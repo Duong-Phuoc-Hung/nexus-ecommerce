@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  # 1. Database cho User Service (SRS 3.1)
+  postgres-user:
+    image: postgres:16-alpine
+    container_name: nexus-postgres-user
+    environment:
+      POSTGRES_USER: nexus_user
+      POSTGRES_PASSWORD: nexus_password
+      POSTGRES_DB: nexus_user_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - user_db_data:/var/lib/postgresql/data
+
+  # 2. Database cho Catalog Service (SRS 3.3)
+  postgres-catalog:
+    image: postgres:16-alpine
+    container_name: nexus-postgres-catalog
+    environment:
+      POSTGRES_USER: nexus_catalog
+      POSTGRES_PASSWORD: nexus_password
+      POSTGRES_DB: nexus_catalog_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - catalog_db_data:/var/lib/postgresql/data
+
+  # 3. Database cho Commerce Service (SRS 3.4)
+  postgres-commerce:
+    image: postgres:16-alpine
+    container_name: nexus-postgres-commerce
+    environment:
+      POSTGRES_USER: nexus_commerce
+      POSTGRES_PASSWORD: nexus_password
+      POSTGRES_DB: nexus_commerce_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - commerce_db_data:/var/lib/postgresql/data
+
+  # 4. Database cho Auction Service (SRS 3.5)
+  postgres-auction:
+    image: postgres:16-alpine
+    container_name: nexus-postgres-auction
+    environment:
+      POSTGRES_USER: nexus_auction
+      POSTGRES_PASSWORD: nexus_password
+      POSTGRES_DB: nexus_auction_db
+    ports:
+      - "5435:5432"
+    volumes:
+      - auction_db_data:/var/lib/postgresql/data
+
+  # 5. Database cho Fulfillment Service (SRS 3.6)
+  postgres-fulfillment:
+    image: postgres:16-alpine
+    container_name: nexus-postgres-fulfillment
+    environment:
+      POSTGRES_USER: nexus_fulfillment
+      POSTGRES_PASSWORD: nexus_password
+      POSTGRES_DB: nexus_fulfillment_db
+    ports:
+      - "5436:5432"
+    volumes:
+      - fulfillment_db_data:/var/lib/postgresql/data
+
+  # 6. Database cho Notification Service (SRS 3.2)
+  postgres-notification:
+    image: postgres:16-alpine
+    container_name: nexus-postgres-notification
+    environment:
+      POSTGRES_USER: nexus_notification
+      POSTGRES_PASSWORD: nexus_password
+      POSTGRES_DB: nexus_notification_db
+    ports:
+      - "5437:5432"
+    volumes:
+      - notification_db_data:/var/lib/postgresql/data
+
+  # 7. Redis Cache & Distributed Lock (SRS 5.1 Bidding SLA <= 300ms)
+  redis:
+    image: redis:7-alpine
+    container_name: nexus-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # 8. RabbitMQ Message Broker (SRS 2.8 Event Message Table)
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: nexus-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+volumes:
+  user_db_data:
+  catalog_db_data:
+  commerce_db_data:
+  auction_db_data:
+  fulfillment_db_data:
+  notification_db_data:
+  redis_data:
+  rabbitmq_data:
