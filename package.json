@@ -13,6 +13,14 @@
     "check:branch": "node scripts/verify-branch-name.js",
     "format": "prettier --write \"**/*.{js,ts,tsx,json,md,yml,yaml}\"",
     "format:check": "prettier --check \"**/*.{js,ts,tsx,json,md,yml,yaml}\"",
+    "build": "pnpm -r --filter \"./backend/*\" build",
+    "dev:gateway": "pnpm --filter @nexus/api-gateway dev",
+    "dev:user": "pnpm --filter @nexus/user-service dev",
+    "dev:catalog": "pnpm --filter @nexus/catalog-service dev",
+    "dev:commerce": "pnpm --filter @nexus/commerce-service dev",
+    "dev:auction": "pnpm --filter @nexus/auction-service dev",
+    "dev:fulfillment": "pnpm --filter @nexus/fulfillment-service dev",
+    "dev:notification": "pnpm --filter @nexus/notification-service dev",
     "docker:dev:up": "docker compose -f devops/docker-compose.dev.yml up -d",
     "docker:dev:down": "docker compose -f devops/docker-compose.dev.yml down",
     "docker:dev:logs": "docker compose -f devops/docker-compose.dev.yml logs -f",
@@ -23,8 +31,18 @@
   "devDependencies": {
     "@commitlint/cli": "^19.8.0",
     "@commitlint/config-conventional": "^19.8.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.4",
     "husky": "^9.1.7",
     "lint-staged": "^15.4.3",
-    "prettier": "^3.5.3"
+    "prettier": "^3.5.3",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.5",
+    "express": "^5.2.1"
   }
 }

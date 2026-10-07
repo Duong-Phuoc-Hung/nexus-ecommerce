@@ -76,17 +76,17 @@ function getCurrentBranch() {
 
 function printHelpBanner(currentBranch) {
   console.error('\n' + '='.repeat(80));
-  console.error('❌ [GIT HOOK ERROR] TÊN NHÁNH KHÔNG HỢP LỆ HOẶC CỐ TÌNH COMMIT TRÊN NHÁNH CHÍNH');
+  console.error(' [GIT HOOK ERROR] TÊN NHÁNH KHÔNG HỢP LỆ HOẶC CỐ TÌNH COMMIT TRÊN NHÁNH CHÍNH');
   console.error('='.repeat(80));
   console.error(`Nhánh hiện tại của bạn: "${currentBranch}"`);
-  console.error('\n📌 QUY TẮC PHÂN NHÁNH CỦA PROJECT NEXUS:');
+  console.error('\n QUY TẮC PHÂN NHÁNH CỦA PROJECT NEXUS:');
   console.error('  1. TUYỆT ĐỐI KHÔNG commit trực tiếp trên nhánh: main / master.');
   console.error('  2. Bắt buộc checkout từ main sang 1 trong 25 nhánh chuẩn của Sprint.');
   console.error(
     '  3. Hoặc đặt tên theo mẫu: feat/be-<tên>, feat/fe-<tên>, fix/be-<tên>, hotfix/<tên>\n',
   );
 
-  console.error('📋 DANH SÁCH 25 NHÁNH CHUẨN 4 SPRINTS:');
+  console.error('DANH SÁCH 25 NHÁNH CHUẨN 4 SPRINTS:');
   for (const [sprintName, branches] of Object.entries(SPRINT_BRANCHES)) {
     console.error(`\n  🔹 ${sprintName}:`);
     for (const b of branches) {
@@ -94,7 +94,7 @@ function printHelpBanner(currentBranch) {
     }
   }
 
-  console.error('\n💡 HƯỚNG DẪN ĐỔI TÊN NHÁNH HIỆN TẠI:');
+  console.error('\nHƯỚNG DẪN ĐỔI TÊN NHÁNH HIỆN TẠI:');
   console.error(`   git branch -m <tên-nhánh-chuẩn>`);
   console.error('   Ví dụ: git branch -m chore/devops-docker-environment\n');
   console.error('='.repeat(80) + '\n');
@@ -112,7 +112,7 @@ function verifyBranch() {
   if (PROTECTED_BRANCHES.includes(currentBranch)) {
     console.error('\n' + '='.repeat(80));
     console.error(
-      `❌ [GIT HOOK BLOCKED] KHÔNG ĐƯỢC PHÉP COMMIT TRỰC TIẾP TRÊN NHÁNH "${currentBranch}"!`,
+      `[GIT HOOK BLOCKED] KHÔNG ĐƯỢC PHÉP COMMIT TRỰC TIẾP TRÊN NHÁNH "${currentBranch}"!`,
     );
     console.error('='.repeat(80));
     console.error('👉 Vui lòng tạo nhánh tính năng mới theo quy chuẩn:');

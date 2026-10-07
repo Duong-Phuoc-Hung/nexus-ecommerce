@@ -1,0 +1,22 @@
+/**
+ * Infrastructure Database: PrismaClientWrapper
+ * Quản lý kết nối cơ sở dữ liệu cô lập của User Service (PostgreSQL port 5432 - SRS 4.1).
+ */
+export class PrismaClientWrapper {
+  private static instance: PrismaClientWrapper;
+
+  private constructor() {
+    // Khởi tạo kết nối DB
+  }
+
+  public static getInstance(): PrismaClientWrapper {
+    if (!PrismaClientWrapper.instance) {
+      PrismaClientWrapper.instance = new PrismaClientWrapper();
+    }
+    return PrismaClientWrapper.instance;
+  }
+
+  public async connect(): Promise<void> {
+    console.log('[User DB] Connected to PostgreSQL (Port: 5432)');
+  }
+}
