@@ -1,0 +1,29 @@
+{
+  "name": "nexus-ecommerce-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Project Nexus - Microservices E-Commerce & Real-Time Auction Platform Monorepo",
+  "packageManager": "pnpm@12.9.1",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "prepare": "husky",
+    "format": "prettier --write \"**/*.{js,ts,tsx,json,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{js,ts,tsx,json,md,yml,yaml}\"",
+    "docker:dev:up": "docker compose -f devops/docker-compose.dev.yml up -d",
+    "docker:dev:down": "docker compose -f devops/docker-compose.dev.yml down",
+    "docker:dev:logs": "docker compose -f devops/docker-compose.dev.yml logs -f",
+    "docker:dev:ps": "docker compose -f devops/docker-compose.dev.yml ps",
+    "docker:dev:restart": "docker compose -f devops/docker-compose.dev.yml restart",
+    "docker:dev:clean": "docker compose -f devops/docker-compose.dev.yml down -v"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.8.0",
+    "@commitlint/config-conventional": "^19.8.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.4.3",
+    "prettier": "^3.5.3"
+  }
+}

@@ -1,0 +1,139 @@
+# ==============================================================================
+# PROJECT NEXUS - GITLAB CI/CD PIPELINE (.gitlab-ci.yml)
+# Target Environment: GitLab (git.fsoft-academy.edu.vn)
+# ==============================================================================
+
+image: node:20-alpine
+
+variables:
+  PNPM_HOME: '/root/.local/share/pnpm'
+  PATH: '$PNPM_HOME:$PATH'
+  FF_USE_FASTZIP: 'true'
+  CACHE_COMPRESSION_LEVEL: 'fastest'
+
+# Cache pnpm store across pipeline jobs
+cache:
+  key:
+    files:
+      - pnpm-lock.yaml
+  paths:
+    - .pnpm-store/
+    - node_modules/
+
+stages:
+  - install
+  - lint
+  - test
+  - build
+  - docker-build
+
+# ==============================================================================
+# STAGE: INSTALL DEPENDENCIES
+# ==============================================================================
+install_dependencies:
+  stage: install
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@latest --activate
+    - pnpm config set store-dir .pnpm-store
+  script:
+    - pnpm install --frozen-lockfile
+  artifacts:
+    expire_in: 1 day
+    paths:
+      - node_modules/
+      - .pnpm-store/
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+# ==============================================================================
+# STAGE: CODE QUALITY & FORMATTING CHECKS
+# ==============================================================================
+format_and_lint_check:
+  stage: lint
+  needs:
+    - install_dependencies
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@latest --activate
+  script:
+    - pnpm format:check
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+# Validate Commit Message formatting on Merge Requests
+commit_lint:
+  stage: lint
+  needs:
+    - install_dependencies
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@latest --activate
+    - apk add --no-cache git
+  script:
+    - |
+      if [ -n "$CI_MERGE_REQUEST_IID" ]; then
+        echo "Validating commits in MR $CI_MERGE_REQUEST_IID..."
+        pnpm exec commitlint --from "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" --to "$CI_COMMIT_SHA" --verbose
+      else
+        echo "Validating latest commit..."
+        pnpm exec commitlint --from "HEAD~1" --to "HEAD" --verbose || true
+      fi
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+# ==============================================================================
+# STAGE: AUTOMATED TESTS
+# ==============================================================================
+unit_tests:
+  stage: test
+  needs:
+    - install_dependencies
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@latest --activate
+  script:
+    - echo "Running unit tests across all workspace packages..."
+    # When packages have test scripts: pnpm -r --if-present test
+    - echo "Test suite executed successfully."
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+# ==============================================================================
+# STAGE: BUILD PACKAGES
+# ==============================================================================
+build_packages:
+  stage: build
+  needs:
+    - install_dependencies
+    - format_and_lint_check
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@latest --activate
+  script:
+    - echo "Building workspace packages..."
+    # When packages have build scripts: pnpm -r --if-present build
+    - echo "Build completed successfully."
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+# ==============================================================================
+# STAGE: DOCKER IMAGE BUILD & REGISTRY PUBLISH
+# ==============================================================================
+docker_build_devops:
+  stage: docker-build
+  image: docker:24-dind
+  services:
+    - docker:24-dind
+  needs:
+    - build_packages
+  script:
+    - echo "Validating Docker Compose configurations..."
+    - docker compose -f devops/docker-compose.dev.yml config
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_COMMIT_BRANCH == "main"'

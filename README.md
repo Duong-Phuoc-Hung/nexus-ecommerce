@@ -2,7 +2,7 @@
 
 > **Phiên bản tài liệu:** 1.0 (Bám sát SRS v1.0 - 04/2026)  
 > **Nền tảng kỹ thuật:** Node.js / TypeScript Enterprise Monorepo  
-> **Kiến trúc:** Microservices (Event-Driven) + Clean Layered Architecture  
+> **Kiến trúc:** Microservices (Event-Driven) + Clean Layered Architecture
 
 ---
 
@@ -10,12 +10,12 @@
 
 Dự án được phân chia độc lập và minh bạch thành các khu vực chuyên biệt. Vui lòng xem tài liệu chi tiết của từng phân khu dưới đây:
 
-| Phân khu | Thư mục mã nguồn | File tài liệu cấu trúc chi tiết | Trách nhiệm chính |
-| :--- | :--- | :--- | :--- |
-| **Backend** | [`backend/`](file:///D:/CodeProject/nexus-ecommerce/nexus-ecommerce-main/backend/) | [**`backend/README.md`**](file:///D:/CodeProject/nexus-ecommerce/nexus-ecommerce-main/backend/README.md) | Chứa API Gateway và 6 Core Microservices (User, Catalog, Commerce, Auction, Fulfillment, Notification). |
-| **Frontend** | [`frontend/`](file:///D:/CodeProject/nexus-ecommerce/nexus-ecommerce-main/frontend/) | [**`frontend/README.md`**](file:///D:/CodeProject/nexus-ecommerce/nexus-ecommerce-main/frontend/README.md) | Chứa ứng dụng Portal khách hàng (`web-customer`) và Cổng quản trị (`web-admin`). |
-| **Shared** | [`shared/`](file:///D:/CodeProject/nexus-ecommerce/nexus-ecommerce-main/shared/) | [**`shared/README.md`**](file:///D:/CodeProject/nexus-ecommerce/nexus-ecommerce-main/shared/README.md) | Thư viện dùng chung: 45+ Sự kiện hệ thống (SRS 2.8), 65 Mã quyền Privileges (SRS 2.7), Enums và Utils. |
-| **DevOps** | [`devops/`](file:///D:/CodeProject/nexus-ecommerce/nexus-ecommerce-main/devops/) | [**`devops/README.md`**](file:///D:/CodeProject/nexus-ecommerce/nexus-ecommerce-main/devops/README.md) | Docker Compose (6 DB Postgres riêng, Redis, RabbitMQ), Nginx Proxy, Kubernetes và CI/CD. |
+| Phân khu     | Thư mục mã nguồn                                                                     | File tài liệu cấu trúc chi tiết                                                                            | Trách nhiệm chính                                                                                       |
+| :----------- | :----------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------ |
+| **Backend**  | [`backend/`](file:///D:/CodeProject/nexus-ecommerce/nexus-ecommerce-main/backend/)   | [**`backend/README.md`**](file:///D:/CodeProject/nexus-ecommerce/nexus-ecommerce-main/backend/README.md)   | Chứa API Gateway và 6 Core Microservices (User, Catalog, Commerce, Auction, Fulfillment, Notification). |
+| **Frontend** | [`frontend/`](file:///D:/CodeProject/nexus-ecommerce/nexus-ecommerce-main/frontend/) | [**`frontend/README.md`**](file:///D:/CodeProject/nexus-ecommerce/nexus-ecommerce-main/frontend/README.md) | Chứa ứng dụng Portal khách hàng (`web-customer`) và Cổng quản trị (`web-admin`).                        |
+| **Shared**   | [`shared/`](file:///D:/CodeProject/nexus-ecommerce/nexus-ecommerce-main/shared/)     | [**`shared/README.md`**](file:///D:/CodeProject/nexus-ecommerce/nexus-ecommerce-main/shared/README.md)     | Thư viện dùng chung: 45+ Sự kiện hệ thống (SRS 2.8), 65 Mã quyền Privileges (SRS 2.7), Enums và Utils.  |
+| **DevOps**   | [`devops/`](file:///D:/CodeProject/nexus-ecommerce/nexus-ecommerce-main/devops/)     | [**`devops/README.md`**](file:///D:/CodeProject/nexus-ecommerce/nexus-ecommerce-main/devops/README.md)     | Docker Compose (6 DB Postgres riêng, Redis, RabbitMQ), Nginx Proxy, Kubernetes và CI/CD.                |
 
 ---
 
@@ -58,28 +58,33 @@ Dự án được phân chia độc lập và minh bạch thành các khu vực 
 ## 4. Bắt Đầu Phát Triển (Quick Start)
 
 ### 4.1. Yêu cầu môi trường
+
 - Node.js >= 20.x
 - pnpm >= 9.x
 - Docker & Docker Compose
 
 ### 4.2. Cài đặt các gói phụ thuộc
+
 ```bash
 # Cài đặt toàn bộ dependencies cho cả FE, BE và Shared
 pnpm install
 ```
 
 ### 4.3. Khởi động hạ tầng cục bộ (Databases, Redis, RabbitMQ)
+
 ```bash
 # Khởi động 6 cơ sở dữ liệu Postgres riêng, Redis và RabbitMQ
 docker compose -f devops/docker-compose.dev.yml up -d
 ```
 
 ### 4.4. Chạy Migration Database cho các dịch vụ
+
 ```bash
 bash scripts/migrate-all-databases.sh
 ```
 
 ### 4.5. Khởi chạy ứng dụng ở chế độ Development
+
 ```bash
 # Chạy toàn bộ services và frontends đồng thời
 pnpm dev

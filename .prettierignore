@@ -1,0 +1,12 @@
+node_modules/
+dist/
+build/
+.next/
+coverage/
+.pnpm-store/
+package-lock.json
+pnpm-lock.yaml
+.git/
+devops/k8s/
+*.min.js
+*.min.css

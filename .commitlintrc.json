@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json.schemastore.org/commitlintrc.json",
+  "extends": ["@commitlint/config-conventional"],
+  "rules": {
+    "type-enum": [
+      2,
+      "always",
+      ["feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert"]
+    ],
+    "scope-enum": [
+      2,
+      "always",
+      [
+        "root",
+        "gateway",
+        "user",
+        "catalog",
+        "commerce",
+        "auction",
+        "fulfillment",
+        "notification",
+        "web",
+        "admin",
+        "shared",
+        "devops",
+        "scripts",
+        "deps",
+        "config"
+      ]
+    ],
+    "scope-case": [2, "always", "lower-case"],
+    "subject-case": [0],
+    "subject-empty": [2, "never"],
+    "subject-full-stop": [2, "never", "."]
+  }
+}

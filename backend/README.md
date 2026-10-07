@@ -11,8 +11,8 @@
 Để code dễ hiểu, dễ phân công nhiệm vụ và bảo trì, mỗi dịch vụ trong `backend/` đều tuân theo mô hình thống nhất:
 
 ```text
-[ Client / Gateway ] 
-         │ 
+[ Client / Gateway ]
+         │
          ▼
      [ routes/ ]          --> Khai báo đường dẫn HTTP (GET, POST, PUT, DELETE)
          │
@@ -287,11 +287,11 @@ backend/
 
 Mỗi service sử dụng một Database PostgreSQL độc lập:
 
-| Service | Tên Database cục bộ | Các bảng chính (Tables) |
-| :--- | :--- | :--- |
-| `user-service` | `nexus_user_db` | `users`, `roles`, `privileges`, `user_roles`, `ratings`, `penalties` |
-| `catalog-service` | `nexus_catalog_db` | `products`, `categories`, `product_images`, `product_attributes` |
-| `commerce-service` | `nexus_commerce_db` | `carts`, `cart_items`, `orders`, `order_items`, `payments`, `invoices`, `refunds` |
-| `auction-service` | `nexus_auction_db` | `auctions`, `bids`, `auction_settlements`, `auction_extensions` |
-| `fulfillment-service` | `nexus_fulfillment_db` | `warehouses`, `sku_inventories`, `inventory_ledgers`, `shipments`, `carriers` |
-| `notification-service` | `nexus_notification_db`| `event_logs`, `notifications`, `notification_preferences` |
+| Service                | Tên Database cục bộ     | Các bảng chính (Tables)                                                           |
+| :--------------------- | :---------------------- | :-------------------------------------------------------------------------------- |
+| `user-service`         | `nexus_user_db`         | `users`, `roles`, `privileges`, `user_roles`, `ratings`, `penalties`              |
+| `catalog-service`      | `nexus_catalog_db`      | `products`, `categories`, `product_images`, `product_attributes`                  |
+| `commerce-service`     | `nexus_commerce_db`     | `carts`, `cart_items`, `orders`, `order_items`, `payments`, `invoices`, `refunds` |
+| `auction-service`      | `nexus_auction_db`      | `auctions`, `bids`, `auction_settlements`, `auction_extensions`                   |
+| `fulfillment-service`  | `nexus_fulfillment_db`  | `warehouses`, `sku_inventories`, `inventory_ledgers`, `shipments`, `carriers`     |
+| `notification-service` | `nexus_notification_db` | `event_logs`, `notifications`, `notification_preferences`                         |

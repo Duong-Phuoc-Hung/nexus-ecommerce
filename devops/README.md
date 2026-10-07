@@ -43,7 +43,7 @@ services:
       POSTGRES_PASSWORD: nexus_password
       POSTGRES_DB: nexus_user_db
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - user_data:/var/lib/postgresql/data
 
@@ -56,7 +56,7 @@ services:
       POSTGRES_PASSWORD: nexus_password
       POSTGRES_DB: nexus_catalog_db
     ports:
-      - "5433:5432"
+      - '5433:5432'
     volumes:
       - catalog_data:/var/lib/postgresql/data
 
@@ -69,7 +69,7 @@ services:
       POSTGRES_PASSWORD: nexus_password
       POSTGRES_DB: nexus_commerce_db
     ports:
-      - "5434:5432"
+      - '5434:5432'
     volumes:
       - commerce_data:/var/lib/postgresql/data
 
@@ -82,7 +82,7 @@ services:
       POSTGRES_PASSWORD: nexus_password
       POSTGRES_DB: nexus_auction_db
     ports:
-      - "5435:5432"
+      - '5435:5432'
     volumes:
       - auction_data:/var/lib/postgresql/data
 
@@ -95,7 +95,7 @@ services:
       POSTGRES_PASSWORD: nexus_password
       POSTGRES_DB: nexus_fulfillment_db
     ports:
-      - "5436:5432"
+      - '5436:5432'
     volumes:
       - fulfillment_data:/var/lib/postgresql/data
 
@@ -108,7 +108,7 @@ services:
       POSTGRES_PASSWORD: nexus_password
       POSTGRES_DB: nexus_notification_db
     ports:
-      - "5437:5432"
+      - '5437:5432'
     volumes:
       - notification_data:/var/lib/postgresql/data
 
@@ -117,7 +117,7 @@ services:
     image: redis:7-alpine
     container_name: nexus-redis
     ports:
-      - "6379:6379"
+      - '6379:6379'
     volumes:
       - redis_data:/data
 
@@ -126,8 +126,8 @@ services:
     image: rabbitmq:3-management-alpine
     container_name: nexus-rabbitmq
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - '5672:5672'
+      - '15672:15672'
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
 
