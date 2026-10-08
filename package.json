@@ -18,7 +18,9 @@
     "docker:dev:logs": "docker compose -f devops/docker-compose.dev.yml logs -f",
     "docker:dev:ps": "docker compose -f devops/docker-compose.dev.yml ps",
     "docker:dev:restart": "docker compose -f devops/docker-compose.dev.yml restart",
-    "docker:dev:clean": "docker compose -f devops/docker-compose.dev.yml down -v"
+    "docker:dev:clean": "docker compose -f devops/docker-compose.dev.yml down -v",
+    "db:migrate": "node scripts/migrate-all-databases.js",
+    "db:seed": "node scripts/migrate-all-databases.js"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.8.0",

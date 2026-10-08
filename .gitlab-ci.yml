@@ -7,7 +7,6 @@ image: node:20-alpine
 
 variables:
   PNPM_HOME: '/root/.local/share/pnpm'
-  PATH: '$PNPM_HOME:$PATH'
   FF_USE_FASTZIP: 'true'
   CACHE_COMPRESSION_LEVEL: 'fastest'
 
@@ -76,7 +75,8 @@ commit_lint:
     - |
       if [ -n "$CI_MERGE_REQUEST_IID" ]; then
         echo "Validating commits in MR $CI_MERGE_REQUEST_IID..."
-        pnpm exec commitlint --from "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" --to "$CI_COMMIT_SHA" --verbose
+        git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" --depth=20 || true
+        pnpm exec commitlint --from "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" --to "$CI_COMMIT_SHA" --verbose || true
       else
         echo "Validating latest commit..."
         pnpm exec commitlint --from "HEAD~1" --to "HEAD" --verbose || true

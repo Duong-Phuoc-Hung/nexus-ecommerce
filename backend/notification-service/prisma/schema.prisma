@@ -1,0 +1,46 @@
+// =============================================================================
+// Project Nexus - Notification Service Prisma Schema (SRS 3.2 & SCRUM-10)
+// Database: PostgreSQL (nexus_notification_db - Port 5437)
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// 1. BẢNG NHẬT KÝ SỰ KIỆN HỆ THỐNG (BẤT BIẾN - AUDIT EVENT LOG theo SRS 3.2.1)
+// Bảng này tự động ghi nhận MỌI Domain Event phát sinh từ 6 services
+// Tuyệt đối chỉ INSERT, cấm UPDATE và DELETE để phục vụ kiểm toán
+// -----------------------------------------------------------------------------
+model EventLog {
+  // Khóa chính: Số tự tăng (1, 2, 3...)
+  id            BigInt   @id @default(autoincrement())
+
+  // Mã định danh duy nhất của sự kiện từ DomainEvent (VD: "evt_123e4567-e89b-12d3...")
+  eventId       String   @unique @map("event_id") @db.VarChar(64)
+
+  // Tên loại sự kiện (VD: "UserRegistered", "OrderCreated", "OrderPaid", "BidPlaced", "AuctionWon")
+  type          String   @db.VarChar(100)
+
+  // Tên service phát ra sự kiện này (VD: "user-service", "commerce-service", "auction-service")
+  sourceService String   @map("source_service") @db.VarChar(50)
+
+  // Toàn bộ dữ liệu chi tiết của sự kiện dưới định dạng JSON
+  payload       Json
+
+  // Trạng thái xử lý sự kiện: SUCCESS, FAILED, RETRYING
+  status        String   @default("SUCCESS") @db.VarChar(20)
+
+  // Thời điểm sự kiện được ghi nhận vào hệ thống (Bất biến)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([createdAt(sort: Desc)], map: "idx_event_created_at")
+  @@index([type], map: "idx_event_type")
+  @@index([sourceService], map: "idx_event_source")
+  @@map("notification_event_log")
+}
