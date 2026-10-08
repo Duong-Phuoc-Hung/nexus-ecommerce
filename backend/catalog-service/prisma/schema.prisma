@@ -1,0 +1,162 @@
+// =============================================================================
+// Project Nexus - Catalog Service Prisma Schema (SRS 3.3)
+// Database: PostgreSQL (nexus_catalog_db - Port 5433)
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// 1. BẢNG DANH MỤC SẢN PHẨM (Phân cấp đa tầng, tối đa 3 cấp theo SRS 3.3)
+// -----------------------------------------------------------------------------
+model Category {
+  // Khóa chính: Số tự tăng (1, 2, 3...)
+  id           BigInt     @id @default(autoincrement())
+
+  // Tên danh mục (VD: "Thiết bị điện tử", "Điện thoại", "iPhone")
+  name         String     @db.VarChar(100)
+
+  // Đường dẫn thân thiện cho SEO (VD: "thiet-bi-dien-tu", "dien-thoai-iphone")
+  slug         String     @unique @db.VarChar(150)
+
+  // Mô tả ngắn về danh mục sản phẩm
+  description  String?    @db.Text
+
+  // Link ảnh banner/icon đại diện danh mục (Lưu trên Cloud Storage / S3)
+  imageUrl     String?    @map("image_url") @db.VarChar(500)
+
+  // Khóa ngoại tự trỏ về danh mục cha (NULL nếu là danh mục gốc cấp 1)
+  parentId     BigInt?    @map("parent_id")
+
+  // Cấp bậc danh mục: 1 (Gốc), 2 (Nhóm con), 3 (Loại chi tiết) - Tối đa 3 tầng
+  level        Int        @default(1)
+
+  // Trạng thái hiển thị: TRUE (Đang bật trên web), FALSE (Tạm ẩn)
+  isActive     Boolean    @default(true) @map("is_active")
+
+  // Thứ tự sắp xếp hiển thị trên thanh menu (0, 1, 2...)
+  displayOrder Int        @default(0) @map("display_order")
+
+  // Thời gian tạo và cập nhật danh mục
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt    DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Quan hệ cây thư mục cha - con trong nội bộ bảng
+  parent       Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children     Category[] @relation("CategoryHierarchy")
+  products     Product[]
+
+  @@index([parentId], map: "idx_category_parent")
+  @@index([slug], map: "idx_category_slug")
+  @@map("catalog_categories")
+}
+
+// -----------------------------------------------------------------------------
+// 2. BẢNG SẢN PHẨM (Lưu thông tin sản phẩm do Người bán đăng tải)
+// -----------------------------------------------------------------------------
+model Product {
+  // Khóa chính: Số tự tăng (1, 2, 3...)
+  id           BigInt             @id @default(autoincrement())
+
+  // Tham chiếu người bán / chủ sở hữu sản phẩm (Lấy 'id' từ user_users bên user-service)
+  sellerId     BigInt             @map("seller_id")
+
+  // Thuộc danh mục nào (Khóa ngoại nối với catalog_categories)
+  categoryId   BigInt             @map("category_id")
+
+  // Tiêu đề / Tên sản phẩm hiển thị (VD: "iPhone 15 Pro Max 256GB Titan Tự Nhiên")
+  title        String             @db.VarChar(255)
+
+  // Đường dẫn SEO duy nhất của sản phẩm (VD: "iphone-15-pro-max-256gb-titan-tu-nhien-101")
+  slug         String             @unique @db.VarChar(300)
+
+  // Bài viết mô tả chi tiết sản phẩm, chính sách bảo hành
+  description  String             @db.Text
+
+  // Trạng thái sản phẩm: DRAFT (Bản nháp), ACTIVE (Đang bán), INACTIVE (Tạm dừng), ARCHIVED (Lưu trữ)
+  status       String             @default("DRAFT") @db.VarChar(20)
+
+  // Tình trạng hàng hóa: NEW (Mới 100%), LIKE_NEW (99%), USED (Đã qua sử dụng), REFURBISHED (Tân trang)
+  condition    String             @default("NEW") @db.VarChar(20)
+
+  // Giá bán niêm yết ban đầu (VND)
+  basePrice    Decimal            @map("base_price") @db.Decimal(12, 2)
+
+  // Sản phẩm này có được phép mang đi đấu giá hay không (TRUE: Có, FALSE: Chỉ bán thẳng)
+  allowAuction Boolean            @default(false) @map("allow_auction")
+
+  // Thời gian tạo và cập nhật sản phẩm
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt    DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Thời điểm xóa mềm (Nếu khác NULL tức là sản phẩm đã bị xóa khỏi shop)
+  deletedAt    DateTime?          @map("deleted_at") @db.Timestamptz()
+
+  category     Category           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  images       ProductImage[]
+  attributes   ProductAttribute[]
+
+  @@index([sellerId], map: "idx_product_seller")
+  @@index([categoryId], map: "idx_product_category")
+  @@index([status], map: "idx_product_status")
+  @@map("catalog_products")
+}
+
+// -----------------------------------------------------------------------------
+// 3. BẢNG ẢNH SẢN PHẨM (Tối đa 5 ảnh cho mỗi sản phẩm theo quy định SRS 3.3)
+// -----------------------------------------------------------------------------
+model ProductImage {
+  // Khóa chính: Số tự tăng (1, 2, 3...)
+  id           BigInt   @id @default(autoincrement())
+
+  // Thuộc sản phẩm nào (Khóa ngoại nối với catalog_products)
+  productId    BigInt   @map("product_id")
+
+  // Link ảnh lưu trên Cloud Storage / CDN
+  imageUrl     String   @map("image_url") @db.VarChar(500)
+
+  // Thứ tự hiển thị trong bộ sưu tập (SRS: Bắt buộc từ 1 đến 5)
+  displayOrder Int      @default(1) @map("display_order")
+
+  // Đánh dấu ảnh đại diện chính (Hiển thị ngoài trang danh sách sản phẩm)
+  isPrimary    Boolean  @default(false) @map("is_primary")
+
+  // Thời gian tải ảnh lên
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId], map: "idx_image_product")
+  @@map("catalog_product_images")
+}
+
+// -----------------------------------------------------------------------------
+// 4. BẢNG THUỘC TÍNH SẢN PHẨM (Màu sắc, Dung lượng, Kích cỡ động)
+// -----------------------------------------------------------------------------
+model ProductAttribute {
+  // Khóa chính: Số tự tăng (1, 2, 3...)
+  id             BigInt   @id @default(autoincrement())
+
+  // Thuộc sản phẩm nào (Khóa ngoại nối với catalog_products)
+  productId      BigInt   @map("product_id")
+
+  // Tên thông số / Thuộc tính (VD: "Màu sắc", "Dung lượng RAM", "Bộ nhớ trong", "Kích thước màn hình")
+  attributeKey   String   @map("attribute_key") @db.VarChar(100)
+
+  // Giá trị cụ thể của thuộc tính (VD: "Titan Tự Nhiên", "8GB", "256GB", "6.7 inch")
+  attributeValue String   @map("attribute_value") @db.VarChar(255)
+
+  // Thời gian tạo bản ghi
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId], map: "idx_attribute_product")
+  @@map("catalog_product_attributes")
+}

@@ -164,3 +164,39 @@ WHERE r.role_code = 'SUPPORT_STAFF' AND p.code IN (
     'SYSTEM.HEALTH.VIEW'
 )
 ON CONFLICT DO NOTHING;
+
+-- -----------------------------------------------------------------------------
+-- 4. NẠP TÀI KHOẢN QUẢN TRỊ VIÊN MẪU (DEFAULT ADMIN USER CHO TEST AUTH)
+-- Email: admin@nexus.internal
+-- Mật khẩu gốc: Admin@123
+-- -----------------------------------------------------------------------------
+INSERT INTO user_users (id, email, phone, password_hash, full_name, identify_number, status, is_deleted)
+VALUES (
+    1,
+    'admin@nexus.internal',
+    '0900000001',
+    '$2a$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW',
+    'System Administrator',
+    '001099000001',
+    'ACTIVE',
+    FALSE
+)
+ON CONFLICT (email) DO NOTHING;
+
+-- Gán vai trò ADMIN cho tài khoản admin
+INSERT INTO user_user_roles (user_id, role_id)
+SELECT u.id, r.id
+FROM user_users u
+CROSS JOIN user_roles r
+WHERE u.email = 'admin@nexus.internal' AND r.role_code = 'ADMIN'
+ON CONFLICT DO NOTHING;
+
+-- Khởi tạo điểm uy tín 100 cho tài khoản admin
+INSERT INTO user_reputations (user_id, trust_level, score, total_orders, total_penalties)
+SELECT u.id, 'VIP', 100, 0, 0
+FROM user_users u
+WHERE u.email = 'admin@nexus.internal'
+ON CONFLICT (user_id) DO NOTHING;
+
+-- Đặt lại Sequence tự tăng sau khi chèn ID chỉ định
+SELECT setval('user_users_id_seq', (SELECT COALESCE(MAX(id), 1) FROM user_users));
