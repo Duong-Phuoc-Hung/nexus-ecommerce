@@ -166,3 +166,38 @@ frontend/
    - Hiển thị bộ đếm ngược 15 phút `checkout-timer.tsx`.
    - Sử dụng `@stripe/react-stripe-js` render khung nhập thẻ ngân hàng an toàn.
    - Khi thanh toán thành công, chuyển hướng người dùng sang trang chi tiết đơn hàng `/orders/[orderId]` để xem hóa đơn điện tử.
+
+---
+
+## 4. Khởi Chạy Frontend `web-customer`
+
+### Yêu cầu
+
+- Node.js 20 trở lên
+- pnpm 9 trở lên (repo ghim pnpm 12.9.1)
+
+### Cài đặt và chạy development
+
+Chạy từ thư mục gốc repo:
+
+```bash
+pnpm install
+pnpm --filter @nexus/web-customer dev
+```
+
+Mở `http://localhost:3000`. Trang khởi đầu không gọi backend nên vẫn chạy được khi các service nghiệp vụ chưa sẵn sàng.
+
+### Build production
+
+```bash
+pnpm --filter @nexus/web-customer build
+pnpm --filter @nexus/web-customer start
+```
+
+### Cấu hình API tùy chọn
+
+Sao chép `frontend/web-customer/.env.example` thành `.env.local` nếu cần đổi URL API. `NEXT_PUBLIC_API_BASE_URL` mặc định là `http://localhost:8000/api/v1` và được dùng bởi Axios client dùng chung tại `src/shared/api/client.ts`. Không commit secret hoặc file `.env.local`.
+
+### Cấu trúc module
+
+Code UI theo bounded context đặt trong `frontend/web-customer/src/modules/<module>` gồm `user`, `catalog`, `commerce`, `auction`, `fulfillment`, `notification`. Giữ chi tiết triển khai bên trong module; nếu cần dùng module khác, phụ thuộc vào contract được export thay vì import trực tiếp component hoặc state nội bộ. Cấu hình app đặt trong `src/app`, transport dùng chung trong `src/shared`.
