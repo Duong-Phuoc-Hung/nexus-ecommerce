@@ -10,8 +10,8 @@ const app = createApplication();
 
 app.listen(PORT, () => {
   console.log('='.repeat(60));
-  console.log(`🚀 [Auction Service] running on http://localhost:${PORT}`);
-  console.log(`🩺 Health check: http://localhost:${PORT}/health`);
-  console.log(`📋 API Docs: http://localhost:${PORT}/api/v1/auctions`);
+  console.log(`[Auction Service] running on http://localhost:${PORT}`);
+  console.log(`Health check: http://localhost:${PORT}/health`);
+  console.log(`API Docs: http://localhost:${PORT}/api/v1/auctions`);
   console.log('='.repeat(60));
 });

@@ -88,9 +88,9 @@ function printHelpBanner(currentBranch) {
 
   console.error('DANH SÁCH 25 NHÁNH CHUẨN 4 SPRINTS:');
   for (const [sprintName, branches] of Object.entries(SPRINT_BRANCHES)) {
-    console.error(`\n  🔹 ${sprintName}:`);
+    console.error(`\n  - ${sprintName}:`);
     for (const b of branches) {
-      console.error(`     • ${b}`);
+      console.error(`     * ${b}`);
     }
   }
 
@@ -115,7 +115,7 @@ function verifyBranch() {
       `[GIT HOOK BLOCKED] KHÔNG ĐƯỢC PHÉP COMMIT TRỰC TIẾP TRÊN NHÁNH "${currentBranch}"!`,
     );
     console.error('='.repeat(80));
-    console.error('👉 Vui lòng tạo nhánh tính năng mới theo quy chuẩn:');
+    console.error('Vui lòng tạo nhánh tính năng mới theo quy chuẩn:');
     console.error('   git checkout -b <tên-nhánh-chuẩn>');
     console.error('   Ví dụ: git checkout -b chore/devops-docker-environment\n');
     process.exit(1);

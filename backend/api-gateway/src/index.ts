@@ -56,8 +56,8 @@ app.get('/api/v1', (_req: Request, res: Response) => {
 
 app.listen(PORT, () => {
   console.log('='.repeat(60));
-  console.log(`🚀 [API Gateway] running on http://localhost:${PORT}`);
-  console.log(`🩺 Health check: http://localhost:${PORT}/health`);
-  console.log(`📋 Service Directory: http://localhost:${PORT}/api/v1`);
+  console.log(`[API Gateway] running on http://localhost:${PORT}`);
+  console.log(`Health check: http://localhost:${PORT}/health`);
+  console.log(`Service Directory: http://localhost:${PORT}/api/v1`);
   console.log('='.repeat(60));
 });

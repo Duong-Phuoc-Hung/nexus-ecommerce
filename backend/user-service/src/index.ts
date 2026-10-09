@@ -8,8 +8,8 @@ const app = createApplication();
 
 app.listen(PORT, () => {
   console.log('='.repeat(60));
-  console.log(`🚀 [User Service] running on http://localhost:${PORT}`);
-  console.log(`🩺 Health check: http://localhost:${PORT}/health`);
-  console.log(`📋 API Docs: http://localhost:${PORT}/api/v1/users/profile`);
+  console.log(`[User Service] running on http://localhost:${PORT}`);
+  console.log(`Health check: http://localhost:${PORT}/health`);
+  console.log(`API Docs: http://localhost:${PORT}/api/v1/users/profile`);
   console.log('='.repeat(60));
 });

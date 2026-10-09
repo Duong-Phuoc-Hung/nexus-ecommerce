@@ -10,10 +10,8 @@ const app = createApplication();
 
 app.listen(PORT, () => {
   console.log('='.repeat(60));
-  console.log(`🚀 [Fulfillment Service] running on http://localhost:${PORT}`);
-  console.log(`🩺 Health check: http://localhost:${PORT}/health`);
-  console.log(
-    `📋 API Docs: http://localhost:${PORT}/api/v1/fulfillments/shipments/shp_01hqz222trk`,
-  );
+  console.log(`[Fulfillment Service] running on http://localhost:${PORT}`);
+  console.log(`Health check: http://localhost:${PORT}/health`);
+  console.log(`API Docs: http://localhost:${PORT}/api/v1/fulfillments/shipments/shp_01hqz222trk`);
   console.log('='.repeat(60));
 });
