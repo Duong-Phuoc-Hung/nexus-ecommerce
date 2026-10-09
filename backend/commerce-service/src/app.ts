@@ -16,7 +16,7 @@ export function createApplication(): Application {
       status: 'UP',
       service: 'commerce-service',
       boundedContext: 'Cart, Orders & Payments (SRS 3.4)',
-      port: process.env.COMMERCE_SERVICE_PORT || 3003,
+      port: process.env.PORT || process.env.COMMERCE_SERVICE_PORT || 4003,
       timestamp: new Date().toISOString(),
     });
   });

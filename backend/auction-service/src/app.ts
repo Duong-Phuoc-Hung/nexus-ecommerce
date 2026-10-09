@@ -16,7 +16,7 @@ export function createApplication(): Application {
       status: 'UP',
       service: 'auction-service',
       boundedContext: 'Real-Time Auction & Bidding (SRS 3.5)',
-      port: process.env.AUCTION_SERVICE_PORT || 3004,
+      port: process.env.PORT || process.env.AUCTION_SERVICE_PORT || 4004,
       timestamp: new Date().toISOString(),
     });
   });

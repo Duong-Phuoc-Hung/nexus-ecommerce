@@ -16,7 +16,7 @@ export function createApplication(): Application {
       status: 'UP',
       service: 'fulfillment-service',
       boundedContext: 'Shipping & Fulfillment (SRS 3.6)',
-      port: process.env.FULFILLMENT_SERVICE_PORT || 3005,
+      port: process.env.PORT || process.env.FULFILLMENT_SERVICE_PORT || 4005,
       timestamp: new Date().toISOString(),
     });
   });

@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fulfillment-service
+  namespace: nexus
+  labels:
+    app.kubernetes.io/name: fulfillment-service
+    app.kubernetes.io/part-of: nexus-platform
+    app.kubernetes.io/component: domain-service
+    app: fulfillment-service
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: fulfillment-service
+  template:
+    metadata:
+      labels:
+        app: fulfillment-service
+        app.kubernetes.io/name: fulfillment-service
+        app.kubernetes.io/part-of: nexus-platform
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: fulfillment-service
+          image: git.fsoft-academy.edu.vn:5050/nexus/nexus-ecommerce/fulfillment-service:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: http
+              containerPort: 4005
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "4005"
+            - name: FULFILLMENT_SERVICE_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: nexus-config
+                  key: FULFILLMENT_SERVICE_PORT
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: nexus-config
+                  key: NODE_ENV
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: nexus-secret
+                  key: FULFILLMENT_DB_URL
+            - name: RABBITMQ_URL
+              valueFrom:
+                secretKeyRef:
+                  name: nexus-secret
+                  key: RABBITMQ_URL
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fulfillment-service
+  namespace: nexus
+  labels:
+    app.kubernetes.io/name: fulfillment-service
+    app.kubernetes.io/part-of: nexus-platform
+    app: fulfillment-service
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 4005
+      targetPort: http
+      protocol: TCP
+  selector:
+    app: fulfillment-service

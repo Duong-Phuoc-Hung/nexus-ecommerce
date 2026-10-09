@@ -16,7 +16,7 @@ export function createApplication(): Application {
       status: 'UP',
       service: 'catalog-service',
       boundedContext: 'Product Catalog (SRS 3.3)',
-      port: process.env.CATALOG_SERVICE_PORT || 3002,
+      port: process.env.PORT || process.env.CATALOG_SERVICE_PORT || 4002,
       timestamp: new Date().toISOString(),
     });
   });

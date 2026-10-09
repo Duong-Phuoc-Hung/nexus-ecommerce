@@ -17,7 +17,7 @@ export function createApplication(): Application {
       status: 'UP',
       service: 'user-service',
       boundedContext: 'User & Authentication (SRS 3.1)',
-      port: process.env.USER_SERVICE_PORT || 3001,
+      port: process.env.PORT || process.env.USER_SERVICE_PORT || 4001,
       timestamp: new Date().toISOString(),
     });
   });

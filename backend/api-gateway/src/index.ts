@@ -4,20 +4,34 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const PORT = process.env.GATEWAY_PORT ? parseInt(process.env.GATEWAY_PORT, 10) : 8000;
+const PORT = process.env.PORT
+  ? parseInt(process.env.PORT, 10)
+  : process.env.GATEWAY_PORT
+    ? parseInt(process.env.GATEWAY_PORT, 10)
+    : 4000;
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-// Gateway Service Registry (Port mapping matching docker & local dev)
+// Gateway Service Registry (Port mapping matching docker, k8s & local dev)
 const SERVICE_ENDPOINTS = {
-  user: `http://localhost:${process.env.USER_SERVICE_PORT || 3001}`,
-  catalog: `http://localhost:${process.env.CATALOG_SERVICE_PORT || 3002}`,
-  commerce: `http://localhost:${process.env.COMMERCE_SERVICE_PORT || 3003}`,
-  auction: `http://localhost:${process.env.AUCTION_SERVICE_PORT || 3004}`,
-  fulfillment: `http://localhost:${process.env.FULFILLMENT_SERVICE_PORT || 3005}`,
-  notification: `http://localhost:${process.env.NOTIFICATION_SERVICE_PORT || 3006}`,
+  user: process.env.USER_SERVICE_URL || `http://localhost:${process.env.USER_SERVICE_PORT || 4001}`,
+  catalog:
+    process.env.CATALOG_SERVICE_URL ||
+    `http://localhost:${process.env.CATALOG_SERVICE_PORT || 4002}`,
+  commerce:
+    process.env.COMMERCE_SERVICE_URL ||
+    `http://localhost:${process.env.COMMERCE_SERVICE_PORT || 4003}`,
+  auction:
+    process.env.AUCTION_SERVICE_URL ||
+    `http://localhost:${process.env.AUCTION_SERVICE_PORT || 4004}`,
+  fulfillment:
+    process.env.FULFILLMENT_SERVICE_URL ||
+    `http://localhost:${process.env.FULFILLMENT_SERVICE_PORT || 4005}`,
+  notification:
+    process.env.NOTIFICATION_SERVICE_URL ||
+    `http://localhost:${process.env.NOTIFICATION_SERVICE_PORT || 4006}`,
 };
 
 // Gateway Central Health Check Endpoint

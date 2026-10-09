@@ -16,7 +16,7 @@ export function createApplication(): Application {
       status: 'UP',
       service: 'notification-service',
       boundedContext: 'Email, Push & In-App Notification (SRS 3.2)',
-      port: process.env.NOTIFICATION_SERVICE_PORT || 3006,
+      port: process.env.PORT || process.env.NOTIFICATION_SERVICE_PORT || 4006,
       timestamp: new Date().toISOString(),
     });
   });

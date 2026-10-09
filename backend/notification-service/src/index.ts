@@ -3,9 +3,11 @@ import { createApplication } from './app';
 
 dotenv.config();
 
-const PORT = process.env.NOTIFICATION_SERVICE_PORT
-  ? parseInt(process.env.NOTIFICATION_SERVICE_PORT, 10)
-  : 3006;
+const PORT = process.env.PORT
+  ? parseInt(process.env.PORT, 10)
+  : process.env.NOTIFICATION_SERVICE_PORT
+    ? parseInt(process.env.NOTIFICATION_SERVICE_PORT, 10)
+    : 4006;
 const app = createApplication();
 
 app.listen(PORT, () => {

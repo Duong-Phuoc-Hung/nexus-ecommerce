@@ -3,9 +3,11 @@ import { createApplication } from './app';
 
 dotenv.config();
 
-const PORT = process.env.AUCTION_SERVICE_PORT
-  ? parseInt(process.env.AUCTION_SERVICE_PORT, 10)
-  : 3004;
+const PORT = process.env.PORT
+  ? parseInt(process.env.PORT, 10)
+  : process.env.AUCTION_SERVICE_PORT
+    ? parseInt(process.env.AUCTION_SERVICE_PORT, 10)
+    : 4004;
 const app = createApplication();
 
 app.listen(PORT, () => {
