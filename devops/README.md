@@ -214,8 +214,8 @@ Tệp `.gitlab-ci.yml` được cấu hình stage `docker-build` tự động h�
 Toàn bộ hạ tầng production Kubernetes được khai báo dạng mã nguồn (GitOps) tại `devops/k8s/`:
 
 - **Namespace**: `nexus`
-- **ConfigMap & Secret**: `nexus-config`, `nexus-secret`
-- **Microservices Deployments & Services**: 7 backend microservices (Ports 4000-4006) với rolling update, non-root security context (`runAsNonRoot: true`, `runAsUser: 1000`), Liveness & Readiness probes (`/health`), giới hạn tài nguyên CPU/RAM chặt chẽ.
+- **ConfigMap & Secret**: `nexus-config`, `nexus-secret` (kèm `gitlab-registry-secret` loại `kubernetes.io/dockerconfigjson` để pull images từ private GitLab Registry `git.fsoft-academy.edu.vn:5050`).
+- **Microservices Deployments & Services**: 7 backend microservices (Ports 4000-4006) với rolling update, non-root security context (`runAsNonRoot: true`, `runAsUser: 1000`), `imagePullSecrets` xác thực Registry, Liveness & Readiness probes (`/health`), giới hạn tài nguyên CPU/RAM chặt chẽ.
 - **Ingress**: `nexus-ingress` điều hướng traffic domain vào API Gateway.
 - **Kustomization**: Quản lý toàn bộ gói tài nguyên qua `kustomization.yaml`.
 - **ArgoCD Application**: `devops/k8s/argocd-application.yaml` và `devops/argocd/application.yaml` kích hoạt chế độ:
@@ -226,6 +226,9 @@ Toàn bộ hạ tầng production Kubernetes được khai báo dạng mã ngu�
 ### Triển khai thủ công hoặc qua GitOps:
 
 ```bash
+# Chạy bộ test kiểm thử tự động toàn diện hạ tầng & healthcheck:
+pnpm test
+
 # Triển khai trực tiếp toàn bộ tài nguyên qua Kustomize:
 kubectl apply -k devops/k8s/
 

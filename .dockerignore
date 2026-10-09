@@ -10,18 +10,20 @@
 *.swo
 
 # Dependency directories & local caches
-node_modules
-.pnpm-store
+**/node_modules
+**/.pnpm-store
 .pnpm-debug.log*
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+*.log
 
 # Build artifacts
-dist
-build
-.next
-.turbo
+**/dist
+**/build
+**/.next
+**/.turbo
+*.tsbuildinfo
 
 # Environment variable files (Security - prevent secret leaks)
 .env
@@ -31,9 +33,12 @@ build
 # Kubernetes, DevOps & Docs (not needed inside container images)
 devops/k8s
 devops/argocd
+devops/nginx
 *.md
 LICENSE
 
 # Testing & Coverage
 coverage
 .nyc_output
+temp*
+test_*

@@ -13,6 +13,7 @@
     "check:branch": "node scripts/verify-branch-name.js",
     "format": "prettier --write \"**/*.{js,ts,tsx,json,md,yml,yaml}\"",
     "format:check": "prettier --check \"**/*.{js,ts,tsx,json,md,yml,yaml}\"",
+    "test": "node --test scripts/test-infrastructure.test.js",
     "build": "pnpm -r --filter \"./backend/*\" build",
     "dev:gateway": "pnpm --filter @nexus/api-gateway dev",
     "dev:user": "pnpm --filter @nexus/user-service dev",

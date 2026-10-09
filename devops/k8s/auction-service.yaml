@@ -26,6 +26,8 @@ spec:
         app.kubernetes.io/name: auction-service
         app.kubernetes.io/part-of: nexus-platform
     spec:
+      imagePullSecrets:
+        - name: gitlab-registry-secret
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000

@@ -58,6 +58,9 @@ RUN if [ -d "./backend/${SERVICE_NAME}/prisma" ]; then \
       cp -r ./backend/${SERVICE_NAME}/prisma /prod/app/prisma; \
     fi
 
+# Clean up dev artifacts, source files and build configurations from prod bundle
+RUN rm -rf /prod/app/src /prod/app/tsconfig.json /prod/app/Dockerfile /prod/app/pnpm-workspace.yaml
+
 # ------------------------------------------------------------------------------
 # Stage 3: Minimal Production Runner (< 150MB)
 # ------------------------------------------------------------------------------
@@ -90,7 +93,7 @@ EXPOSE ${SERVICE_PORT}
 
 # In-container health check probe
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:' + (process.env.PORT || 4000) + '/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"
+  CMD node -e "require('http').get('http://127.0.0.1:' + (process.env.PORT || 4000) + '/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
 
 # Start the Microservice
 CMD ["node", "dist/index.js"]
