@@ -1,0 +1,198 @@
+// =============================================================================
+// Project Nexus - Fulfillment Service Prisma Schema (SRS 3.6)
+// Database: PostgreSQL (nexus_fulfillment_db - Port 5436)
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// 1. BẢNG DANH MỤC KHO HÀNG (Quản lý các kho bãi vật lý của hệ thống)
+// -----------------------------------------------------------------------------
+model Warehouse {
+  // Khóa chính: Số tự tăng (1, 2, 3...)
+  id        BigInt               @id @default(autoincrement())
+
+  // Mã định danh kho bãi (SRS: Mặc định kho chính là WH_001)
+  code      String               @unique @db.VarChar(50)
+
+  // Tên kho hàng (VD: "Kho Tổng TP.HCM", "Kho Phân Phối Hà Nội")
+  name      String               @db.VarChar(100)
+
+  // Địa chỉ chi tiết nơi đặt kho
+  address   String               @db.VarChar(255)
+
+  // Tỉnh / Thành phố
+  city      String               @db.VarChar(100)
+
+  // Trạng thái: TRUE (Đang mở cửa nhận/xuất hàng), FALSE (Tạm đóng cửa)
+  isActive  Boolean              @default(true) @map("is_active")
+
+  // Thời gian tạo và cập nhật thông tin kho
+  createdAt DateTime             @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Quan hệ nội bộ trong fulfillment-service
+  inventories SkuInventory[]
+  shipments   Shipment[]
+
+  @@map("fulfillment_warehouses")
+}
+
+// -----------------------------------------------------------------------------
+// 2. BẢNG TỒN KHO THEO SKU (Quản lý 4 trạng thái tồn kho nghiêm ngặt)
+// -----------------------------------------------------------------------------
+model SkuInventory {
+  // Khóa chính: Số tự tăng (1, 2, 3...)
+  id                  BigInt            @id @default(autoincrement())
+
+  // Hàng hóa nằm ở kho nào (Khóa ngoại nối với fulfillment_warehouses)
+  warehouseId         BigInt            @map("warehouse_id")
+
+  // Tham chiếu sản phẩm gốc (Lấy 'id' từ catalog_products bên catalog-service)
+  productId           BigInt            @map("product_id")
+
+  // Mã phân loại sản phẩm chi tiết (VD: "IPHONE-15-BLUE-256")
+  skuCode             String            @unique @map("sku_code") @db.VarChar(100)
+
+  // Tổng số lượng hàng hóa thực tế đang nằm trên kệ trong kho
+  totalQuantity       Int               @default(0) @map("total_quantity")
+
+  // Số lượng hàng sẵn sàng bán cho khách mua
+  availableQuantity   Int               @default(0) @map("available_quantity")
+
+  // Số lượng đang bị giữ chỗ tạm thời trong 30 phút khi khách checkout (SRS: RESERVATION_TIMEOUT = 30m)
+  reservedQuantity    Int               @default(0) @map("reserved_quantity")
+
+  // Số lượng hàng bị lỗi, hỏng hóc, chờ thanh lý (không được bán)
+  unavailableQuantity Int               @default(0) @map("unavailable_quantity")
+
+  // Thời gian tạo và cập nhật số lượng tồn kho
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt           DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  warehouse           Warehouse         @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  ledgers             InventoryLedger[]
+
+  @@index([warehouseId], map: "idx_inventory_warehouse")
+  @@index([productId], map: "idx_inventory_product")
+  @@map("fulfillment_sku_inventories")
+}
+
+// -----------------------------------------------------------------------------
+// 3. BẢNG SỔ CÁI BIẾN ĐỘNG KHO (BẤT BIẾN - APPEND-ONLY theo SRS 3.6.1)
+// Tuyệt đối không cho phép UPDATE hay DELETE để đảm bảo minh bạch kiểm toán kho
+// -----------------------------------------------------------------------------
+model InventoryLedger {
+  // Khóa chính: Số tự tăng (1, 2, 3...)
+  id              BigInt       @id @default(autoincrement())
+
+  // Thuộc dòng tồn kho nào (Khóa ngoại nối với fulfillment_sku_inventories)
+  inventoryId     BigInt       @map("inventory_id")
+
+  // Loại biến động: INTAKE (Nhập kho), RESERVE (Giữ chỗ 30p), RELEASE (Nhả hàng hủy), COMMIT (Trừ thật), ADJUST (Kiểm kê)
+  transactionType String       @map("transaction_type") @db.VarChar(30)
+
+  // Số lượng biến động (+10 nhập kho, -2 xuất bán,...)
+  quantityChange  Int          @map("quantity_change")
+
+  // Mã chứng từ liên quan (Lấy 'order_id' từ commerce_orders hoặc mã phiếu nhập kho)
+  referenceId     String?      @map("reference_id") @db.VarChar(100)
+
+  // Diễn giải lý do biến động số lượng
+  reason          String?      @db.VarChar(255)
+
+  // Thời điểm ghi nhận biến động (Bất biến, không bao giờ thay đổi)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz()
+
+  inventory       SkuInventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+
+  @@index([inventoryId], map: "idx_ledger_inventory")
+  @@index([transactionType], map: "idx_ledger_type")
+  @@index([referenceId], map: "idx_ledger_reference")
+  @@map("fulfillment_inventory_ledgers")
+}
+
+// -----------------------------------------------------------------------------
+// 4. BẢNG ĐƠN VẬN CHUYỂN / GIAO HÀNG (Theo dõi lộ trình giao đơn tới tay khách)
+// -----------------------------------------------------------------------------
+model Shipment {
+  // Khóa chính: Số tự tăng (1, 2, 3...)
+  id              BigInt    @id @default(autoincrement())
+
+  // Tham chiếu đơn hàng cần giao (Lấy 'id' từ commerce_orders bên commerce-service)
+  orderId         BigInt    @map("order_id")
+
+  // Xuất hàng đi từ kho nào (Khóa ngoại nối với fulfillment_warehouses)
+  warehouseId     BigInt    @map("warehouse_id")
+
+  // Hãng giao hàng được chọn (GHN hoặc GHTK)
+  carrierCode     String    @map("carrier_code") @db.VarChar(50)
+
+  // Mã vận đơn do GHN/GHTK cấp để khách tra cứu hành trình (VD: "GHN123456789VN")
+  trackingCode    String?   @map("tracking_code") @db.VarChar(100)
+
+  // Cước phí vận chuyển thực tế
+  shippingFee     Decimal   @default(0.00) @map("shipping_fee") @db.Decimal(12, 2)
+
+  // Trạng thái: PENDING (Chờ lấy), PICKED_UP (Đã lấy hàng), IN_TRANSIT (Đang giao), DELIVERED (Thành công), FAILED, RETURNED
+  status          String    @default("PENDING") @db.VarChar(30)
+
+  // Họ tên người nhận hàng
+  receiverName    String    @map("receiver_name") @db.VarChar(100)
+
+  // Số điện thoại người nhận hàng
+  receiverPhone   String    @map("receiver_phone") @db.VarChar(20)
+
+  // Địa chỉ giao hàng đầy đủ (Lưu JSON để hiển thị nguyên vẹn)
+  shippingAddress Json      @map("shipping_address")
+
+  // Thời điểm tài xế lấy hàng đi giao
+  shippedAt       DateTime? @map("shipped_at") @db.Timestamptz()
+
+  // Thời điểm khách ký nhận hàng thành công
+  deliveredAt     DateTime? @map("delivered_at") @db.Timestamptz()
+
+  // Thời gian tạo và cập nhật đơn vận chuyển
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  warehouse       Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+
+  @@index([orderId], map: "idx_shipment_order")
+  @@index([warehouseId], map: "idx_shipment_warehouse")
+  @@index([trackingCode], map: "idx_shipment_tracking")
+  @@index([status], map: "idx_shipment_status")
+  @@map("fulfillment_shipments")
+}
+
+// -----------------------------------------------------------------------------
+// 5. BẢNG ĐỐI TÁC VẬN CHUYỂN (Tích hợp hệ thống GHN, GHTK)
+// -----------------------------------------------------------------------------
+model Carrier {
+  // Khóa chính: Số tự tăng (1, 2, 3...)
+  id          BigInt   @id @default(autoincrement())
+
+  // Mã đối tác (VD: "GHN", "GHTK")
+  carrierCode String   @unique @map("carrier_code") @db.VarChar(50)
+
+  // Tên đầy đủ hiển thị (VD: "Giao Hàng Nhanh", "Giao Hàng Tiết Kiệm")
+  carrierName String   @map("carrier_name") @db.VarChar(100)
+
+  // Trạng thái: TRUE (Đang sử dụng đối tác này), FALSE (Tạm dừng tích hợp)
+  isActive    Boolean  @default(true) @map("is_active")
+
+  // Đường link kỹ thuật của Server GHN/GHTK để Backend tự động gửi dữ liệu tạo đơn
+  apiEndpoint String?  @map("api_endpoint") @db.VarChar(255)
+
+  // Thời gian tạo bản ghi
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@map("fulfillment_carriers")
+}
