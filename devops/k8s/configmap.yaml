@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nexus-config
+  namespace: nexus
+  labels:
+    app.kubernetes.io/name: nexus-config
+    app.kubernetes.io/part-of: nexus-platform
+data:
+  NODE_ENV: "production"
+  TZ: "UTC"
+  
+  # Microservices Port Mappings
+  GATEWAY_PORT: "4000"
+  USER_SERVICE_PORT: "4001"
+  CATALOG_SERVICE_PORT: "4002"
+  COMMERCE_SERVICE_PORT: "4003"
+  AUCTION_SERVICE_PORT: "4004"
+  FULFILLMENT_SERVICE_PORT: "4005"
+  NOTIFICATION_SERVICE_PORT: "4006"
+
+  # Internal Microservice Discovery URLs via Kubernetes CoreDNS
+  USER_SERVICE_URL: "http://user-service:4001"
+  CATALOG_SERVICE_URL: "http://catalog-service:4002"
+  COMMERCE_SERVICE_URL: "http://commerce-service:4003"
+  AUCTION_SERVICE_URL: "http://auction-service:4004"
+  FULFILLMENT_SERVICE_URL: "http://fulfillment-service:4005"
+  NOTIFICATION_SERVICE_URL: "http://notification-service:4006"
+
+  # Shared Redis Cache & Redlock Host
+  REDIS_HOST: "nexus-redis"
+  REDIS_PORT: "6379"
+
+  # RabbitMQ Broker Host & Ports
+  RABBITMQ_HOST: "nexus-rabbitmq"
+  RABBITMQ_PORT: "5672"
+  RABBITMQ_MANAGEMENT_PORT: "15672"
