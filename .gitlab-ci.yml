@@ -50,11 +50,6 @@ install_dependencies:
   stage: install
   script:
     - pnpm install --frozen-lockfile
-  artifacts:
-    expire_in: 1 day
-    paths:
-      - node_modules/
-      - .pnpm-store/
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
