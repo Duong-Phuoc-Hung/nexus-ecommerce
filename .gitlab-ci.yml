@@ -98,6 +98,8 @@ unit_tests:
   needs:
     - install_dependencies
   script:
+    - echo "Building workspace packages before testing..."
+    - pnpm build
     - echo "Running unit tests across all workspace packages..."
     - pnpm test
     - echo "Test suite executed successfully."
@@ -137,7 +139,8 @@ validate_docker_configs:
   needs:
     - build_packages
   dependencies: []
-  before_script: []
+  before_script:
+    - apk add --no-cache docker-cli-compose
   script:
     - echo "Validating Docker Compose configurations..."
     - docker compose -f devops/docker-compose.dev.yml config
