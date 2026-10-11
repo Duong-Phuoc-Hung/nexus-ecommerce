@@ -90,6 +90,27 @@ Mỗi service trong `backend/` tương ứng với một **Bounded Context** đ�
   - `fulfillment-service`: `nexus_fulfillment_db` (Port 5436)
   - `notification-service`: `nexus_notification_db` (Port 5437)
 
+### Quy tắc 5: KIỂM SOÁT TỰ ĐỘNG BẰNG ARCHUNIT TESTS (`pnpm test:arch`)
+
+Các quy tắc ranh giới kiến trúc trên không chỉ dừng lại ở mặt lý thuyết hay quy ước, mà được **bảo vệ và kiểm tra tự động 100%** thông qua bộ test ArchUnit tại [`scripts/test-architecture-boundaries.test.js`](file:///D:/CodeProject/nexus-ecommerce/nexus-ecommerce-main/scripts/test-architecture-boundaries.test.js).
+
+1. **Lệnh chạy kiểm tra ranh giới:**
+
+   ```bash
+   # Chạy toàn bộ test suites (gồm cả Architecture Boundaries và Infrastructure)
+   pnpm test
+
+   # Hoặc chỉ chạy riêng bài kiểm tra ranh giới kiến trúc ArchUnit
+   pnpm test:arch
+   ```
+
+2. **Các ràng buộc kiến trúc được tự động thực thi:**
+   - **`RULE_1_FORBID_CROSS_CONTEXT_INTERNAL_IMPORT`**: Ngăn chặn tuyệt đối việc một Bounded Context import trực tiếp Entity, Repository, Use-Case hay cấu trúc nội bộ của context khác. Nếu xuất hiện import chéo, test sẽ lập tức **FAIL** và chỉ rõ chính xác file, dòng vi phạm, và ngữ cảnh.
+   - **`RULE_2_DOMAIN_LAYER_PURITY`**: Ép buộc tầng Domain phải thuần túy, cấm phụ thuộc vào Application, Infrastructure hay Interfaces.
+   - **`RULE_2_DOMAIN_ENTITY_ISOLATION`**: Cấm Domain Entity import trực tiếp các ORM hay Database client (như Prisma, Mongoose).
+   - **Giao tiếp hợp lệ được phép**: Chỉ cho phép import từ các package dùng chung chuẩn hóa (`@nexus/contracts`, `@nexus/events`, `@nexus/shared`, `@nexus/utils`) hoặc thư viện bên thứ ba.
+   - **Tự động áp dụng cho package mới (Dynamic Extensibility)**: Bất kỳ thư mục Bounded Context mới nào được thêm vào thư mục `backend/` đều được engine tự động phát hiện và áp dụng toàn bộ rule mà không cần sửa đổi test runner.
+
 ---
 
 ## 3. Danh Sách 6 Bounded Contexts & API Gateway
