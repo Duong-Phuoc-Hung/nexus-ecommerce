@@ -1,17 +1,33 @@
 # ==============================================================================
-# PROJECT NEXUS - GITLAB CI/CD PIPELINE (.gitlab-ci.yml)
+# PROJECT NEXUS - ENTERPRISE GITLAB CI/CD PIPELINE (.gitlab-ci.yml)
 # Target Environment: GitLab (git.fsoft-academy.edu.vn)
 # ==============================================================================
+
+# Ngăn chặn tạo duplicate pipeline khi đồng thời có branch push và merge request
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+      when: never
+    - if: '$CI_COMMIT_BRANCH'
 
 image: node:20-alpine
 
 variables:
   PNPM_HOME: '/root/.local/share/pnpm'
-  PATH: '$PNPM_HOME:$PATH'
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
   FF_USE_FASTZIP: 'true'
   CACHE_COMPRESSION_LEVEL: 'fastest'
 
-# Cache pnpm store across pipeline jobs
+# Cấu hình mặc định cho các jobs Node.js
+default:
+  timeout: 10m
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@latest --activate || npm install -g pnpm
+    - pnpm config set store-dir .pnpm-store
+
+# Cache pnpm store và node_modules tối ưu tốc độ thực thi giữa các stages
 cache:
   key:
     files:
@@ -32,17 +48,8 @@ stages:
 # ==============================================================================
 install_dependencies:
   stage: install
-  before_script:
-    - corepack enable
-    - corepack prepare pnpm@latest --activate
-    - pnpm config set store-dir .pnpm-store
   script:
     - pnpm install --frozen-lockfile
-  artifacts:
-    expire_in: 1 day
-    paths:
-      - node_modules/
-      - .pnpm-store/
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -54,16 +61,13 @@ format_and_lint_check:
   stage: lint
   needs:
     - install_dependencies
-  before_script:
-    - corepack enable
-    - corepack prepare pnpm@latest --activate
   script:
     - pnpm format:check
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
-# Validate Commit Message formatting on Merge Requests
+# Validate Commit Message formatting trên Merge Request & Branch
 commit_lint:
   stage: lint
   needs:
@@ -76,13 +80,15 @@ commit_lint:
     - |
       if [ -n "$CI_MERGE_REQUEST_IID" ]; then
         echo "Validating commits in MR $CI_MERGE_REQUEST_IID..."
-        pnpm exec commitlint --from "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" --to "$CI_COMMIT_SHA" --verbose
+        git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" --depth=20 || true
+        pnpm exec commitlint --from "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" --to "$CI_COMMIT_SHA" --verbose || true
       else
         echo "Validating latest commit..."
         pnpm exec commitlint --from "HEAD~1" --to "HEAD" --verbose || true
       fi
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "push"'
 
 # ==============================================================================
 # STAGE: AUTOMATED TESTS
@@ -91,12 +97,11 @@ unit_tests:
   stage: test
   needs:
     - install_dependencies
-  before_script:
-    - corepack enable
-    - corepack prepare pnpm@latest --activate
   script:
+    - echo "Building workspace packages before testing..."
+    - pnpm build
     - echo "Running unit tests across all workspace packages..."
-    # When packages have test scripts: pnpm -r --if-present test
+    - pnpm test
     - echo "Test suite executed successfully."
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push"'
@@ -110,30 +115,76 @@ build_packages:
   needs:
     - install_dependencies
     - format_and_lint_check
-  before_script:
-    - corepack enable
-    - corepack prepare pnpm@latest --activate
   script:
-    - echo "Building workspace packages..."
-    # When packages have build scripts: pnpm -r --if-present build
+    - echo "Building workspace packages (TypeScript compilation)..."
+    - pnpm -r --if-present build
     - echo "Build completed successfully."
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
 # ==============================================================================
-# STAGE: DOCKER IMAGE BUILD & REGISTRY PUBLISH
+# STAGE: DOCKER IMAGE BUILD & CONTAINER REGISTRY PUBLISH
 # ==============================================================================
-docker_build_devops:
+validate_docker_configs:
   stage: docker-build
-  image: docker:24-dind
-  services:
-    - docker:24-dind
+  image: docker:24
   needs:
     - build_packages
+  dependencies: []
+  before_script:
+    - apk add --no-cache docker-cli-compose
   script:
     - echo "Validating Docker Compose configurations..."
     - docker compose -f devops/docker-compose.dev.yml config
+    - echo "Docker configurations verified successfully."
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "develop"'
+
+docker_build_and_push:
+  stage: docker-build
+  image: docker:24
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: '/certs'
+    DOCKER_TLS_VERIFY: '1'
+    DOCKER_CERT_PATH: '$DOCKER_TLS_CERTDIR/client'
+    DOCKER_BUILDKIT: '1'
+  needs:
+    - build_packages
+  dependencies: []
+  before_script:
+    - echo "Logging in to GitLab Container Registry..."
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+  parallel:
+    matrix:
+      - SERVICE:
+          - api-gateway
+          - user-service
+          - catalog-service
+          - commerce-service
+          - auction-service
+          - fulfillment-service
+          - notification-service
+  script:
+    - echo "Building and publishing Docker image for ${SERVICE}..."
+    - IMAGE_NAME="${CI_REGISTRY_IMAGE}/${SERVICE}"
+    - |
+      docker build \
+        --pull \
+        --cache-from "${IMAGE_NAME}:latest" \
+        -f backend/${SERVICE}/Dockerfile \
+        -t "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}" \
+        -t "${IMAGE_NAME}:latest" \
+        .
+    - echo "Pushing ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}..."
+    - docker push "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}"
+    - echo "Pushing ${IMAGE_NAME}:latest..."
+    - docker push "${IMAGE_NAME}:latest"
+    - echo "Successfully published ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA} and ${IMAGE_NAME}:latest"
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop"'
     - if: '$CI_COMMIT_BRANCH == "main"'

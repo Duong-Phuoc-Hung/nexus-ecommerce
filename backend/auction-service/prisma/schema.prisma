@@ -1,0 +1,174 @@
+// =============================================================================
+// Project Nexus - Auction Service Prisma Schema (SRS 3.5)
+// Database: PostgreSQL (nexus_auction_db - Port 5435)
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// 1. BẢNG PHÒNG ĐẤU GIÁ (Quản lý toàn bộ vòng đời phiên đấu giá)
+// -----------------------------------------------------------------------------
+model AuctionRoom {
+  // Khóa chính: Số tự tăng (1, 2, 3...)
+  id            BigInt             @id @default(autoincrement())
+
+  // Tham chiếu sản phẩm đấu giá (Lấy 'id' từ catalog_products bên catalog-service)
+  productId     BigInt             @map("product_id")
+
+  // Tham chiếu người bán / chủ phòng (Lấy 'id' từ user_users bên user-service)
+  sellerId      BigInt             @map("seller_id")
+
+  // Tiêu đề phòng đấu giá (VD: "Đấu giá iPhone 15 Pro Max 256GB Like New")
+  title         String             @db.VarChar(255)
+
+  // Giá khởi điểm do người bán đặt ra ban đầu
+  startPrice    Decimal            @map("start_price") @db.Decimal(12, 2)
+
+  // Giá cao nhất hiện tại (Cập nhật liên tục mỗi khi có lượt đặt giá mới)
+  currentPrice  Decimal            @map("current_price") @db.Decimal(12, 2)
+
+  // Bước giá tối thiểu (SRS: Mỗi lần trả giá phải tăng ít nhất bằng số tiền này)
+  bidStep       Decimal            @map("bid_step") @db.Decimal(12, 2)
+
+  // Giá mua đứt ngay (Tùy chọn: nếu khách trả mức này thì trúng luôn, kết thúc phiên)
+  buyNowPrice   Decimal?           @map("buy_now_price") @db.Decimal(12, 2)
+
+  // Thời điểm mở phiên đấu giá cho người dùng vào trả giá
+  startTime     DateTime           @map("start_time") @db.Timestamptz()
+
+  // Thời điểm kết thúc phiên đấu giá dự kiến ban đầu
+  endTime       DateTime           @map("end_time") @db.Timestamptz()
+
+  // Thời điểm kết thúc thực tế (Tự dời lùi lại nếu có kích hoạt Anti-sniping ở phút chót)
+  actualEndTime DateTime?          @map("actual_end_time") @db.Timestamptz()
+
+  // Trạng thái: SCHEDULED (Chờ mở), ACTIVE (Đang diễn ra), ENDED (Hết giờ), SETTLED (Đã chốt), CANCELLED (Đã hủy)
+  status        String             @default("SCHEDULED") @db.VarChar(20)
+
+  // Tham chiếu người thắng cuộc khi phiên kết thúc (Lấy 'id' từ user_users bên user-service)
+  winnerId      BigInt?            @map("winner_id")
+
+  // Thời gian tạo và cập nhật phòng đấu giá
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Quan hệ nội bộ trong auction-service
+  bids          AuctionBid[]
+  settlement    AuctionSettlement?
+  extensions    AuctionExtension[]
+
+  @@index([productId], map: "idx_auction_product")
+  @@index([sellerId], map: "idx_auction_seller")
+  @@index([status], map: "idx_auction_status")
+  @@index([winnerId], map: "idx_auction_winner")
+  @@map("auction_rooms")
+}
+
+// -----------------------------------------------------------------------------
+// 2. BẢNG LỊCH SỬ ĐẶT GIÁ (Lưu vết từng lượt trả giá, yêu cầu phản hồi <= 300ms)
+// -----------------------------------------------------------------------------
+model AuctionBid {
+  // Khóa chính: Số tự tăng (1, 2, 3...)
+  id        BigInt      @id @default(autoincrement())
+
+  // Thuộc phòng đấu giá nào (Khóa ngoại nối với bảng auction_rooms)
+  auctionId BigInt      @map("auction_id")
+
+  // Tham chiếu người bấm nút trả giá (Lấy 'id' từ user_users bên user-service)
+  bidderId  BigInt      @map("bidder_id")
+
+  // Số tiền người này đưa ra đấu giá
+  bidAmount Decimal     @map("bid_amount") @db.Decimal(12, 2)
+
+  // Thời điểm bấm giá chính xác đến mili-giây (Dùng phân xử ai bấm trước)
+  bidTime   DateTime    @default(now()) @map("bid_time") @db.Timestamptz()
+
+  // Cờ đánh dấu: TRUE nếu mức giá này đang dẫn đầu, FALSE nếu bị người khác vượt qua
+  isWinning Boolean     @default(false) @map("is_winning")
+
+  // Thời gian tạo bản ghi
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz()
+
+  auction   AuctionRoom @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+
+  @@index([auctionId], map: "idx_bid_auction")
+  @@index([bidderId], map: "idx_bid_bidder")
+  @@index([bidTime(sort: Desc)], map: "idx_bid_time")
+  @@map("auction_bids")
+}
+
+// -----------------------------------------------------------------------------
+// 3. BẢNG CHỐT NGƯỜI THẮNG & HẠN NỘP TIỀN 24H (Quản lý thanh toán sau đấu giá)
+// -----------------------------------------------------------------------------
+model AuctionSettlement {
+  // Khóa chính: Số tự tăng (1, 2, 3...)
+  id               BigInt      @id @default(autoincrement())
+
+  // Thuộc phiên đấu giá nào (Nối 1-1 với auction_rooms)
+  auctionId        BigInt      @unique @map("auction_id")
+
+  // Tham chiếu người chiến thắng (Lấy 'id' từ user_users bên user-service)
+  winnerId         BigInt      @map("winner_id")
+
+  // Số tiền trúng đấu giá cuối cùng phải thanh toán
+  winningBidAmount Decimal     @map("winning_bid_amount") @db.Decimal(12, 2)
+
+  // Hạn chót nộp tiền: Đúng 24h sau khi phiên kết thúc (SRS: Quá hạn phạt trừ 10 điểm uy tín)
+  paymentDeadline  DateTime    @map("payment_deadline") @db.Timestamptz()
+
+  // Tham chiếu đơn hàng tạo bên commerce_orders của commerce-service khi người thắng bấm thanh toán
+  orderId          BigInt?     @map("order_id")
+
+  // Trạng thái nộp tiền: PENDING_PAYMENT (Chờ trả), PAID (Đã trả), TIMEOUT_PENALIZED (Bùng kèo quá 24h)
+  status           String      @default("PENDING_PAYMENT") @db.VarChar(20)
+
+  // Thời điểm hệ thống chốt người thắng
+  settledAt        DateTime    @default(now()) @map("settled_at") @db.Timestamptz()
+
+  // Thời gian tạo bản ghi
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz()
+
+  auction          AuctionRoom @relation(fields: [auctionId], references: [id], onDelete: Restrict)
+
+  @@index([winnerId], map: "idx_settlement_winner")
+  @@index([status], map: "idx_settlement_status")
+  @@map("auction_settlements")
+}
+
+// -----------------------------------------------------------------------------
+// 4. BẢNG NHẬT KÝ GIA HẠN ANTI-SNIPING (Chống vét giá giây cuối)
+// -----------------------------------------------------------------------------
+model AuctionExtension {
+  // Khóa chính: Số tự tăng (1, 2, 3...)
+  id              BigInt      @id @default(autoincrement())
+
+  // Thuộc phòng đấu giá nào (Nối với auction_rooms)
+  auctionId       BigInt      @map("auction_id")
+
+  // Số phút được cộng thêm (SRS: Mặc định cộng thêm 5 phút nếu có bid ở 5 phút cuối)
+  extendedMinutes Int         @default(5) @map("extended_minutes")
+
+  // Giờ kết thúc cũ trước khi bị gia hạn
+  previousEndTime DateTime    @map("previous_end_time") @db.Timestamptz()
+
+  // Giờ kết thúc mới sau khi được cộng thêm 5 phút
+  newEndTime      DateTime    @map("new_end_time") @db.Timestamptz()
+
+  // Lý do gia hạn (VD: "Anti-sniping triggered by last-minute bid")
+  reason          String      @default("Anti-sniping triggered by last-minute bid") @db.VarChar(100)
+
+  // Thời điểm kích hoạt gia hạn
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz()
+
+  auction         AuctionRoom @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+
+  @@index([auctionId], map: "idx_extension_auction")
+  @@map("auction_extensions")
+}
