@@ -89,3 +89,16 @@ bash scripts/migrate-all-databases.sh
 # Chạy toàn bộ services và frontends đồng thời
 pnpm dev
 ```
+
+### 4.6. Kiểm thử tự động & Kiểm tra ranh giới kiến trúc (ArchUnit)
+
+```bash
+# Chạy toàn bộ test suites (Infrastructure + ArchUnit Architecture Boundaries)
+pnpm test
+
+# Hoặc chỉ chạy kiểm tra ranh giới kiến trúc liên Bounded Context
+pnpm test:arch
+
+# Hoặc chỉ chạy kiểm tra hạ tầng, Docker & K8s manifests
+pnpm test:infra
+```

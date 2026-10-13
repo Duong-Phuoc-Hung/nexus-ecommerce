@@ -1,297 +1,183 @@
-# Backend Architecture & Structure Specification (BE)
+# Backend Architecture & Bounded Context Specification
 
 > **Tài liệu tham chiếu:** SRS Project Nexus v1.0 (Section 2.4, 2.5, 3.1 - 3.6, 4.1 - 4.3, 5.1 - 5.8)  
-> **Ngôn ngữ & Nền tảng:** Node.js, TypeScript, Express / NestJS, Prisma ORM, Redis, RabbitMQ.  
-> **Nguyên tắc kiến trúc cốt lõi:** Database-per-service (SRS 4.1), Event-Driven Architecture, Layered Services.
+> **Ngôn ngữ & Nền tảng:** Node.js, TypeScript (Strict Mode), Express, Prisma ORM, Redis, RabbitMQ.  
+> **Mô hình kiến trúc:** Domain-Driven Design (DDD) & Clean Architecture / Hexagonal Architecture.
 
 ---
 
-## 1. Mô Hình Lớp Chuẩn Trong Mỗi Service (Standard Service Layers)
+## 1. Kiến Trúc 4 Tầng Chuẩn DDD Trong Mỗi Bounded Context
 
-Để code dễ hiểu, dễ phân công nhiệm vụ và bảo trì, mỗi dịch vụ trong `backend/` đều tuân theo mô hình thống nhất:
+Mỗi service trong `backend/` tương ứng với một **Bounded Context** độc lập và được cấu trúc theo 4 tầng phân tách nghiêm ngặt:
 
 ```text
-[ Client / Gateway ]
-         │
-         ▼
-     [ routes/ ]          --> Khai báo đường dẫn HTTP (GET, POST, PUT, DELETE)
-         │
-         ▼
-  [ middlewares/ ]        --> Xác thực Token, kiểm tra quyền (RBAC), Validate dữ liệu đầu vào
-         │
-         ▼
-   [ controllers/ ]       --> Nhận Request, gọi Service, trả về JSON Response chuẩn
-         │
-         ▼
-    [ services/ ]         --> Chứa 100% logic nghiệp vụ, tính toán, kiểm tra điều kiện SRS
-      │      │
-      │      ├───────────► [ integrations/ ] --> Gọi API bên ngoài (Stripe, GHN, GHTK, FCM)
-      │      │
-      │      ├───────────► [ publishers/ ]   --> Bắn sự kiện ra RabbitMQ sau khi hoàn thành
-      │      │
-      ▼      ▼
-    [ prisma/ ]           --> Tương tác Cơ sở dữ liệu thông qua Prisma Client
+       ┌────────────────────────────────────────────────────────┐
+       │             1. INTERFACES (API / PRESENTATION)         │
+       │  - HTTP REST Controllers, Express Routes, DTOs         │
+       └───────────────────────────┬────────────────────────────┘
+                                   │ (calls)
+                                   ▼
+       ┌────────────────────────────────────────────────────────┐
+       │             2. APPLICATION (USE CASES)                 │
+       │  - Use Cases / Interactors, Inbound & Outbound Ports   │
+       └─────────────┬────────────────────────────┬─────────────┘
+                     │ (orchestrates)             │ (inversion)
+                     ▼                            ▼
+┌──────────────────────────────────────┐  ┌────────────────────────────────────┐
+│         3. DOMAIN (CORE BUSINESS)    │  │       4. INFRASTRUCTURE            │
+│  - Entities & Value Objects          │  │  - Repository Implementations      │
+│  - Repository Interfaces (Ports)     │◄─┼── (Prisma, In-Memory)              │
+│  - Domain Events & Domain Exceptions │  │  - RabbitMQ Event Publishers       │
+│  * 100% Độc lập Framework & Database *│  │  - Database Connections & Drivers  │
+└──────────────────────────────────────┘  └────────────────────────────────────┘
 ```
+
+### Chi tiết nhiệm vụ từng tầng:
+
+1. **`domain/` (Enterprise Business Rules):**
+   - **Entities**: Đại diện cho các đối tượng nghiệp vụ cốt lõi, nắm giữ định danh và các quy tắc bảo toàn tính hợp lệ dữ liệu (Domain Invariants).
+   - **Repositories (Interfaces/Ports)**: Khai báo hợp đồng truy xuất dữ liệu thuần túy bằng TypeScript Interface. **Tuyệt đối không chứa mã SQL hay Prisma.**
+   - **Events**: Khai báo các sự kiện nghiệp vụ nội bộ (Domain Events).
+   - **Exceptions**: Các lỗi nghiệp vụ đặc thù của miền (Domain Exceptions).
+
+2. **`application/` (Application Business Rules):**
+   - **Use Cases**: Điều phối luồng nghiệp vụ cho từng ca sử dụng (ví dụ: `GetUserProfileUseCase`, `GetProductDetailUseCase`, `GetAuctionDetailUseCase`).
+   - **DTOs**: Định nghĩa cấu trúc dữ liệu truyền vào và lấy ra của Use Case.
+   - **Ports**: Khai báo các giao diện xuất (Outbound Ports) như `IEventPublisher`.
+
+3. **`infrastructure/` (Frameworks & Drivers):**
+   - **Repositories**: Triển khai cụ thể các interface ở tầng Domain (sử dụng Prisma Client hoặc In-Memory phục vụ dev/test).
+   - **Messaging**: Triển khai phát tán sự kiện ra RabbitMQ Broker.
+   - **Database**: Quản lý kết nối Prisma Client tới PostgreSQL cô lập của service.
+
+4. **`interfaces/` (Interface Adapters):**
+   - **Controllers**: Tiếp nhận HTTP Request từ client/gateway, parse dữ liệu, gọi Use Case và trả về HTTP Response chuẩn (JSON).
+   - **Routes**: Khai báo endpoint đường dẫn và method (GET, POST, PUT, DELETE).
+   - **DTOs**: Kiểm tra và validate dữ liệu request body.
 
 ---
 
-## 2. Cây Thư Mục Chi Tiết Toàn Bộ Backend
+## 2. Quy Tắc Giao Tiếp Liên Bounded Context (BẮT BUỘC TUÂN THỦ)
 
-```text
-backend/
-├── api-gateway/                             # CỔNG ĐIỀU PHỐI API (SRS 2.4)
-│   ├── package.json
-│   ├── tsconfig.json
-│   ├── .env.example
-│   └── src/
-│       ├── configs/
-│       │   └── gateway.config.ts            # Cấu hình Port, URL nội bộ các service, Secret Key
-│       ├── middlewares/
-│       │   ├── auth.middleware.ts           # Giải mã JWT Bearer Token, kiểm tra hạn dùng
-│       │   ├── rbac.middleware.ts           # Kiểm tra quyền hạn theo bảng Privileges (SRS 2.7)
-│       │   ├── rate-limiter.ts              # Giới hạn tần suất gọi chống tràn tải
-│       │   ├── trace-id.middleware.ts       # Gắn mã X-Trace-Id vào header của từng request
-│       │   ├── cors.middleware.ts           # Cấu hình tên miền cho phép truy cập (CORS)
-│       │   └── error-handler.ts             # Bộ bắt lỗi tập trung tại cổng Gateway
-│       ├── routes/
-│       │   ├── user.route.ts                # Chuyển tiếp tới User Service (/api/v1/auth, /api/v1/users)
-│       │   ├── catalog.route.ts             # Chuyển tiếp tới Catalog Service (/api/v1/products, /api/v1/categories)
-│       │   ├── commerce.route.ts            # Chuyển tiếp tới Commerce Service (/api/v1/cart, /api/v1/orders)
-│       │   ├── auction.route.ts             # Chuyển tiếp tới Auction Service (/api/v1/auctions, /api/v1/bids)
-│       │   ├── fulfillment.route.ts         # Chuyển tiếp tới Fulfillment Service (/api/v1/inventory, /api/v1/shipping)
-│       │   ├── notification.route.ts        # Chuyển tiếp tới Notification Service (/api/v1/notifications)
-│       │   └── index.ts
-│       ├── app.ts                           # Cấu hình Express App
-│       └── server.ts                        # Khởi động server HTTP & WebSocket Gateway
-│
-├── user-service/                            # DỊCH VỤ TÀI KHOẢN & ĐIỂM UY TÍN (SRS 3.1)
-│   ├── package.json
-│   ├── tsconfig.json
-│   ├── .env.example
-│   ├── prisma/
-│   │   └── schema.prisma                    # Bảng: users, roles, privileges, ratings, penalties
-│   └── src/
-│       ├── configs/
-│       │   └── user.config.ts               # SESSION_TIMEOUT_MINUTES (30), MAX_LOGIN_ATTEMPTS (5)...
-│       ├── controllers/
-│       │   ├── auth.controller.ts           # Đăng ký, Đăng nhập, Đăng xuất, Quên mật khẩu
-│       │   ├── user.controller.ts           # Xem hồ sơ, Cập nhật thông tin, Xóa mềm (Soft Delete)
-│       │   ├── role.controller.ts           # Quản lý chức vụ và phân quyền (RBAC)
-│       │   └── reputation.controller.ts     # Đánh giá sau giao dịch, Xem Trust Level, Xử lý phạt
-│       ├── services/
-│       │   ├── auth.service.ts              # Xử lý mật khẩu, cấp Access/Refresh Token, khóa tài khoản nếu sai 5 lần
-│       │   ├── user.service.ts              # Kiểm tra thông tin hợp lệ (Email, CMND, Ngày sinh), đổi mật khẩu
-│       │   ├── role.service.ts              # Phân quyền hạn theo 65 mã Privileges (SRS 2.7)
-│       │   └── reputation.service.ts        # Tính điểm Trust Level, trừ 10 điểm phạt nếu quá hạn trả tiền
-│       ├── routes/
-│       │   ├── auth.routes.ts               # POST /login, POST /register, POST /logout, POST /forgot-password
-│       │   ├── user.routes.ts               # GET /, GET /:id, PUT /:id, DELETE /:id, POST /change-password
-│       │   ├── role.routes.ts               # GET /, POST /, PUT /:id, DELETE /:id
-│       │   └── reputation.routes.ts         # POST /ratings, GET /:userId/summary, POST /penalties
-│       ├── validations/
-│       │   ├── auth.validation.ts           # Kiểm tra định dạng Email, độ mạnh mật khẩu
-│       │   ├── user.validation.ts           # Kiểm tra CMND/CCCD, định dạng số điện thoại
-│       │   └── rating.validation.ts         # Điểm số từ 1 - 5, cấm tự đánh giá chính mình
-│       ├── subscribers/
-│       │   ├── order-completed.subscriber.ts# Nhận OrderCompleted -> Cho phép 2 bên đánh giá nhau
-│       │   └── payment-timeout.subscriber.ts# Nhận AuctionPaymentTimeout -> Tự động trừ điểm uy tín
-│       ├── publishers/
-│       │   └── user.publisher.ts            # Bắn: UserRegistered, UserRated, ReputationUpdated...
-│       ├── app.ts
-│       └── server.ts
-│
-├── catalog-service/                         # DỊCH VỤ SẢN PHẨM, DANH MỤC & TÌM KIẾM (SRS 3.3)
-│   ├── package.json
-│   ├── tsconfig.json
-│   ├── .env.example
-│   ├── prisma/
-│   │   └── schema.prisma                    # Bảng: products, categories, product_images, product_attributes
-│   └── src/
-│       ├── configs/
-│       │   └── catalog.config.ts            # CATEGORY_MAX_LEVEL (3), MAX_PRODUCT_IMAGES (5), PRODUCT_STATUSES
-│       ├── controllers/
-│       │   ├── product.controller.ts        # CRUD sản phẩm, kiểm soát trạng thái DRAFT/ACTIVE/INACTIVE
-│       │   ├── category.controller.ts       # CRUD danh mục, hiển thị cây danh mục
-│       │   └── search.controller.ts         # Tìm kiếm sản phẩm, Lọc theo giá/danh mục, Gợi ý khám phá
-│       ├── services/
-│       │   ├── product.service.ts           # Chặn upload quá 5 ảnh, không cho xóa sản phẩm đã phát sinh đơn
-│       │   ├── category.service.ts          # Đảm bảo phân cấp tối đa 3 tầng, không cho xóa danh mục còn sản phẩm
-│       │   └── search.service.ts            # Thuật toán tìm kiếm theo tên, danh mục, giá, sắp xếp
-│       ├── routes/
-│       │   ├── product.routes.ts            # POST /, GET /, GET /:id, PUT /:id, DELETE /:id
-│       │   ├── category.routes.ts           # POST /, GET /, GET /tree, GET /:id, PUT /:id, DELETE /:id
-│       │   └── search.routes.ts             # GET /products, GET /discovery
-│       ├── validations/
-│       │   ├── product.validation.ts
-│       │   └── category.validation.ts
-│       ├── publishers/
-│       │   └── catalog.publisher.ts         # Bắn: ProductCreated, ProductUpdated, CategoryCreated...
-│       ├── app.ts
-│       └── server.ts
-│
-├── commerce-service/                        # DỊCH VỤ GIỎ HÀNG, ĐẶT HÀNG & THANH TOÁN (SRS 3.4)
-│   ├── package.json
-│   ├── tsconfig.json
-│   ├── .env.example
-│   ├── prisma/
-│   │   └── schema.prisma                    # Bảng: carts, cart_items, orders, order_items, payments, invoices
-│   └── src/
-│       ├── configs/
-│       │   └── commerce.config.ts           # CART_EXPIRATION_DAYS (7), CHECKOUT_TIMEOUT_MINUTES (15)
-│       ├── controllers/
-│       │   ├── cart.controller.ts           # Thao tác món trong giỏ hàng (thêm, sửa số lượng, xóa)
-│       │   ├── checkout.controller.ts       # Khởi tạo quy trình checkout, khóa phiên 15 phút
-│       │   ├── order.controller.ts          # Tạo đơn hàng, Hủy đơn hàng, Xem lịch sử và chi tiết
-│       │   └── payment.controller.ts        # Tạo giao dịch thanh toán, Nhận Webhook từ Stripe
-│       ├── services/
-│       │   ├── cart.service.ts              # Tính tổng tiền, gộp giỏ hàng khách vô danh (Guest) khi đăng nhập
-│       │   ├── checkout.service.ts          # Tái kiểm tra giá và tính khả dụng của hàng ngay trước khi tính tiền
-│       │   ├── order.service.ts             # Chụp snapshot giá sản phẩm, quản lý trạng thái đơn hàng
-│       │   ├── payment.service.ts           # Cơ chế Idempotent (cửa sổ 60p) chống trừ tiền 2 lần khi nhận Webhook
-│       │   └── invoice.service.ts           # Tự động xuất hóa đơn / biên lai điện tử PDF
-│       ├── integrations/
-│       │   └── stripe-payment.client.ts     # Gọi SDK Stripe: Tạo PaymentIntent, Xác thực chữ ký Webhook
-│       ├── routes/
-│       │   ├── cart.routes.ts
-│       │   ├── checkout.routes.ts
-│       │   ├── order.routes.ts
-│       │   └── payment.routes.ts
-│       ├── validations/
-│       │   ├── cart.validation.ts
-│       │   └── checkout.validation.ts
-│       ├── subscribers/
-│       │   ├── auction-won.subscriber.ts    # Nhận AuctionWon -> Tự động sinh đơn hàng cho người thắng cuộc
-│       │   └── inventory-reserved.subscriber.ts # Nhận xác nhận kho đã giữ chỗ -> Tiếp tục thanh toán
-│       ├── publishers/
-│       │   └── commerce.publisher.ts        # Bắn: OrderCreated, OrderPaid, OrderCancelled, OrderRefunded...
-│       ├── app.ts
-│       └── server.ts
-│
-├── auction-service/                         # DỊCH VỤ ĐẤU GIÁ & ĐẶT GIÁ REALTIME (SRS 3.5)
-│   ├── package.json
-│   ├── tsconfig.json
-│   ├── .env.example
-│   ├── prisma/
-│   │   └── schema.prisma                    # Bảng: auctions, bids, auction_settlements
-│   └── src/
-│       ├── configs/
-│       │   └── auction.config.ts            # DEFAULT_BID_INCREMENT (10), ANTI_SNIPING (5m), PAYMENT_DEADLINE (24h)
-│       ├── controllers/
-│       │   ├── auction.controller.ts        # Tạo phòng đấu giá, Sửa tham số (chỉ trước khi mở), Hủy phòng
-│       │   └── bid.controller.ts            # Đặt giá mới, Xem lịch sử đặt giá công khai
-│       ├── services/
-│       │   ├── auction.service.ts           # Quản lý vòng đời (SCHEDULED -> ACTIVE -> ENDED -> SETTLED)
-│       │   ├── bidding.service.ts           # Đặt giá siêu tốc (< 300ms), kiểm tra bước giá, kích hoạt Anti-sniping
-│       │   └── settlement.service.ts        # Chốt người trả giá cao nhất, phát lệnh tạo đơn hàng
-│       ├── websockets/
-│       │   └── auction-bid.socket.ts        # Kênh Socket.IO phát giá mới tức thì cho toàn bộ người đang theo dõi
-│       ├── redis/
-│       │   ├── redis-bid-lock.ts            # Khóa phân tán (Lock) chống xung đột mili-giây
-│       │   └── redis-auction-cache.ts       # Lưu giá cao nhất hiện tại trên RAM để đọc siêu tốc
-│       ├── jobs/
-│       │   ├── auction-scheduler.job.ts     # Tự động mở/đóng phiên đấu giá theo đúng giờ hẹn
-│       │   └── payment-deadline.job.ts      # Quét đơn quá 24h chưa trả tiền -> Báo phạt uy tín
-│       ├── routes/
-│       │   ├── auction.routes.ts
-│       │   └── bid.routes.ts
-│       ├── validations/
-│       │   ├── auction.validation.ts
-│       │   └── bid.validation.ts
-│       ├── publishers/
-│       │   └── auction.publisher.ts         # Bắn: AuctionStarted, BidPlaced, Outbid, AuctionWon, AuctionSettled...
-│       ├── app.ts
-│       └── server.ts
-│
-├── fulfillment-service/                     # DỊCH VỤ KHO VÀ GIAO HÀNG (SRS 3.6)
-│   ├── package.json
-│   ├── tsconfig.json
-│   ├── .env.example
-│   ├── prisma/
-│   │   └── schema.prisma                    # Bảng: warehouses, sku_inventories, inventory_ledgers, shipments
-│   └── src/
-│       ├── configs/
-│       │   └── fulfillment.config.ts        # RESERVATION_TIMEOUT (30m), DEFAULT_WAREHOUSE (WH_001)
-│       ├── controllers/
-│       │   ├── inventory.controller.ts      # Tra cứu tồn kho theo SKU, Điều chỉnh tồn kho thủ công
-│       │   ├── warehouse.controller.ts      # Danh sách kho bãi, Quản lý kho
-│       │   └── shipping.controller.ts       # Báo giá ship, Tạo đơn vận chuyển, Xem lộ trình di chuyển (Tracking)
-│       ├── services/
-│       │   ├── inventory.service.ts         # Quản lý 4 trạng thái: Total, Available, Reserved, Unavailable
-│       │   ├── ledger.service.ts            # Sổ cái bất biến lưu vết biến động kho: INTAKE, RESERVE, RELEASE, COMMIT
-│       │   ├── warehouse.service.ts         # Phân bổ lấy hàng từ tối đa 2 kho cho 1 đơn hàng
-│       │   └── shipping.service.ts          # Chuẩn hóa trạng thái đơn giao nhận từ các hãng về chuẩn chung
-│       ├── integrations/
-│       │   ├── ghn-shipping.client.ts       # Gọi API Giao Hàng Nhanh (Lấy cước, Đẩy đơn, Tra mã vận đơn)
-│       │   ├── ghtk-shipping.client.ts      # Gọi API Giao Hàng Tiết Kiệm
-│       │   └── carrier-resilience.ts        # Bộ Circuit Breaker chống sập khi đối tác giao hàng gặp sự cố
-│       ├── routes/
-│       │   ├── inventory.routes.ts
-│       │   ├── warehouse.routes.ts
-│       │   └── shipping.routes.ts
-│       ├── validations/
-│       │   ├── inventory.validation.ts
-│       │   └── shipping.validation.ts
-│       ├── subscribers/
-│       │   ├── order-created.subscriber.ts  # Nhận OrderCreated -> Giữ chỗ kho (Reserve) 30 phút
-│       │   ├── order-paid.subscriber.ts     # Nhận OrderPaid -> Trừ kho thật (Commit) & Đẩy đơn sang GHN/GHTK
-│       │   ├── order-cancelled.subscriber.ts# Nhận OrderCancelled -> Nhả lại hàng về kho (Release)
-│       │   └── auction-created.subscriber.ts# Nhận AuctionCreated -> Khóa giữ kho cho hàng đấu giá
-│       ├── publishers/
-│       │   └── fulfillment.publisher.ts     # Bắn: InventoryReserved, ShipmentCreated, ShipmentDelivered...
-│       ├── app.ts
-│       └── server.ts
-│
-└── notification-service/                    # DỊCH VỤ THÔNG BÁO & NHẬT KÝ SỰ KIỆN (SRS 3.2)
-    ├── package.json
-    ├── tsconfig.json
-    ├── .env.example
-    ├── prisma/
-    │   └── schema.prisma                    # Bảng: event_logs, notifications, notification_preferences
-    └── src/
-        ├── configs/
-        │   └── notification.config.ts       # Cấu hình Email, Push, SMS, Retry limit (3 lần)
-        ├── controllers/
-        │   ├── notification.controller.ts   # Lấy danh sách thông báo của tôi, Đánh dấu đã đọc
-        │   ├── event-log.controller.ts      # Màn hình Admin tra cứu nhật ký sự kiện hệ thống
-        │   ├── preference.controller.ts     # Bật/tắt loại thông báo theo ý người dùng
-        │   └── health.controller.ts         # Kiểm tra kết nối Message Broker (RabbitMQ)
-        ├── services/
-        │   ├── notification.service.ts      # Phân luồng gửi qua Email hoặc Push Notification
-        │   ├── event-log.service.ts         # Tự động ghi log sự kiện bất biến và phục vụ tra cứu
-        │   ├── preference.service.ts        # Chặn người dùng tắt thông báo giao dịch bắt buộc
-        │   └── broker-health.service.ts     # Quét định kỳ kiểm tra RabbitMQ còn sống không
-        ├── integrations/
-        │   ├── email-sender.client.ts       # Gửi Email qua SMTP / SendGrid
-        │   ├── push-fcm.client.ts           # Gửi Push Notification tới App qua Firebase FCM
-        │   └── sms-gateway.client.ts        # Gửi SMS viễn thông
-        ├── routes/
-        │   ├── notification.routes.ts
-        │   ├── event-log.routes.ts
-        │   ├── preference.routes.ts
-        │   └── health.routes.ts
-        ├── validations/
-        │   └── preference.validation.ts
-        ├── subscribers/
-        │   ├── audit-event-logger.subscriber.ts # Tự động bắt TẤT CẢ sự kiện hệ thống lưu vào event_logs
-        │   ├── order-events.subscriber.ts       # Nhận OrderPaid -> Gửi email hóa đơn cho người mua
-        │   └── auction-events.subscriber.ts     # Nhận Outbid -> Bắn Push Notification báo người bị vượt giá
-        ├── publishers/
-        │   └── notification.publisher.ts     # Bắn: NotificationSent, MessageBrokerUnavailable...
-        ├── app.ts
-        └── server.ts
-```
+Để đảm bảo các module có thể phát triển, kiểm thử và triển khai độc lập, toàn bộ nhóm phải tuân thủ nghiêm ngặt 4 quy tắc sau:
+
+### Quy tắc 1: CẤM IMPORT CHÉO ENTITY HOẶC REPOSITORY
+
+- **NGHIÊM CẤM:** Service A `import { Order } from '../../commerce-service/src/domain/entities/Order'` hoặc import Repository của nhau.
+- **NGHIÊM CẤM:** Một service kết nối hoặc truy vấn trực tiếp vào Database của service khác.
+- **LÝ DO:** Mỗi Bounded Context là một ranh giới nghiệp vụ riêng biệt. Việc import chéo sẽ biến hệ thống thành một khối Spaghettti Monolith không thể tách rời.
+
+### Quy tắc 2: GIAO TIẾP ĐỒNG BỘ QUA INTERFACE / HTTP API GATEWAY
+
+- Khi Service A cần thông tin tức thời từ Service B (ví dụ: Commerce Service cần kiểm tra giá sản phẩm từ Catalog Service):
+  - **Cách làm đúng:** Service A gọi qua HTTP REST endpoint của Service B (thông qua API Gateway hoặc Internal URL) và nhận về Public DTO.
+  - Không bao giờ đọc bảng cơ sở dữ liệu của nhau.
+
+### Quy tắc 3: GIAO TIẾP BẤT ĐỒNG BỘ QUA EVENT BROKER (RABBITMQ)
+
+- Khi một hành động nghiệp vụ hoàn thành ở Service A và các service khác cần phản ứng lại (Event-Driven Architecture):
+  - Service A bắn Domain Event chuẩn ra RabbitMQ Exchange (ví dụ: `user.registered`, `auction.bid.placed`, `commerce.order.created`).
+  - Các service liên quan (như Notification Service) lắng nghe queue sự kiện tương ứng và thực thi tác vụ ngầm (gửi email, cập nhật cache).
+  - Tuân theo bảng phân bổ sự kiện SRS Section 2.8.
+
+### Quy tắc 4: CƠ SỞ DỮ LIỆU ĐỘC LẬP (DATABASE-PER-SERVICE)
+
+- Mỗi Bounded Context sở hữu một Database PostgreSQL riêng biệt trên các cổng khác nhau:
+  - `user-service`: `nexus_user_db` (Port 5432)
+  - `catalog-service`: `nexus_catalog_db` (Port 5433)
+  - `commerce-service`: `nexus_commerce_db` (Port 5434)
+  - `auction-service`: `nexus_auction_db` (Port 5435)
+  - `fulfillment-service`: `nexus_fulfillment_db` (Port 5436)
+  - `notification-service`: `nexus_notification_db` (Port 5437)
+
+### Quy tắc 5: KIỂM SOÁT TỰ ĐỘNG BẰNG ARCHUNIT TESTS (`pnpm test:arch`)
+
+Các quy tắc ranh giới kiến trúc trên không chỉ dừng lại ở mặt lý thuyết hay quy ước, mà được **bảo vệ và kiểm tra tự động 100%** thông qua bộ test ArchUnit tại [`scripts/test-architecture-boundaries.test.js`](file:///D:/CodeProject/nexus-ecommerce/nexus-ecommerce-main/scripts/test-architecture-boundaries.test.js).
+
+1. **Lệnh chạy kiểm tra ranh giới:**
+
+   ```bash
+   # Chạy toàn bộ test suites (gồm cả Architecture Boundaries và Infrastructure)
+   pnpm test
+
+   # Hoặc chỉ chạy riêng bài kiểm tra ranh giới kiến trúc ArchUnit
+   pnpm test:arch
+   ```
+
+2. **Các ràng buộc kiến trúc được tự động thực thi:**
+   - **`RULE_1_FORBID_CROSS_CONTEXT_INTERNAL_IMPORT`**: Ngăn chặn tuyệt đối việc một Bounded Context import trực tiếp Entity, Repository, Use-Case hay cấu trúc nội bộ của context khác. Nếu xuất hiện import chéo, test sẽ lập tức **FAIL** và chỉ rõ chính xác file, dòng vi phạm, và ngữ cảnh.
+   - **`RULE_2_DOMAIN_LAYER_PURITY`**: Ép buộc tầng Domain phải thuần túy, cấm phụ thuộc vào Application, Infrastructure hay Interfaces.
+   - **`RULE_2_DOMAIN_ENTITY_ISOLATION`**: Cấm Domain Entity import trực tiếp các ORM hay Database client (như Prisma, Mongoose).
+   - **Giao tiếp hợp lệ được phép**: Chỉ cho phép import từ các package dùng chung chuẩn hóa (`@nexus/contracts`, `@nexus/events`, `@nexus/shared`, `@nexus/utils`) hoặc thư viện bên thứ ba.
+   - **Tự động áp dụng cho package mới (Dynamic Extensibility)**: Bất kỳ thư mục Bounded Context mới nào được thêm vào thư mục `backend/` đều được engine tự động phát hiện và áp dụng toàn bộ rule mà không cần sửa đổi test runner.
 
 ---
 
-## 3. Danh Sách Cơ Sở Dữ Liệu Riêng Biệt (Database-per-Service)
+## 3. Danh Sách 6 Bounded Contexts & API Gateway
 
-Mỗi service sử dụng một Database PostgreSQL độc lập:
+| Service                    | Bounded Context                           | Cổng (Port) | Health Check URL               | Endpoint Mẫu                                         |
+| :------------------------- | :---------------------------------------- | :---------: | :----------------------------- | :--------------------------------------------------- |
+| **`api-gateway`**          | Cổng điều phối & Proxy                    |   `8000`    | `http://localhost:8000/health` | `GET /api/v1`                                        |
+| **`user-service`**         | Người dùng & Định danh (SRS 3.1)          |   `3001`    | `http://localhost:3001/health` | `GET /api/v1/users/profile`                          |
+| **`catalog-service`**      | Danh mục & Sản phẩm (SRS 3.3)             |   `3002`    | `http://localhost:3002/health` | `GET /api/v1/products`                               |
+| **`commerce-service`**     | Giỏ hàng, Đơn hàng & Thanh toán (SRS 3.4) |   `3003`    | `http://localhost:3003/health` | `GET /api/v1/orders/ord_01hqz555abc`                 |
+| **`auction-service`**      | Đấu giá thời gian thực (SRS 3.5)          |   `3004`    | `http://localhost:3004/health` | `GET /api/v1/auctions`                               |
+| **`fulfillment-service`**  | Vận chuyển & Giao vận (SRS 3.6)           |   `3005`    | `http://localhost:3005/health` | `GET /api/v1/fulfillments/shipments/shp_01hqz222trk` |
+| **`notification-service`** | Thông báo Email / Push (SRS 3.2)          |   `3006`    | `http://localhost:3006/health` | `GET /api/v1/notifications/ntf_01hqz111welcome`      |
 
-| Service                | Tên Database cục bộ     | Các bảng chính (Tables)                                                           |
-| :--------------------- | :---------------------- | :-------------------------------------------------------------------------------- |
-| `user-service`         | `nexus_user_db`         | `users`, `roles`, `privileges`, `user_roles`, `ratings`, `penalties`              |
-| `catalog-service`      | `nexus_catalog_db`      | `products`, `categories`, `product_images`, `product_attributes`                  |
-| `commerce-service`     | `nexus_commerce_db`     | `carts`, `cart_items`, `orders`, `order_items`, `payments`, `invoices`, `refunds` |
-| `auction-service`      | `nexus_auction_db`      | `auctions`, `bids`, `auction_settlements`, `auction_extensions`                   |
-| `fulfillment-service`  | `nexus_fulfillment_db`  | `warehouses`, `sku_inventories`, `inventory_ledgers`, `shipments`, `carriers`     |
-| `notification-service` | `nexus_notification_db` | `event_logs`, `notifications`, `notification_preferences`                         |
+---
+
+## 4. Hướng Dẫn Biên Dịch & Chạy Thử Nghiệm
+
+### 1. Biên dịch toàn bộ các Service cùng lúc:
+
+Tại thư mục gốc dự án:
+
+```powershell
+pnpm build
+```
+
+### 2. Khởi chạy từng Service độc lập ở chế độ Development (Hot-reload):
+
+```powershell
+# Khởi chạy User Service:
+pnpm dev:user
+
+# Khởi chạy Catalog Service:
+pnpm dev:catalog
+
+# Khởi chạy Commerce Service:
+pnpm dev:commerce
+
+# Khởi chạy Auction Service:
+pnpm dev:auction
+
+# Khởi chạy Fulfillment Service:
+pnpm dev:fulfillment
+
+# Khởi chạy Notification Service:
+pnpm dev:notification
+
+# Khởi chạy API Gateway:
+pnpm dev:gateway
+```
+
+### 3. Kiểm tra tính sẵn sàng (Health Check Verification):
+
+Mỗi service khi khởi chạy đều trả về trạng thái `UP` với mã HTTP 200:
+
+```powershell
+Invoke-RestMethod -Uri "http://localhost:3001/health"
+```
+
+Kết quả trả về:
+
+```json
+{
+  "status": "UP",
+  "service": "user-service",
+  "boundedContext": "User & Authentication (SRS 3.1)",
+  "port": 3001,
+  "timestamp": "2026-10-07T10:04:03.848Z"
+}
+```
