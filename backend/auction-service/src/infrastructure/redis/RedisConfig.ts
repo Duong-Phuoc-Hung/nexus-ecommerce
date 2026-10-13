@@ -12,6 +12,7 @@ export interface RedisConfig {
   port: number;
   password?: string;
   timeoutMs: number;
+  pingTimeoutMs?: number;
   url?: string;
 }
 
@@ -98,11 +99,23 @@ export function loadRedisConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Re
     );
   }
 
+  // 5. Phân tích Ping Timeout (SCRUM-41: Giới hạn thời gian ping để endpoint không bị treo)
+  const pingTimeoutRaw = env.REDIS_PING_TIMEOUT_MS?.trim();
+  const pingTimeoutMs = pingTimeoutRaw ? parseInt(pingTimeoutRaw, 10) : 1500;
+  if (pingTimeoutRaw && (isNaN(pingTimeoutMs) || pingTimeoutMs <= 0)) {
+    throw new RedisConfigError(
+      `REDIS_PING_TIMEOUT_MS không hợp lệ: "${pingTimeoutRaw}". Thời gian chờ ping phải là số nguyên dương (đơn vị mili-giây, ví dụ: 1500).`,
+      'REDIS_PING_TIMEOUT_MS',
+      pingTimeoutRaw,
+    );
+  }
+
   return {
     host,
     port,
     password,
     timeoutMs,
+    pingTimeoutMs,
     url: url || `redis://${host}:${port}`,
   };
 }

@@ -65,10 +65,16 @@ export function getRedisClient(customConfig?: Partial<RedisConfig>): Redis {
   const client = new Redis(redisOptions);
 
   client.on('connect', () => {
+    if (client.stream && typeof client.stream.unref === 'function') {
+      client.stream.unref();
+    }
     console.log(`[Redis Connected] Kết nối thành công tới Redis tại ${config.host}:${config.port}`);
   });
 
   client.on('ready', () => {
+    if (client.stream && typeof client.stream.unref === 'function') {
+      client.stream.unref();
+    }
     console.log(`[Redis Ready] Redis client sẵn sàng tiếp nhận lệnh.`);
   });
 
@@ -87,47 +93,110 @@ export function getRedisClient(customConfig?: Partial<RedisConfig>): Redis {
 }
 
 /**
- * Kiểm tra trạng thái sức khỏe (Health Check) của kết nối Redis bằng lệnh PING
+ * Thời gian timeout mặc định cho thao tác PING kiểm tra sức khỏe (mili-giây)
  */
-export async function checkRedisHealth(): Promise<RedisHealthStatus> {
-  const config = currentConfig || loadRedisConfigFromEnv();
-  const startTime = Date.now();
+export const DEFAULT_PING_TIMEOUT_MS = 1500;
+
+/**
+ * Thực thi lệnh PING tới Redis với giới hạn thời gian (Timeout Wrapper - SCRUM-41)
+ * Sử dụng Promise.race để đảm bảo request không bị treo khi Redis bị deadlock/lag mạng.
+ */
+export async function pingRedisWithTimeout(
+  client: Redis,
+  timeoutMs: number = DEFAULT_PING_TIMEOUT_MS,
+): Promise<string> {
+  let timer: NodeJS.Timeout | undefined;
+  let isSettled = false;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      if (!isSettled) {
+        reject(new Error(`Redis ping timed out sau ${timeoutMs}ms`));
+      }
+    }, timeoutMs);
+    if (timer.unref) {
+      timer.unref(); // Không giữ event loop của Node.js mở trong Unit Testing
+    }
+  });
+
+  const pingPromise = new Promise<string>((resolve, reject) => {
+    (async () => {
+      try {
+        if (client.status === 'wait' || client.status === 'close') {
+          await client.connect();
+        }
+        const pong = await client.ping();
+        resolve(pong);
+      } catch (err) {
+        reject(err);
+      }
+    })().catch(() => {
+      // Bắt lỗi ngầm để tránh UnhandledPromiseRejection nếu timeout giải quyết trước
+    });
+  });
 
   try {
-    const client = getRedisClient();
-
-    // Kết nối nếu client chưa kết nối
-    if (client.status === 'wait' || client.status === 'close') {
-      await client.connect();
+    const result = await Promise.race([pingPromise, timeoutPromise]);
+    isSettled = true;
+    return result;
+  } catch (error) {
+    isSettled = true;
+    throw error;
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
     }
+  }
+}
 
-    const pong = await client.ping();
+/**
+ * Kiểm tra trạng thái sức khỏe (Health Check) của kết nối Redis bằng lệnh PING (SCRUM-41)
+ * Trả về UP khi PING thành công, DOWN khi lỗi hoặc timeout.
+ * Giới hạn thời gian ping để endpoint không bị treo.
+ */
+export async function checkRedisHealth(
+  timeoutMs?: number,
+  clientOverride?: Redis,
+): Promise<RedisHealthStatus> {
+  const config = currentConfig || loadRedisConfigFromEnv();
+  const startTime = Date.now();
+  const effectiveTimeout = timeoutMs || config.pingTimeoutMs || DEFAULT_PING_TIMEOUT_MS;
+
+  const host = (clientOverride?.options as RedisOptions | undefined)?.host || config.host;
+  const port = (clientOverride?.options as RedisOptions | undefined)?.port || config.port;
+
+  try {
+    const client = clientOverride || getRedisClient();
+    const pong = await pingRedisWithTimeout(client, effectiveTimeout);
     const latencyMs = Date.now() - startTime;
 
     if (pong === 'PONG') {
       return {
         status: 'UP',
-        host: config.host,
-        port: config.port,
+        host,
+        port,
         latencyMs,
         timestamp: new Date().toISOString(),
       };
     }
 
+    const unexpError = `Phản hồi không mong đợi từ Redis: "${pong}"`;
+    console.error(`[Redis Health Check DOWN] ${unexpError} (${host}:${port})`);
     return {
       status: 'DOWN',
-      host: config.host,
-      port: config.port,
-      error: `Phản hồi không mong đợi từ Redis: ${pong}`,
+      host,
+      port,
+      error: unexpError,
       timestamp: new Date().toISOString(),
     };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
+    console.error(`[Redis Health Check DOWN] Không thể ping Redis (${host}:${port}): ${message}`);
     return {
       status: 'DOWN',
-      host: config.host,
-      port: config.port,
-      error: `Không thể kết nối tới Redis (${config.host}:${config.port}): ${message}`,
+      host,
+      port,
+      error: `Không thể kết nối hoặc ping Redis (${host}:${port}): ${message}`,
       timestamp: new Date().toISOString(),
     };
   }
