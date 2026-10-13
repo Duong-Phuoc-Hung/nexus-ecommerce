@@ -1,6 +1,7 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import { InMemoryUserRepository } from './infrastructure/repositories/InMemoryUserRepository';
+import { PostgresUserRepository } from './infrastructure/repositories/PostgresUserRepository';
 import { GetUserProfileUseCase } from './application/use-cases/GetUserProfileUseCase';
 import { UserController } from './interfaces/http/controllers/UserController';
 import { createUserRoutes } from './interfaces/http/routes/UserRoutes';
@@ -23,7 +24,10 @@ export function createApplication(): Application {
   });
 
   // Khởi tạo Dependency Injection (Composition Root)
-  const userRepository = new InMemoryUserRepository();
+  const userRepository =
+    process.env.USE_IN_MEMORY_DB === 'true'
+      ? new InMemoryUserRepository()
+      : new PostgresUserRepository();
   const getUserProfileUseCase = new GetUserProfileUseCase(userRepository);
   const userController = new UserController(getUserProfileUseCase);
 
