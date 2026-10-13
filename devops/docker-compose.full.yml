@@ -1,0 +1,304 @@
+# ==============================================================================
+# PROJECT NEXUS - FULL LOCAL DOCKER COMPOSE STACK (INFRASTRUCTURE + MICROSERVICES)
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # INFRASTRUCTURE DATABASES & BROKERS
+  # ----------------------------------------------------------------------------
+  postgres-user:
+    image: postgres:16-alpine
+    container_name: nexus-postgres-user
+    environment:
+      POSTGRES_USER: nexus_user
+      POSTGRES_PASSWORD: nexus_password
+      POSTGRES_DB: nexus_user_db
+    ports:
+      - '5432:5432'
+    volumes:
+      - user_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U nexus_user -d nexus_user_db']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres-catalog:
+    image: postgres:16-alpine
+    container_name: nexus-postgres-catalog
+    environment:
+      POSTGRES_USER: nexus_catalog
+      POSTGRES_PASSWORD: nexus_password
+      POSTGRES_DB: nexus_catalog_db
+    ports:
+      - '5433:5432'
+    volumes:
+      - catalog_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U nexus_catalog -d nexus_catalog_db']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres-commerce:
+    image: postgres:16-alpine
+    container_name: nexus-postgres-commerce
+    environment:
+      POSTGRES_USER: nexus_commerce
+      POSTGRES_PASSWORD: nexus_password
+      POSTGRES_DB: nexus_commerce_db
+    ports:
+      - '5434:5432'
+    volumes:
+      - commerce_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U nexus_commerce -d nexus_commerce_db']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres-auction:
+    image: postgres:16-alpine
+    container_name: nexus-postgres-auction
+    environment:
+      POSTGRES_USER: nexus_auction
+      POSTGRES_PASSWORD: nexus_password
+      POSTGRES_DB: nexus_auction_db
+    ports:
+      - '5435:5432'
+    volumes:
+      - auction_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U nexus_auction -d nexus_auction_db']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres-fulfillment:
+    image: postgres:16-alpine
+    container_name: nexus-postgres-fulfillment
+    environment:
+      POSTGRES_USER: nexus_fulfillment
+      POSTGRES_PASSWORD: nexus_password
+      POSTGRES_DB: nexus_fulfillment_db
+    ports:
+      - '5436:5432'
+    volumes:
+      - fulfillment_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U nexus_fulfillment -d nexus_fulfillment_db']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres-notification:
+    image: postgres:16-alpine
+    container_name: nexus-postgres-notification
+    environment:
+      POSTGRES_USER: nexus_notification
+      POSTGRES_PASSWORD: nexus_password
+      POSTGRES_DB: nexus_notification_db
+    ports:
+      - '5437:5432'
+    volumes:
+      - notification_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U nexus_notification -d nexus_notification_db']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: nexus-redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: nexus-rabbitmq
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  # ----------------------------------------------------------------------------
+  # CORE BACKEND MICROSERVICES (7 SERVICES)
+  # ----------------------------------------------------------------------------
+  user-service:
+    build:
+      context: ..
+      dockerfile: backend/user-service/Dockerfile
+    image: nexus/user-service:latest
+    container_name: nexus-user-service
+    environment:
+      NODE_ENV: development
+      PORT: 4001
+      DATABASE_URL: postgresql://nexus_user:nexus_password@postgres-user:5432/nexus_user_db
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    ports:
+      - '4001:4001'
+    depends_on:
+      postgres-user:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  catalog-service:
+    build:
+      context: ..
+      dockerfile: backend/catalog-service/Dockerfile
+    image: nexus/catalog-service:latest
+    container_name: nexus-catalog-service
+    environment:
+      NODE_ENV: development
+      PORT: 4002
+      DATABASE_URL: postgresql://nexus_catalog:nexus_password@postgres-catalog:5432/nexus_catalog_db
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    ports:
+      - '4002:4002'
+    depends_on:
+      postgres-catalog:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  commerce-service:
+    build:
+      context: ..
+      dockerfile: backend/commerce-service/Dockerfile
+    image: nexus/commerce-service:latest
+    container_name: nexus-commerce-service
+    environment:
+      NODE_ENV: development
+      PORT: 4003
+      DATABASE_URL: postgresql://nexus_commerce:nexus_password@postgres-commerce:5432/nexus_commerce_db
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    ports:
+      - '4003:4003'
+    depends_on:
+      postgres-commerce:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  auction-service:
+    build:
+      context: ..
+      dockerfile: backend/auction-service/Dockerfile
+    image: nexus/auction-service:latest
+    container_name: nexus-auction-service
+    environment:
+      NODE_ENV: development
+      PORT: 4004
+      DATABASE_URL: postgresql://nexus_auction:nexus_password@postgres-auction:5432/nexus_auction_db
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    ports:
+      - '4004:4004'
+    depends_on:
+      postgres-auction:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  fulfillment-service:
+    build:
+      context: ..
+      dockerfile: backend/fulfillment-service/Dockerfile
+    image: nexus/fulfillment-service:latest
+    container_name: nexus-fulfillment-service
+    environment:
+      NODE_ENV: development
+      PORT: 4005
+      DATABASE_URL: postgresql://nexus_fulfillment:nexus_password@postgres-fulfillment:5432/nexus_fulfillment_db
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    ports:
+      - '4005:4005'
+    depends_on:
+      postgres-fulfillment:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  notification-service:
+    build:
+      context: ..
+      dockerfile: backend/notification-service/Dockerfile
+    image: nexus/notification-service:latest
+    container_name: nexus-notification-service
+    environment:
+      NODE_ENV: development
+      PORT: 4006
+      DATABASE_URL: postgresql://nexus_notification:nexus_password@postgres-notification:5432/nexus_notification_db
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    ports:
+      - '4006:4006'
+    depends_on:
+      postgres-notification:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  api-gateway:
+    build:
+      context: ..
+      dockerfile: backend/api-gateway/Dockerfile
+    image: nexus/api-gateway:latest
+    container_name: nexus-api-gateway
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      USER_SERVICE_URL: http://user-service:4001
+      CATALOG_SERVICE_URL: http://catalog-service:4002
+      COMMERCE_SERVICE_URL: http://commerce-service:4003
+      AUCTION_SERVICE_URL: http://auction-service:4004
+      FULFILLMENT_SERVICE_URL: http://fulfillment-service:4005
+      NOTIFICATION_SERVICE_URL: http://notification-service:4006
+    ports:
+      - '4000:4000'
+    depends_on:
+      - user-service
+      - catalog-service
+      - commerce-service
+      - auction-service
+      - fulfillment-service
+      - notification-service
+
+  nginx:
+    image: nginx:alpine
+    container_name: nexus-nginx
+    ports:
+      - '80:80'
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api-gateway
+
+volumes:
+  user_db_data:
+  catalog_db_data:
+  commerce_db_data:
+  auction_db_data:
+  fulfillment_db_data:
+  notification_db_data:
+  redis_data:
+  rabbitmq_data:

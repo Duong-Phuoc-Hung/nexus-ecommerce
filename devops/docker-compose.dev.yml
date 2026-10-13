@@ -82,9 +82,14 @@ services:
     image: redis:7-alpine
     container_name: nexus-redis
     ports:
-      - '6379:6379'
+      - '${REDIS_PORT:-6379}:6379'
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   # 8. RabbitMQ Message Broker (SRS 2.8 Event Message Table)
   rabbitmq:

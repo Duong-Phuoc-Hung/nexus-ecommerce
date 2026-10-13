@@ -51,7 +51,7 @@ services:
     ports:
       - '5432:5432'
     volumes:
-      - user_data:/var/lib/postgresql/data
+      - user_db_data:/var/lib/postgresql/data
 
   # 2. Cơ sở dữ liệu Catalog Service (Port: 5433)
   postgres-catalog:
@@ -64,7 +64,7 @@ services:
     ports:
       - '5433:5432'
     volumes:
-      - catalog_data:/var/lib/postgresql/data
+      - catalog_db_data:/var/lib/postgresql/data
 
   # 3. Cơ sở dữ liệu Commerce Service (Port: 5434)
   postgres-commerce:
@@ -77,7 +77,7 @@ services:
     ports:
       - '5434:5432'
     volumes:
-      - commerce_data:/var/lib/postgresql/data
+      - commerce_db_data:/var/lib/postgresql/data
 
   # 4. Cơ sở dữ liệu Auction Service (Port: 5435)
   postgres-auction:
@@ -90,7 +90,7 @@ services:
     ports:
       - '5435:5432'
     volumes:
-      - auction_data:/var/lib/postgresql/data
+      - auction_db_data:/var/lib/postgresql/data
 
   # 5. Cơ sở dữ liệu Fulfillment Service (Port: 5436)
   postgres-fulfillment:
@@ -103,7 +103,7 @@ services:
     ports:
       - '5436:5432'
     volumes:
-      - fulfillment_data:/var/lib/postgresql/data
+      - fulfillment_db_data:/var/lib/postgresql/data
 
   # 6. Cơ sở dữ liệu Notification Service (Port: 5437)
   postgres-notification:
@@ -116,16 +116,21 @@ services:
     ports:
       - '5437:5432'
     volumes:
-      - notification_data:/var/lib/postgresql/data
+      - notification_db_data:/var/lib/postgresql/data
 
-  # 7. Redis Cache & Distributed Lock cho Bidding Đấu giá (Port: 6379)
+  # 7. Redis Cache & Distributed Lock (SRS 5.1 Bidding SLA <= 300ms)
   redis:
     image: redis:7-alpine
     container_name: nexus-redis
     ports:
-      - '6379:6379'
+      - '${REDIS_PORT:-6379}:6379'
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   # 8. RabbitMQ Message Broker phục vụ truyền tải 45+ sự kiện (Port: 5672, Dashboard: 15672)
   rabbitmq:
@@ -138,12 +143,12 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
 
 volumes:
-  user_data:
-  catalog_data:
-  commerce_data:
-  auction_data:
-  fulfillment_data:
-  notification_data:
+  user_db_data:
+  catalog_db_data:
+  commerce_db_data:
+  auction_db_data:
+  fulfillment_db_data:
+  notification_db_data:
   redis_data:
   rabbitmq_data:
 ```
@@ -167,7 +172,57 @@ volumes:
 
 ---
 
-## 4. Multi-Stage Docker Builds (< 150MB)
+## 4. Cấu Hình & Kiểm Tra Kết Nối Dịch Vụ Redis
+
+### 4.1. Cấu hình biến môi trường
+
+Các thông số kết nối Redis được khai báo trong file `.env` (tham khảo template tại [`.env.example`](file:///d:/Nexus/nexus-ecommerce/.env.example)):
+
+```bash
+# Redis Cache, Session & Distributed Lock (Redlock)
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_URL=redis://localhost:6379
+```
+
+_Lưu ý: Môi trường local development mặc định không đặt password. Tuyệt đối không hardcode mật khẩu vào file compose._
+
+### 4.2. Kiểm tra kết nối và trạng thái hoạt động
+
+1. **Kiểm tra Healthcheck:**
+
+   ```bash
+   docker compose -f devops/docker-compose.dev.yml ps redis
+   ```
+
+   _Kết quả mong đợi: Cột `STATUS` hiển thị `Up ... (healthy)`._
+
+2. **Kiểm tra kết nối trực tiếp qua Redis CLI (Ping):**
+
+   ```bash
+   docker exec -it nexus-redis redis-cli ping
+   ```
+
+   _Kết quả mong đợi:_
+
+   ```text
+   PONG
+   ```
+
+3. **Kiểm tra ghi/đọc dữ liệu (Cache test):**
+   ```bash
+   docker exec -it nexus-redis redis-cli set test_key "nexus_redis_ok"
+   docker exec -it nexus-redis redis-cli get test_key
+   ```
+   _Kết quả mong đợi:_
+   ```text
+   "nexus_redis_ok"
+   ```
+
+---
+
+## 5. Multi-Stage Docker Builds (< 150MB)
 
 Mỗi microservice được trang bị Dockerfile multi-stage tận dụng tối đa `pnpm workspaces` (pnpm@12) và `node:20-alpine`:
 
@@ -198,7 +253,7 @@ Mỗi microservice được trang bị Dockerfile multi-stage tận dụng tối
 
 ---
 
-## 5. GitLab CI/CD Container Registry Pipeline
+## 6. GitLab CI/CD Container Registry Pipeline
 
 Tệp `.gitlab-ci.yml` được cấu hình stage `docker-build` tự động hóa:
 
@@ -209,7 +264,7 @@ Tệp `.gitlab-ci.yml` được cấu hình stage `docker-build` tự động h�
 
 ---
 
-## 6. Kubernetes & GitOps Triển Khai Tự Động Với ArgoCD
+## 7. Kubernetes & GitOps Triển Khai Tự Động Với ArgoCD
 
 Toàn bộ hạ tầng production Kubernetes được khai báo dạng mã nguồn (GitOps) tại `devops/k8s/`:
 
