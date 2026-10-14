@@ -8,6 +8,7 @@ import { MarketplaceHero } from './marketplace-hero';
 import { AccountPromptDialog } from './account-prompt-dialog';
 import { MarketplaceSortMenu } from './marketplace-sort-menu';
 import { NexusLogo } from '@/shared/components/nexus-logo';
+import { authApi, type AuthUser } from '@/services/auth.api';
 
 const normalized = (value: string) =>
   value
@@ -19,6 +20,7 @@ const normalized = (value: string) =>
 
 export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
   const products = feed.products;
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [draftSearch, setDraftSearch] = useState('');
   const [query, setQuery] = useState('');
@@ -32,6 +34,7 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
   const [limit, setLimit] = useState(12);
 
   useEffect(() => {
+    setCurrentUser(authApi.getCurrentUser());
     const started = Date.now();
     const interval = window.setInterval(
       () => setElapsed(Math.floor((Date.now() - started) / 1000)),
@@ -137,13 +140,32 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
               <a href="#faq" className="hidden hover:text-brand-dark sm:block">
                 Trợ giúp
               </a>
-              <a
-                href="/login"
-                className="flex min-h-11 items-center gap-1.5 font-semibold text-brand-dark hover:text-brand"
-              >
-                <MarketplaceIcon name="users" className="size-4" />
-                Đăng nhập
-              </a>
+              {currentUser ? (
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-semibold text-brand-dark">
+                    👤 {currentUser.fullName || currentUser.email} ({currentUser.role})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await authApi.logout();
+                      setCurrentUser(null);
+                      window.location.reload();
+                    }}
+                    className="text-xs font-semibold text-red-500 hover:text-red-700 underline cursor-pointer"
+                  >
+                    Đăng xuất
+                  </button>
+                </div>
+              ) : (
+                <a
+                  href="/login"
+                  className="flex min-h-11 items-center gap-1.5 font-semibold text-brand-dark hover:text-brand"
+                >
+                  <MarketplaceIcon name="users" className="size-4" />
+                  Đăng nhập
+                </a>
+              )}
             </div>
           </div>
         </div>

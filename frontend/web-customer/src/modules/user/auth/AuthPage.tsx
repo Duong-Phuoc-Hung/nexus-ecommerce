@@ -1,12 +1,15 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import { ApiError } from '@/services/api-client';
+import { authApi } from '@/services/auth.api';
 import './auth.css';
 import { NexusLogo } from '@/shared/components/nexus-logo';
 
-type AuthMode = 'login' | 'register';
-type FieldName = 'identity' | 'email' | 'username' | 'password';
+type AuthMode = 'login' | 'register' | 'forgot-password';
+type FieldName = 'identity' | 'email' | 'username' | 'password' | 'forgotEmail';
 type FieldErrors = Partial<Record<FieldName, string>>;
+type NoticeType = 'info' | 'success' | 'error';
 
 function EyeIcon({ hidden }: { hidden: boolean }) {
   return (
@@ -26,9 +29,17 @@ function EyeIcon({ hidden }: { hidden: boolean }) {
 export function AuthPage({ initialMode = 'login' }: { initialMode?: AuthMode }) {
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [showPassword, setShowPassword] = useState(false);
-  const [values, setValues] = useState({ identity: '', email: '', username: '', password: '' });
+  const [values, setValues] = useState({
+    identity: '',
+    email: '',
+    username: '',
+    password: '',
+    forgotEmail: '',
+  });
   const [errors, setErrors] = useState<FieldErrors>({});
   const [notice, setNotice] = useState('');
+  const [noticeType, setNoticeType] = useState<NoticeType>('info');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isRegister = mode === 'register';
 
@@ -43,41 +54,112 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: AuthMode }) 
     setErrors({});
     setNotice('');
     setShowPassword(false);
+    if (typeof window !== 'undefined' && (nextMode === 'login' || nextMode === 'register')) {
+      window.history.replaceState(null, '', `/${nextMode}`);
+    }
   }
 
   function validate(): FieldErrors {
     const nextErrors: FieldErrors = {};
 
-    if (isRegister) {
-      if (!values.email.trim()) nextErrors.email = 'Vui lòng điền thông tin này';
-      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email.trim())) {
+    if (mode === 'register') {
+      if (!values.email.trim()) {
+        nextErrors.email = 'Vui lòng điền thông tin này';
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email.trim())) {
         nextErrors.email = 'Vui lòng nhập email hợp lệ';
       }
-      if (!values.username.trim()) nextErrors.username = 'Vui lòng điền thông tin này';
-    } else if (!values.identity.trim()) {
-      nextErrors.identity = 'Vui lòng điền thông tin này';
-    } else if (values.identity.includes('@')) {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.identity.trim())) {
-        nextErrors.identity = 'Vui lòng nhập email hợp lệ';
+      if (!values.username.trim()) {
+        nextErrors.username = 'Vui lòng điền họ và tên';
+      } else if (values.username.trim().length > 100) {
+        nextErrors.username = 'Họ và tên tối đa 100 ký tự';
       }
-    } else if (!/^\+?[\d\s().-]{8,20}$/.test(values.identity.trim())) {
-      nextErrors.identity = 'Vui lòng nhập email hoặc số điện thoại hợp lệ';
+      if (!values.password) {
+        nextErrors.password = 'Vui lòng điền thông tin này';
+      } else if (values.password.length < 6) {
+        nextErrors.password = 'Mật khẩu phải có ít nhất 6 ký tự';
+      }
+    } else if (mode === 'login') {
+      if (!values.identity.trim()) {
+        nextErrors.identity = 'Vui lòng điền thông tin này';
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.identity.trim())) {
+        nextErrors.identity = 'Vui lòng nhập địa chỉ email hợp lệ';
+      }
+      if (!values.password) {
+        nextErrors.password = 'Vui lòng điền thông tin này';
+      }
+    } else if (mode === 'forgot-password') {
+      if (!values.forgotEmail.trim()) {
+        nextErrors.forgotEmail = 'Vui lòng nhập email của tài khoản';
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.forgotEmail.trim())) {
+        nextErrors.forgotEmail = 'Vui lòng nhập email hợp lệ';
+      }
     }
 
-    if (!values.password) nextErrors.password = 'Vui lòng điền thông tin này';
     return nextErrors;
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextErrors = validate();
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length === 0) {
-      setNotice(
-        isRegister
-          ? 'Thông tin hợp lệ. Có thể kết nối API đăng ký sau.'
-          : 'Thông tin hợp lệ. Có thể kết nối API đăng nhập sau.',
-      );
+    if (Object.keys(nextErrors).length > 0) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setNotice('');
+
+    try {
+      if (mode === 'register') {
+        const user = await authApi.register({
+          email: values.email.trim(),
+          fullName: values.username.trim(),
+          password: values.password,
+        });
+        setNoticeType('success');
+        setNotice(`Đăng ký thành công tài khoản ${user.email}! Đang tự động đăng nhập...`);
+        await authApi.login(values.email.trim(), values.password);
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 800);
+      } else if (mode === 'login') {
+        const result = await authApi.login(values.identity.trim(), values.password);
+        setNoticeType('success');
+        setNotice(`Đăng nhập thành công! Chào mừng ${result.user.fullName || result.user.email}.`);
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 800);
+      } else if (mode === 'forgot-password') {
+        const res = await authApi.requestPasswordReset(values.forgotEmail.trim());
+        setNoticeType('success');
+        let msg =
+          res.message || 'Nếu tài khoản tồn tại, hướng dẫn đặt lại mật khẩu đã được gửi đến email.';
+        if (res.resetToken) {
+          msg += ` (Dev token: ${res.resetToken})`;
+        }
+        setNotice(msg);
+      }
+    } catch (err) {
+      setNoticeType('error');
+      if (err instanceof ApiError) {
+        if (err.status === 423) {
+          setNotice(
+            'Tài khoản đã bị tạm khóa do nhập sai mật khẩu quá 5 lần. Vui lòng thử lại sau 15 phút.',
+          );
+        } else if (err.status === 401) {
+          setNotice('Email hoặc mật khẩu không chính xác.');
+        } else if (err.status === 409 || err.message.toLowerCase().includes('already exists')) {
+          setNotice('Email này đã được sử dụng. Vui lòng đăng nhập hoặc sử dụng email khác.');
+        } else {
+          setNotice(err.message || 'Thao tác không thành công. Vui lòng kiểm tra lại.');
+        }
+      } else if (err instanceof Error) {
+        setNotice(err.message || 'Có lỗi xảy ra. Vui lòng thử lại.');
+      } else {
+        setNotice('Không thể kết nối đến máy chủ. Vui lòng kiểm tra Backend API Gateway.');
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -87,7 +169,13 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: AuthMode }) 
         <div className="auth-header-inner">
           <div className="auth-brand-group">
             <NexusLogo />
-            <span className="auth-heading">{isRegister ? 'Đăng ký' : 'Đăng nhập'}</span>
+            <span className="auth-heading">
+              {mode === 'register'
+                ? 'Đăng ký'
+                : mode === 'forgot-password'
+                  ? 'Khôi phục mật khẩu'
+                  : 'Đăng nhập'}
+            </span>
           </div>
           <a className="help-link" href="#help">
             Bạn cần trợ giúp?
@@ -143,14 +231,20 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: AuthMode }) 
 
           <section
             className="auth-card"
-            aria-label={isRegister ? 'Biểu mẫu đăng ký' : 'Biểu mẫu đăng nhập'}
+            aria-label={
+              mode === 'register'
+                ? 'Biểu mẫu đăng ký'
+                : mode === 'forgot-password'
+                  ? 'Biểu mẫu đặt lại mật khẩu'
+                  : 'Biểu mẫu đăng nhập'
+            }
           >
             <div className="auth-tabs" role="tablist" aria-label="Chọn hình thức tài khoản">
               <button
                 type="button"
                 role="tab"
-                aria-selected={!isRegister}
-                className={!isRegister ? 'active' : ''}
+                aria-selected={mode === 'login'}
+                className={mode === 'login' ? 'active' : ''}
                 onClick={() => selectMode('login')}
               >
                 Đăng nhập
@@ -158,8 +252,8 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: AuthMode }) 
               <button
                 type="button"
                 role="tab"
-                aria-selected={isRegister}
-                className={isRegister ? 'active' : ''}
+                aria-selected={mode === 'register'}
+                className={mode === 'register' ? 'active' : ''}
                 onClick={() => selectMode('register')}
               >
                 Đăng ký
@@ -167,7 +261,26 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: AuthMode }) 
             </div>
 
             <form className="auth-form" noValidate onSubmit={handleSubmit}>
-              {isRegister ? (
+              {mode === 'forgot-password' ? (
+                <div className="form-field">
+                  <label htmlFor="auth-forgot-email">Email tài khoản</label>
+                  <input
+                    id="auth-forgot-email"
+                    type="email"
+                    autoComplete="email"
+                    placeholder="example@email.com"
+                    value={values.forgotEmail}
+                    aria-invalid={Boolean(errors.forgotEmail)}
+                    aria-describedby={errors.forgotEmail ? 'auth-forgot-email-error' : undefined}
+                    onChange={(event) => updateField('forgotEmail', event.target.value)}
+                  />
+                  {errors.forgotEmail && (
+                    <span className="field-error" id="auth-forgot-email-error">
+                      {errors.forgotEmail}
+                    </span>
+                  )}
+                </div>
+              ) : isRegister ? (
                 <>
                   <div className="form-field">
                     <label htmlFor="auth-email">Email</label>
@@ -188,12 +301,12 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: AuthMode }) 
                     )}
                   </div>
                   <div className="form-field">
-                    <label htmlFor="auth-username">Tên đăng nhập</label>
+                    <label htmlFor="auth-username">Họ và tên</label>
                     <input
                       id="auth-username"
                       type="text"
-                      autoComplete="username"
-                      placeholder="Tên bạn muốn sử dụng"
+                      autoComplete="name"
+                      placeholder="Nguyễn Văn A"
                       value={values.username}
                       aria-invalid={Boolean(errors.username)}
                       aria-describedby={errors.username ? 'auth-username-error' : undefined}
@@ -208,12 +321,12 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: AuthMode }) 
                 </>
               ) : (
                 <div className="form-field">
-                  <label htmlFor="auth-identity">Email hoặc số điện thoại</label>
+                  <label htmlFor="auth-identity">Email đăng nhập</label>
                   <input
                     id="auth-identity"
-                    type="text"
-                    autoComplete="username"
-                    placeholder="Email hoặc số điện thoại"
+                    type="email"
+                    autoComplete="email"
+                    placeholder="example@email.com"
                     value={values.identity}
                     aria-invalid={Boolean(errors.identity)}
                     aria-describedby={errors.identity ? 'auth-identity-error' : undefined}
@@ -227,63 +340,95 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: AuthMode }) 
                 </div>
               )}
 
-              <div className="form-field">
-                <label htmlFor="auth-password">Mật khẩu</label>
-                <div className={`password-wrap ${errors.password ? 'has-error' : ''}`}>
-                  <input
-                    id="auth-password"
-                    type={showPassword ? 'text' : 'password'}
-                    autoComplete={isRegister ? 'new-password' : 'current-password'}
-                    placeholder="Nhập mật khẩu"
-                    value={values.password}
-                    aria-invalid={Boolean(errors.password)}
-                    aria-describedby={errors.password ? 'auth-password-error' : undefined}
-                    onChange={(event) => updateField('password', event.target.value)}
-                  />
-                  <button
-                    className="password-toggle"
-                    type="button"
-                    aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
-                    onClick={() => setShowPassword((visible) => !visible)}
-                  >
-                    <EyeIcon hidden={!showPassword} />
-                  </button>
+              {mode !== 'forgot-password' && (
+                <div className="form-field">
+                  <label htmlFor="auth-password">Mật khẩu</label>
+                  <div className={`password-wrap ${errors.password ? 'has-error' : ''}`}>
+                    <input
+                      id="auth-password"
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete={isRegister ? 'new-password' : 'current-password'}
+                      placeholder="Nhập mật khẩu (tối thiểu 6 ký tự)"
+                      value={values.password}
+                      aria-invalid={Boolean(errors.password)}
+                      aria-describedby={errors.password ? 'auth-password-error' : undefined}
+                      onChange={(event) => updateField('password', event.target.value)}
+                    />
+                    <button
+                      className="password-toggle"
+                      type="button"
+                      aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                      onClick={() => setShowPassword((visible) => !visible)}
+                    >
+                      <EyeIcon hidden={!showPassword} />
+                    </button>
+                  </div>
+                  {errors.password && (
+                    <span className="field-error" id="auth-password-error">
+                      {errors.password}
+                    </span>
+                  )}
                 </div>
-                {errors.password && (
-                  <span className="field-error" id="auth-password-error">
-                    {errors.password}
-                  </span>
-                )}
-              </div>
-
-              {!isRegister && (
-                <a className="forgot-link" href="#forgot-password">
-                  Quên mật khẩu?
-                </a>
               )}
+
+              {mode === 'login' && (
+                <button
+                  type="button"
+                  className="forgot-link"
+                  style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer' }}
+                  onClick={() => {
+                    setMode('forgot-password');
+                    setNotice('');
+                    setErrors({});
+                  }}
+                >
+                  Quên mật khẩu?
+                </button>
+              )}
+
               {notice && (
-                <p className="form-notice" role="status">
+                <p className={`form-notice ${noticeType}`} role="status">
                   {notice}
                 </p>
               )}
-              <button className="submit-button" type="submit">
-                {isRegister ? 'ĐĂNG KÝ' : 'ĐĂNG NHẬP'}
+
+              <button className="submit-button" type="submit" disabled={isSubmitting}>
+                {isSubmitting
+                  ? mode === 'register'
+                    ? 'ĐANG ĐĂNG KÝ...'
+                    : mode === 'forgot-password'
+                      ? 'ĐANG XỬ LÝ...'
+                      : 'ĐANG ĐĂNG NHẬP...'
+                  : mode === 'register'
+                    ? 'ĐĂNG KÝ'
+                    : mode === 'forgot-password'
+                      ? 'GỬI YÊU CẦU ĐẶT LẠI MẬT KHẨU'
+                      : 'ĐĂNG NHẬP'}
               </button>
-              <p className="form-terms">
-                {isRegister
-                  ? 'Bằng việc đăng ký, bạn đồng ý với '
-                  : 'Đăng nhập đồng nghĩa bạn chấp nhận '}
-                <a href="#terms">Điều khoản dịch vụ</a> và <a href="#privacy">Chính sách bảo mật</a>{' '}
-                của Nexus.
-              </p>
+
+              {mode === 'forgot-password' ? (
+                <button type="button" className="back-link" onClick={() => selectMode('login')}>
+                  ← Quay lại đăng nhập
+                </button>
+              ) : (
+                <p className="form-terms">
+                  {isRegister
+                    ? 'Bằng việc đăng ký, bạn đồng ý với '
+                    : 'Đăng nhập đồng nghĩa bạn chấp nhận '}
+                  <a href="#terms">Điều khoản dịch vụ</a> và{' '}
+                  <a href="#privacy">Chính sách bảo mật</a> của Nexus.
+                </p>
+              )}
             </form>
 
-            <div className="auth-alternate">
-              <span>{isRegister ? 'Đã có tài khoản?' : 'Chưa có tài khoản?'}</span>
-              <button type="button" onClick={() => selectMode(isRegister ? 'login' : 'register')}>
-                {isRegister ? 'Đăng nhập' : 'Đăng ký ngay'}
-              </button>
-            </div>
+            {mode !== 'forgot-password' && (
+              <div className="auth-alternate">
+                <span>{isRegister ? 'Đã có tài khoản?' : 'Chưa có tài khoản?'}</span>
+                <button type="button" onClick={() => selectMode(isRegister ? 'login' : 'register')}>
+                  {isRegister ? 'Đăng nhập' : 'Đăng ký ngay'}
+                </button>
+              </div>
+            )}
           </section>
         </div>
       </main>

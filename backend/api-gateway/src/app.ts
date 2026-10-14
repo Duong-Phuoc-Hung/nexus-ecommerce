@@ -7,7 +7,6 @@ export function createApplication(): Application {
   app.use(cors());
   app.use(express.json());
 
-  // Gateway Service Registry (Port mapping matching docker, k8s & local dev)
   const SERVICE_ENDPOINTS = {
     user:
       process.env.USER_SERVICE_URL || `http://localhost:${process.env.USER_SERVICE_PORT || 4001}`,
@@ -28,7 +27,6 @@ export function createApplication(): Application {
       `http://localhost:${process.env.NOTIFICATION_SERVICE_PORT || 4006}`,
   };
 
-  // Gateway Central Health Check Endpoint
   app.get('/health', (_req: Request, res: Response) => {
     res.status(200).json({
       status: 'UP',
@@ -38,12 +36,12 @@ export function createApplication(): Application {
     });
   });
 
-  // Gateway Forwarding Info
   app.get('/api/v1', (_req: Request, res: Response) => {
     res.status(200).json({
       name: 'Nexus E-Commerce & Auction API Gateway',
       version: '1.0.0',
       boundedContexts: [
+        { name: 'Auth', prefix: '/api/v1/auth', target: SERVICE_ENDPOINTS.user },
         { name: 'User & IAM', prefix: '/api/v1/users', target: SERVICE_ENDPOINTS.user },
         { name: 'Catalog', prefix: '/api/v1/products', target: SERVICE_ENDPOINTS.catalog },
         { name: 'Commerce & Orders', prefix: '/api/v1/orders', target: SERVICE_ENDPOINTS.commerce },
@@ -65,6 +63,52 @@ export function createApplication(): Application {
       ],
     });
   });
+
+  const proxyToUserService = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const headers = new Headers();
+      for (const [name, value] of Object.entries(req.headers)) {
+        if (
+          [
+            'host',
+            'content-length',
+            'connection',
+            'transfer-encoding',
+            'content-encoding',
+          ].includes(name.toLowerCase())
+        )
+          continue;
+        if (Array.isArray(value)) {
+          for (const item of value) headers.append(name, item);
+        } else if (value !== undefined) {
+          headers.set(name, value);
+        }
+      }
+
+      const hasBody = req.method !== 'GET' && req.method !== 'HEAD';
+      if (hasBody && !headers.has('content-type')) {
+        headers.set('content-type', 'application/json');
+      }
+      const upstream = await fetch(`${SERVICE_ENDPOINTS.user}${req.originalUrl}`, {
+        method: req.method,
+        headers,
+        body: hasBody ? JSON.stringify(req.body ?? {}) : undefined,
+      });
+
+      res.status(upstream.status);
+      const contentType = upstream.headers.get('content-type');
+      if (contentType) res.setHeader('content-type', contentType);
+      res.send(await upstream.text());
+    } catch {
+      res.status(502).json({
+        success: false,
+        error: 'User service is currently unavailable.',
+      });
+    }
+  };
+
+  app.use('/api/v1/auth', proxyToUserService);
+  app.use('/api/v1/users', proxyToUserService);
 
   return app;
 }

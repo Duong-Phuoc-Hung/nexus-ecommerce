@@ -105,6 +105,10 @@ model User {
   // Trạng thái tài khoản: ACTIVE (Bình thường), LOCKED (Khóa tạm), SUSPENDED (Cấm vĩnh viễn)
   status         String               @default("ACTIVE") @db.VarChar(20)
 
+  // Theo dõi đăng nhập thất bại và thời điểm hết khóa tạm
+  failedLoginAttempts Int              @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime?        @map("locked_until") @db.Timestamptz()
+
   // Cờ đánh dấu xóa mềm (TRUE: Đã xóa tài khoản, FALSE: Đang hoạt động)
   isDeleted      Boolean              @default(false) @map("is_deleted")
 

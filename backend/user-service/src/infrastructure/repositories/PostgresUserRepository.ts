@@ -26,7 +26,8 @@ export class PostgresUserRepository implements IUserRepository {
 
   public async findByEmail(email: string): Promise<User | null> {
     const query = `
-      SELECT u.id, u.email, u.full_name, u.password_hash, u.status, u.created_at, u.updated_at,
+            SELECT u.id, u.email, u.full_name, u.password_hash, u.status,
+              u.failed_login_attempts, u.locked_until, u.created_at, u.updated_at,
              COALESCE(r.role_code, 'BUYER') as role_code,
              COALESCE(rep.score, 100) as reputation_score
       FROM user_users u
@@ -47,7 +48,8 @@ export class PostgresUserRepository implements IUserRepository {
 
   public async findById(id: string): Promise<User | null> {
     const query = `
-      SELECT u.id, u.email, u.full_name, u.password_hash, u.status, u.created_at, u.updated_at,
+            SELECT u.id, u.email, u.full_name, u.password_hash, u.status,
+              u.failed_login_attempts, u.locked_until, u.created_at, u.updated_at,
              COALESCE(r.role_code, 'BUYER') as role_code,
              COALESCE(rep.score, 100) as reputation_score
       FROM user_users u
@@ -107,12 +109,38 @@ export class PostgresUserRepository implements IUserRepository {
   }
 
   public async update(user: User): Promise<void> {
-    const query = `
-      UPDATE user_users
-      SET full_name = $1, status = $2, updated_at = $3
-      WHERE id = $4;
-    `;
-    await this.pool.query(query, [user.fullName, user.status, new Date(), user.id]);
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `UPDATE user_users
+         SET full_name = $1, status = $2, password_hash = $3,
+             failed_login_attempts = $4, locked_until = $5, updated_at = $6
+         WHERE id = $7;`,
+        [
+          user.fullName,
+          user.status,
+          user.passwordHash,
+          user.failedLoginAttempts,
+          user.lockedUntil,
+          new Date(),
+          user.id,
+        ],
+      );
+      await client.query('DELETE FROM user_user_roles WHERE user_id = $1;', [user.id]);
+      await client.query(
+        `INSERT INTO user_user_roles (user_id, role_id)
+         SELECT $1, id FROM user_roles WHERE role_code = $2
+         ON CONFLICT DO NOTHING;`,
+        [user.id, user.role],
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   public async delete(id: string): Promise<void> {
@@ -145,6 +173,8 @@ export class PostgresUserRepository implements IUserRepository {
       role: role,
       status: status,
       reputationScore: Number(row.reputation_score) || 100,
+      failedLoginAttempts: Number(row.failed_login_attempts) || 0,
+      lockedUntil: row.locked_until ? new Date(row.locked_until) : null,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
     });
