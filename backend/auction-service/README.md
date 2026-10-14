@@ -178,9 +178,17 @@ Gửi lại request kiểm tra: `GET http://localhost:4004/health` sẽ tự đ�
 
 ---
 
-## 6. Kiểm Thử Tự Động (Automated Testing)
+## 6. Kiểm Thử Tự Động & QA Verification (SCRUM-32, SCRUM-41, SCRUM-43)
 
-### Chạy test suite riêng cho Redis (Bao gồm SCRUM-32 và SCRUM-41):
+### Chạy kịch bản kiểm thử QA tự động (SCRUM-43):
+
+Kịch bản end-to-end kiểm tra toàn diện 5 phases: cấu hình, đọc/ghi CRUD với TTL, dọn dẹp key (`DEL`), cô lập namespace `nexus:test:qa_scrum43:*`, health check khi Redis BẬT (HTTP 200) và khi Redis TẮT (HTTP 503, chống healthy giả):
+
+```bash
+pnpm qa:redis
+```
+
+### Chạy test suite riêng cho Redis (Bao gồm đầy đủ 6 suites):
 
 ```bash
 pnpm test:redis
@@ -191,3 +199,5 @@ pnpm test:redis
 ```bash
 pnpm test
 ```
+
+> 📄 **Xem báo cáo nghiệm thu chi tiết:** [`docs/qa/SCRUM-43-redis-read-write-health-down-report.md`](../../docs/qa/SCRUM-43-redis-read-write-health-down-report.md)

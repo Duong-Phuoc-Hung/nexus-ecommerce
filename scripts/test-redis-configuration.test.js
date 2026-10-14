@@ -401,4 +401,106 @@ describe('🎯 [SCRUM-32] Redis Configuration & Connection Test Suite', () => {
       }
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // SUITE 6: [SCRUM-43] QA VERIFICATION: READ/WRITE LIFECYCLE & DOWN DIAGNOSTICS
+  // ---------------------------------------------------------------------------
+  describe('6. [SCRUM-43] QA Verification: Read/Write Lifecycle, Namespace Isolation & DOWN Diagnostics', () => {
+    const qaNamespace = 'nexus:test:qa_scrum43';
+    const qaKey = `${qaNamespace}:key_${Date.now()}`;
+    const qaPayload = {
+      testId: 'qa_scrum43_suite',
+      author: 'QA Tester',
+      purpose: 'Verification of Read/Write and Cleanup',
+      timestamp: new Date().toISOString(),
+      metadata: { scope: 'SCRUM-43', verified: true },
+    };
+
+    test('6.1 GHI (SET) key với namespace test và TTL 60s thành công', async () => {
+      const client = getRedisClient();
+      const setResult = await client.set(qaKey, JSON.stringify(qaPayload), 'EX', 60);
+      assert.strictEqual(setResult, 'OK', 'Lệnh SET phải trả về OK');
+    });
+
+    test('6.2 ĐỌC (GET) key và xác minh tính toàn vẹn của payload dữ liệu', async () => {
+      const client = getRedisClient();
+      const readData = await client.get(qaKey);
+      assert.ok(readData, 'Dữ liệu đọc về không được rỗng');
+
+      const parsed = JSON.parse(readData);
+      assert.strictEqual(parsed.testId, qaPayload.testId);
+      assert.strictEqual(parsed.author, qaPayload.author);
+      assert.strictEqual(parsed.metadata.scope, 'SCRUM-43');
+    });
+
+    test('6.3 Kiểm tra thời gian sống (TTL) của key thử nghiệm còn hiệu lực', async () => {
+      const client = getRedisClient();
+      const ttl = await client.ttl(qaKey);
+      assert.ok(ttl > 0 && ttl <= 60, `TTL phải nằm trong khoảng 1 - 60s, thực tế: ${ttl}s`);
+    });
+
+    test('6.4 Dọn dẹp dữ liệu (DEL) và xác nhận key không còn tồn tại trên Redis', async () => {
+      const client = getRedisClient();
+      const delCount = await client.del(qaKey);
+      assert.strictEqual(delCount, 1, 'Số lượng key xóa phải là 1');
+
+      const exists = await client.exists(qaKey);
+      assert.strictEqual(exists, 0, 'Key phải không còn tồn tại (exists = 0)');
+    });
+
+    test('6.5 Xác nhận cô lập namespace: không có key rác sót lại trong namespace test', async () => {
+      const client = getRedisClient();
+      const remainingKeys = await client.keys(`${qaNamespace}:*`);
+      assert.strictEqual(
+        remainingKeys.length,
+        0,
+        `Namespace test phải sạch hoàn toàn, phát hiện sót: ${remainingKeys.join(', ')}`,
+      );
+    });
+
+    test('6.6 Xác nhận app KHÔNG báo healthy giả khi Redis ngắt kết nối (Anti False-Positive)', async () => {
+      const mockDown = async () => ({
+        status: 'DOWN',
+        host: 'localhost',
+        port: 6379,
+        error: 'Mất kết nối tới Redis Server: Connection refused',
+        timestamp: new Date().toISOString(),
+      });
+
+      const downApp = createApplication(mockDown);
+      const server = http.createServer(downApp);
+      await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+      const port = server.address().port;
+
+      try {
+        const res = await new Promise((resolve, reject) => {
+          http
+            .get(`http://127.0.0.1:${port}/health`, (response) => {
+              let data = '';
+              response.on('data', (c) => (data += c));
+              response.on('end', () =>
+                resolve({ status: response.statusCode, body: JSON.parse(data) }),
+              );
+            })
+            .on('error', reject);
+        });
+
+        // 1. Tuyệt đối không được trả về HTTP 200
+        assert.notStrictEqual(res.status, 200, 'Không được trả về HTTP 200 khi Redis DOWN');
+        assert.strictEqual(res.status, 503, 'Phải trả về HTTP 503 Service Unavailable');
+
+        // 2. Tuyệt đối không được báo status "UP" (Healthy Giả)
+        assert.notStrictEqual(
+          res.body.status,
+          'UP',
+          'Status tổng thể không được là UP (Healthy Giả)',
+        );
+        assert.strictEqual(res.body.status, 'DOWN', 'Status tổng thể phải là DOWN');
+        assert.strictEqual(res.body.components.redis.status, 'DOWN');
+        assert.ok(res.body.components.redis.error, 'Phải có thông báo lỗi chẩn đoán');
+      } finally {
+        await new Promise((resolve) => server.close(resolve));
+      }
+    });
+  });
 });
