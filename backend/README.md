@@ -32,6 +32,23 @@ Mỗi service trong `backend/` tương ứng với một **Bounded Context** đ�
 └──────────────────────────────────────┘  └────────────────────────────────────┘
 ```
 
+## Auth & IAM Prototype
+
+User Service exposes these endpoints directly and through the API Gateway:
+
+- `POST /api/v1/auth/register` creates a BUYER account.
+- `POST /api/v1/auth/login` returns a JWT and the role permissions.
+- `POST /api/v1/auth/logout` revokes the bearer token.
+- `POST /api/v1/auth/forgot-password` requests a single-use reset token (15-minute lifetime).
+- `POST /api/v1/auth/reset-password` consumes the reset token and changes the password.
+- `GET /api/v1/auth/roles` lists the current static role-permission mappings; requires `ROLE.VIEW`.
+- `GET /api/v1/users/profile` returns the authenticated user's profile.
+- `PUT /api/v1/users/:id/role` assigns `BUYER`, `SELLER`, or `ADMIN`; requires `ROLE.UPDATE`.
+
+For local admin access, configure `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` (minimum 12 characters) before starting User Service. Set a private `JWT_SECRET` for deployments; production startup/authentication must not use the development fallback. The reset token is included in the response only outside production because this prototype has no email-delivery adapter.
+
+These endpoints currently use in-memory repositories and token stores. Accounts, revocations, and reset tokens are lost on restart and are not shared between service replicas; configure persistent storage and an email provider before production use.
+
 ### Chi tiết nhiệm vụ từng tầng:
 
 1. **`domain/` (Enterprise Business Rules):**

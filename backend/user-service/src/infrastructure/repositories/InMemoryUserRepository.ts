@@ -1,28 +1,48 @@
 import { IUserRepository } from '../../domain/repositories/IUserRepository';
 import { User, UserRole, UserStatus } from '../../domain/entities/User';
+import { hashPassword } from '../security/auth';
 
-/**
- * Infrastructure Repository: InMemoryUserRepository
- * Triển khai interface IUserRepository để phục vụ khởi động, unit test và chạy thử nghiệm skeleton.
- * Trong phase sau, lớp này sẽ được thay thế hoặc bổ sung bằng PrismaUserRepository.
- */
 export class InMemoryUserRepository implements IUserRepository {
   private readonly users: Map<string, User> = new Map();
 
   constructor() {
-    // Dữ liệu khởi tạo mẫu để skeleton có thể test ngay lập tức
-    const sampleUser = new User({
+    const now = new Date();
+    const buyer = new User({
       id: 'usr_01hqz789abc',
       email: 'buyer.test@nexus-ecommerce.com',
       fullName: 'Nguyen Van Buyer',
-      passwordHash: '$2b$12$eXampleHashedPasswordString...',
+      passwordHash: hashPassword('Password123!'),
       role: UserRole.BUYER,
       status: UserStatus.ACTIVE,
       reputationScore: 100,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: now,
+      updatedAt: now,
     });
-    this.users.set(sampleUser.id, sampleUser);
+    this.users.set(buyer.id, buyer);
+
+    const adminEmail = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();
+    const adminPassword = process.env.BOOTSTRAP_ADMIN_PASSWORD;
+    if (adminEmail && adminPassword) {
+      if (adminPassword.length < 12) {
+        throw new Error('BOOTSTRAP_ADMIN_PASSWORD must be at least 12 characters.');
+      }
+      if (adminEmail === buyer.email) {
+        throw new Error('Bootstrap admin email must differ from the sample buyer email.');
+      }
+
+      const admin = new User({
+        id: 'usr_bootstrap_admin',
+        email: adminEmail,
+        fullName: 'Nexus Administrator',
+        passwordHash: hashPassword(adminPassword),
+        role: UserRole.ADMIN,
+        status: UserStatus.ACTIVE,
+        reputationScore: 100,
+        createdAt: now,
+        updatedAt: now,
+      });
+      this.users.set(admin.id, admin);
+    }
   }
 
   public async findById(id: string): Promise<User | null> {

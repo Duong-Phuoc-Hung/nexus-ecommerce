@@ -18,6 +18,8 @@ export interface UserProps {
   role: UserRole;
   status: UserStatus;
   reputationScore: number;
+  failedLoginAttempts?: number;
+  lockedUntil?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -28,6 +30,9 @@ export interface UserProps {
  * Tuân thủ nguyên tắc thuần Domain: Không phụ thuộc vào database hay framework bên ngoài.
  */
 export class User {
+  public static readonly MAX_FAILED_LOGIN_ATTEMPTS = 5;
+  public static readonly LOCKOUT_DURATION_MS = 15 * 60 * 1000;
+
   private readonly _id: string;
   private _email: string;
   private _fullName: string;
@@ -35,6 +40,8 @@ export class User {
   private _role: UserRole;
   private _status: UserStatus;
   private _reputationScore: number;
+  private _failedLoginAttempts: number;
+  private _lockedUntil: Date | null;
   private readonly _createdAt: Date;
   private _updatedAt: Date;
 
@@ -46,6 +53,8 @@ export class User {
     this._role = props.role;
     this._status = props.status;
     this._reputationScore = props.reputationScore;
+    this._failedLoginAttempts = props.failedLoginAttempts ?? 0;
+    this._lockedUntil = props.lockedUntil ?? null;
     this._createdAt = props.createdAt;
     this._updatedAt = props.updatedAt;
   }
@@ -74,6 +83,14 @@ export class User {
     return this._reputationScore;
   }
 
+  public get failedLoginAttempts(): number {
+    return this._failedLoginAttempts;
+  }
+
+  public get lockedUntil(): Date | null {
+    return this._lockedUntil;
+  }
+
   public get createdAt(): Date {
     return this._createdAt;
   }
@@ -86,8 +103,50 @@ export class User {
     return this._status === UserStatus.ACTIVE;
   }
 
+  public isLocked(now: Date = new Date()): boolean {
+    if (!this._lockedUntil) {
+      return false;
+    }
+
+    if (this._lockedUntil.getTime() <= now.getTime()) {
+      this._lockedUntil = null;
+      this._failedLoginAttempts = 0;
+      this._updatedAt = new Date();
+      return false;
+    }
+
+    return true;
+  }
+
+  public recordFailedLoginAttempt(): void {
+    this._failedLoginAttempts += 1;
+    this._updatedAt = new Date();
+
+    if (this._failedLoginAttempts >= User.MAX_FAILED_LOGIN_ATTEMPTS) {
+      this._lockedUntil = new Date(Date.now() + User.LOCKOUT_DURATION_MS);
+    }
+  }
+
+  public resetFailedLoginAttempts(): void {
+    this._failedLoginAttempts = 0;
+    this._lockedUntil = null;
+    this._updatedAt = new Date();
+  }
+
   public updateReputation(delta: number): void {
     this._reputationScore = Math.max(0, this._reputationScore + delta);
+    this._updatedAt = new Date();
+  }
+  public get passwordHash(): string {
+    return this._passwordHash;
+  }
+  public setPasswordHash(passwordHash: string): void {
+    this._passwordHash = passwordHash;
+    this._updatedAt = new Date();
+  }
+
+  public setRole(role: UserRole): void {
+    this._role = role;
     this._updatedAt = new Date();
   }
 }

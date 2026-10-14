@@ -1,18 +1,42 @@
 import { Request, Response } from 'express';
 import { GetUserProfileUseCase } from '../../../application/use-cases/GetUserProfileUseCase';
+import { LoginUseCase } from '../../../application/use-cases/LoginUseCase';
+import { LogoutUseCase } from '../../../application/use-cases/LogoutUseCase';
+import { RegisterUserUseCase } from '../../../application/use-cases/RegisterUserUseCase';
+import { RequestPasswordResetUseCase } from '../../../application/use-cases/RequestPasswordResetUseCase';
+import { ResetPasswordUseCase } from '../../../application/use-cases/ResetPasswordUseCase';
+import { AssignUserRoleUseCase } from '../../../application/use-cases/AssignUserRoleUseCase';
+import { AccountLockedException } from '../../../domain/exceptions/AccountLockedException';
+import { InvalidCredentialsException } from '../../../domain/exceptions/InvalidCredentialsException';
+import { InvalidTokenException } from '../../../domain/exceptions/InvalidTokenException';
+import { UserInactiveException } from '../../../domain/exceptions/UserInactiveException';
 import { UserNotFoundException } from '../../../domain/exceptions/UserNotFoundException';
+import { ROLE_PERMISSIONS } from '../../../infrastructure/security/authorization';
 
-/**
- * Interface Adapter: UserController
- * Nhận HTTP request, gọi Application UseCase và trả về HTTP response.
- */
 export class UserController {
-  constructor(private readonly getUserProfileUseCase: GetUserProfileUseCase) {}
+  constructor(
+    private readonly getUserProfileUseCase: GetUserProfileUseCase,
+    private readonly loginUseCase: LoginUseCase,
+    private readonly logoutUseCase: LogoutUseCase,
+    private readonly registerUserUseCase: RegisterUserUseCase,
+    private readonly requestPasswordResetUseCase: RequestPasswordResetUseCase,
+    private readonly resetPasswordUseCase: ResetPasswordUseCase,
+    private readonly assignUserRoleUseCase: AssignUserRoleUseCase,
+  ) {}
 
   public async getProfile(req: Request, res: Response): Promise<void> {
     try {
-      const userId = (req.params.id || 'usr_01hqz789abc') as string;
+      const authenticatedUserId = (req as Request & { user?: { sub: string } }).user?.sub;
+      const requestedUserId = req.params.id;
+      const userId =
+        (Array.isArray(requestedUserId) ? requestedUserId[0] : requestedUserId) ||
+        authenticatedUserId;
+      if (!userId) {
+        res.status(400).json({ success: false, error: 'User id is required.' });
+        return;
+      }
       const profile = await this.getUserProfileUseCase.execute(userId);
+
       res.status(200).json({
         success: true,
         data: profile,
@@ -25,6 +49,7 @@ export class UserController {
         });
         return;
       }
+
       res.status(500).json({
         success: false,
         error: 'Internal Server Error',
@@ -33,15 +58,124 @@ export class UserController {
   }
 
   public async register(req: Request, res: Response): Promise<void> {
-    const { email, fullName } = req.body;
-    res.status(201).json({
+    try {
+      const user = await this.registerUserUseCase.execute(req.body || {});
+      res.status(201).json({ success: true, data: user });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Registration failed.';
+      const status = message.includes('already exists') ? 409 : 400;
+      res.status(status).json({ success: false, error: message });
+    }
+  }
+
+  public async requestPasswordReset(req: Request, res: Response): Promise<void> {
+    try {
+      const token = await this.requestPasswordResetUseCase.execute(req.body?.email);
+      const response: { success: true; message: string; resetToken?: string } = {
+        success: true,
+        message: 'If the account exists, password reset instructions will be sent.',
+      };
+
+      if (process.env.NODE_ENV !== 'production' && token) {
+        response.resetToken = token;
+      }
+      res.status(200).json(response);
+    } catch {
+      res.status(200).json({
+        success: true,
+        message: 'If the account exists, password reset instructions will be sent.',
+      });
+    }
+  }
+
+  public async resetPassword(req: Request, res: Response): Promise<void> {
+    try {
+      await this.resetPasswordUseCase.execute(req.body?.token, req.body?.newPassword);
+      res.status(200).json({ success: true, message: 'Password has been reset.' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Password reset failed.';
+      res.status(400).json({ success: false, error: message });
+    }
+  }
+
+  public async assignRole(req: Request, res: Response): Promise<void> {
+    try {
+      const result = await this.assignUserRoleUseCase.execute(
+        Array.isArray(req.params.id) ? req.params.id[0] : req.params.id,
+        req.body?.role,
+      );
+      res.status(200).json({ success: true, data: result });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Role assignment failed.';
+      res
+        .status(message === 'User not found.' ? 404 : 400)
+        .json({ success: false, error: message });
+    }
+  }
+
+  public listRoles(_req: Request, res: Response): void {
+    res.status(200).json({
       success: true,
-      message: 'User registration initiated (Skeleton mode)',
-      data: {
-        id: 'usr_' + Date.now(),
-        email: email || 'user@example.com',
-        fullName: fullName || 'New User',
-      },
+      data: Object.entries(ROLE_PERMISSIONS).map(([role, permissions]) => ({
+        role,
+        permissions,
+      })),
     });
+  }
+
+  public async login(req: Request, res: Response): Promise<void> {
+    try {
+      const { email, password } = req.body || {};
+      const result = await this.loginUseCase.execute(email, password);
+
+      res.status(200).json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      if (
+        error instanceof AccountLockedException ||
+        error instanceof InvalidCredentialsException ||
+        error instanceof UserInactiveException ||
+        error instanceof UserNotFoundException
+      ) {
+        const status = error instanceof AccountLockedException ? 423 : 401;
+        res.status(status).json({
+          success: false,
+          error: error.message,
+        });
+        return;
+      }
+
+      res.status(500).json({
+        success: false,
+        error: 'Internal Server Error',
+      });
+    }
+  }
+
+  public async logout(req: Request, res: Response): Promise<void> {
+    try {
+      const authHeader = req.headers.authorization || '';
+      const result = await this.logoutUseCase.execute(authHeader);
+
+      res.status(200).json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      if (error instanceof InvalidTokenException) {
+        res.status(401).json({
+          success: false,
+          error: error.message,
+        });
+        return;
+      }
+
+      res.status(500).json({
+        success: false,
+        error: 'Internal Server Error',
+      });
+    }
   }
 }
