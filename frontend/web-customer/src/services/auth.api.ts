@@ -44,6 +44,10 @@ export function createAuthApi(client: ApiClient = apiClient) {
         body: JSON.stringify({ email, password }),
       });
       client.setToken(response.data.token);
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.setItem('nexus.user', JSON.stringify(response.data.user));
+        window.localStorage.setItem('nexus.user', JSON.stringify(response.data.user));
+      }
       return response.data;
     },
 
@@ -52,6 +56,21 @@ export function createAuthApi(client: ApiClient = apiClient) {
         await client.request('/auth/logout', { method: 'POST' });
       } finally {
         client.clearToken();
+        if (typeof window !== 'undefined') {
+          window.sessionStorage.removeItem('nexus.user');
+          window.localStorage.removeItem('nexus.user');
+        }
+      }
+    },
+
+    getCurrentUser(): AuthUser | null {
+      if (typeof window === 'undefined') return null;
+      try {
+        const stored =
+          window.sessionStorage.getItem('nexus.user') || window.localStorage.getItem('nexus.user');
+        return stored ? JSON.parse(stored) : null;
+      } catch {
+        return null;
       }
     },
 

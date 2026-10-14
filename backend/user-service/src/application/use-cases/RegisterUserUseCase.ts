@@ -32,8 +32,8 @@ export class RegisterUserUseCase {
     if (!fullName || fullName.length > 100) {
       throw new Error('Full name is required and must be at most 100 characters.');
     }
-    if (typeof password !== 'string' || password.length < 12) {
-      throw new Error('Password must be at least 12 characters.');
+    if (typeof password !== 'string' || password.length < 6) {
+      throw new Error('Password must be at least 6 characters.');
     }
     if (await this.userRepository.findByEmail(email)) {
       throw new Error('An account with this email already exists.');

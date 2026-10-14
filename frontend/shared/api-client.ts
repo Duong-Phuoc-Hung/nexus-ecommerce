@@ -15,19 +15,35 @@ export class ApiError extends Error {
 }
 
 const browserTokenStorage: TokenStorage = {
-  get: () =>
-    typeof window === 'undefined' ? null : window.sessionStorage.getItem('nexus.accessToken'),
+  get: () => {
+    if (typeof window === 'undefined') return null;
+    return (
+      window.localStorage?.getItem('nexus.accessToken') ||
+      window.sessionStorage?.getItem('nexus.accessToken') ||
+      null
+    );
+  },
   set: (token) => {
-    if (typeof window !== 'undefined') window.sessionStorage.setItem('nexus.accessToken', token);
+    if (typeof window !== 'undefined') {
+      window.localStorage?.setItem('nexus.accessToken', token);
+      window.sessionStorage?.setItem('nexus.accessToken', token);
+    }
   },
   clear: () => {
-    if (typeof window !== 'undefined') window.sessionStorage.removeItem('nexus.accessToken');
+    if (typeof window !== 'undefined') {
+      window.localStorage?.removeItem('nexus.accessToken');
+      window.sessionStorage?.removeItem('nexus.accessToken');
+      window.localStorage?.removeItem('nexus.user');
+      window.sessionStorage?.removeItem('nexus.user');
+    }
   },
 };
 
 export class ApiClient {
   constructor(
-    private readonly baseUrl = 'http://localhost:4000/api/v1',
+    private readonly baseUrl = process.env.NEXT_PUBLIC_API_URL ||
+      process.env.NEXT_PUBLIC_API_BASE_URL ||
+      'http://localhost:4000/api/v1',
     private readonly tokenStorage: TokenStorage = browserTokenStorage,
     private readonly fetcher: typeof fetch = fetch,
   ) {}
@@ -62,8 +78,12 @@ export class ApiClient {
     if (!response.ok) {
       if (response.status === 401) this.tokenStorage.clear();
       const message =
-        typeof payload === 'object' && payload !== null && 'error' in payload
-          ? String(payload.error)
+        typeof payload === 'object' && payload !== null
+          ? String(
+              (payload as Record<string, unknown>).error ||
+                (payload as Record<string, unknown>).message ||
+                `Request failed with status ${response.status}.`,
+            )
           : `Request failed with status ${response.status}.`;
       throw new ApiError(message, response.status);
     }
