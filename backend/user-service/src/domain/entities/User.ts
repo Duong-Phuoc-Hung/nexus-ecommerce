@@ -62,6 +62,10 @@ export class User {
     return this._fullName;
   }
 
+  public get passwordHash(): string {
+    return this._passwordHash;
+  }
+
   public get role(): UserRole {
     return this._role;
   }

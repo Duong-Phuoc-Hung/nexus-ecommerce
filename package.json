@@ -32,6 +32,12 @@
     "docker:dev:ps": "docker compose -f devops/docker-compose.dev.yml ps",
     "docker:dev:restart": "docker compose -f devops/docker-compose.dev.yml restart",
     "docker:dev:clean": "docker compose -f devops/docker-compose.dev.yml down -v",
+    "docker:build": "node scripts/build-all-images.js",
+    "docker:build:sh": "bash scripts/build-all-images.sh",
+    "docker:full:up": "docker compose -f devops/docker-compose.full.yml up -d",
+    "docker:full:down": "docker compose -f devops/docker-compose.full.yml down",
+    "docker:full:logs": "docker compose -f devops/docker-compose.full.yml logs -f",
+    "docker:full:ps": "docker compose -f devops/docker-compose.full.yml ps",
     "db:migrate": "node scripts/migrate-all-databases.js",
     "db:seed": "node scripts/migrate-all-databases.js"
   },

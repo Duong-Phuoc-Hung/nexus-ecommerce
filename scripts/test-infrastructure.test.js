@@ -38,7 +38,19 @@ describe('1. Microservices Application Instances & Healthcheck Probes', () => {
         `createApplication must be exported by ${svc.name}`,
       );
 
-      const app = createApplication();
+      let app;
+      if (svc.name === 'auction-service') {
+        const mockHealthChecker = async () => ({
+          status: 'UP',
+          host: 'localhost',
+          port: 6379,
+          latencyMs: 1,
+          timestamp: new Date().toISOString(),
+        });
+        app = createApplication(mockHealthChecker);
+      } else {
+        app = createApplication();
+      }
       const server = http.createServer(app);
 
       await new Promise((resolve, reject) => {

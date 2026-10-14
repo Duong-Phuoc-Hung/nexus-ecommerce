@@ -96,12 +96,15 @@ for (const svc of SERVICES_CONFIG) {
   for (const file of sqlFiles) {
     const filePath = path.join(svc.dir, file);
     try {
-      // Đọc nội dung file SQL và pipe vào lệnh psql trong Docker container
+      // Đọc nội dung file SQL và pipe vào lệnh psql trong Docker container (ép chuẩn UTF-8 chống lỗi font Windows)
       const sqlContent = fs.readFileSync(filePath, 'utf-8');
-      execSync(`docker exec -i ${svc.container} psql -U ${svc.user} -d ${svc.db}`, {
-        input: sqlContent,
-        stdio: ['pipe', 'ignore', 'pipe'],
-      });
+      execSync(
+        `docker exec -i -e PGCLIENTENCODING=UTF8 ${svc.container} psql -U ${svc.user} -d ${svc.db}`,
+        {
+          input: Buffer.from(`SET client_encoding = 'UTF8';\n${sqlContent}`, 'utf-8'),
+          stdio: ['pipe', 'ignore', 'pipe'],
+        },
+      );
       console.log(`   ✅ Thành công: ${file}`);
       totalSuccess++;
     } catch (err) {

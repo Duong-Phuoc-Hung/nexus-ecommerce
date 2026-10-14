@@ -9,7 +9,9 @@ INSERT INTO user_roles (role_code, role_name, description) VALUES
 ('SELLER', 'Seller', 'Đối tác bán hàng và đấu giá'),
 ('BUYER', 'Buyer', 'Khách hàng mua sắm và tham gia đấu giá'),
 ('SUPPORT_STAFF', 'Support Staff', 'Nhân viên hỗ trợ, giải quyết khiếu nại')
-ON CONFLICT (role_code) DO NOTHING;
+ON CONFLICT (role_code) DO UPDATE 
+SET role_name = EXCLUDED.role_name,
+    description = EXCLUDED.description;
 
 -- 2. NẠP 61 QUYỀN HẠN CHI TIẾT (SRS Mục 2.7 Privileges List)
 INSERT INTO user_privileges (code, description) VALUES
@@ -99,7 +101,7 @@ INSERT INTO user_privileges (code, description) VALUES
 ('SYSTEM.CONFIG.VIEW', 'Xem cấu hình hệ thống'),
 ('SYSTEM.CONFIG.UPDATE', 'Cập nhật cấu hình hệ thống'),
 ('SYSTEM.HEALTH.VIEW', 'Xem trạng thái sức khỏe hệ thống')
-ON CONFLICT (code) DO NOTHING;
+ON CONFLICT (code) DO UPDATE SET description = EXCLUDED.description;
 
 -- 3. GÁN QUYỀN CHO 4 VAI TRÒ THEO MA TRẬN SRS MỤC 2.7
 -- ADMIN
