@@ -201,3 +201,52 @@ pnpm test
 ```
 
 > 📄 **Xem báo cáo nghiệm thu chi tiết:** [`docs/qa/SCRUM-43-redis-read-write-health-down-report.md`](../../docs/qa/SCRUM-43-redis-read-write-health-down-report.md)
+
+---
+
+## 7. Quy Ước Redis Key Prefix & Quản Lý TTL Theo Module (SCRUM-54)
+
+Nhằm tránh **xung đột key (Key Collision)** giữa các Bounded Contexts dùng chung cụm Redis (Port 6379), hệ thống chuẩn hóa cấu trúc key theo nguyên tắc:
+
+$$\text{<module>}:\text{<purpose>}:\text{<identifier>}[:\text{<sub\_identifier>}]$$
+
+### 7.1. Bảng Tra Cứu Tiền Tố (Prefix Registry) & TTL Dự Kiến
+
+| Module / Bounded Context | Tiền tố chuẩn (`RedisKeyPrefix`) | Cấu trúc Key                                  | Kiểu dữ liệu  |     TTL Mặc định (`RedisTTL`)     | Mục đích sử dụng                                  |
+| :----------------------- | :------------------------------- | :-------------------------------------------- | :-----------: | :-------------------------------: | :------------------------------------------------ |
+| **Auth / IAM**           | `auth:blacklist:`                | `auth:blacklist:{token_jti_or_hash}`          |    String     |      $86,400\text{s}$ (24h)       | Danh sách JWT Token đã logout / thu hồi           |
+| **Auth / IAM**           | `auth:lockout:`                  | `auth:lockout:{email_or_user_id}`             |    Counter    |        $900\text{s}$ (15m)        | Khóa tạm thời sau 5 lần nhập sai mật khẩu         |
+| **Auth / IAM**           | `auth:password_reset:`           | `auth:password_reset:{reset_token}`           |    String     |        $900\text{s}$ (15m)        | Token đặt lại mật khẩu một lần                    |
+| **Auction**              | `auction:lock:`                  | `auction:lock:{auction_id}`                   |    String     | $3,000\text{ms} - 5,000\text{ms}$ | Distributed Lock chống race condition khi đặt giá |
+| **Auction**              | `auction:highest_bid:`           | `auction:highest_bid:{auction_id}`            |  Hash / JSON  |   Thời gian phiên $+ 1\text{h}$   | Cache giá thầu cao nhất truy vấn nhanh            |
+| **Auction**              | `auction:bids_zset:`             | `auction:bids_zset:{auction_id}`              |     ZSET      |  Thời gian phiên $+ 24\text{h}$   | Sorted Set lịch sử giá thầu theo Score            |
+| **Auction**              | `auction:stream:`                | `auction:stream:{auction_id}`                 |    Stream     |            $2\text{h}$            | Redis Stream sự kiện đấu giá realtime             |
+| **Commerce (Cart)**      | `cart:guest:`                    | `cart:guest:{guest_session_id}`               |  Hash / JSON  |      $604,800\text{s}$ (7d)       | Giỏ hàng tạm thời cho khách chưa đăng nhập        |
+| **Commerce (Cart)**      | `cart:user:`                     | `cart:user:{user_id}`                         |  Hash / JSON  |     $2,592,000\text{s}$ (30d)     | Giỏ hàng người dùng đã đăng nhập                  |
+| **Catalog**              | `catalog:product:`               | `catalog:product:{product_id}`                | String (JSON) |        $600\text{s}$ (10m)        | Cache thông tin chi tiết sản phẩm                 |
+| **Catalog**              | `catalog:categories:`            | `catalog:categories:all`                      | String (JSON) |       $3,600\text{s}$ (1h)        | Cache cây danh mục sản phẩm                       |
+| **Catalog**              | `catalog:stock_lock:`            | `catalog:stock_lock:{sku_id}`                 |    String     |         $5,000\text{ms}$          | Khóa tạm giữ tồn kho khi checkout                 |
+| **Notification**         | `notification:rate_limit:`       | `notification:rate_limit:{user_id}:{channel}` |    Counter    |         $60\text{s}$ (1m)         | Giới hạn tần suất gửi OTP / SMS / Email           |
+| **Fulfillment**          | `fulfillment:lock:`              | `fulfillment:lock:{shipment_id}`              |    String     |         $10,000\text{ms}$         | Khóa điều phối đơn giao hàng                      |
+| **Testing & QA**         | `nexus:test:`                    | `nexus:test:{module}:{test_id}`               |      Any      |           $60\text{s}$            | Namespace cô lập kịch bản test tự động            |
+
+### 7.2. Hướng Dẫn Sử Dụng Trong Mã Nguồn
+
+```typescript
+import {
+  RedisKeyPrefix,
+  RedisTTL,
+  buildRedisKey,
+  assertValidRedisKey,
+} from './infrastructure/redis';
+
+// 1. Tạo key phân tán an toàn (Type-Safe, tự động kiểm tra khoảng trắng và rỗng)
+const lockKey = buildRedisKey(RedisKeyPrefix.AUCTION_LOCK, 'auc_100293');
+// -> Kết quả: "auction:lock:auc_100293"
+
+// 2. Chặn bare key không có namespace module
+assertValidRedisKey(lockKey); // Hợp lệ!
+// assertValidRedisKey('bare_key_danger'); // Ném lỗi [RedisKeyViolationError] ngay lập tức!
+```
+
+> 📖 **Xem tài liệu chi tiết quy chuẩn toàn nền tảng:** [`docs/standards/redis-key-conventions.md`](../../docs/standards/redis-key-conventions.md)
