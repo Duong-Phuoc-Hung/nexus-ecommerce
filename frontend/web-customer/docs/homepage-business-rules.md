@@ -25,7 +25,7 @@ Không lặp sản phẩm đấu giá trong lưới mua sắm. Nhãn đấu giá
 
 Khách được xem banner, danh mục, danh sách, tìm kiếm và lọc. Bấm ảnh, tên, nút xem hoặc lưu một sản phẩm mở cùng popup mời đăng nhập/đăng ký, có tên và ảnh món đồ liên quan. Header có nút Đăng nhập. Có nút đóng, Escape, nhấn nền và Tiếp tục xem trang chủ; focus được quản lý bằng native dialog.
 
-Đăng nhập liên kết `/login`; đăng ký liên kết `/login?mode=register` và dùng `AuthPage` hiện có của nhóm. Chỉ route wrapper đọc mode, không tạo form auth mới. Popup không thu thập mật khẩu và không tự cấp quyền/session.
+Đăng nhập liên kết `/login`; đăng ký liên kết `/register` và dùng `AuthPage` hiện có của nhóm. Chỉ route wrapper đọc mode, không tạo form auth mới. Popup không thu thập mật khẩu và không tự cấp quyền/session.
 
 **Điểm cần nhóm thống nhất:** SRS View Product chưa ghi rõ phải đăng nhập mới xem chi tiết; gate này là yêu cầu UX mới của chủ project, không phải điều kiện được suy ra từ SRS. Khi tích hợp session thật, phải thay trạng thái guest hiện tại bằng auth contract của nhóm và tiếp tục action bằng route/contract sản phẩm được nhóm xác nhận. UI gate không thay thế authorization backend.
 
@@ -33,7 +33,7 @@ Khách được xem banner, danh mục, danh sách, tìm kiếm và lọc. Bấm
 
 24 listing mua sắm + 7 listing đấu giá, vẫn trong 4 danh mục để phù hợp nhóm 6 người / 2–3 tháng. Tăng fixture không đồng nghĩa mở rộng bounded context. Giá, uy tín, đánh giá, số lượng đã bán, lịch sử và người bán đều là mock. Ảnh stock chỉ minh họa nhóm sản phẩm, không bảo đảm đúng model. Không có thanh toán, đặt hàng hoặc bid thật.
 
-Countdown bắt đầu từ fixture khi tải trang. Homepage hiện dùng luồng guest cho tới khi nối auth của nhóm; không tự nhận demo session cũ là tài khoản thật. Component chi tiết/bid demo cũ được giữ trong source nhưng không mở khi guest bấm sản phẩm.
+Countdown bắt đầu từ fixture khi tải trang. Homepage hiện dùng luồng guest cho tới khi nối auth của nhóm; không tự nhận demo session cũ là tài khoản thật. Khách bấm sản phẩm mở popup mời đăng nhập/đăng ký.
 
 ## Banner
 
