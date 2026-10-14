@@ -71,6 +71,10 @@ export class User {
     return this._fullName;
   }
 
+  public get passwordHash(): string {
+    return this._passwordHash;
+  }
+
   public get role(): UserRole {
     return this._role;
   }
@@ -136,9 +140,6 @@ export class User {
   public updateReputation(delta: number): void {
     this._reputationScore = Math.max(0, this._reputationScore + delta);
     this._updatedAt = new Date();
-  }
-  public get passwordHash(): string {
-    return this._passwordHash;
   }
   public setPasswordHash(passwordHash: string): void {
     this._passwordHash = passwordHash;

@@ -1,6 +1,7 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import { InMemoryUserRepository } from './infrastructure/repositories/InMemoryUserRepository';
+import { PostgresUserRepository } from './infrastructure/repositories/PostgresUserRepository';
 import { GetUserProfileUseCase } from './application/use-cases/GetUserProfileUseCase';
 import { LoginUseCase } from './application/use-cases/LoginUseCase';
 import { LogoutUseCase } from './application/use-cases/LogoutUseCase';
@@ -29,7 +30,11 @@ export function createApplication(): Application {
     });
   });
 
-  const userRepository = new InMemoryUserRepository();
+  // Khởi tạo Dependency Injection (Composition Root)
+  const userRepository =
+    process.env.USE_IN_MEMORY_DB === 'true'
+      ? new InMemoryUserRepository()
+      : new PostgresUserRepository();
   const getUserProfileUseCase = new GetUserProfileUseCase(userRepository);
   const loginUseCase = new LoginUseCase(userRepository);
   const logoutUseCase = new LogoutUseCase();
