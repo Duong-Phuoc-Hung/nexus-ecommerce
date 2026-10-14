@@ -1,4 +1,4 @@
-import { ApiClient, apiClient } from './api-client';
+import { ApiClient, authApiClient } from './api-client';
 
 export interface AuthUser {
   id: string;
@@ -28,7 +28,7 @@ export interface RegisterInput {
   password: string;
 }
 
-export function createAuthApi(client: ApiClient = apiClient) {
+export function createAuthApi(client: ApiClient = authApiClient) {
   return {
     async register(input: RegisterInput): Promise<AuthUser> {
       const response = await client.request<ApiEnvelope<AuthUser>>('/auth/register', {

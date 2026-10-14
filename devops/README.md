@@ -290,3 +290,30 @@ kubectl apply -k devops/k8s/
 # Hoặc kích hoạt ứng dụng ArgoCD tự động giám sát và đồng bộ:
 kubectl apply -f devops/argocd/application.yaml
 ```
+
+---
+
+## 8. Quy Ước Redis Key Prefix & Quản Lý TTL Theo Module (SCRUM-54)
+
+Cụm Redis tập trung (`nexus-redis` - Port `6379`) được dùng chung giữa tất cả 7 Core Services. Để ngăn ngừa **xung đột đè key (Key Collision)** và rò rỉ bộ nhớ (OOM), toàn bộ lập trình viên bắt buộc tuân thủ:
+
+- **Cấu trúc key:** `<module>:<purpose>:<identifier>[:<sub_identifier>]`
+- **Quy tắc:** Bắt buộc có namespace module, chữ thường, không dùng bare key.
+
+### Bảng Tra Cứu Tiền Tố (Prefix) & TTL Chuẩn:
+
+| Module / Service    | Prefix Chuẩn               | Cấu trúc Key                             |           TTL Mặc định            | Mục đích sử dụng              |
+| :------------------ | :------------------------- | :--------------------------------------- | :-------------------------------: | :---------------------------- |
+| **Auth / IAM**      | `auth:blacklist:`          | `auth:blacklist:{token_hash}`            |      $86,400\text{s}$ (24h)       | Danh sách JWT Token thu hồi   |
+| **Auth / IAM**      | `auth:lockout:`            | `auth:lockout:{user_id}`                 |        $900\text{s}$ (15m)        | Khóa tạm sau 5 lần login sai  |
+| **Auction**         | `auction:lock:`            | `auction:lock:{auction_id}`              | $3,000\text{ms} - 5,000\text{ms}$ | Distributed Lock đặt giá thầu |
+| **Auction**         | `auction:highest_bid:`     | `auction:highest_bid:{auction_id}`       |        Phiên $+ 1\text{h}$        | Cache giá thầu cao nhất       |
+| **Auction**         | `auction:bids_zset:`       | `auction:bids_zset:{auction_id}`         |       Phiên $+ 24\text{h}$        | Sorted Set lịch sử thầu       |
+| **Commerce (Cart)** | `cart:guest:`              | `cart:guest:{guest_session_id}`          |      $604,800\text{s}$ (7d)       | Giỏ hàng khách vãng lai       |
+| **Commerce (Cart)** | `cart:user:`               | `cart:user:{user_id}`                    |     $2,592,000\text{s}$ (30d)     | Giỏ hàng người dùng           |
+| **Catalog**         | `catalog:product:`         | `catalog:product:{product_id}`           |        $600\text{s}$ (10m)        | Cache chi tiết sản phẩm       |
+| **Notification**    | `notification:rate_limit:` | `notification:rate_limit:{user_id}:{ch}` |         $60\text{s}$ (1m)         | Rate limiting OTP / SMS       |
+| **Testing & QA**    | `nexus:test:`              | `nexus:test:{module}:{test_id}`          |           $60\text{s}$            | Namespace cô lập test tự động |
+
+> 📖 **Tài liệu đặc tả đầy đủ:** [`docs/standards/redis-key-conventions.md`](../docs/standards/redis-key-conventions.md)  
+> 🧪 **Chạy kiểm thử quy ước tự động:** `pnpm test:redis:prefix`

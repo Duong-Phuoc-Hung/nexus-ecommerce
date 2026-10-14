@@ -93,6 +93,7 @@ commit_lint:
 # ==============================================================================
 # STAGE: AUTOMATED TESTS
 # ==============================================================================
+# Backend Unit & Architecture Boundary Tests (chỉ kích hoạt khi có thay đổi backend/devops)
 unit_tests:
   stage: test
   needs:
@@ -104,12 +105,39 @@ unit_tests:
     - pnpm test
     - echo "Test suite executed successfully."
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_PIPELINE_SOURCE == "push"'
+      changes:
+        - 'backend/**/*'
+        - 'shared/**/*'
+        - 'scripts/**/*'
+        - 'devops/**/*'
+        - 'package.json'
+        - 'pnpm-lock.yaml'
+        - '.gitlab-ci.yml'
+
+# Frontend Build & Typecheck (chạy siêu nhanh ~3-5s, chỉ kích hoạt khi sửa frontend)
+frontend_build:
+  stage: test
+  needs:
+    - install_dependencies
+  script:
+    - echo "Building Frontend applications (@nexus/web-customer)..."
+    - pnpm -r --filter "./frontend/*" --if-present build
+    - echo "Frontend build and typecheck completed successfully."
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_PIPELINE_SOURCE == "push"'
+      changes:
+        - 'frontend/**/*'
+        - 'package.json'
+        - 'pnpm-lock.yaml'
+        - '.gitlab-ci.yml'
 
 # ==============================================================================
 # STAGE: BUILD PACKAGES
 # ==============================================================================
+# Build TypeScript compilation cho Backend packages (bỏ qua khi chỉ sửa Frontend)
 build_packages:
   stage: build
   needs:
@@ -120,8 +148,15 @@ build_packages:
     - pnpm -r --if-present build
     - echo "Build completed successfully."
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_PIPELINE_SOURCE == "push"'
+      changes:
+        - 'backend/**/*'
+        - 'shared/**/*'
+        - 'scripts/**/*'
+        - 'package.json'
+        - 'pnpm-lock.yaml'
+        - '.gitlab-ci.yml'
 
 # ==============================================================================
 # STAGE: DOCKER IMAGE BUILD & CONTAINER REGISTRY PUBLISH
@@ -129,8 +164,7 @@ build_packages:
 validate_docker_configs:
   stage: docker-build
   image: docker:24
-  needs:
-    - build_packages
+  needs: []
   dependencies: []
   before_script:
     - apk add --no-cache docker-cli-compose
@@ -139,8 +173,13 @@ validate_docker_configs:
     - docker compose -f devops/docker-compose.dev.yml config
     - echo "Docker configurations verified successfully."
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "develop"'
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || ($CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "develop")'
+      changes:
+        - 'devops/**/*'
+        - 'backend/**/*'
+        - '.gitlab-ci.yml'
 
 docker_build_and_push:
   stage: docker-build

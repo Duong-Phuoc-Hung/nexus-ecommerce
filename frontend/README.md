@@ -167,6 +167,27 @@ frontend/
    - Sử dụng `@stripe/react-stripe-js` render khung nhập thẻ ngân hàng an toàn.
    - Khi thanh toán thành công, chuyển hướng người dùng sang trang chi tiết đơn hàng `/orders/[orderId]` để xem hóa đơn điện tử.
 
+## Frontend modules and API configuration
+
+The two frontend applications use feature folders aligned with the project's business contexts. Customer modules are `user`, `catalog`, `commerce`, `auction`, `fulfillment`, and `notification`; admin modules are `user`, `catalog`, `commerce`, `auction`, `fulfillment`, and `system`. `user` includes account and reputation features described by the SRS.
+
+Each feature module keeps its own `api/`, `components/`, `pages/`, and `types/` folders. Put feature-specific code there; shared HTTP configuration belongs in each app's `src/services/api-client.ts`. Feature API functions should import the shared client and use endpoint paths relative to the configured base URL, as shown by `web-customer/src/modules/catalog/api/catalog.api.ts`.
+
+Copy each app's `.env.example` to `.env.local` for local development:
+
+```powershell
+Copy-Item frontend/web-customer/.env.example frontend/web-customer/.env.local
+Copy-Item frontend/web-admin/.env.example frontend/web-admin/.env.local
+```
+
+| Application | API base URL               | Timeout (ms)                 |
+| ----------- | -------------------------- | ---------------------------- |
+| Customer    | `NEXT_PUBLIC_API_BASE_URL` | `NEXT_PUBLIC_API_TIMEOUT_MS` |
+| Admin       | `NEXT_PUBLIC_API_BASE_URL` | `NEXT_PUBLIC_API_TIMEOUT_MS` |
+
+The examples point to the local API Gateway at `http://localhost:8000/api/v1`; replace it with the shared environment's gateway URL as appropriate. Include `/api/v1` in the base URL and omit that prefix from feature endpoint paths. Both clients default to a 10,000 ms timeout and normalize HTTP, network, and timeout failures into an `ApiError`. Configure a valid base URL before importing the API client. Restart the dev server after changing environment variables.
+
+Only public configuration belongs in frontend env variables. Never store passwords, private keys, or access tokens in `NEXT_PUBLIC_*` or `VITE_*` values because bundlers expose them to browser code. Keep local values in `.env.local`; commit `.env.example` only.
 ---
 
 ## 4. Khởi Chạy Frontend `web-customer`
@@ -201,3 +222,27 @@ Sao chép `frontend/web-customer/.env.example` thành `.env.local` nếu cần �
 ### Cấu trúc module
 
 Code UI theo bounded context đặt trong `frontend/web-customer/src/modules/<module>` gồm `user`, `catalog`, `commerce`, `auction`, `fulfillment`, `notification`. Giữ chi tiết triển khai bên trong module; nếu cần dùng module khác, phụ thuộc vào contract được export thay vì import trực tiếp component hoặc state nội bộ. Cấu hình app đặt trong `src/app`, transport dùng chung trong `src/shared`.
+
+---
+
+## 5. Khởi Chạy Frontend `web-admin`
+
+`web-admin` là ứng dụng Next.js + TypeScript riêng cho quản trị. Cài dependencies từ thư mục gốc repo nếu chưa cài:
+
+```bash
+pnpm install
+pnpm --filter @nexus/web-admin dev
+```
+
+Mở `http://localhost:3001`. Trang khởi đầu không gọi backend nên có thể chạy độc lập. Cổng `3001` cho phép chạy admin cùng lúc với customer trên cổng `3000`.
+
+Build và chạy production:
+
+```bash
+pnpm --filter @nexus/web-admin build
+pnpm --filter @nexus/web-admin start
+```
+
+Nếu cần cấu hình API, sao chép `frontend/web-admin/.env.example` thành `.env.local`. Axios client dùng chung nằm tại `frontend/web-admin/src/shared/api/client.ts`; không commit secret hoặc file `.env.local`.
+
+Các khu vực quản trị đang được chuẩn bị trong `src/pages` (dashboard, users, catalog, auctions, orders, fulfillment, reputation và system). Tiếp tục đặt UI theo từng khu vực; phần khởi động hiện tại không yêu cầu backend.

@@ -198,3 +198,42 @@ Kết quả trả về:
   "timestamp": "2026-10-07T10:04:03.848Z"
 }
 ```
+
+---
+
+## 5. Cấu Hình & Kết Nối Redis (SRS 3.5 - SCRUM-32)
+
+Dịch vụ Đấu giá (`auction-service`) sử dụng Redis làm In-Memory Cache và Khóa phân tán (Redlock) với cấu hình an toàn qua biến môi trường:
+
+### 1. Bảng biến môi trường (Environment Variables):
+
+- `REDIS_HOST`: Địa chỉ máy chủ Redis (mặc định: `localhost`).
+- `REDIS_PORT`: Cổng kết nối Redis (mặc định: `6379`, hợp lệ từ 1 - 65535).
+- `REDIS_PASSWORD`: Mật khẩu xác thực (môi trường local dev để trống, tuyệt đối không hardcode secret).
+- `REDIS_TIMEOUT`: Thời gian timeout kết nối/lệnh (mặc định: `5000` ms).
+- `REDIS_URL`: Chuỗi URL kết nối đầy đủ (ví dụ: `redis://localhost:6379`).
+
+### 2. Kiểm tra sức khỏe kết nối (Health Check):
+
+- Endpoint kiểm tra riêng cho Redis:
+  ```powershell
+  Invoke-RestMethod -Uri "http://localhost:4004/health/redis"
+  ```
+- Kết quả mong đợi khi kết nối thành công:
+  ```json
+  {
+    "status": "UP",
+    "host": "localhost",
+    "port": 6379,
+    "latencyMs": 2,
+    "timestamp": "2026-10-13T16:45:00.000Z"
+  }
+  ```
+
+### 3. Lệnh chạy Test Suite riêng cho Redis:
+
+```bash
+pnpm test:redis
+```
+
+Chi tiết cấu hình và cơ chế chẩn đoán lỗi xem tại: [`backend/auction-service/README.md`](./auction-service/README.md).
