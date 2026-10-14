@@ -201,3 +201,27 @@ Sao chép `frontend/web-customer/.env.example` thành `.env.local` nếu cần �
 ### Cấu trúc module
 
 Code UI theo bounded context đặt trong `frontend/web-customer/src/modules/<module>` gồm `user`, `catalog`, `commerce`, `auction`, `fulfillment`, `notification`. Giữ chi tiết triển khai bên trong module; nếu cần dùng module khác, phụ thuộc vào contract được export thay vì import trực tiếp component hoặc state nội bộ. Cấu hình app đặt trong `src/app`, transport dùng chung trong `src/shared`.
+
+---
+
+## 5. Khởi Chạy Frontend `web-admin`
+
+`web-admin` là ứng dụng Next.js + TypeScript riêng cho quản trị. Cài dependencies từ thư mục gốc repo nếu chưa cài:
+
+```bash
+pnpm install
+pnpm --filter @nexus/web-admin dev
+```
+
+Mở `http://localhost:3001`. Trang khởi đầu không gọi backend nên có thể chạy độc lập. Cổng `3001` cho phép chạy admin cùng lúc với customer trên cổng `3000`.
+
+Build và chạy production:
+
+```bash
+pnpm --filter @nexus/web-admin build
+pnpm --filter @nexus/web-admin start
+```
+
+Nếu cần cấu hình API, sao chép `frontend/web-admin/.env.example` thành `.env.local`. Axios client dùng chung nằm tại `frontend/web-admin/src/shared/api/client.ts`; không commit secret hoặc file `.env.local`.
+
+Các khu vực quản trị đang được chuẩn bị trong `src/pages` (dashboard, users, catalog, auctions, orders, fulfillment, reputation và system). Tiếp tục đặt UI theo từng khu vực; phần khởi động hiện tại không yêu cầu backend.

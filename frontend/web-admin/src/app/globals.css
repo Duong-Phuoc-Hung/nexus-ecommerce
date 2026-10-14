@@ -1,0 +1,68 @@
+:root {
+  color-scheme: light;
+  font-family: Arial, Helvetica, sans-serif;
+  color: #202a3b;
+  background: #f4f6f8;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* { box-sizing: border-box; }
+body { min-width: 360px; min-height: 100vh; margin: 0; }
+a { color: inherit; text-decoration: none; }
+.admin-shell { min-height: 100vh; }
+.sidebar { position: fixed; inset: 0 auto 0 0; display: flex; flex-direction: column; width: 248px; padding: 28px 18px 24px; background: #182338; color: #dce5f2; }
+.brand { display: flex; align-items: center; gap: 11px; padding: 0 8px; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.12em; }
+.brand-mark { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 10px; background: #91e1c2; color: #182338; font-size: 1rem; letter-spacing: 0; }
+.brand-light { color: #91e1c2; }
+.nav-caption { margin: 52px 10px 14px; color: #7e8aa0; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.16em; }
+.nav-item { display: flex; align-items: center; gap: 13px; margin: 3px 0; padding: 12px 11px; border-radius: 9px; color: #aab6c8; font-size: 0.88rem; }
+.nav-item > span { width: 18px; color: #8e9bb0; text-align: center; }
+.nav-item-active { background: #28364d; color: #fff; }
+.nav-item-active > span { color: #91e1c2; }
+.sidebar-bottom { margin-top: auto; padding: 16px 10px 0; border-top: 1px solid #334057; color: #bdc9d9; font-size: 0.68rem; line-height: 1.8; letter-spacing: 0.08em; }
+.sidebar-bottom span { color: #7e8aa0; letter-spacing: 0; }
+.main-panel { min-height: 100vh; margin-left: 248px; }
+.topbar { display: flex; height: 72px; align-items: center; justify-content: space-between; padding: 0 48px; border-bottom: 1px solid #e5e9ee; background: rgb(255 255 255 / 82%); color: #4b5669; font-size: 0.8rem; }
+.crumb { color: #929baa; }
+.environment { display: flex; align-items: center; gap: 8px; color: #637084; font-size: 0.64rem; font-weight: 700; letter-spacing: 0.1em; }
+.environment i { width: 7px; height: 7px; border-radius: 50%; background: #46b98b; box-shadow: 0 0 0 3px #e0f5ed; }
+.content { width: min(100%, 1120px); margin: 0 auto; padding: 72px 48px 28px; }
+.overline { margin: 0; color: #8490a1; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.17em; }
+h1 { margin: 22px 0 15px; color: #1b2739; font-size: clamp(2.7rem, 5vw, 4.4rem); font-weight: 500; letter-spacing: -0.065em; line-height: 1.04; }
+h1 span { color: #8793a4; }
+.intro { max-width: 510px; margin: 0; color: #697588; font-size: 0.98rem; line-height: 1.75; }
+.section-heading { display: flex; align-items: flex-end; justify-content: space-between; margin: 66px 0 18px; padding-bottom: 17px; border-bottom: 1px solid #dfe4ea; }
+.section-heading h2 { margin: 7px 0 0; color: #263247; font-size: 1.15rem; font-weight: 600; }
+.section-heading > span { color: #8b96a6; font-size: 0.68rem; letter-spacing: 0.12em; }
+.workspace-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.workspace-card { position: relative; min-height: 154px; padding: 22px; border: 1px solid #e1e6ec; border-radius: 12px; background: #fff; transition: border-color 160ms ease, transform 160ms ease; }
+.workspace-card:hover { transform: translateY(-2px); border-color: #a8d9c5; }
+.card-number { color: #53a989; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.12em; }
+.workspace-card h3 { margin: 20px 0 6px; color: #29364a; font-size: 0.95rem; font-weight: 600; }
+.workspace-card p { margin: 0; color: #8792a2; font-size: 0.78rem; line-height: 1.5; }
+.card-arrow { position: absolute; top: 20px; right: 20px; color: #9ba6b4; }
+.page-footer { margin-top: 64px; padding-top: 17px; border-top: 1px solid #e0e5eb; color: #8792a2; font-size: 0.69rem; }
+.page-footer span { padding: 0 5px; color: #51aa87; }
+
+@media (max-width: 850px) {
+  .sidebar { width: 72px; padding-inline: 12px; }
+  .brand { justify-content: center; padding: 0; }
+  .brand > span:last-child, .nav-caption, .nav-item:not(.nav-item-active), .nav-item-active { font-size: 0; }
+  .nav-item { justify-content: center; padding: 12px 0; }
+  .nav-item > span { font-size: 1rem; }
+  .sidebar-bottom { overflow: hidden; padding-inline: 0; font-size: 0; }
+  .main-panel { margin-left: 72px; }
+  .topbar { padding-inline: 28px; }
+  .content { padding: 56px 28px 24px; }
+}
+
+@media (max-width: 560px) {
+  .workspace-grid { grid-template-columns: 1fr; }
+  .topbar { height: 60px; padding-inline: 18px; }
+  .content { padding: 42px 18px 20px; }
+  .environment { font-size: 0; }
+  .section-heading { margin-top: 48px; }
+}
