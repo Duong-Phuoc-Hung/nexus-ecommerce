@@ -218,17 +218,16 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
               Danh mục
             </button>
             <a
-              href="#live-auctions"
+              href="/auctions"
               className="flex min-h-11 items-center border-b-2 border-brand font-bold text-brand-dark"
             >
               Đấu giá trực tiếp
             </a>
             <a
-              href="#discover"
-              onClick={resetFilters}
+              href="/products"
               className="hidden min-h-11 items-center hover:text-brand-dark sm:flex"
             >
-              Khám phá sản phẩm
+              Tất cả sản phẩm
             </a>
             <a
               href="#how-it-works"
@@ -325,6 +324,12 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
                 className="flex items-center gap-2 text-xl font-bold tracking-tight sm:text-2xl"
               >
                 Đấu giá đang diễn ra
+                <a
+                  href="/auctions"
+                  className="ml-2 inline-flex min-h-11 items-center gap-1 text-xs font-semibold tracking-normal text-brand-dark"
+                >
+                  Xem tất cả <MarketplaceIcon name="arrow" className="size-3.5" />
+                </a>
                 <MarketplaceIcon name="gavel" className="hidden size-6 text-brand sm:block" />
               </h2>
               <p className="mt-1.5 text-xs text-muted">
@@ -442,6 +447,12 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
               </p>
               <h2 id="discover-title" className="text-2xl font-bold tracking-tight">
                 {query ? `Kết quả mua sắm cho “${query}”` : 'Khám phá sản phẩm'}
+                <a
+                  href="/products"
+                  className="ml-3 inline-flex min-h-11 items-center gap-1 align-middle text-xs font-semibold tracking-normal text-brand-dark"
+                >
+                  Xem tất cả <MarketplaceIcon name="arrow" className="size-3.5" />
+                </a>
               </h2>
               <p className="mt-2 text-xs text-muted">
                 {catalog.length} sản phẩm
