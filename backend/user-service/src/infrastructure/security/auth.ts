@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import bcrypt from 'bcryptjs';
 
 const JWT_TTL_SECONDS = 60 * 60 * 8;
 
@@ -21,27 +22,39 @@ export interface JwtPayload {
 }
 
 export function hashPassword(password: string): string {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
-
-  return `${salt}:${hash}`;
+  // Mặc định băm bằng BCrypt 10 rounds chuẩn bảo mật công nghiệp
+  return bcrypt.hashSync(password, 10);
 }
 
 export function verifyPassword(password: string, passwordHash: string): boolean {
-  if (!passwordHash || !passwordHash.includes(':')) {
+  if (!password || !passwordHash) {
     return false;
   }
 
-  const [salt, storedHash] = passwordHash.split(':');
-  if (!salt || !storedHash) return false;
-
-  const candidate = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
-
-  try {
-    return crypto.timingSafeEqual(Buffer.from(candidate), Buffer.from(storedHash));
-  } catch {
-    return false;
+  // 1. Hỗ trợ chuẩn BCrypt ($2a$, $2b$) tương thích tuyệt đối với PostgreSQL demo seed accounts
+  if (passwordHash.startsWith('$2a$') || passwordHash.startsWith('$2b$')) {
+    try {
+      return bcrypt.compareSync(password, passwordHash);
+    } catch {
+      return false;
+    }
   }
+
+  // 2. Hỗ trợ chuẩn PBKDF2 (salt:hash)
+  if (passwordHash.includes(':')) {
+    const [salt, storedHash] = passwordHash.split(':');
+    if (!salt || !storedHash) return false;
+
+    const candidate = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+
+    try {
+      return crypto.timingSafeEqual(Buffer.from(candidate), Buffer.from(storedHash));
+    } catch {
+      return false;
+    }
+  }
+
+  return false;
 }
 
 export function createJwtToken(payload: Omit<JwtPayload, 'iat' | 'exp'>): string {
