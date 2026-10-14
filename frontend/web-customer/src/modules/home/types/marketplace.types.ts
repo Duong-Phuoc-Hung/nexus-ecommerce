@@ -1,0 +1,32 @@
+export type CategoryId = 'all' | 'tech' | 'watches' | 'audio' | 'collectibles';
+export type MarketplaceCategory = {
+  id: CategoryId;
+  name: string;
+  icon: 'camera' | 'watch' | 'headphones' | 'gem';
+  description: string;
+};
+export type BidEntry = { bidder: string; amount: number; label: string };
+export type MarketplaceProduct = {
+  id: string;
+  name: string;
+  category: Exclude<CategoryId, 'all'>;
+  categoryName: string;
+  image: string;
+  imageAlt: string;
+  mode: 'auction' | 'fixed';
+  status: 'active' | 'scheduled';
+  price: number;
+  rating?: number;
+  soldCount?: number;
+  startingPrice: number;
+  increment: number;
+  remainingSeconds: number;
+  bids: number;
+  condition: string;
+  seller: string;
+  reputation: number;
+  location: string;
+  description: string;
+  history: BidEntry[];
+};
+export type MarketplaceFeed = { categories: MarketplaceCategory[]; products: MarketplaceProduct[] };
