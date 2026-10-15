@@ -28,7 +28,6 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
   const [budget, setBudget] = useState('all');
   const [sort, setSort] = useState('featured');
   const [auctionTab, setAuctionTab] = useState('all');
-  const [showAllAuctions, setShowAllAuctions] = useState(false);
   const [showCategories, setShowCategories] = useState(false);
   const [prompt, setPrompt] = useState<{ product?: MarketplaceProduct } | null>(null);
   const [limit, setLimit] = useState(12);
@@ -68,7 +67,7 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
     if (auctionTab === 'popular') result.sort((a, b) => b.bids - a.bids);
     return result;
   }, [products, elapsed, auctionTab, category, query]);
-  const auctions = matchingAuctions.slice(0, showAllAuctions ? matchingAuctions.length : 5);
+  const auctions = matchingAuctions.slice(0, 5);
   const catalog = useMemo(() => {
     const result = products.filter(
       (product) =>
@@ -218,17 +217,16 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
               Danh mục
             </button>
             <a
-              href="#live-auctions"
+              href="/auctions"
               className="flex min-h-11 items-center border-b-2 border-brand font-bold text-brand-dark"
             >
               Đấu giá trực tiếp
             </a>
             <a
-              href="#discover"
-              onClick={resetFilters}
+              href="/products"
               className="hidden min-h-11 items-center hover:text-brand-dark sm:flex"
             >
-              Khám phá sản phẩm
+              Tất cả sản phẩm
             </a>
             <a
               href="#how-it-works"
@@ -363,14 +361,12 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
                 </button>
               ))}
             </div>
-            <button
-              onClick={() => setShowAllAuctions((value) => !value)}
-              aria-expanded={showAllAuctions}
-              className="flex min-h-11 items-center gap-2 text-xs font-bold text-brand-dark"
+            <a
+              href="/auctions"
+              className="ml-2 inline-flex min-h-11 items-center gap-1 text-xs font-semibold tracking-normal text-brand-dark"
             >
-              {showAllAuctions ? 'Thu gọn phiên đấu' : `Xem các phiên (${matchingAuctions.length})`}
-              <MarketplaceIcon name="arrow" className="size-4" />
-            </button>
+              Xem tất cả <MarketplaceIcon name="arrow" className="size-3.5" />
+            </a>
           </div>
           {auctions.length ? (
             <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-5 pb-6 sm:grid sm:grid-cols-2 sm:px-7 md:grid-cols-3 xl:grid-cols-5">
@@ -442,6 +438,12 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
               </p>
               <h2 id="discover-title" className="text-2xl font-bold tracking-tight">
                 {query ? `Kết quả mua sắm cho “${query}”` : 'Khám phá sản phẩm'}
+                <a
+                  href="/products"
+                  className="ml-3 inline-flex min-h-11 items-center gap-1 align-middle text-xs font-semibold tracking-normal text-brand-dark"
+                >
+                  Xem tất cả <MarketplaceIcon name="arrow" className="size-3.5" />
+                </a>
               </h2>
               <p className="mt-2 text-xs text-muted">
                 {catalog.length} sản phẩm

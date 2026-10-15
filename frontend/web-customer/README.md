@@ -31,3 +31,11 @@ Base URL API chỉ cấu hình bằng env trong `.env.local` theo `.env.example`
 Video đĩa than Mixkit nằm trong `public/videos/nexus-vinyl-hero.mp4`; poster tại `public/images/nexus-vinyl-poster.jpg`. Xem nguồn/giấy phép trong `public/videos/ASSET-LICENSE.md`. Video tự phát, lặp, tắt tiếng và playsInline; nếu autoplay bị chặn hoặc video lỗi thì banner vẫn có poster. Chỉ tham khảo cách phối lớp từ NexPark, không sao chép footage hoặc branding parking.
 
 Mỗi banner dùng nền khớp listing: banner 1 video đĩa than (NX-215), banner 2 ảnh máy ảnh (NX-101), banner 3 ảnh đồng hồ thông minh (NX-108). Video được pause/ẩn khi rời banner 1; carousel vẫn tự chuyển giữa cả ba banner.
+
+## Trang danh sách
+
+- `/products`: toàn bộ listing mua sắm, 12 sản phẩm/trang. Tìm tên/danh mục/gian hàng không dấu; lọc danh mục, khoảng giá, tình trạng; sắp xếp giá và lượt mua.
+- `/auctions`: toàn bộ phiên đấu giá, 6 phiên/trang. Hero phiên nổi bật theo số lượt trả giá, bộ đếm thời gian, tab tất cả/đang diễn ra/sắp kết thúc trong 60 phút/sắp mở/đã kết thúc. Lọc và sắp xếp độc lập với trang mua sắm.
+- Tái sử dụng mock feed của homepage, không gọi API mới. Bấm xem/lưu/phiên nổi bật mở popup; đăng nhập `/login`, đăng ký `/register`. Countdown reset khi mở lại trang trong bản mock.
+- Routes mỏng; entry point tại module catalog/auction, phần trình bày danh sách dùng chung tại `src/shared/components/marketplace-directory.tsx`.
+- Không triển khai đặt giá, giỏ hàng, checkout hoặc tự xác thực phiên đăng nhập trong hai trang này.
