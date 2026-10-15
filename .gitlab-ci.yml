@@ -35,6 +35,8 @@ cache:
   paths:
     - .pnpm-store/
     - node_modules/
+    - backend/*/node_modules/
+    - frontend/*/node_modules/
 
 stages:
   - install
@@ -99,6 +101,8 @@ unit_tests:
   needs:
     - install_dependencies
   script:
+    - echo "Restoring workspace package dependencies..."
+    - pnpm install --frozen-lockfile --prefer-offline
     - echo "Building workspace packages before testing..."
     - pnpm build
     - echo "Running unit tests across all workspace packages..."
@@ -144,6 +148,8 @@ build_packages:
     - install_dependencies
     - format_and_lint_check
   script:
+    - echo "Restoring workspace package dependencies..."
+    - pnpm install --frozen-lockfile --prefer-offline
     - echo "Building workspace packages (TypeScript compilation)..."
     - pnpm -r --if-present build
     - echo "Build completed successfully."

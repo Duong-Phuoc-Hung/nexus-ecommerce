@@ -200,6 +200,9 @@ importers:
       express:
         specifier: ^5.2.1
         version: 5.2.1
+      ioredis:
+        specifier: ^6.0.0
+        version: 6.0.0
     devDependencies:
       '@commitlint/cli':
         specifier: ^19.8.0
