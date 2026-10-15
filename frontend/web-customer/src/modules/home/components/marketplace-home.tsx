@@ -28,7 +28,6 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
   const [budget, setBudget] = useState('all');
   const [sort, setSort] = useState('featured');
   const [auctionTab, setAuctionTab] = useState('all');
-  const [showAllAuctions, setShowAllAuctions] = useState(false);
   const [showCategories, setShowCategories] = useState(false);
   const [prompt, setPrompt] = useState<{ product?: MarketplaceProduct } | null>(null);
   const [limit, setLimit] = useState(12);
@@ -68,7 +67,7 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
     if (auctionTab === 'popular') result.sort((a, b) => b.bids - a.bids);
     return result;
   }, [products, elapsed, auctionTab, category, query]);
-  const auctions = matchingAuctions.slice(0, showAllAuctions ? matchingAuctions.length : 5);
+  const auctions = matchingAuctions.slice(0, 5);
   const catalog = useMemo(() => {
     const result = products.filter(
       (product) =>
@@ -324,12 +323,6 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
                 className="flex items-center gap-2 text-xl font-bold tracking-tight sm:text-2xl"
               >
                 Đấu giá đang diễn ra
-                <a
-                  href="/auctions"
-                  className="ml-2 inline-flex min-h-11 items-center gap-1 text-xs font-semibold tracking-normal text-brand-dark"
-                >
-                  Xem tất cả <MarketplaceIcon name="arrow" className="size-3.5" />
-                </a>
                 <MarketplaceIcon name="gavel" className="hidden size-6 text-brand sm:block" />
               </h2>
               <p className="mt-1.5 text-xs text-muted">
@@ -368,14 +361,12 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
                 </button>
               ))}
             </div>
-            <button
-              onClick={() => setShowAllAuctions((value) => !value)}
-              aria-expanded={showAllAuctions}
-              className="flex min-h-11 items-center gap-2 text-xs font-bold text-brand-dark"
+            <a
+              href="/auctions"
+              className="ml-2 inline-flex min-h-11 items-center gap-1 text-xs font-semibold tracking-normal text-brand-dark"
             >
-              {showAllAuctions ? 'Thu gọn phiên đấu' : `Xem các phiên (${matchingAuctions.length})`}
-              <MarketplaceIcon name="arrow" className="size-4" />
-            </button>
+              Xem tất cả <MarketplaceIcon name="arrow" className="size-3.5" />
+            </a>
           </div>
           {auctions.length ? (
             <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-5 pb-6 sm:grid sm:grid-cols-2 sm:px-7 md:grid-cols-3 xl:grid-cols-5">
