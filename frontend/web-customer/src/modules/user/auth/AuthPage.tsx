@@ -127,7 +127,7 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: AuthMode }) 
         setNoticeType('success');
         setNotice(`Đăng nhập thành công! Chào mừng ${result.user.fullName || result.user.email}.`);
         setTimeout(() => {
-          window.location.href = '/';
+          window.location.href = result.user.role === 'SELLER' ? '/seller' : '/';
         }, 800);
       } else if (mode === 'forgot-password') {
         const res = await authApi.requestPasswordReset(values.forgotEmail.trim());

@@ -1,11 +1,11 @@
 import axios from 'axios';
 
-/** Shared HTTP client for frontend modules. Connected to Nexus API Gateway (Port 4000) */
+/** Shared HTTP client for frontend modules. Connected to Nexus API Gateway (Port 8000) */
 export const apiClient = axios.create({
   baseURL:
     process.env.NEXT_PUBLIC_API_BASE_URL ??
     process.env.NEXT_PUBLIC_API_URL ??
-    'http://localhost:4000/api/v1',
+    'http://localhost:8000/api/v1',
   timeout: 10_000,
   headers: { 'Content-Type': 'application/json' },
 });
