@@ -1,4 +1,5 @@
 'use client';
+import { Button } from '@/components/ui/button';
 
 import type { MarketplaceProduct } from '../types/marketplace.types';
 import { MarketplaceIcon } from './marketplace-icon';
@@ -15,7 +16,7 @@ export function ProductPhoto({
   className = '',
   priority = false,
 }: {
-  product: MarketplaceProduct;
+  product: Pick<MarketplaceProduct, 'image' | 'imageAlt'>;
   className?: string;
   priority?: boolean;
 }) {
@@ -59,25 +60,33 @@ export function MarketplaceCard({
       <div
         className={`relative overflow-hidden bg-stone-100 ${compact ? 'aspect-[5/4]' : 'aspect-square'}`}
       >
-        <button onClick={onOpen} className="block size-full" aria-label={`Xem ${product.name}`}>
+        <Button
+          variant="ghost"
+          size="plain"
+          onClick={onOpen}
+          className="block size-full"
+          aria-label={`Xem ${product.name}`}
+        >
           <ProductPhoto
             product={product}
             className="size-full object-cover transition duration-500 group-hover:scale-105 motion-reduce:transform-none"
           />
-        </button>
+        </Button>
         {product.mode === 'auction' && (
           <span className="absolute left-3 top-3 rounded-md bg-brand-dark px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
             {product.status === 'scheduled' ? 'Sắp mở phiên' : ended ? 'Đã kết thúc' : 'Đấu giá'}
           </span>
         )}
-        <button
+        <Button
+          variant="ghost"
+          size="plain"
           onClick={onFavorite}
           aria-label={`${favorite ? 'Bỏ lưu' : 'Lưu'} ${product.name}`}
           aria-pressed={favorite}
           className={`absolute right-2 top-2 grid size-11 place-items-center rounded-full bg-white/95 shadow-sm transition hover:text-brand ${favorite ? 'text-brand' : 'text-ink/65'}`}
         >
           <MarketplaceIcon name="heart" className="size-[18px]" filled={favorite} />
-        </button>
+        </Button>
         {product.mode === 'auction' && (
           <div className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-2 rounded-lg bg-white/95 px-3 py-2 text-xs font-semibold text-ink shadow-sm">
             <span className="flex items-center gap-1.5">
@@ -95,12 +104,14 @@ export function MarketplaceCard({
           {product.categoryName} <span className="mx-1 text-line">/</span>{' '}
           {product.condition.split(' · ')[0]}
         </p>
-        <button
+        <Button
+          variant="ghost"
+          size="plain"
           onClick={onOpen}
           className="mb-3 min-h-11 text-left text-[14px] font-semibold leading-5 text-ink hover:text-brand-dark"
         >
           <span className="line-clamp-2">{product.name}</span>
-        </button>
+        </Button>
         {product.mode === 'auction' && (
           <p className="text-[11px] text-muted">
             {product.status === 'scheduled' ? 'Giá khởi điểm' : 'Giá hiện tại'}
@@ -123,13 +134,15 @@ export function MarketplaceCard({
             {product.mode === 'auction' ? `${product.bids} lượt trả giá` : product.location}
           </span>
         </div>
-        <button
+        <Button
+          variant="ghost"
+          size="plain"
           onClick={onOpen}
           className={`mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-lg text-xs font-bold transition ${compact ? 'bg-brand-soft text-brand-dark hover:bg-brand hover:text-white' : 'border border-line text-ink hover:border-brand hover:text-brand-dark'}`}
         >
           {product.mode === 'auction' ? 'Xem phiên đấu' : 'Xem sản phẩm'}
           <MarketplaceIcon name="arrow" className="size-3.5" />
-        </button>
+        </Button>
       </div>
     </article>
   );

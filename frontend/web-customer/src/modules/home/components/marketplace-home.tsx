@@ -1,39 +1,58 @@
 'use client';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { Suspense, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useRouter } from 'next/navigation';
+import { CatalogListing, CatalogSkeleton } from '@/modules/catalog/components/catalog-listing';
+import { catalogApi } from '@/modules/catalog/api/catalog.api';
+import { AccountControls } from '@/modules/user/components/account-controls';
 import type { CategoryId, MarketplaceFeed, MarketplaceProduct } from '../types/marketplace.types';
 import { MarketplaceIcon } from './marketplace-icon';
 import { MarketplaceCard, timeLeft } from './marketplace-card';
 import { MarketplaceHero } from './marketplace-hero';
 import { AccountPromptDialog } from './account-prompt-dialog';
-import { MarketplaceSortMenu } from './marketplace-sort-menu';
 import { NexusLogo } from '@/shared/components/nexus-logo';
-import { authApi, type AuthUser } from '@/services/auth.api';
-
-const normalized = (value: string) =>
-  value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'D')
-    .toLowerCase();
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
   const products = feed.products;
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const router = useRouter();
+  const [headerCategories, setHeaderCategories] = useState(feed.categories.slice(0, 0));
+  useEffect(() => {
+    const controller = new AbortController();
+    catalogApi
+      .categories(controller.signal)
+      .then((rows) => {
+        if (!controller.signal.aborted)
+          setHeaderCategories(
+            rows.map((row) => ({
+              id: row.id,
+              name: row.name,
+              icon: feed.categories.find((c) => c.id === row.id)?.icon || 'gem',
+              description: 'Khám phá sản phẩm trong danh mục',
+            })),
+          );
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setHeaderCategories([]);
+      });
+    return () => controller.abort();
+  }, [feed.categories]);
   const [elapsed, setElapsed] = useState(0);
   const [draftSearch, setDraftSearch] = useState('');
-  const [query, setQuery] = useState('');
-  const [category, setCategory] = useState<CategoryId>('all');
-  const [budget, setBudget] = useState('all');
-  const [sort, setSort] = useState('featured');
   const [auctionTab, setAuctionTab] = useState('all');
-  const [showCategories, setShowCategories] = useState(false);
+  const [showAllAuctions, setShowAllAuctions] = useState(false);
   const [prompt, setPrompt] = useState<{ product?: MarketplaceProduct } | null>(null);
-  const [limit, setLimit] = useState(12);
 
   useEffect(() => {
-    setCurrentUser(authApi.getCurrentUser());
     const started = Date.now();
     const interval = window.setInterval(
       () => setElapsed(Math.floor((Date.now() - started) / 1000)),
@@ -57,36 +76,18 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
         product.mode === 'auction' &&
         (auctionTab === 'upcoming'
           ? product.status === 'scheduled'
-          : product.status === 'active' && product.remainingSeconds > elapsed) &&
-        (category === 'all' || product.category === category) &&
-        normalized(`${product.name} ${product.categoryName} ${product.seller}`).includes(
-          normalized(query),
-        ),
+          : product.status === 'active' && product.remainingSeconds > elapsed),
     );
     if (auctionTab === 'ending') result.sort((a, b) => a.remainingSeconds - b.remainingSeconds);
     if (auctionTab === 'popular') result.sort((a, b) => b.bids - a.bids);
     return result;
-  }, [products, elapsed, auctionTab, category, query]);
-  const auctions = matchingAuctions.slice(0, 5);
-  const catalog = useMemo(() => {
-    const result = products.filter(
-      (product) =>
-        product.mode === 'fixed' &&
-        normalized(`${product.name} ${product.categoryName} ${product.seller}`).includes(
-          normalized(query),
-        ) &&
-        (category === 'all' || product.category === category) &&
-        (budget === 'all' ||
-          (budget === 'under1' && product.price < 1000000) ||
-          (budget === '1to5' && product.price >= 1000000 && product.price <= 5000000) ||
-          (budget === 'over5' && product.price > 5000000)),
-    );
-    if (sort === 'price-asc') result.sort((a, b) => a.price - b.price);
-    if (sort === 'price-desc') result.sort((a, b) => b.price - a.price);
-    if (sort === 'popular') result.sort((a, b) => (b.soldCount ?? 0) - (a.soldCount ?? 0));
-    return result;
-  }, [products, query, category, budget, sort]);
+  }, [products, elapsed, auctionTab]);
+  const auctions = matchingAuctions.slice(0, showAllAuctions ? matchingAuctions.length : 5);
   function openProduct(product: MarketplaceProduct) {
+    if (product.mode === 'fixed') {
+      router.push('/products/' + encodeURIComponent(product.id));
+      return;
+    }
     setPrompt({ product });
   }
   function scrollToCatalog() {
@@ -95,29 +96,11 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
     });
   }
   function chooseCategory(value: CategoryId) {
-    setCategory(value);
-    setQuery('');
-    setDraftSearch('');
-    setLimit(12);
-    setShowCategories(false);
-    scrollToCatalog();
+    router.push('/products' + (value === 'all' ? '' : '?categoryId=' + encodeURIComponent(value)));
   }
   function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setQuery(draftSearch.trim());
-    setCategory('all');
-    setBudget('all');
-    setLimit(12);
-    setAuctionTab('all');
-    scrollToCatalog();
-  }
-  function resetFilters() {
-    setQuery('');
-    setDraftSearch('');
-    setCategory('all');
-    setBudget('all');
-    setSort('featured');
-    setLimit(12);
+    router.push('/products?q=' + encodeURIComponent(draftSearch.trim()));
   }
 
   return (
@@ -139,32 +122,7 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
               <a href="#faq" className="hidden hover:text-brand-dark sm:block">
                 Trợ giúp
               </a>
-              {currentUser ? (
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-semibold text-brand-dark">
-                    👤 {currentUser.fullName || currentUser.email} ({currentUser.role})
-                  </span>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await authApi.logout();
-                      setCurrentUser(null);
-                      window.location.reload();
-                    }}
-                    className="text-xs font-semibold text-red-500 hover:text-red-700 underline cursor-pointer"
-                  >
-                    Đăng xuất
-                  </button>
-                </div>
-              ) : (
-                <a
-                  href="/login"
-                  className="flex min-h-11 items-center gap-1.5 font-semibold text-brand-dark hover:text-brand"
-                >
-                  <MarketplaceIcon name="users" className="size-4" />
-                  Đăng nhập
-                </a>
-              )}
+              <AccountControls />
             </div>
           </div>
         </div>
@@ -181,41 +139,80 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
             <label htmlFor="marketplace-search" className="sr-only">
               Tìm sản phẩm hoặc gian hàng
             </label>
-            <input
+            <Input
               id="marketplace-search"
               value={draftSearch}
               onChange={(event) => setDraftSearch(event.target.value)}
               placeholder="Tìm món đồ bạn yêu thích..."
               className="min-w-0 flex-1 bg-transparent px-2 py-1.5 text-sm outline-offset-0 placeholder:text-muted"
             />
-            <button
+            <Button
+              variant="ghost"
+              size="plain"
               className="flex min-h-10 items-center gap-2 rounded-lg bg-brand-dark px-4 text-xs font-semibold text-white transition hover:bg-brand"
               type="submit"
             >
               <MarketplaceIcon name="search" className="size-4" />
               <span className="hidden sm:inline">Tìm kiếm</span>
-            </button>
+            </Button>
           </form>
-          <button
-            onClick={() => setPrompt({})}
-            aria-label="Xem món đồ đã lưu"
-            className="ml-auto flex min-h-11 items-center gap-2 text-sm font-medium text-ink hover:text-brand-dark"
+          <a
+            href="/account"
+            className="ml-auto inline-flex min-h-11 items-center gap-2 text-sm font-medium text-ink"
           >
-            <MarketplaceIcon name="heart" className="size-6" />
-            <span className="hidden sm:block">Đã lưu</span>
-          </button>
+            <MarketplaceIcon name="users" className="size-5" />
+            <span className="hidden sm:block">Tài khoản</span>
+          </a>
         </div>
         <div className="nexus-container relative flex min-h-12 items-center justify-between gap-4 border-t border-line/60 text-xs font-medium">
           <nav aria-label="Điều hướng chính" className="flex items-center gap-4 sm:gap-7">
-            <button
-              aria-expanded={showCategories}
-              aria-controls="category-menu"
-              onClick={() => setShowCategories((value) => !value)}
-              className="flex min-h-11 items-center gap-2 text-ink"
-            >
-              <MarketplaceIcon name="grid" className="size-4" />
-              Danh mục
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="plain"
+                  type="button"
+                  className="flex min-h-11 items-center gap-2 rounded-lg px-2 text-ink transition hover:bg-brand-soft data-[state=open]:bg-brand-soft data-[state=open]:text-brand-dark"
+                >
+                  <MarketplaceIcon name="grid" className="size-4" />
+                  Danh mục
+                  <MarketplaceIcon name="chevron" className="size-3 rotate-90" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="start"
+                sideOffset={8}
+                collisionPadding={16}
+                className="w-80 max-w-[calc(100vw-2rem)] rounded-2xl border-line bg-white p-2 shadow-[0_12px_40px_#24232918]"
+              >
+                <DropdownMenuLabel className="px-3 py-2 text-[10px] font-bold uppercase tracking-[.15em] text-muted">
+                  Khám phá danh mục
+                </DropdownMenuLabel>
+                <DropdownMenuItem
+                  onSelect={() => chooseCategory('all')}
+                  className="min-h-11 cursor-pointer gap-3 rounded-xl px-3 focus:bg-brand-soft focus:text-brand-dark"
+                >
+                  <MarketplaceIcon name="box" className="size-4" />
+                  <span>Tất cả sản phẩm</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="mx-1 bg-line" />
+                {headerCategories.map((item) => (
+                  <DropdownMenuItem
+                    key={item.id}
+                    onSelect={() => chooseCategory(item.id)}
+                    className="min-h-16 cursor-pointer gap-3 rounded-xl px-3 focus:bg-brand-soft focus:text-brand-dark"
+                  >
+                    <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand-dark">
+                      <MarketplaceIcon name={item.icon} className="size-5" />
+                    </span>
+                    <span>
+                      <span className="block text-sm font-semibold">{item.name}</span>
+                      <span className="mt-1 block text-xs text-muted">{item.description}</span>
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <a
               href="/auctions"
               className="flex min-h-11 items-center border-b-2 border-brand font-bold text-brand-dark"
@@ -239,26 +236,6 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
             <span className="size-1.5 rounded-full bg-brand" />
             {activeAuctions.length} phiên đang mở
           </span>
-          {showCategories && (
-            <div
-              id="category-menu"
-              className="absolute inset-x-0 top-full z-40 grid grid-cols-2 gap-2 rounded-b-2xl border border-line bg-white p-4 shadow-xl md:left-0 md:right-auto md:w-[560px]"
-            >
-              {feed.categories.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => chooseCategory(item.id)}
-                  className="flex min-h-16 items-center gap-3 rounded-xl px-3 py-2 text-left hover:bg-brand-soft"
-                >
-                  <MarketplaceIcon name={item.icon} className="size-6 text-brand-dark" />
-                  <span className="font-semibold">
-                    {item.name}
-                    <small className="mt-1 block font-normal text-muted">{item.description}</small>
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       </header>
 
@@ -281,29 +258,26 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
               </h2>
             </div>
           </div>
-          {feed.categories.map((item, index) => (
-            <button
+          {headerCategories.map((item, index) => (
+            <Button
+              variant="ghost"
+              size="plain"
               key={item.id}
               onClick={() => chooseCategory(item.id)}
               className="group flex min-h-[90px] items-center gap-2 rounded-2xl border border-line bg-white p-3 sm:gap-3 sm:p-4 text-left transition hover:border-brand/30 hover:shadow-md"
             >
               <span
-                className={`grid size-10 shrink-0 place-items-center rounded-xl sm:size-12 ${['bg-brand-soft text-brand-dark', 'bg-amber-50 text-amber-800', 'bg-indigo-50 text-indigo-800', 'bg-teal-50 text-teal-800'][index]}`}
+                className={`grid size-10 shrink-0 place-items-center rounded-xl sm:size-12 ${['bg-brand-soft text-brand-dark', 'bg-amber-50 text-amber-800', 'bg-indigo-50 text-indigo-800', 'bg-teal-50 text-teal-800'][index % 4]}`}
               >
                 <MarketplaceIcon name={item.icon} className="size-6" />
               </span>
               <span className="text-xs font-bold group-hover:text-brand-dark sm:text-sm">
                 {item.name}
                 <small className="mt-1.5 block text-[11px] font-normal text-muted">
-                  {
-                    products.filter(
-                      (product) => product.mode === 'fixed' && product.category === item.id,
-                    ).length
-                  }{' '}
-                  lựa chọn mua sắm
+                  Khám phá bộ sưu tập
                 </small>
               </span>
-            </button>
+            </Button>
           ))}
         </section>
 
@@ -351,14 +325,16 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
                 { id: 'popular', text: 'Nhiều lượt trả giá' },
                 { id: 'upcoming', text: 'Sắp mở phiên' },
               ].map((tab) => (
-                <button
+                <Button
+                  variant="ghost"
+                  size="plain"
                   key={tab.id}
                   onClick={() => setAuctionTab(tab.id)}
                   aria-pressed={auctionTab === tab.id}
                   className={`min-h-10 rounded-full px-3 text-[11px] font-semibold transition ${auctionTab === tab.id ? 'bg-brand-dark text-white' : 'bg-stone-50 text-muted hover:bg-brand-soft hover:text-brand-dark'}`}
                 >
                   {tab.text}
-                </button>
+                </Button>
               ))}
             </div>
             <a
@@ -393,7 +369,7 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
               <MarketplaceIcon name="shield" className="size-3.5 text-brand-dark" />
               Đấu giá theo thời gian · Giá hiện tại là mức đang được trả, chưa phải giá mua
             </span>
-            <span>Dữ liệu & thời gian mô phỏng</span>
+            <span>Khám phá những phiên đấu nổi bật</span>
           </div>
         </section>
 
@@ -430,126 +406,9 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
           ))}
         </section>
 
-        <section id="discover" aria-labelledby="discover-title" className="pt-2">
-          <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <p className="mb-2 text-[10px] font-bold tracking-[.16em] text-brand-dark">
-                CHỌN MỘT MÓN ĐỒ. BẮT ĐẦU MỘT ĐAM MÊ.
-              </p>
-              <h2 id="discover-title" className="text-2xl font-bold tracking-tight">
-                {query ? `Kết quả mua sắm cho “${query}”` : 'Khám phá sản phẩm'}
-                <a
-                  href="/products"
-                  className="ml-3 inline-flex min-h-11 items-center gap-1 align-middle text-xs font-semibold tracking-normal text-brand-dark"
-                >
-                  Xem tất cả <MarketplaceIcon name="arrow" className="size-3.5" />
-                </a>
-              </h2>
-              <p className="mt-2 text-xs text-muted">
-                {catalog.length} sản phẩm
-                {category !== 'all'
-                  ? ` · ${feed.categories.find((item) => item.id === category)?.name}`
-                  : ' để mua sắm · Không bao gồm sản phẩm đấu giá'}
-              </p>
-            </div>
-            <button
-              onClick={resetFilters}
-              className="min-h-11 text-xs font-semibold text-brand-dark underline underline-offset-4"
-            >
-              Đặt lại bộ lọc
-            </button>
-          </div>
-          {query && (
-            <p className="mb-4 text-xs text-muted">
-              Phiên đấu phù hợp được hiển thị riêng.{' '}
-              <a
-                href="#live-auctions"
-                className="inline-flex min-h-11 items-center font-semibold text-brand-dark underline underline-offset-4"
-              >
-                Xem kết quả tại Nexus Live
-              </a>
-            </p>
-          )}
-          <div className="mb-5 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_44px] items-center gap-2 rounded-2xl border border-line bg-white p-3 sm:flex">
-            <label className="sr-only" htmlFor="category-filter">
-              Danh mục sản phẩm
-            </label>
-            <select
-              id="category-filter"
-              value={category}
-              onChange={(event) => {
-                setCategory(event.target.value as CategoryId);
-                setLimit(12);
-              }}
-              className="min-h-11 min-w-0 rounded-lg border border-line bg-white px-2 text-xs text-ink sm:px-3"
-            >
-              <option value="all">Tất cả danh mục</option>
-              {feed.categories.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-            <label htmlFor="budget-filter" className="sr-only">
-              Khoảng giá
-            </label>
-            <select
-              id="budget-filter"
-              value={budget}
-              onChange={(event) => {
-                setBudget(event.target.value);
-                setLimit(12);
-              }}
-              className="min-h-11 min-w-0 rounded-lg border border-line bg-white px-2 text-xs sm:px-3"
-            >
-              <option value="all">Mọi khoảng giá</option>
-              <option value="under1">Dưới 1 triệu</option>
-              <option value="1to5">1–5 triệu</option>
-              <option value="over5">Trên 5 triệu</option>
-            </select>
-            <MarketplaceSortMenu value={sort} onChange={setSort} />
-          </div>
-          {catalog.length ? (
-            <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-              {catalog.slice(0, limit).map((product) => (
-                <MarketplaceCard
-                  key={product.id}
-                  product={product}
-                  elapsed={elapsed}
-                  favorite={false}
-                  onFavorite={() => openProduct(product)}
-                  onOpen={() => openProduct(product)}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="grid min-h-56 place-content-center rounded-2xl border border-dashed border-line bg-white p-6 text-center">
-              <MarketplaceIcon name="search" className="mx-auto mb-3 size-8 text-brand-dark" />
-              <h3 className="text-lg font-semibold">Chưa tìm thấy sản phẩm phù hợp</h3>
-              <p className="mt-2 text-sm text-muted">
-                Thử từ khóa khác hoặc thay đổi bộ lọc. Phiên đấu giá được hiển thị riêng ở khu Nexus
-                Live.
-              </p>
-              <button
-                onClick={resetFilters}
-                className="mx-auto mt-4 min-h-11 rounded-lg bg-brand-soft px-4 text-xs font-bold text-brand-dark"
-              >
-                Khám phá tất cả
-              </button>
-            </div>
-          )}
-          {catalog.length > limit && (
-            <div className="mt-7 text-center">
-              <button
-                onClick={() => setLimit((value) => value + 12)}
-                className="inline-flex min-h-12 items-center gap-5 rounded-xl border border-line bg-white px-8 text-xs font-bold transition hover:border-brand hover:text-brand-dark"
-              >
-                Khám phá thêm
-                <MarketplaceIcon name="arrow" className="size-4" />
-              </button>
-            </div>
-          )}
-        </section>
+        <Suspense fallback={<CatalogSkeleton />}>
+          <CatalogListing embedded />
+        </Suspense>
 
         <section
           id="how-it-works"
@@ -618,14 +477,14 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
                   'Khu mua sắm hiển thị giá bán của sản phẩm. Với đấu giá, người tham gia trả giá trong khoảng thời gian của phiên; mỗi lần trả phải tuân theo mức tối thiểu và bước giá được công bố.',
               },
               {
-                question: 'Vì sao cần đăng nhập khi mở sản phẩm?',
+                question: 'Có thể xem sản phẩm khi chưa đăng nhập không?',
                 answer:
-                  'Bạn có thể xem danh mục, tìm kiếm và so sánh trên trang chủ. Khi mở một món đồ, Nexus mời bạn đăng nhập hoặc tạo tài khoản để tiếp tục. Dữ liệu hiện tại là mẫu; chưa có giao dịch thật.',
+                  'Bạn có thể xem danh sách, hình ảnh và thông tin chi tiết sản phẩm ngay. Đăng nhập giúp bạn sử dụng các tính năng tài khoản.',
               },
               {
-                question: 'Khi có API thật, quy trình sẽ hoạt động thế nào?',
+                question: 'Nên xem thông tin nào trước khi tham gia đấu giá?',
                 answer:
-                  'Bản thật sẽ xác thực Buyer và kiểm tra quyền, điểm uy tín, trạng thái phiên ở backend. Khi phiên kết thúc hợp lệ, kết quả sẽ chuyển sang luồng đơn hàng và thanh toán theo SRS.',
+                  'Hãy đọc kỹ mô tả sản phẩm, tình trạng, thông tin người bán, thời gian kết thúc và bước giá của phiên để lựa chọn mức giá phù hợp.',
               },
             ].map((item) => (
               <details key={item.question} className="group py-4 first:pt-0">
@@ -671,7 +530,6 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
                 <a
                   className="inline-flex min-h-9 items-center hover:text-brand-dark"
                   href="#discover"
-                  onClick={resetFilters}
                 >
                   Khám phá sản phẩm
                 </a>
@@ -689,14 +547,16 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
           <div>
             <h2 className="text-xs font-bold">Danh mục</h2>
             <ul className="mt-3 space-y-2 text-xs text-muted">
-              {feed.categories.map((item) => (
+              {headerCategories.map((item) => (
                 <li key={item.id}>
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="plain"
                     onClick={() => chooseCategory(item.id)}
                     className="min-h-9 hover:text-brand-dark"
                   >
                     {item.name}
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -719,7 +579,7 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
               </li>
             </ul>
             <p className="mt-4 text-[11px] leading-5 text-muted">
-              Project Nexus · Giao diện giới thiệu với dữ liệu mô phỏng.
+              Nexus · Khám phá giá trị, kết nối đam mê.
             </p>
           </div>
         </div>

@@ -1,0 +1,486 @@
+{
+  "categories": [
+    {
+      "id": "tech",
+      "name": "Công nghệ",
+      "parentId": null,
+      "level": 1
+    },
+    {
+      "id": "watches",
+      "name": "Đồng hồ",
+      "parentId": null,
+      "level": 1
+    },
+    {
+      "id": "audio",
+      "name": "Âm thanh",
+      "parentId": null,
+      "level": 1
+    },
+    {
+      "id": "collectibles",
+      "name": "Đồ sưu tầm",
+      "parentId": null,
+      "level": 1
+    }
+  ],
+  "products": [
+    {
+      "id": "NX-107",
+      "title": "Loa Bluetooth · âm thanh di động",
+      "description": "Khám phá Loa Bluetooth · âm thanh di động. Đối chiếu hình ảnh, tình trạng sản phẩm và thông tin người bán để lựa chọn món đồ phù hợp với bạn.",
+      "images": [
+        "https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?auto=format&fit=crop&w=800&q=85"
+      ],
+      "price": 4290000,
+      "currency": "VND",
+      "categoryId": "audio",
+      "categoryName": "Âm thanh",
+      "sellerId": "preview-audio",
+      "sellerName": "Sound Space",
+      "condition": "NEW",
+      "status": "ACTIVE",
+      "saleType": "FIXED_PRICE",
+      "rating": 4.7,
+      "soldCount": 125
+    },
+    {
+      "id": "NX-108",
+      "title": "Đồng hồ thông minh · thiết kế tối giản",
+      "description": "Khám phá Đồng hồ thông minh · thiết kế tối giản. Đối chiếu hình ảnh, tình trạng sản phẩm và thông tin người bán để lựa chọn món đồ phù hợp với bạn.",
+      "images": [
+        "https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?auto=format&fit=crop&w=800&q=85"
+      ],
+      "price": 1890000,
+      "currency": "VND",
+      "categoryId": "watches",
+      "categoryName": "Đồng hồ",
+      "sellerId": "preview-watches",
+      "sellerName": "The Watch Room",
+      "condition": "NEW",
+      "status": "ACTIVE",
+      "saleType": "FIXED_PRICE",
+      "rating": 4.7,
+      "soldCount": 138
+    },
+    {
+      "id": "NX-109",
+      "title": "Bàn phím cơ · phiên bản custom",
+      "description": "Khám phá Bàn phím cơ · phiên bản custom. Đối chiếu hình ảnh, tình trạng sản phẩm và thông tin người bán để lựa chọn món đồ phù hợp với bạn.",
+      "images": [
+        "https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=800&q=85"
+      ],
+      "price": 2450000,
+      "currency": "VND",
+      "categoryId": "tech",
+      "categoryName": "Công nghệ",
+      "sellerId": "preview-tech",
+      "sellerName": "Desk Lab",
+      "condition": "LIKE_NEW",
+      "status": "ACTIVE",
+      "saleType": "FIXED_PRICE",
+      "rating": 4.7,
+      "soldCount": 151
+    },
+    {
+      "id": "NX-110",
+      "title": "Tranh in vintage · bộ sưu tập nghệ thuật",
+      "description": "Khám phá Tranh in vintage · bộ sưu tập nghệ thuật. Đối chiếu hình ảnh, tình trạng sản phẩm và thông tin người bán để lựa chọn món đồ phù hợp với bạn.",
+      "images": [
+        "https://images.unsplash.com/photo-1461360370896-922624d12aa1?auto=format&fit=crop&w=800&q=85"
+      ],
+      "price": 1250000,
+      "currency": "VND",
+      "categoryId": "collectibles",
+      "categoryName": "Đồ sưu tầm",
+      "sellerId": "preview-collectibles",
+      "sellerName": "Analog Corner",
+      "condition": "USED",
+      "status": "ACTIVE",
+      "saleType": "FIXED_PRICE",
+      "rating": 4.7,
+      "soldCount": 164
+    },
+    {
+      "id": "NX-112",
+      "title": "Tai nghe không dây · thiết kế tối giản",
+      "description": "Khám phá Tai nghe không dây · thiết kế tối giản. Đối chiếu hình ảnh, tình trạng sản phẩm và thông tin người bán để lựa chọn món đồ phù hợp với bạn.",
+      "images": [
+        "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=85"
+      ],
+      "price": 2190000,
+      "currency": "VND",
+      "categoryId": "audio",
+      "categoryName": "Âm thanh",
+      "sellerId": "preview-audio",
+      "sellerName": "Sound Space",
+      "condition": "NEW",
+      "status": "ACTIVE",
+      "saleType": "FIXED_PRICE",
+      "rating": 4.7,
+      "soldCount": 190
+    },
+    {
+      "id": "NX-201",
+      "title": "Tai nghe chụp tai · đệm mềm",
+      "description": "Khám phá Tai nghe chụp tai · đệm mềm. Đối chiếu hình ảnh, tình trạng sản phẩm và thông tin người bán để lựa chọn món đồ phù hợp với bạn.",
+      "images": [
+        "https://images.unsplash.com/photo-1546435770-a3e426bf472b?auto=format&fit=crop&w=800&q=85"
+      ],
+      "price": 1590000,
+      "currency": "VND",
+      "categoryId": "audio",
+      "categoryName": "Âm thanh",
+      "sellerId": "preview-audio",
+      "sellerName": "Sound Space",
+      "condition": "NEW",
+      "status": "ACTIVE",
+      "saleType": "FIXED_PRICE",
+      "rating": 4.6,
+      "soldCount": 28
+    },
+    {
+      "id": "NX-202",
+      "title": "Chuột không dây · góc làm việc",
+      "description": "Khám phá Chuột không dây · góc làm việc. Đối chiếu hình ảnh, tình trạng sản phẩm và thông tin người bán để lựa chọn món đồ phù hợp với bạn.",
+      "images": [
+        "https://images.unsplash.com/photo-1527814050087-3793815479db?auto=format&fit=crop&w=800&q=85"
+      ],
+      "price": 690000,
+      "currency": "VND",
+      "categoryId": "tech",
+      "categoryName": "Công nghệ",
+      "sellerId": "preview-tech",
+      "sellerName": "Desk Lab",
+      "condition": "NEW",
+      "status": "ACTIVE",
+      "saleType": "FIXED_PRICE",
+      "rating": 4.7,
+      "soldCount": 45
+    },
+    {
+      "id": "NX-203",
+      "title": "Bàn phím low-profile · layout 75%",
+      "description": "Khám phá Bàn phím low-profile · layout 75%. Đối chiếu hình ảnh, tình trạng sản phẩm và thông tin người bán để lựa chọn món đồ phù hợp với bạn.",
+      "images": [
+        "https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=800&q=85"
+      ],
+      "price": 1690000,
+      "currency": "VND",
+      "categoryId": "tech",
+      "categoryName": "Công nghệ",
+      "sellerId": "preview-tech",
+      "sellerName": "Desk Lab",
+      "condition": "NEW",
+      "status": "ACTIVE",
+      "saleType": "FIXED_PRICE",
+      "rating": 4.8,
+      "soldCount": 62
+    },
+    {
+      "id": "NX-204",
+      "title": "Đồng hồ mặt tròn · dây thép",
+      "description": "Khám phá Đồng hồ mặt tròn · dây thép. Đối chiếu hình ảnh, tình trạng sản phẩm và thông tin người bán để lựa chọn món đồ phù hợp với bạn.",
+      "images": [
+        "https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=800&q=85"
+      ],
+      "price": 2890000,
+      "currency": "VND",
+      "categoryId": "watches",
+      "categoryName": "Đồng hồ",
+      "sellerId": "preview-watches",
+      "sellerName": "The Watch Room",
+      "condition": "NEW",
+      "status": "ACTIVE",
+      "saleType": "FIXED_PRICE",
+      "rating": 4.9,
+      "soldCount": 79
+    },
+    {
+      "id": "NX-205",
+      "title": "Loa Bluetooth · góc nghe nhạc",
+      "description": "Khám phá Loa Bluetooth · góc nghe nhạc. Đối chiếu hình ảnh, tình trạng sản phẩm và thông tin người bán để lựa chọn món đồ phù hợp với bạn.",
+      "images": [
+        "https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?auto=format&fit=crop&w=800&q=85"
+      ],
+      "price": 3590000,
+      "currency": "VND",
+      "categoryId": "audio",
+      "categoryName": "Âm thanh",
+      "sellerId": "preview-audio",
+      "sellerName": "Sound Space",
+      "condition": "NEW",
+      "status": "ACTIVE",
+      "saleType": "FIXED_PRICE",
+      "rating": 4.6,
+      "soldCount": 96
+    },
+    {
+      "id": "NX-206",
+      "title": "Tranh in cổ điển · bộ sưu tập",
+      "description": "Khám phá Tranh in cổ điển · bộ sưu tập. Đối chiếu hình ảnh, tình trạng sản phẩm và thông tin người bán để lựa chọn món đồ phù hợp với bạn.",
+      "images": [
+        "https://images.unsplash.com/photo-1461360370896-922624d12aa1?auto=format&fit=crop&w=800&q=85"
+      ],
+      "price": 890000,
+      "currency": "VND",
+      "categoryId": "collectibles",
+      "categoryName": "Đồ sưu tầm",
+      "sellerId": "preview-collectibles",
+      "sellerName": "Analog Corner",
+      "condition": "NEW",
+      "status": "ACTIVE",
+      "saleType": "FIXED_PRICE",
+      "rating": 4.7,
+      "soldCount": 113
+    },
+    {
+      "id": "NX-207",
+      "title": "Máy ảnh compact · chụp ảnh hằng ngày",
+      "description": "Khám phá Máy ảnh compact · chụp ảnh hằng ngày. Đối chiếu hình ảnh, tình trạng sản phẩm và thông tin người bán để lựa chọn món đồ phù hợp với bạn.",
+      "images": [
+        "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=800&q=85"
+      ],
+      "price": 5490000,
+      "currency": "VND",
+      "categoryId": "tech",
+      "categoryName": "Công nghệ",
+      "sellerId": "preview-tech",
+      "sellerName": "Minh Camera",
+      "condition": "NEW",
+      "status": "ACTIVE",
+      "saleType": "FIXED_PRICE",
+      "rating": 4.8,
+      "soldCount": 130
+    },
+    {
+      "id": "NX-208",
+      "title": "Ống kính chân dung · tiêu cự cố định",
+      "description": "Khám phá Ống kính chân dung · tiêu cự cố định. Đối chiếu hình ảnh, tình trạng sản phẩm và thông tin người bán để lựa chọn món đồ phù hợp với bạn.",
+      "images": [
+        "https://images.unsplash.com/photo-1617005082133-548c4dd27f35?auto=format&fit=crop&w=800&q=85"
+      ],
+      "price": 3290000,
+      "currency": "VND",
+      "categoryId": "tech",
+      "categoryName": "Công nghệ",
+      "sellerId": "preview-tech",
+      "sellerName": "Minh Camera",
+      "condition": "NEW",
+      "status": "ACTIVE",
+      "saleType": "FIXED_PRICE",
+      "rating": 4.9,
+      "soldCount": 147
+    },
+    {
+      "id": "NX-209",
+      "title": "Tai nghe over-ear · chất âm ấm",
+      "description": "Khám phá Tai nghe over-ear · chất âm ấm. Đối chiếu hình ảnh, tình trạng sản phẩm và thông tin người bán để lựa chọn món đồ phù hợp với bạn.",
+      "images": [
+        "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=85"
+      ],
+      "price": 1890000,
+      "currency": "VND",
+      "categoryId": "audio",
+      "categoryName": "Âm thanh",
+      "sellerId": "preview-audio",
+      "sellerName": "Sound Space",
+      "condition": "NEW",
+      "status": "ACTIVE",
+      "saleType": "FIXED_PRICE",
+      "rating": 4.6,
+      "soldCount": 164
+    },
+    {
+      "id": "NX-210",
+      "title": "Đồng hồ thông minh · theo dõi vận động",
+      "description": "Khám phá Đồng hồ thông minh · theo dõi vận động. Đối chiếu hình ảnh, tình trạng sản phẩm và thông tin người bán để lựa chọn món đồ phù hợp với bạn.",
+      "images": [
+        "https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?auto=format&fit=crop&w=800&q=85"
+      ],
+      "price": 2190000,
+      "currency": "VND",
+      "categoryId": "watches",
+      "categoryName": "Đồng hồ",
+      "sellerId": "preview-watches",
+      "sellerName": "The Watch Room",
+      "condition": "NEW",
+      "status": "ACTIVE",
+      "saleType": "FIXED_PRICE",
+      "rating": 4.7,
+      "soldCount": 181
+    },
+    {
+      "id": "NX-211",
+      "title": "Máy chơi game · bộ phụ kiện retro",
+      "description": "Khám phá Máy chơi game · bộ phụ kiện retro. Đối chiếu hình ảnh, tình trạng sản phẩm và thông tin người bán để lựa chọn món đồ phù hợp với bạn.",
+      "images": [
+        "https://images.unsplash.com/photo-1486401899868-0e435ed85128?auto=format&fit=crop&w=800&q=85"
+      ],
+      "price": 1490000,
+      "currency": "VND",
+      "categoryId": "collectibles",
+      "categoryName": "Đồ sưu tầm",
+      "sellerId": "preview-collectibles",
+      "sellerName": "Retro Club",
+      "condition": "NEW",
+      "status": "ACTIVE",
+      "saleType": "FIXED_PRICE",
+      "rating": 4.8,
+      "soldCount": 198
+    },
+    {
+      "id": "NX-212",
+      "title": "Tai nghe in-ear · hộp sạc gọn nhẹ",
+      "description": "Khám phá Tai nghe in-ear · hộp sạc gọn nhẹ. Đối chiếu hình ảnh, tình trạng sản phẩm và thông tin người bán để lựa chọn món đồ phù hợp với bạn.",
+      "images": [
+        "https://images.unsplash.com/photo-1606220945770-b5b6c2c55bf1?auto=format&fit=crop&w=800&q=85"
+      ],
+      "price": 1290000,
+      "currency": "VND",
+      "categoryId": "audio",
+      "categoryName": "Âm thanh",
+      "sellerId": "preview-audio",
+      "sellerName": "Sound Space",
+      "condition": "NEW",
+      "status": "ACTIVE",
+      "saleType": "FIXED_PRICE",
+      "rating": 4.9,
+      "soldCount": 215
+    },
+    {
+      "id": "NX-213",
+      "title": "Máy ảnh film · bộ kit cơ bản",
+      "description": "Khám phá Máy ảnh film · bộ kit cơ bản. Đối chiếu hình ảnh, tình trạng sản phẩm và thông tin người bán để lựa chọn món đồ phù hợp với bạn.",
+      "images": [
+        "https://images.unsplash.com/photo-1510127034890-7e566e7eb3a7?auto=format&fit=crop&w=800&q=85"
+      ],
+      "price": 2490000,
+      "currency": "VND",
+      "categoryId": "collectibles",
+      "categoryName": "Đồ sưu tầm",
+      "sellerId": "preview-collectibles",
+      "sellerName": "Film Archive",
+      "condition": "NEW",
+      "status": "ACTIVE",
+      "saleType": "FIXED_PRICE",
+      "rating": 4.6,
+      "soldCount": 232
+    },
+    {
+      "id": "NX-214",
+      "title": "Đồng hồ tối giản · mặt sáng",
+      "description": "Khám phá Đồng hồ tối giản · mặt sáng. Đối chiếu hình ảnh, tình trạng sản phẩm và thông tin người bán để lựa chọn món đồ phù hợp với bạn.",
+      "images": [
+        "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=85"
+      ],
+      "price": 1590000,
+      "currency": "VND",
+      "categoryId": "watches",
+      "categoryName": "Đồng hồ",
+      "sellerId": "preview-watches",
+      "sellerName": "The Watch Room",
+      "condition": "NEW",
+      "status": "ACTIVE",
+      "saleType": "FIXED_PRICE",
+      "rating": 4.7,
+      "soldCount": 249
+    },
+    {
+      "id": "NX-215",
+      "title": "Mâm đĩa than · khởi đầu analog",
+      "description": "Khám phá Mâm đĩa than · khởi đầu analog. Đối chiếu hình ảnh, tình trạng sản phẩm và thông tin người bán để lựa chọn món đồ phù hợp với bạn.",
+      "images": [
+        "https://images.unsplash.com/photo-1603048588665-791ca8aea617?auto=format&fit=crop&w=800&q=85"
+      ],
+      "price": 3990000,
+      "currency": "VND",
+      "categoryId": "audio",
+      "categoryName": "Âm thanh",
+      "sellerId": "preview-audio",
+      "sellerName": "Analog Corner",
+      "condition": "NEW",
+      "status": "ACTIVE",
+      "saleType": "FIXED_PRICE",
+      "rating": 4.8,
+      "soldCount": 266
+    },
+    {
+      "id": "NX-216",
+      "title": "Máy ảnh instant · lưu lại kỷ niệm",
+      "description": "Khám phá Máy ảnh instant · lưu lại kỷ niệm. Đối chiếu hình ảnh, tình trạng sản phẩm và thông tin người bán để lựa chọn món đồ phù hợp với bạn.",
+      "images": [
+        "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?auto=format&fit=crop&w=800&q=85"
+      ],
+      "price": 2490000,
+      "currency": "VND",
+      "categoryId": "tech",
+      "categoryName": "Công nghệ",
+      "sellerId": "preview-tech",
+      "sellerName": "Minh Camera",
+      "condition": "NEW",
+      "status": "ACTIVE",
+      "saleType": "FIXED_PRICE",
+      "rating": 4.9,
+      "soldCount": 283
+    },
+    {
+      "id": "NX-217",
+      "title": "Tranh nghệ thuật · phiên bản sưu tầm",
+      "description": "Khám phá Tranh nghệ thuật · phiên bản sưu tầm. Đối chiếu hình ảnh, tình trạng sản phẩm và thông tin người bán để lựa chọn món đồ phù hợp với bạn.",
+      "images": [
+        "https://images.unsplash.com/photo-1461360370896-922624d12aa1?auto=format&fit=crop&w=800&q=85"
+      ],
+      "price": 690000,
+      "currency": "VND",
+      "categoryId": "collectibles",
+      "categoryName": "Đồ sưu tầm",
+      "sellerId": "preview-collectibles",
+      "sellerName": "Analog Corner",
+      "condition": "NEW",
+      "status": "ACTIVE",
+      "saleType": "FIXED_PRICE",
+      "rating": 4.6,
+      "soldCount": 300
+    },
+    {
+      "id": "NX-218",
+      "title": "Đồng hồ chronograph · phong cách thể thao",
+      "description": "Khám phá Đồng hồ chronograph · phong cách thể thao. Đối chiếu hình ảnh, tình trạng sản phẩm và thông tin người bán để lựa chọn món đồ phù hợp với bạn.",
+      "images": [
+        "https://images.unsplash.com/photo-1434056886845-dac89ffe9b56?auto=format&fit=crop&w=800&q=85"
+      ],
+      "price": 3890000,
+      "currency": "VND",
+      "categoryId": "watches",
+      "categoryName": "Đồng hồ",
+      "sellerId": "preview-watches",
+      "sellerName": "The Watch Room",
+      "condition": "NEW",
+      "status": "ACTIVE",
+      "saleType": "FIXED_PRICE",
+      "rating": 4.7,
+      "soldCount": 317
+    },
+    {
+      "id": "NX-219",
+      "title": "Tai nghe studio · nghe nhạc tại nhà",
+      "description": "Khám phá Tai nghe studio · nghe nhạc tại nhà. Đối chiếu hình ảnh, tình trạng sản phẩm và thông tin người bán để lựa chọn món đồ phù hợp với bạn.",
+      "images": [
+        "https://images.unsplash.com/photo-1546435770-a3e426bf472b?auto=format&fit=crop&w=800&q=85"
+      ],
+      "price": 2690000,
+      "currency": "VND",
+      "categoryId": "audio",
+      "categoryName": "Âm thanh",
+      "sellerId": "preview-audio",
+      "sellerName": "Sound Space",
+      "condition": "NEW",
+      "status": "ACTIVE",
+      "saleType": "FIXED_PRICE",
+      "rating": 4.8,
+      "soldCount": 334
+    }
+  ]
+}

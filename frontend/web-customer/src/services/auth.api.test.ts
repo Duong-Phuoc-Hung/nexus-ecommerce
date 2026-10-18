@@ -1,145 +1,112 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
-import { ApiClient, TokenStorage } from './api-client';
-import { createAuthApi } from './auth.api';
+import test, { beforeEach } from 'node:test';
+import { AxiosError, type AxiosResponse } from 'axios';
+import { apiClient } from './api-client';
+import { authApi } from './auth.api';
+import { getToken } from '../../../shared/http';
 
-function createMemoryStorage(): TokenStorage & { token: string | null } {
+function memoryStorage() {
+  const items = new Map<string, string>();
   return {
-    token: null,
-    get() {
-      return this.token;
-    },
-    set(token) {
-      this.token = token;
-    },
-    clear() {
-      this.token = null;
-    },
+    getItem: (key: string) => items.get(key) ?? null,
+    setItem: (key: string, value: string) => items.set(key, value),
+    removeItem: (key: string) => items.delete(key),
   };
 }
-
-test('login stores JWT and profile request automatically sends bearer token', async () => {
-  const storage = createMemoryStorage();
-  const requests: Array<{ url: string; authorization: string | null }> = [];
-  const fetcher: typeof fetch = async (input, init) => {
-    const url = String(input);
-    const headers = new Headers(init?.headers);
-    requests.push({ url, authorization: headers.get('authorization') });
-
-    if (url.endsWith('/auth/login')) {
-      return Response.json({
-        success: true,
-        data: {
-          token: 'test-jwt',
-          user: {
-            id: 'u1',
-            email: 'buyer@example.com',
-            fullName: 'Buyer',
-            role: 'BUYER',
-            permissions: [],
-          },
-        },
-      });
-    }
-
-    return Response.json({
-      success: true,
-      data: { id: 'u1', email: 'buyer@example.com', fullName: 'Buyer', role: 'BUYER' },
-    });
-  };
-  const client = new ApiClient('http://gateway.test/api/v1', storage, fetcher);
-  const authApi = createAuthApi(client);
-
-  await authApi.login('buyer@example.com', 'StrongPassword123!');
-  const profile = await authApi.getProfile();
-
-  assert.equal(storage.token, 'test-jwt');
-  assert.equal(profile.id, 'u1');
-  assert.equal(requests[0].authorization, null);
-  assert.equal(requests[1].authorization, 'Bearer test-jwt');
-});
-
-test('401 response clears the saved JWT', async () => {
-  const storage = createMemoryStorage();
-  storage.set('expired-jwt');
-  const fetcher: typeof fetch = async () =>
-    Response.json({ success: false, error: 'Invalid or expired token.' }, { status: 401 });
-  const client = new ApiClient('http://gateway.test/api/v1', storage, fetcher);
-
-  await assert.rejects(client.request('/users/profile'), { status: 401 });
-  assert.equal(storage.token, null);
-});
-
-test('register sends input payload and returns user envelope data', async () => {
-  const storage = createMemoryStorage();
-  const fetcher: typeof fetch = async (input, init) => {
-    assert.equal(String(input), 'http://gateway.test/api/v1/auth/register');
-    assert.equal(init?.method, 'POST');
-    const body = JSON.parse(String(init?.body));
-    assert.equal(body.email, 'newbuyer@example.com');
-    assert.equal(body.fullName, 'New Buyer');
-    assert.equal(body.password, '123456');
-    return Response.json({
-      success: true,
-      data: {
-        id: 'u2',
-        email: 'newbuyer@example.com',
-        fullName: 'New Buyer',
-        role: 'BUYER',
-        status: 'ACTIVE',
-        reputationScore: 100,
-        permissions: ['BID.CREATE', 'PROFILE.VIEW'],
-      },
-    });
-  };
-  const client = new ApiClient('http://gateway.test/api/v1', storage, fetcher);
-  const authApi = createAuthApi(client);
-  const user = await authApi.register({
-    email: 'newbuyer@example.com',
-    fullName: 'New Buyer',
-    password: '123456',
+beforeEach(() => {
+  const sessionStorage = memoryStorage(),
+    localStorage = memoryStorage();
+  Object.assign(globalThis, {
+    sessionStorage,
+    localStorage,
+    window: {
+      sessionStorage,
+      localStorage,
+      dispatchEvent: () => true,
+    },
   });
-  assert.equal(user.id, 'u2');
-  assert.equal(user.role, 'BUYER');
 });
-
-test('logout invokes /auth/logout and clears client token', async () => {
-  const storage = createMemoryStorage();
-  storage.set('logged-in-token');
-  let logoutCalled = false;
-  const fetcher: typeof fetch = async (input, init) => {
-    assert.equal(String(input), 'http://gateway.test/api/v1/auth/logout');
-    assert.equal(init?.method, 'POST');
-    logoutCalled = true;
-    return Response.json({ success: true, data: { message: 'Logged out successfully.' } });
-  };
-  const client = new ApiClient('http://gateway.test/api/v1', storage, fetcher);
-  const authApi = createAuthApi(client);
-  await authApi.logout();
-  assert.equal(logoutCalled, true);
-  assert.equal(storage.get(), null);
+const user = {
+  id: 'u1',
+  email: 'buyer@example.com',
+  fullName: 'Buyer',
+  role: 'BUYER',
+  status: 'ACTIVE',
+};
+function mockApi(handler: (url: string, body: unknown, authorization: unknown) => unknown) {
+  apiClient.defaults.adapter = async (config) => ({
+    data: handler(
+      config.url!,
+      config.data ? JSON.parse(config.data) : undefined,
+      config.headers.Authorization,
+    ),
+    status: 200,
+    statusText: 'OK',
+    headers: {},
+    config,
+  });
+}
+test('login stores JWT and profile request sends bearer token', async () => {
+  mockApi((url, body, authorization) => {
+    if (url === '/auth/login') {
+      assert.equal(authorization, undefined);
+      assert.deepEqual(body, { email: user.email, password: 'StrongPassword123!' });
+      return { success: true, data: { token: 'test-jwt', user } };
+    }
+    assert.equal(url, '/users/profile');
+    assert.equal(authorization, 'Bearer test-jwt');
+    return { success: true, data: user };
+  });
+  await authApi.login(user.email, 'StrongPassword123!');
+  assert.equal(getToken(), 'test-jwt');
+  assert.equal(localStorage.getItem('nexus.accessToken'), null);
+  assert.equal((await authApi.getProfile()).id, 'u1');
 });
-
-test('requestPasswordReset and resetPassword invoke correct endpoints', async () => {
-  const storage = createMemoryStorage();
-  const calls: string[] = [];
-  const fetcher: typeof fetch = async (input) => {
-    const url = String(input);
-    calls.push(url);
-    if (url.endsWith('/auth/forgot-password')) {
-      return Response.json({ success: true, message: 'Reset email sent.', resetToken: 'tok_abc' });
-    }
-    if (url.endsWith('/auth/reset-password')) {
-      return Response.json({ success: true, message: 'Password has been reset.' });
-    }
-    return Response.json({ success: false }, { status: 404 });
+test('401 clears the saved JWT in both storage areas', async () => {
+  sessionStorage.setItem('nexus.accessToken', 'expired');
+  localStorage.setItem('nexus.accessToken', 'old');
+  apiClient.defaults.adapter = async (config) => {
+    const response = {
+      data: { success: false, error: 'Expired' },
+      status: 401,
+      statusText: 'Unauthorized',
+      headers: {},
+      config,
+    } as AxiosResponse;
+    throw new AxiosError('Unauthorized', 'ERR_BAD_REQUEST', config, undefined, response);
   };
-  const client = new ApiClient('http://gateway.test/api/v1', storage, fetcher);
-  const authApi = createAuthApi(client);
-
-  const reqRes = await authApi.requestPasswordReset('buyer@example.com');
-  assert.equal(reqRes.resetToken, 'tok_abc');
-
-  await authApi.resetPassword('tok_abc', 'NewPass123!');
-  assert.equal(calls.length, 2);
+  await assert.rejects(authApi.getProfile(), { status: 401 });
+  assert.equal(getToken(), null);
+});
+test('register sends input and returns user envelope', async () => {
+  const input = { email: user.email, fullName: user.fullName, password: 'StrongPassword123!' };
+  mockApi((url, body) => {
+    assert.equal(url, '/auth/register');
+    assert.deepEqual(body, input);
+    return { success: true, data: user };
+  });
+  assert.equal((await authApi.register(input)).id, 'u1');
+});
+test('logout sends token and clears session even if server fails', async () => {
+  sessionStorage.setItem('nexus.accessToken', 'token');
+  mockApi((url, _body, token) => {
+    assert.equal(url, '/auth/logout');
+    assert.equal(token, 'Bearer token');
+    throw new Error('Network unavailable');
+  });
+  await assert.rejects(authApi.logout());
+  assert.equal(getToken(), null);
+});
+test('password reset uses the expected endpoints and payloads', async () => {
+  const calls: unknown[] = [];
+  mockApi((url, body) => {
+    calls.push([url, body]);
+    return { success: true, message: 'Request received' };
+  });
+  await authApi.requestPasswordReset(user.email);
+  await authApi.resetPassword('reset-token', 'NewPassword123!');
+  assert.deepEqual(calls, [
+    ['/auth/forgot-password', { email: user.email }],
+    ['/auth/reset-password', { token: 'reset-token', newPassword: 'NewPassword123!' }],
+  ]);
 });

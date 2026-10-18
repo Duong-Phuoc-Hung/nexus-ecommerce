@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './marketplace.css';
+import { SessionProvider } from '@/modules/user/auth/session-provider';
 
 export const metadata: Metadata = {
   title: 'Nexus — Khám phá giá trị, kết nối đam mê',
@@ -12,7 +13,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="vi">
       {/* Browser extensions such as Grammarly add attributes to body before hydration.
           Keep this exception at body; child components still receive hydration checks. */}
-      <body suppressHydrationWarning>{children}</body>
+      <body suppressHydrationWarning>
+        <SessionProvider>{children}</SessionProvider>
+      </body>
     </html>
   );
 }
