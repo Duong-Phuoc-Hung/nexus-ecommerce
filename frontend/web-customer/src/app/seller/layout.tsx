@@ -1,3 +1,4 @@
+import '@/modules/seller/components/seller.css';
 import type { ReactNode } from 'react';
 import { SellerShell } from '@/modules/seller/components/seller-shell';
 
