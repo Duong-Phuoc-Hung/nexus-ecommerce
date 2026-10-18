@@ -32,22 +32,108 @@ Mỗi service trong `backend/` tương ứng với một **Bounded Context** đ�
 └──────────────────────────────────────┘  └────────────────────────────────────┘
 ```
 
-## Auth & IAM Prototype
+## User Auth/IAM API
 
-User Service exposes these endpoints directly and through the API Gateway:
+Tài liệu này phản ánh route/controller/use-case hiện có trong User Service. Base URL mặc định dành cho FE là `http://localhost:4000/api/v1` (qua API Gateway). User Service mặc định nghe tại `http://localhost:4001`.
 
-- `POST /api/v1/auth/register` creates a BUYER account.
-- `POST /api/v1/auth/login` returns a JWT and the role permissions.
-- `POST /api/v1/auth/logout` revokes the bearer token.
-- `POST /api/v1/auth/forgot-password` requests a single-use reset token (15-minute lifetime).
-- `POST /api/v1/auth/reset-password` consumes the reset token and changes the password.
-- `GET /api/v1/auth/roles` lists the current static role-permission mappings; requires `ROLE.VIEW`.
-- `GET /api/v1/users/profile` returns the authenticated user's profile.
-- `PUT /api/v1/users/:id/role` assigns `BUYER`, `SELLER`, or `ADMIN`; requires `ROLE.UPDATE`.
+### Chạy Backend
 
-For local admin access, configure `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` (minimum 12 characters) before starting User Service. Set a private `JWT_SECRET` for deployments; production startup/authentication must not use the development fallback. The reset token is included in the response only outside production because this prototype has no email-delivery adapter.
+Yêu cầu: Node.js `>=20`, pnpm `>=9`; PostgreSQL chỉ cần khi chạy repository Postgres.
 
-These endpoints currently use in-memory repositories and token stores. Accounts, revocations, and reset tokens are lost on restart and are not shared between service replicas; configure persistent storage and an email provider before production use.
+Cài dependency từ thư mục gốc:
+
+```powershell
+pnpm install
+```
+
+Để chạy nhanh cho demo bằng InMemory (dữ liệu mất khi dừng User Service), mở hai terminal:
+
+```powershell
+# Terminal 1: User Service
+$env:USE_IN_MEMORY_DB = 'true'
+pnpm dev:user
+```
+
+```powershell
+# Terminal 2: API Gateway
+pnpm dev:gateway
+```
+
+Để chạy với Postgres, app cần database `nexus_user_db` và các migration của User Service. Có thể khởi động hạ tầng bằng `pnpm docker:dev:up`, sau đó `pnpm db:migrate`; lưu ý script migration chạy migration cho toàn bộ services trong repo. User Service mặc định dùng `DB_HOST=localhost`, `DB_PORT=5432`, `DB_USER=nexus_user`, `DB_NAME=nexus_user_db`; cấu hình mật khẩu bằng `DB_PASSWORD` trong môi trường local, không đưa secret vào tài liệu hoặc FE. Nếu `USE_IN_MEMORY_DB` không bằng `true`, User Service chọn `PostgresUserRepository`.
+
+Các biến Auth liên quan:
+
+| Biến                                                      | Tác dụng                                                                                                |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `USE_IN_MEMORY_DB`                                        | Đặt `true` để demo bằng `InMemoryUserRepository`; mặc định dùng Postgres.                               |
+| `JWT_SECRET`                                              | Secret ký/xác minh JWT; production bắt buộc cấu hình giá trị riêng.                                     |
+| `PORT` / `USER_SERVICE_PORT`                              | Port User Service; mặc định `4001`. `PORT` được ưu tiên nếu cả hai cùng có.                             |
+| `GATEWAY_PORT`                                            | Port Gateway; mặc định `4000` (biến `PORT` được ưu tiên).                                               |
+| `USER_SERVICE_URL`                                        | URL upstream User Service của Gateway; mặc định dùng localhost và port User Service.                    |
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | Thông tin kết nối Postgres; có default dev trong repository.                                            |
+| `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`       | Tạo admin mẫu trong InMemory repository; password tối thiểu 12 ký tự. Không dùng để bootstrap Postgres. |
+
+Health checks:
+
+```powershell
+Invoke-RestMethod http://localhost:4001/health
+Invoke-RestMethod http://localhost:4000/health
+```
+
+### Danh sách API
+
+Tất cả route dưới đây có thể gọi trực tiếp tới User Service bằng prefix `http://localhost:4001`, hoặc qua Gateway bằng base URL `http://localhost:4000/api/v1`. FE nên dùng Gateway. Request có body dùng `Content-Type: application/json`. Success/error response theo envelope `{ "success": boolean, "data"?: ..., "error"?: ... }`, trừ endpoint forgot-password trả message trực tiếp ở top level.
+
+| Chức năng                | Method và URL                | JWT / permission            | Request                                                                               | Kết quả và trạng thái                                                                                                                                                                                                              |
+| ------------------------ | ---------------------------- | --------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Đăng ký                  | `POST /auth/register`        | Không cần                   | `{ "email": "buyer@example.com", "fullName": "Demo Buyer", "password": "secret123" }` | `201` trả `data` gồm `id`, `email`, `fullName`, `role`, `status`, `reputationScore`, `createdAt`, `updatedAt`; role luôn là `BUYER`. `400` dữ liệu không hợp lệ; `409` email trùng. Password hiện tối thiểu 6 ký tự.               |
+| Đăng nhập                | `POST /auth/login`           | Không cần                   | `{ "email": "buyer@example.com", "password": "secret123" }`                           | `200` trả `data.token` và `data.user` (id, email, fullName, role, status, reputationScore, permissions). `401` thiếu/sai thông tin, user không tồn tại hoặc inactive; `423` account bị khóa sau 5 lần sai liên tiếp trong 15 phút. |
+| Đăng xuất                | `POST /auth/logout`          | Bearer JWT hợp lệ           | Không có body                                                                         | `200` trả success/message; `401` token thiếu/sai/hết hạn. Backend thêm token vào revoked-token store trong RAM; token bị từ chối ở request tiếp theo.                                                                              |
+| Yêu cầu quên mật khẩu    | `POST /auth/forgot-password` | Không cần                   | `{ "email": "buyer@example.com" }`                                                    | `200` trả thông điệp chung để không tiết lộ email có tồn tại hay không. Trong môi trường không phải production, nếu account tồn tại thì response có thêm `resetToken`. Chưa gửi email thật.                                        |
+| Đặt lại mật khẩu         | `POST /auth/reset-password`  | Reset token; không cần JWT  | `{ "token": "<reset-token>", "newPassword": "new-secret-123" }`                       | `200` đổi mật khẩu; `400` password ngắn hơn 12 ký tự hoặc token thiếu/sai/hết hạn/đã dùng. Reset token dùng một lần, TTL 15 phút.                                                                                                  |
+| Xem role/permission tĩnh | `GET /auth/roles`            | Bearer JWT + `ROLE.VIEW`    | Không có body                                                                         | `200` trả `data` là danh sách role cùng permissions tĩnh; `401` thiếu/sai JWT; `403` không có quyền. Đây không phải CRUD role.                                                                                                     |
+| Xem hồ sơ hiện tại       | `GET /users/profile`         | Bearer JWT + `PROFILE.VIEW` | Không có body                                                                         | `200` trả `data` gồm `id`, `email`, `fullName`, `role`, `status`, `reputationScore`, `createdAt`; `401` thiếu/sai JWT; `403` thiếu quyền.                                                                                          |
+| Xem hồ sơ theo ID        | `GET /users/:id`             | Bearer JWT + `USER.VIEW`    | ID nằm trong path                                                                     | `200` trả profile; `401` thiếu/sai JWT; `403` thiếu quyền; `404` không tìm thấy user. Chưa có API list users.                                                                                                                      |
+| Gán role cho user        | `PUT /users/:id/role`        | Bearer JWT + `ROLE.UPDATE`  | `{ "role": "SELLER" }` (`BUYER`, `SELLER`, `ADMIN`)                                   | `200` trả user ID và role mới; `401` thiếu/sai JWT; `403` thiếu quyền; `400` role không hợp lệ; `404` user không tồn tại.                                                                                                          |
+
+Đăng ký không nhận `role`, phone hoặc CCCD trong request. Backend tự gán `BUYER`; Postgres repository hiện sinh phone/identify number nội bộ để thỏa schema. Không gửi permission trong request body. Role/permission lấy từ cấu hình tĩnh trong `authorization.ts`.
+
+### JWT và quyền truy cập
+
+1. Gọi `POST /auth/login`; lấy `data.token`.
+2. Với route cần đăng nhập, gửi header `Authorization: Bearer <token>`.
+3. Middleware xác minh chữ ký HS256, `exp` (8 giờ) và revoked-token store. `401` nghĩa là thiếu/sai/hết hạn/đã thu hồi token; `403` nghĩa là thiếu permission.
+4. Logout gọi `POST /auth/logout` với cùng bearer token. Revocation có hiệu lực trong process đang chạy, nhưng store ở RAM nên không dùng chung giữa replicas và mất khi restart.
+
+JWT được ký bằng `JWT_SECRET`. Ở production biến này là bắt buộc; fallback chỉ dành cho development. Payload JWT được ký, không mã hóa, nên không chứa password/secret.
+
+### Vị trí xử lý và tích hợp FE
+
+- Routes/middleware: `backend/user-service/src/interfaces/http/routes/UserRoutes.ts`, `backend/user-service/src/infrastructure/security/authorization.ts`.
+- Controller/use cases: `backend/user-service/src/interfaces/http/controllers/UserController.ts`, `backend/user-service/src/application/use-cases/`.
+- Hash/JWT: `backend/user-service/src/infrastructure/security/auth.ts`.
+- Repositories: `backend/user-service/src/infrastructure/repositories/`.
+- Gateway proxy: `backend/api-gateway/src/app.ts`, prefix `/api/v1/auth` và `/api/v1/users`.
+- FE customer gọi Auth ở `frontend/web-customer/src/services/auth.api.ts`; form login/register/forgot nằm trong `frontend/web-customer/src/modules/user/auth/AuthPage.tsx`. `resetPassword()` có client method nhưng hiện chưa có form đặt lại mật khẩu. Admin API client ở `frontend/web-admin/src/services/admin-api.ts`.
+
+### Trạng thái kiểm thử
+
+- Auth use-case/middleware và Gateway proxy có test riêng; lệnh chạy:
+
+  ```powershell
+  pnpm exec tsx --test backend/user-service/src/application/use-cases/IAM.test.ts backend/user-service/src/infrastructure/security/authorization.test.ts backend/api-gateway/src/app.test.ts
+  ```
+
+- `pnpm test` hiện chạy architecture/infrastructure/Redis scripts; nó không tự chạy các file Auth test kể trên. Chạy `pnpm build` trước `pnpm test`, vì Redis tests load generated `dist` files.
+- Các luồng register/login/profile/role-denial/logout/lockout đã được xác minh qua Gateway với InMemory. Postgres live flow và forgot/reset HTTP flow chưa được xác minh trong lần rà soát này.
+
+### Giới hạn hiện tại
+
+- Reset token và revoked-token store ở RAM; reset token chưa gửi email.
+- Role/permission là mapping tĩnh; chưa có CRUD user/role/permission.
+- Password mới dùng bcryptjs; code vẫn verify PBKDF2 legacy hash nhưng chưa tự rehash legacy hash sau login.
+- Register password tối thiểu 6 ký tự, reset password tối thiểu 12 ký tự.
+- Chưa có refresh token, endpoint change-password, API list users hoặc form reset-password hoàn chỉnh ở FE.
 
 ### Chi tiết nhiệm vụ từng tầng:
 
@@ -134,8 +220,8 @@ Các quy tắc ranh giới kiến trúc trên không chỉ dừng lại ở mặ
 
 | Service                    | Bounded Context                           | Cổng (Port) | Health Check URL               | Endpoint Mẫu                                         |
 | :------------------------- | :---------------------------------------- | :---------: | :----------------------------- | :--------------------------------------------------- |
-| **`api-gateway`**          | Cổng điều phối & Proxy                    |   `8000`    | `http://localhost:8000/health` | `GET /api/v1`                                        |
-| **`user-service`**         | Người dùng & Định danh (SRS 3.1)          |   `3001`    | `http://localhost:3001/health` | `GET /api/v1/users/profile`                          |
+| **`api-gateway`**          | Cổng điều phối & Proxy                    |   `4000`    | `http://localhost:4000/health` | `GET /api/v1`                                        |
+| **`user-service`**         | Người dùng & Định danh (SRS 3.1)          |   `4001`    | `http://localhost:4001/health` | `GET /api/v1/users/profile`                          |
 | **`catalog-service`**      | Danh mục & Sản phẩm (SRS 3.3)             |   `3002`    | `http://localhost:3002/health` | `GET /api/v1/products`                               |
 | **`commerce-service`**     | Giỏ hàng, Đơn hàng & Thanh toán (SRS 3.4) |   `3003`    | `http://localhost:3003/health` | `GET /api/v1/orders/ord_01hqz555abc`                 |
 | **`auction-service`**      | Đấu giá thời gian thực (SRS 3.5)          |   `3004`    | `http://localhost:3004/health` | `GET /api/v1/auctions`                               |
@@ -184,7 +270,7 @@ pnpm dev:gateway
 Mỗi service khi khởi chạy đều trả về trạng thái `UP` với mã HTTP 200:
 
 ```powershell
-Invoke-RestMethod -Uri "http://localhost:3001/health"
+Invoke-RestMethod -Uri "http://localhost:4001/health"
 ```
 
 Kết quả trả về:
@@ -194,7 +280,7 @@ Kết quả trả về:
   "status": "UP",
   "service": "user-service",
   "boundedContext": "User & Authentication (SRS 3.1)",
-  "port": 3001,
+  "port": 4001,
   "timestamp": "2026-10-07T10:04:03.848Z"
 }
 ```
