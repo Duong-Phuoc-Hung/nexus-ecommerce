@@ -49,6 +49,83 @@ For local admin access, configure `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_P
 
 These endpoints currently use in-memory repositories and token stores. Accounts, revocations, and reset tokens are lost on restart and are not shared between service replicas; configure persistent storage and an email provider before production use.
 
+## Catalog Product Search API
+
+Catalog Service exposes product search directly at:
+
+```text
+GET http://localhost:4002/api/v1/products/search
+```
+
+This endpoint currently runs on Catalog Service directly. The API Gateway lists the Catalog prefix, but its current source does not proxy product requests; Gateway routing must be added by its owner before FE can call this endpoint through `http://localhost:4000`.
+
+### Query parameters
+
+| Parameter    | Required | Default | Description                                                                                          |
+| ------------ | -------: | ------: | ---------------------------------------------------------------------------------------------------- |
+| `q`          |      Yes |       — | Non-empty keyword; case-insensitive substring match against product title or description.            |
+| `categoryId` |       No |       — | Exact category ID filter.                                                                            |
+| `minPrice`   |       No |       — | Inclusive lower bound for product price; must be a non-negative number.                              |
+| `maxPrice`   |       No |       — | Inclusive upper bound for product price; must be a non-negative number and not less than `minPrice`. |
+| `page`       |       No |     `1` | Positive integer page number.                                                                        |
+| `limit`      |       No |    `20` | Positive integer page size, maximum `100`.                                                           |
+
+Example:
+
+```http
+GET http://localhost:4002/api/v1/products/search?q=headphones&categoryId=cat_electronics&minPrice=100&maxPrice=500&page=1&limit=10
+```
+
+No JWT is required. The current implementation uses `InMemoryProductRepository` and includes only products for which `Product.isAvailable()` is true (`ACTIVE` status and positive stock). It searches in-memory data and does not query PostgreSQL.
+
+Successful response (`200`):
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "prod_01hqz999xyz",
+      "sellerId": "usr_01hqz789abc",
+      "categoryId": "cat_electronics",
+      "title": "Sony WH-1000XM5 Wireless Headphones",
+      "price": 399.99,
+      "stockQuantity": 50,
+      "status": "ACTIVE"
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "limit": 10,
+    "total": 1,
+    "totalPages": 1
+  }
+}
+```
+
+No matches returns `200` with an empty `data` array and zero totals. Missing/blank `q`, invalid page/limit/prices, `limit > 100`, or `minPrice > maxPrice` returns `400` with `{ "success": false, "error": "..." }`.
+
+Implementation files:
+
+- Route: `backend/catalog-service/src/interfaces/http/routes/ProductRoutes.ts`
+- Request validation: `backend/catalog-service/src/interfaces/http/dtos/SearchProductsQueryDto.ts`
+- Controller: `backend/catalog-service/src/interfaces/http/controllers/ProductController.ts`
+- Search orchestration: `backend/catalog-service/src/application/use-cases/SearchProductsUseCase.ts`
+- Repository contract/data filtering: `backend/catalog-service/src/domain/repositories/IProductRepository.ts`, `backend/catalog-service/src/infrastructure/repositories/InMemoryProductRepository.ts`
+- HTTP tests: `backend/catalog-service/src/app.test.ts`
+
+Run the service with `pnpm dev:catalog`. Verify Search API tests with:
+
+```powershell
+pnpm exec tsx --test backend/catalog-service/src/app.test.ts
+```
+
+Build Catalog Service with:
+
+```powershell
+pnpm --filter @nexus/catalog-service build
+```
+
 ### Chi tiết nhiệm vụ từng tầng:
 
 1. **`domain/` (Enterprise Business Rules):**
@@ -136,7 +213,7 @@ Các quy tắc ranh giới kiến trúc trên không chỉ dừng lại ở mặ
 | :------------------------- | :---------------------------------------- | :---------: | :----------------------------- | :--------------------------------------------------- |
 | **`api-gateway`**          | Cổng điều phối & Proxy                    |   `8000`    | `http://localhost:8000/health` | `GET /api/v1`                                        |
 | **`user-service`**         | Người dùng & Định danh (SRS 3.1)          |   `3001`    | `http://localhost:3001/health` | `GET /api/v1/users/profile`                          |
-| **`catalog-service`**      | Danh mục & Sản phẩm (SRS 3.3)             |   `3002`    | `http://localhost:3002/health` | `GET /api/v1/products`                               |
+| **`catalog-service`**      | Danh mục & Sản phẩm (SRS 3.3)             |   `4002`    | `http://localhost:4002/health` | `GET /api/v1/products`                               |
 | **`commerce-service`**     | Giỏ hàng, Đơn hàng & Thanh toán (SRS 3.4) |   `3003`    | `http://localhost:3003/health` | `GET /api/v1/orders/ord_01hqz555abc`                 |
 | **`auction-service`**      | Đấu giá thời gian thực (SRS 3.5)          |   `3004`    | `http://localhost:3004/health` | `GET /api/v1/auctions`                               |
 | **`fulfillment-service`**  | Vận chuyển & Giao vận (SRS 3.6)           |   `3005`    | `http://localhost:3005/health` | `GET /api/v1/fulfillments/shipments/shp_01hqz222trk` |

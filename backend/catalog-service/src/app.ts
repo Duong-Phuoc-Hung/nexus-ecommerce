@@ -4,6 +4,7 @@ import { InMemoryProductRepository } from './infrastructure/repositories/InMemor
 import { GetProductDetailUseCase } from './application/use-cases/GetProductDetailUseCase';
 import { ProductController } from './interfaces/http/controllers/ProductController';
 import { createProductRoutes } from './interfaces/http/routes/ProductRoutes';
+import { SearchProductsUseCase } from './application/use-cases/SearchProductsUseCase';
 
 export function createApplication(): Application {
   const app = express();
@@ -23,7 +24,12 @@ export function createApplication(): Application {
 
   const productRepository = new InMemoryProductRepository();
   const getProductDetailUseCase = new GetProductDetailUseCase(productRepository);
-  const productController = new ProductController(getProductDetailUseCase, productRepository);
+  const searchProductsUseCase = new SearchProductsUseCase(productRepository);
+  const productController = new ProductController(
+    getProductDetailUseCase,
+    productRepository,
+    searchProductsUseCase,
+  );
 
   app.use('/api/v1/products', createProductRoutes(productController));
 

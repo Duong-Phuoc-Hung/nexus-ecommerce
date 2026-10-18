@@ -1,4 +1,8 @@
-import { IProductRepository } from '../../domain/repositories/IProductRepository';
+import {
+  IProductRepository,
+  ProductSearchCriteria,
+  ProductSearchPage,
+} from '../../domain/repositories/IProductRepository';
 import { Product, ProductStatus } from '../../domain/entities/Product';
 
 export class InMemoryProductRepository implements IProductRepository {
@@ -30,6 +34,28 @@ export class InMemoryProductRepository implements IProductRepository {
 
   public async findByCategory(categoryId: string): Promise<Product[]> {
     return Array.from(this.products.values()).filter((p) => p.categoryId === categoryId);
+  }
+
+  public async search(criteria: ProductSearchCriteria): Promise<ProductSearchPage> {
+    const keyword = criteria.q.toLocaleLowerCase();
+    const matches = Array.from(this.products.values()).filter((product) => {
+      if (!product.isAvailable()) return false;
+      if (
+        !product.title.toLocaleLowerCase().includes(keyword) &&
+        !product.description.toLocaleLowerCase().includes(keyword)
+      ) {
+        return false;
+      }
+      if (criteria.categoryId && product.categoryId !== criteria.categoryId) return false;
+      if (criteria.minPrice !== undefined && product.price < criteria.minPrice) return false;
+      if (criteria.maxPrice !== undefined && product.price > criteria.maxPrice) return false;
+      return true;
+    });
+
+    return {
+      products: matches.slice(criteria.offset, criteria.offset + criteria.limit),
+      total: matches.length,
+    };
   }
 
   public async save(product: Product): Promise<void> {
