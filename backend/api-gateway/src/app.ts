@@ -130,7 +130,8 @@ export function createApplication(): Application {
         const contentType = upstream.headers.get('content-type');
         if (contentType) res.setHeader('content-type', contentType);
         res.send(await upstream.text());
-      } catch {
+      } catch (proxyErr) {
+        console.error(`[Gateway Proxy Error -> ${serviceName}]:`, proxyErr);
         res.status(502).json({
           success: false,
           error: `${serviceName} is currently unavailable. Vui lòng kiểm tra cổng service đã được bật chưa.`,
