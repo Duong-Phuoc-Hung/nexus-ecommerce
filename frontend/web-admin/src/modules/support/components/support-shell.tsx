@@ -40,7 +40,9 @@ export function SupportShell({ children }: { children: ReactNode }) {
         <nav aria-label="Support navigation">
           {items.map((item) => {
             const active =
-              item.href === '/support' ? pathname === item.href : pathname.startsWith(item.href);
+              item.href === '/support'
+                ? pathname === item.href
+                : Boolean(pathname?.startsWith(item.href));
             return (
               <Link
                 className={`support-nav-item ${active ? 'active' : ''}`}
@@ -69,7 +71,7 @@ export function SupportShell({ children }: { children: ReactNode }) {
               {items.find(
                 (item) =>
                   item.href === pathname ||
-                  (item.href !== '/support' && pathname.startsWith(item.href)),
+                  (item.href !== '/support' && Boolean(pathname?.startsWith(item.href))),
               )?.label ?? 'Chi tiết đơn hàng'}
             </small>
           </div>
