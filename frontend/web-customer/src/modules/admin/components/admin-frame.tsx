@@ -38,6 +38,12 @@ export function AdminFrame({
           >
             <span aria-hidden="true">02</span>Sản phẩm
           </Link>
+          <Link
+            href="/admin/auctions"
+            aria-current={pathname.startsWith('/admin/auctions') ? 'page' : undefined}
+          >
+            <span aria-hidden="true">03</span>Phiên đấu giá
+          </Link>
         </nav>
         <div className="admin-sidebar-bottom">
           <strong>Project Nexus</strong>
@@ -53,7 +59,12 @@ export function AdminFrame({
           <span>
             Quản trị{' '}
             <span className="admin-muted">
-              / {pathname.includes('/products') ? 'Sản phẩm' : 'Tổng quan'}
+              /{' '}
+              {pathname.includes('/auctions')
+                ? 'Phiên đấu giá'
+                : pathname.includes('/products')
+                  ? 'Sản phẩm'
+                  : 'Tổng quan'}
             </span>
           </span>
           <div className="admin-account">

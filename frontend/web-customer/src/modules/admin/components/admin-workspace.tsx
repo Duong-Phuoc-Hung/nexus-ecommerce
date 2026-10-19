@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { AdminAuctions } from './admin-auctions';
 import { AdminCatalogProvider } from './admin-catalog-context';
 import { AdminProducts } from './admin-products';
 import { ProductForm } from './product-form';
@@ -15,15 +16,18 @@ export function AdminWorkspace({
   basePath?: string;
 }) {
   if (process.env.NODE_ENV !== 'development') return null;
-  const content = !path.length ? (
-    <AdminOverview productsPath={basePath + '/products'} />
-  ) : path.length === 1 ? (
-    <AdminProducts />
-  ) : path[1] === 'new' ? (
-    <ProductForm />
-  ) : (
-    <ProductForm productId={path[1]} />
-  );
+  const content =
+    path[0] === 'auctions' ? (
+      <AdminAuctions key={path.join('/')} />
+    ) : !path.length ? (
+      <AdminOverview productsPath={basePath + '/products'} />
+    ) : path.length === 1 ? (
+      <AdminProducts />
+    ) : path[1] === 'new' ? (
+      <ProductForm />
+    ) : (
+      <ProductForm productId={path[1]} />
+    );
   return (
     <AdminCatalogProvider productsPath={basePath + '/products'}>
       <AdminFrame

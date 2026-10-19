@@ -20,8 +20,8 @@ export function AdminOverview({ productsPath = '/products' }: { productsPath?: s
             được giới thiệu đúng cách.
           </h2>
           <p>Kiểm tra tên, hình ảnh, tình trạng và giá trước khi đưa sản phẩm đến người mua.</p>
-          <Link href={productsPath + '/new'} className="admin-button">
-            Thêm sản phẩm mới
+          <Link href={productsPath} className="admin-button">
+            Xem danh sách sản phẩm
           </Link>
         </div>
         <div className="admin-hero-art" aria-hidden="true">
@@ -36,17 +36,18 @@ export function AdminOverview({ productsPath = '/products' }: { productsPath?: s
           <p className="admin-muted">Tìm sản phẩm và xem trạng thái hiển thị hiện tại.</p>
           <strong>Xem sản phẩm →</strong>
         </Link>
-        <Link href={productsPath + '/new'} className="admin-card">
+        <div className="admin-card">
           <span className="admin-step">02</span>
           <h2>Chuẩn bị nội dung</h2>
           <p className="admin-muted">Tạo thông tin và hình ảnh rõ ràng cho từng món đồ.</p>
-          <strong>Thêm sản phẩm →</strong>
-        </Link>
+          <strong>API tạo sản phẩm chưa được cung cấp</strong>
+        </div>
         <div className="admin-card">
           <span className="admin-step">03</span>
           <h2>Kiểm tra trước khi lưu</h2>
           <p className="admin-muted">
-            Quyền thao tác và điều kiện nghiệp vụ được xác minh khi gửi yêu cầu.
+            API hiện hỗ trợ đọc dữ liệu. Tạo, sửa và duyệt sẽ mở khi backend cung cấp endpoint tương
+            ứng.
           </p>
         </div>
       </section>
