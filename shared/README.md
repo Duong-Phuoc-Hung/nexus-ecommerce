@@ -62,7 +62,13 @@ shared/
 
 ## 2. Chi Tiết Danh Sách Sự Kiện (SRS 2.8 Event Message Table)
 
-Mỗi file trong `shared/contracts/src/events/` định nghĩa cấu trúc dữ liệu (`interface`) cho từng sự kiện:
+> 📖 **Xem tài liệu chi tiết đầy đủ:**
+>
+> - [**Báo cáo so sánh & đề xuất cơ chế event (SCRUM-33)**](../docs/architecture/event-mechanism-comparison-phase-0.md)
+> - [**ADR-001: Lựa chọn cơ chế giao tiếp sự kiện cho Phase 0 (SCRUM-34)**](../docs/adr/ADR-001-event-mechanism-phase-0.md)
+> - [**Danh mục đặc tả chi tiết SRS 2.8 Event Catalog (SCRUM-37)**](../docs/standards/event-catalog-srs-2.8.md)
+
+Toàn bộ các sự kiện đều kế thừa lớp cơ sở bất biến [`DomainEvent<T>`](src/events/domain-event.base.ts) và phát tán qua cổng [`IEventPublisher`](src/events/event-publisher.interface.ts):
 
 1. **User Events (`user.events.ts`)**:
    - `UserRegistered`: Tài khoản mới được tạo thành công.
