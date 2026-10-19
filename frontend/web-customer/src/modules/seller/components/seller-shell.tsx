@@ -1,9 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { ReactNode, useEffect, useState } from 'react';
-import { AuthUser, authApi } from '@/services/auth.api';
+import { usePathname } from 'next/navigation';
+import type { ReactNode } from 'react';
 
 const navigation = [
   { href: '/seller', label: 'Tổng quan', icon: '⌂' },
@@ -15,42 +14,7 @@ const navigation = [
 
 export function SellerShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [checked, setChecked] = useState(false);
-
-  useEffect(() => {
-    setUser(authApi.getCurrentUser());
-    setChecked(true);
-  }, []);
-
-  async function logout() {
-    await authApi.logout().catch(() => undefined);
-    router.push('/login');
-  }
-
-  if (!checked) {
-    return <main className="seller-access-state">Đang kiểm tra phiên đăng nhập…</main>;
-  }
-
-  if (!user || user.role !== 'SELLER') {
-    return (
-      <main className="seller-access-state">
-        <section>
-          <span className="seller-brand-mark">N</span>
-          <p className="seller-eyebrow">NEXUS SELLER CENTER</p>
-          <h1>Cần đăng nhập bằng tài khoản Seller</h1>
-          <p>Khu vực này chỉ dành cho tài khoản đã được cấp vai trò người bán.</p>
-          <Link className="seller-primary-link" href="/login">
-            Đăng nhập
-          </Link>
-          <Link className="seller-back-link" href="/">
-            Về trang chủ
-          </Link>
-        </section>
-      </main>
-    );
-  }
+  const demoSeller = { fullName: 'Nexus Demo Seller' };
 
   return (
     <div className="seller-workspace">
@@ -101,14 +65,11 @@ export function SellerShell({ children }: { children: ReactNode }) {
             </span>
           </div>
           <div className="seller-account">
-            <span className="seller-avatar">{user.fullName.slice(0, 1).toUpperCase()}</span>
+            <span className="seller-avatar">{demoSeller.fullName.slice(0, 1).toUpperCase()}</span>
             <span>
-              <strong>{user.fullName}</strong>
-              <small>Seller</small>
+              <strong>{demoSeller.fullName}</strong>
+              <small>Seller · Demo</small>
             </span>
-            <button type="button" onClick={logout}>
-              Đăng xuất
-            </button>
           </div>
         </header>
         <main className="seller-content">{children}</main>

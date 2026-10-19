@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Nexus Admin',
-  description: 'Project Nexus administration portal',
+  title: 'Nexus Support Staff',
+  description: 'Project Nexus support staff workspace',
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
