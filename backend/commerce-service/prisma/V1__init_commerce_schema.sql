@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS commerce_carts (
     -- Khóa chính: Số tự tăng (1, 2, 3...)
     id BIGSERIAL PRIMARY KEY,
 
-    -- Tham chiếu người dùng nếu đã đăng nhập (Lấy 'id' từ user_users bên user-service, NULL nếu là khách)
-    user_id BIGINT,
+    -- Tham chiếu người dùng nếu đã đăng nhập (Lấy 'id' từ user_users bên user-service - UUID, NULL nếu là khách)
+    user_id VARCHAR(36),
 
     -- Mã định danh phiên duyệt web của khách vãng lai (Dùng để gộp giỏ hàng khi họ đăng nhập)
     session_id VARCHAR(100),
@@ -67,11 +67,11 @@ CREATE TABLE IF NOT EXISTS commerce_orders (
     -- Mã đơn hàng hiển thị cho khách xem (VD: "ORD-20261008-001")
     order_code VARCHAR(50) NOT NULL UNIQUE,
 
-    -- Tham chiếu người mua (Lấy 'id' từ user_users bên user-service)
-    buyer_id BIGINT NOT NULL,
+    -- Tham chiếu người mua (Lấy 'id' từ user_users bên user-service - UUID)
+    buyer_id VARCHAR(36) NOT NULL,
 
-    -- Tham chiếu người bán (Lấy 'id' từ user_users bên user-service)
-    seller_id BIGINT NOT NULL,
+    -- Tham chiếu người bán (Lấy 'id' từ user_users bên user-service - UUID)
+    seller_id VARCHAR(36) NOT NULL,
 
     -- Tổng số tiền khách phải thanh toán (Tiền hàng + ship - giảm giá)
     total_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,

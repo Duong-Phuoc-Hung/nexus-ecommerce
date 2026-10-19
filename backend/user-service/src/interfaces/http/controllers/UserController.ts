@@ -27,15 +27,16 @@ export class UserController {
   public async getProfile(req: Request, res: Response): Promise<void> {
     try {
       const authenticatedUserId = (req as Request & { user?: { sub: string } }).user?.sub;
-      const requestedUserId = req.params.id;
-      const userId =
-        (Array.isArray(requestedUserId) ? requestedUserId[0] : requestedUserId) ||
-        authenticatedUserId;
-      if (!userId) {
-        res.status(400).json({ success: false, error: 'User id is required.' });
+      const requestedId = req.params.id;
+      const queryEmail = typeof req.query.email === 'string' ? req.query.email : undefined;
+      const targetParam = Array.isArray(requestedId) ? requestedId[0] : requestedId;
+      const targetIdentifier = queryEmail || targetParam || authenticatedUserId;
+
+      if (!targetIdentifier) {
+        res.status(400).json({ success: false, error: 'User id or email is required.' });
         return;
       }
-      const profile = await this.getUserProfileUseCase.execute(userId);
+      const profile = await this.getUserProfileUseCase.execute(targetIdentifier);
 
       res.status(200).json({
         success: true,

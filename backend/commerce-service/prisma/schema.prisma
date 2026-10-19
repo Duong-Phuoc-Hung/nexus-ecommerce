@@ -19,8 +19,8 @@ model Cart {
   // Khóa chính: Số tự tăng (1, 2, 3...)
   id        BigInt     @id @default(autoincrement())
 
-  // Tham chiếu người dùng nếu đã đăng nhập (Lấy 'id' từ user_users bên user-service, NULL nếu là khách)
-  userId    BigInt?    @map("user_id")
+  // Tham chiếu người dùng nếu đã đăng nhập (Lấy 'id' từ user_users bên user-service - UUID, NULL nếu là khách)
+  userId    String?    @map("user_id") @db.VarChar(36)
 
   // Mã định danh phiên duyệt web của khách vãng lai (Dùng để gộp giỏ hàng khi họ đăng nhập)
   sessionId String?    @map("session_id") @db.VarChar(100)
@@ -79,11 +79,11 @@ model Order {
   // Mã đơn hàng hiển thị cho khách xem (VD: "ORD-20261008-001")
   orderCode                String      @unique @map("order_code") @db.VarChar(50)
 
-  // Tham chiếu người mua (Lấy 'id' từ user_users bên user-service)
-  buyerId                  BigInt      @map("buyer_id")
+  // Tham chiếu người mua (Lấy 'id' từ user_users bên user-service - UUID)
+  buyerId                  String      @map("buyer_id") @db.VarChar(36)
 
-  // Tham chiếu người bán (Lấy 'id' từ user_users bên user-service)
-  sellerId                 BigInt      @map("seller_id")
+  // Tham chiếu người bán (Lấy 'id' từ user_users bên user-service - UUID)
+  sellerId                 String      @map("seller_id") @db.VarChar(36)
 
   // Tổng số tiền khách phải thanh toán (Tiền hàng + ship - giảm giá)
   totalAmount              Decimal     @map("total_amount") @db.Decimal(12, 2)

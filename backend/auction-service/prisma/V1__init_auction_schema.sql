@@ -13,8 +13,8 @@ CREATE TABLE IF NOT EXISTS auction_rooms (
     -- Tham chiếu sản phẩm đấu giá (Lấy 'id' từ catalog_products bên catalog-service)
     product_id BIGINT NOT NULL,
 
-    -- Tham chiếu người tạo phiên / chủ món hàng (Lấy 'id' từ user_users bên user-service)
-    seller_id BIGINT NOT NULL,
+    -- Tham chiếu người tạo phiên / chủ món hàng (Lấy 'id' từ user_users bên user-service - UUID)
+    seller_id VARCHAR(36) NOT NULL,
 
     -- Tiêu đề phiên đấu giá hiển thị cho người xem
     title VARCHAR(255) NOT NULL,
@@ -43,8 +43,8 @@ CREATE TABLE IF NOT EXISTS auction_rooms (
     -- Trạng thái: SCHEDULED, ACTIVE, ENDED, SETTLED, CANCELLED
     status VARCHAR(20) NOT NULL DEFAULT 'SCHEDULED',
 
-    -- Tham chiếu người thắng cuộc khi kết thúc phiên (Lấy 'id' từ user_users bên user-service)
-    winner_id BIGINT,
+    -- Tham chiếu người thắng cuộc khi kết thúc phiên (Lấy 'id' từ user_users bên user-service - UUID)
+    winner_id VARCHAR(36),
 
     -- Thời gian tạo và cập nhật phòng đấu giá
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -69,8 +69,8 @@ CREATE TABLE IF NOT EXISTS auction_bids (
     -- Thuộc phòng đấu giá nào (Khóa ngoại nối với auction_rooms)
     auction_id BIGINT NOT NULL,
 
-    -- Tham chiếu người vừa bấm nút trả giá (Lấy 'id' từ user_users bên user-service)
-    bidder_id BIGINT NOT NULL,
+    -- Tham chiếu người vừa bấm nút trả giá (Lấy 'id' từ user_users bên user-service - UUID)
+    bidder_id VARCHAR(36) NOT NULL,
 
     -- Số tiền mà người này đưa ra trả giá
     bid_amount DECIMAL(12, 2) NOT NULL,
@@ -101,8 +101,8 @@ CREATE TABLE IF NOT EXISTS auction_settlements (
     -- Thuộc phòng đấu giá nào (Nối 1-1 với auction_rooms)
     auction_id BIGINT NOT NULL UNIQUE,
 
-    -- Tham chiếu người thắng cuộc (Lấy 'id' từ user_users bên user-service)
-    winner_id BIGINT NOT NULL,
+    -- Tham chiếu người thắng cuộc (Lấy 'id' từ user_users bên user-service - UUID)
+    winner_id VARCHAR(36) NOT NULL,
 
     -- Số tiền trúng đấu giá cuối cùng
     winning_bid_amount DECIMAL(12, 2) NOT NULL,

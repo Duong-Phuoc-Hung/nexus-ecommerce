@@ -18,16 +18,23 @@ export class ProductController {
         sellerId: p.sellerId,
         categoryId: p.categoryId,
         title: p.title,
+        description: p.description,
         price: p.price,
         stockQuantity: p.stockQuantity,
         status: p.status,
+        images: p.images,
+        primaryImage: p.primaryImage,
+        condition: p.condition,
+        slug: p.slug,
+        allowAuction: p.allowAuction,
+        attributes: p.attributes,
       })),
     });
   }
 
   public async getById(req: Request, res: Response): Promise<void> {
     try {
-      const productId = (req.params.id || 'prod_01hqz999xyz') as string;
+      const productId = req.params.id as string;
       const product = await this.getProductDetailUseCase.execute(productId);
       res.status(200).json({
         success: true,

@@ -64,8 +64,8 @@ model Product {
   // Khóa chính: Số tự tăng (1, 2, 3...)
   id           BigInt             @id @default(autoincrement())
 
-  // Tham chiếu người bán / chủ sở hữu sản phẩm (Lấy 'id' từ user_users bên user-service)
-  sellerId     BigInt             @map("seller_id")
+  // Tham chiếu người bán / chủ sở hữu sản phẩm (Lấy 'id' từ user_users bên user-service - UUID)
+  sellerId     String             @map("seller_id") @db.VarChar(36)
 
   // Thuộc danh mục nào (Khóa ngoại nối với catalog_categories)
   categoryId   BigInt             @map("category_id")

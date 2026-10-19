@@ -13,6 +13,8 @@ import { UserController } from './interfaces/http/controllers/UserController';
 import { createAuthRoutes, createUserRoutes } from './interfaces/http/routes/UserRoutes';
 import { authTokenStore } from './infrastructure/security/AuthTokenStore';
 import { passwordResetTokenStore } from './infrastructure/security/PasswordResetTokenStore';
+import swaggerUi from 'swagger-ui-express';
+import { swaggerDocument } from './interfaces/http/swagger';
 
 export function createApplication(): Application {
   const app = express();
@@ -63,6 +65,7 @@ export function createApplication(): Application {
 
   app.use('/api/v1/auth', createAuthRoutes(userController));
   app.use('/api/v1/users', createUserRoutes(userController));
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
   return app;
 }
