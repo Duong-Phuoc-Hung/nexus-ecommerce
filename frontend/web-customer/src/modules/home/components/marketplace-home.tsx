@@ -1,4 +1,5 @@
 'use client';
+import { auctionApi, currentPrice, type Auction } from '@/modules/auction/api/auction.api';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
@@ -23,7 +24,26 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
-  const products = feed.products;
+  const [auctionRows, setAuctionRows] = useState<Auction[] | null>(null);
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      try {
+        const rows = await auctionApi.list();
+        if (active) setAuctionRows(rows);
+      } catch {
+        /* Keep the initial read-only feed if local storage is unavailable. */
+      }
+    };
+    void load();
+    const off = auctionApi.subscribe(() => void load());
+    const timer = setInterval(() => void load(), 3000);
+    return () => {
+      active = false;
+      off();
+      clearInterval(timer);
+    };
+  }, []);
   const router = useRouter();
   const [headerCategories, setHeaderCategories] = useState(feed.categories.slice(0, 0));
   useEffect(() => {
@@ -47,6 +67,20 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
     return () => controller.abort();
   }, [feed.categories]);
   const [elapsed, setElapsed] = useState(0);
+  const products = feed.products.flatMap((product) => {
+    if (product.mode !== 'auction' || !auctionRows) return [product];
+    const a = auctionRows.find((row) => row.id === product.id);
+    if (!a || a.status === 'ENDED' || a.status === 'CANCELLED') return [];
+    return [
+      {
+        ...product,
+        price: currentPrice(a),
+        bids: a.bids.length,
+        status: a.status === 'ACTIVE' ? ('active' as const) : ('scheduled' as const),
+        remainingSeconds: Math.max(0, Math.ceil((a.endAt - Date.now()) / 1000)) + elapsed,
+      },
+    ];
+  });
   const [draftSearch, setDraftSearch] = useState('');
   const [auctionTab, setAuctionTab] = useState('all');
   const [showAllAuctions, setShowAllAuctions] = useState(false);
@@ -88,7 +122,7 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
       router.push('/products/' + encodeURIComponent(product.id));
       return;
     }
-    setPrompt({ product });
+    router.push('/auctions/' + encodeURIComponent(product.id));
   }
   function scrollToCatalog() {
     document.getElementById('discover')?.scrollIntoView({

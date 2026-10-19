@@ -2,16 +2,10 @@
 
 import { createContext, useContext, useMemo } from 'react';
 import { createCatalogApi } from '../../../../../shared/catalog';
-import { catalogApi } from '../api/catalog.api';
+import { requestApi } from '../../../services/api-client';
 
-const Context = createContext({ api: catalogApi, productsPath: '/products' });
-// The preview owns a read-only adapter, regardless of the app's API environment.
-const preview = {
-  api: createCatalogApi(async () => {
-    throw new Error('Preview cannot send HTTP requests.');
-  }, 'mock'),
-  productsPath: '/admin/products',
-};
+const adminCatalogApi = createCatalogApi(requestApi, 'api');
+const Context = createContext({ api: adminCatalogApi, productsPath: '/products' });
 
 export function AdminCatalogProvider({
   children,
@@ -20,7 +14,7 @@ export function AdminCatalogProvider({
   children: React.ReactNode;
   productsPath?: string;
 }) {
-  const value = useMemo(() => ({ api: catalogApi, productsPath }), [productsPath]);
+  const value = useMemo(() => ({ api: adminCatalogApi, productsPath }), [productsPath]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 
