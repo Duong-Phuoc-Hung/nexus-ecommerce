@@ -151,7 +151,7 @@ build_packages:
     - echo "Restoring workspace package dependencies..."
     - pnpm install --frozen-lockfile --prefer-offline
     - echo "Building workspace packages (TypeScript compilation)..."
-    - pnpm -r --if-present build
+    - pnpm build
     - echo "Build completed successfully."
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
