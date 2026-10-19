@@ -4,8 +4,19 @@ import { InMemoryNotificationRepository } from './infrastructure/repositories/In
 import { GetNotificationDetailUseCase } from './application/use-cases/GetNotificationDetailUseCase';
 import { NotificationController } from './interfaces/http/controllers/NotificationController';
 import { createNotificationRoutes } from './interfaces/http/routes/NotificationRoutes';
+import { InMemoryEventLogRepository } from './infrastructure/repositories/InMemoryEventLogRepository';
+import { IEventLogRepository } from './domain/repositories/IEventLogRepository';
+import { EventLogService } from './application/services/EventLogService';
+import { EventLogController } from './interfaces/http/controllers/EventLogController';
+import { createEventLogRoutes } from './interfaces/http/routes/EventLogRoutes';
+import { GlobalEventAuditSubscriber } from './application/listeners/GlobalEventAuditSubscriber';
 
-export function createApplication(): Application {
+export interface AppDependencies {
+  eventLogRepository?: IEventLogRepository;
+  eventPublisher?: any;
+}
+
+export function createApplication(deps?: AppDependencies): Application {
   const app = express();
 
   app.use(cors());
@@ -21,11 +32,23 @@ export function createApplication(): Application {
     });
   });
 
+  // Notifications
   const notificationRepository = new InMemoryNotificationRepository();
   const getNotificationDetailUseCase = new GetNotificationDetailUseCase(notificationRepository);
   const notificationController = new NotificationController(getNotificationDetailUseCase);
-
   app.use('/api/v1/notifications', createNotificationRoutes(notificationController));
+
+  // Event Logs (Audit according to SRS 2.7 & 3.2.1)
+  const eventLogRepository = deps?.eventLogRepository || new InMemoryEventLogRepository();
+  const eventLogService = new EventLogService(eventLogRepository);
+  const eventLogController = new EventLogController(eventLogService);
+  app.use('/api/v1/event-logs', createEventLogRoutes(eventLogController));
+
+  // Auto-subscribe to EventPublisher if provided
+  if (deps?.eventPublisher) {
+    const subscriber = new GlobalEventAuditSubscriber(eventLogService);
+    subscriber.register(deps.eventPublisher);
+  }
 
   return app;
 }

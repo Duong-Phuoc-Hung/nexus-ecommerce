@@ -73,12 +73,36 @@ try {
 let totalSuccess = 0;
 let totalFailed = 0;
 
+function waitForPostgres(container, user, db, maxRetries = 25) {
+  process.stdout.write(`   ⏳ Chờ container [${container}] sẵn sàng tiếp nhận kết nối... `);
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      execSync(`docker exec ${container} pg_isready -U ${user} -d ${db}`, { stdio: 'ignore' });
+      process.stdout.write('Sẵn sàng! ✅\n');
+      return true;
+    } catch {
+      const end = Date.now() + 1000;
+      while (Date.now() < end) {}
+    }
+  }
+  process.stdout.write('Timeout! ❌\n');
+  return false;
+}
+
 for (const svc of SERVICES_CONFIG) {
   console.log(`📦 Đang xử lý: [${svc.name}] -> Container: [${svc.container}]`);
 
   // Kiểm tra thư mục prisma có tồn tại không
   if (!fs.existsSync(svc.dir)) {
     console.log(`   ⚠️ Thư mục ${svc.dir} không tồn tại. Bỏ qua.\n`);
+    continue;
+  }
+
+  // Chờ PostgreSQL container hoàn tất khởi động và sẵn sàng nhận kết nối
+  const isReady = waitForPostgres(svc.container, svc.user, svc.db);
+  if (!isReady) {
+    console.error(`   ❌ [ERROR] Container ${svc.container} chưa sẵn sàng sau 25s. Bỏ qua.\n`);
+    totalFailed++;
     continue;
   }
 

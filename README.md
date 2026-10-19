@@ -108,6 +108,7 @@ pnpm test:events
 ## 5. Quyết Định Kiến Trúc & Tiêu Chuẩn (ADRs & Standards)
 
 - [**ADR-001: Lựa chọn cơ chế giao tiếp Sự kiện (Event-Driven Architecture) cho Phase 0**](docs/adr/ADR-001-event-mechanism-phase-0.md)
+- [**ADR-002: Kiến trúc Lưu trữ và Kiểm toán Sự kiện qua event_log (SCRUM-10)**](docs/adr/ADR-002-event-log-storage-and-audit.md)
 - [**Báo cáo so sánh & đề xuất cơ chế Event cho Phase 0**](docs/architecture/event-mechanism-comparison-phase-0.md)
 - [**Danh mục đặc tả sự kiện SRS 2.8 Event Catalog**](docs/standards/event-catalog-srs-2.8.md)
 - [**Quy chuẩn tiền tố và thời gian sống Redis (SCRUM-54)**](docs/standards/redis-key-conventions.md)
