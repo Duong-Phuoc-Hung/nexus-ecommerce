@@ -133,14 +133,16 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
         } else {
           await authApi.login(values.email.trim(), values.password, remember);
         }
-        const profile = await authApi.getProfile().catch(() => null);
-        if (profile?.role === 'ADMIN' && next === '/') {
-          window.location.assign('/admin');
-        } else if (profile?.role === 'SELLER' && next === '/') {
-          window.location.assign('/seller');
-        } else {
-          window.location.assign(next);
+        const profile = await authApi.getProfile();
+        if (profile.status !== 'ACTIVE') {
+          throw new ApiError('Tài khoản chưa ở trạng thái hoạt động.', 423);
         }
+        let destination = next;
+        if (profile.role === 'ADMIN' && next === '/') destination = '/admin';
+        else if (profile.role === 'BUYER' && next === '/') destination = '/';
+        else if (profile.role === 'SELLER' && next === '/') destination = '/seller';
+        else if (profile.role === 'BUYER' && next.startsWith('/admin')) destination = '/';
+        window.location.assign(destination);
       }
     } catch (error) {
       const e = error instanceof ApiError ? error : null;
