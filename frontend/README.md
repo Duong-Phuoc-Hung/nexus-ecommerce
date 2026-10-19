@@ -2,7 +2,7 @@
 
 > **Tài liệu tham chiếu:** SRS Project Nexus v1.0 (Section 1.2, 2.3, 2.4, 3.1 - 3.6)  
 > **Nền tảng kỹ thuật:** React 18+, Next.js (App/Pages router), TypeScript, Tailwind CSS, TanStack Query (React Query), Socket.IO Client, Stripe Elements.  
-> **Cổng tiếp nhận duy nhất:** Mọi yêu cầu từ Frontend đều gửi đến **API Gateway** (`http://localhost:8000/api/v1`).
+> **Cổng tiếp nhận duy nhất:** Mọi yêu cầu từ Frontend đều gửi đến **API Gateway** (`http://localhost:4000/api/v1`).
 
 ---
 
@@ -13,6 +13,7 @@ Theo SRS (Section 1.2 & 2.3), các tác nhân người dùng (Actors) được p
 1. **`web-customer/`**:
    - Dành cho **Người mua (Buyer)**: Tìm kiếm, lọc sản phẩm, giỏ hàng, đặt hàng thanh toán thẻ Stripe, tham gia phòng đấu giá thời gian thực, đánh giá uy tín người bán.
    - Dành cho **Người bán (Seller)**: Quản lý danh sách sản phẩm đăng bán, theo dõi số lượng tồn kho theo SKU, tạo phòng đấu giá mới, theo dõi người tham gia.
+   - Bản demo **Support Staff** cũng được phục vụ tại route `/support` để chạy chung cổng `3000` khi xem giao diện.
 2. **`web-admin/`**:
    - Dành cho **Quản trị viên (Admin)**: Phân quyền tài khoản theo 65 mã Privileges (SRS 2.7), kiểm duyệt sản phẩm, hủy khẩn cấp phiên đấu giá vi phạm, chỉnh sửa cấu hình hệ thống (SRS 2.6), tra cứu nhật ký sự kiện (`event_logs`), theo dõi sức khỏe kết nối RabbitMQ.
    - Dành cho **Nhân viên hỗ trợ (Support Staff)**: Xử lý tranh chấp, khiếu nại hoàn tiền đơn hàng của Buyer/Seller.
@@ -185,7 +186,7 @@ Copy-Item frontend/web-admin/.env.example frontend/web-admin/.env.local
 | Customer    | `NEXT_PUBLIC_API_BASE_URL` | `NEXT_PUBLIC_API_TIMEOUT_MS` |
 | Admin       | `NEXT_PUBLIC_API_BASE_URL` | `NEXT_PUBLIC_API_TIMEOUT_MS` |
 
-The examples point to the local API Gateway at `http://localhost:8000/api/v1`; replace it with the shared environment's gateway URL as appropriate. Include `/api/v1` in the base URL and omit that prefix from feature endpoint paths. Both clients default to a 10,000 ms timeout and normalize HTTP, network, and timeout failures into an `ApiError`. Configure a valid base URL before importing the API client. Restart the dev server after changing environment variables.
+The examples point to the local API Gateway at `http://localhost:4000/api/v1`; replace it with the shared environment's gateway URL as appropriate. Include `/api/v1` in the base URL and omit that prefix from feature endpoint paths. Both clients default to a 10,000 ms timeout and normalize HTTP, network, and timeout failures into an `ApiError`. Configure a valid base URL before importing the API client. Restart the dev server after changing environment variables.
 
 Only public configuration belongs in frontend env variables. Never store passwords, private keys, or access tokens in `NEXT_PUBLIC_*` or `VITE_*` values because bundlers expose them to browser code. Keep local values in `.env.local`; commit `.env.example` only.
 ---
@@ -217,7 +218,7 @@ pnpm --filter @nexus/web-customer start
 
 ### Cấu hình API tùy chọn
 
-Sao chép `frontend/web-customer/.env.example` thành `.env.local` nếu cần đổi URL API. `NEXT_PUBLIC_API_BASE_URL` mặc định là `http://localhost:8000/api/v1` và được dùng bởi Axios client dùng chung tại `src/shared/api/client.ts`. Không commit secret hoặc file `.env.local`.
+Sao chép `frontend/web-customer/.env.example` thành `.env.local` nếu cần đổi URL API. `NEXT_PUBLIC_API_BASE_URL` mặc định là `http://localhost:4000/api/v1` và được dùng bởi Axios client dùng chung tại `src/shared/api/client.ts`. Không commit secret hoặc file `.env.local`.
 
 ### Cấu trúc module
 
@@ -225,24 +226,30 @@ Code UI theo bounded context đặt trong `frontend/web-customer/src/modules/<mo
 
 ---
 
-## 5. Khởi Chạy Frontend `web-admin`
+## 5. Chạy chung Seller và Support trên cổng `3000`
 
-`web-admin` là ứng dụng Next.js + TypeScript riêng cho quản trị. Cài dependencies từ thư mục gốc repo nếu chưa cài:
+Các trang Seller và Support demo được đặt trong `web-customer`, nên chỉ cần chạy app này để xem cả hai. Từ thư mục gốc repo:
 
 ```bash
 pnpm install
-pnpm --filter @nexus/web-admin dev
+pnpm dev
 ```
 
-Mở `http://localhost:3001`. Trang khởi đầu không gọi backend nên có thể chạy độc lập. Cổng `3001` cho phép chạy admin cùng lúc với customer trên cổng `3000`.
+Mở các route trên cùng origin `http://localhost:3000`:
 
-Build và chạy production:
+- `/seller`: workspace người bán
+- `/support`: tổng quan ca hỗ trợ
+- `/support/orders`: tra cứu đơn hàng; mở chi tiết từ từng dòng
+- `/support/users`: tra cứu người dùng
+- `/support/shipments`: tra cứu vận đơn
+
+Seller và Support dùng dữ liệu demo, không cần tài khoản hoặc API nghiệp vụ để xem giao diện.
+
+Build và chạy production app kết hợp:
 
 ```bash
-pnpm --filter @nexus/web-admin build
-pnpm --filter @nexus/web-admin start
+pnpm --filter @nexus/web-customer build
+pnpm --filter @nexus/web-customer start
 ```
 
-Nếu cần cấu hình API, sao chép `frontend/web-admin/.env.example` thành `.env.local`. Axios client dùng chung nằm tại `frontend/web-admin/src/shared/api/client.ts`; không commit secret hoặc file `.env.local`.
-
-Các khu vực quản trị đang được chuẩn bị trong `src/pages` (dashboard, users, catalog, auctions, orders, fulfillment, reputation và system). Tiếp tục đặt UI theo từng khu vực; phần khởi động hiện tại không yêu cầu backend.
+App `web-admin` vẫn là workspace riêng tại cổng `3001`; không cần khởi động nó để xem Seller và Support trong bản demo chung.
