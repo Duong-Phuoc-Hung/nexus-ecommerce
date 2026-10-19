@@ -1,5 +1,16 @@
+import { Suspense } from 'react';
 import { AuthPage } from '@/modules/user/auth/AuthPage';
-
-export default function RegisterPage() {
-  return <AuthPage initialMode="register" />;
+export const metadata = { title: 'Đăng ký | Nexus', referrer: 'no-referrer' as const };
+export default function Page() {
+  return (
+    <Suspense
+      fallback={
+        <p className="p-8" role="status">
+          Đang tải biểu mẫu…
+        </p>
+      }
+    >
+      <AuthPage initialMode="register" />
+    </Suspense>
+  );
 }

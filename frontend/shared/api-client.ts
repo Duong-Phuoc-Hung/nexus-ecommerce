@@ -45,7 +45,7 @@ export class ApiClient {
   constructor(
     private readonly baseUrl = process.env.NEXT_PUBLIC_API_URL ||
       process.env.NEXT_PUBLIC_API_BASE_URL ||
-      'http://localhost:4000/api/v1',
+      'http://localhost:8000/api/v1',
     private readonly tokenStorage: TokenStorage = browserTokenStorage,
     private readonly fetcher: typeof fetch = fetch,
   ) {}

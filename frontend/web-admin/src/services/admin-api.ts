@@ -1,5 +1,6 @@
 import { ApiClient } from '../../../shared/api-client';
 import type { TokenStorage } from '../../../shared/api-client';
+import { adminConfig } from '../configs/admin.config';
 
 const adminTokenStorage: TokenStorage = {
   get: () =>
@@ -9,11 +10,14 @@ const adminTokenStorage: TokenStorage = {
       window.sessionStorage.setItem('nexus.admin.accessToken', token);
   },
   clear: () => {
-    if (typeof window !== 'undefined') window.sessionStorage.removeItem('nexus.admin.accessToken');
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.removeItem('nexus.admin.accessToken');
+      window.sessionStorage.removeItem('nexus.admin.user');
+    }
   },
 };
 
-const adminClient = new ApiClient('http://localhost:4000/api/v1', adminTokenStorage);
+const adminClient = new ApiClient(adminConfig.api.baseUrl, adminTokenStorage);
 
 interface ApiEnvelope<T> {
   success: boolean;
@@ -45,7 +49,20 @@ export const adminApi = {
       body: JSON.stringify({ email, password }),
     });
     adminClient.setToken(response.data.token);
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem('nexus.admin.user', JSON.stringify(response.data.user));
+    }
     return response.data;
+  },
+
+  getCurrentUser(): AdminLoginResult['user'] | null {
+    if (typeof window === 'undefined') return null;
+    try {
+      const stored = window.sessionStorage.getItem('nexus.admin.user');
+      return stored ? (JSON.parse(stored) as AdminLoginResult['user']) : null;
+    } catch {
+      return null;
+    }
   },
 
   async logout(): Promise<void> {

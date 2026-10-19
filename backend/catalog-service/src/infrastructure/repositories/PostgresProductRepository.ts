@@ -1,5 +1,9 @@
 import { Pool } from 'pg';
-import { IProductRepository } from '../../domain/repositories/IProductRepository';
+import {
+  IProductRepository,
+  ProductSearchCriteria,
+  ProductSearchPage,
+} from '../../domain/repositories/IProductRepository';
 import { Product, ProductStatus } from '../../domain/entities/Product';
 
 /**
@@ -103,6 +107,79 @@ export class PostgresProductRepository implements IProductRepository {
     return result.rows.map((row: any) =>
       this.mapRowToProduct(row, imagesMap[row.id] || [], attributesMap[row.id] || {}),
     );
+  }
+
+  public async search(criteria: ProductSearchCriteria): Promise<ProductSearchPage> {
+    const conditions: string[] = ['p.deleted_at IS NULL', "p.status = 'AVAILABLE'"];
+    const params: any[] = [];
+
+    params.push(`%${criteria.q.trim().toLowerCase()}%`);
+    conditions.push(
+      `(LOWER(p.title) LIKE $${params.length} OR LOWER(COALESCE(p.description, '')) LIKE $${params.length})`,
+    );
+
+    if (criteria.categoryId) {
+      const isNumeric = /^\d+$/.test(criteria.categoryId);
+      if (isNumeric) {
+        params.push(parseInt(criteria.categoryId, 10));
+        conditions.push(`p.category_id = $${params.length}`);
+      } else {
+        params.push(criteria.categoryId);
+        conditions.push(
+          `EXISTS (SELECT 1 FROM catalog_categories c WHERE c.id = p.category_id AND c.slug = $${params.length})`,
+        );
+      }
+    }
+
+    if (criteria.minPrice !== undefined) {
+      params.push(criteria.minPrice);
+      conditions.push(`p.base_price >= $${params.length}`);
+    }
+
+    if (criteria.maxPrice !== undefined) {
+      params.push(criteria.maxPrice);
+      conditions.push(`p.base_price <= $${params.length}`);
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    const countResult = await this.pool.query(
+      `SELECT COUNT(*)::int as total FROM catalog_products p WHERE ${whereClause}`,
+      params,
+    );
+    const total = countResult.rows[0]?.total || 0;
+
+    params.push(criteria.limit);
+    const limitParam = `$${params.length}`;
+    params.push(criteria.offset);
+    const offsetParam = `$${params.length}`;
+
+    const query = `
+      SELECT 
+        p.id, p.seller_id, p.category_id, p.title, p.slug, p.description, 
+        p.status, p.condition, p.base_price, p.allow_auction, p.created_at, p.updated_at
+      FROM catalog_products p
+      WHERE ${whereClause}
+      ORDER BY p.id ASC
+      LIMIT ${limitParam} OFFSET ${offsetParam};
+    `;
+
+    const result = await this.pool.query(query, params);
+    if (result.rows.length === 0) {
+      return { products: [], total };
+    }
+
+    const productIds = result.rows.map((r: any) => Number(r.id));
+    const [imagesMap, attributesMap] = await Promise.all([
+      this.getImagesForProductIds(productIds),
+      this.getAttributesForProductIds(productIds),
+    ]);
+
+    const products = result.rows.map((row: any) =>
+      this.mapRowToProduct(row, imagesMap[row.id] || [], attributesMap[row.id] || {}),
+    );
+
+    return { products, total };
   }
 
   public async save(product: Product): Promise<void> {

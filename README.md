@@ -99,6 +99,16 @@ pnpm test
 # Hoặc chỉ chạy kiểm tra ranh giới kiến trúc liên Bounded Context
 pnpm test:arch
 
-# Hoặc chỉ chạy kiểm tra hạ tầng, Docker & K8s manifests
-pnpm test:infra
+# Chạy kiểm thử sự kiện và hợp đồng SRS 2.8
+pnpm test:events
 ```
+
+---
+
+## 5. Quyết Định Kiến Trúc & Tiêu Chuẩn (ADRs & Standards)
+
+- [**ADR-001: Lựa chọn cơ chế giao tiếp Sự kiện (Event-Driven Architecture) cho Phase 0**](docs/adr/ADR-001-event-mechanism-phase-0.md)
+- [**Báo cáo so sánh & đề xuất cơ chế Event cho Phase 0**](docs/architecture/event-mechanism-comparison-phase-0.md)
+- [**Danh mục đặc tả sự kiện SRS 2.8 Event Catalog**](docs/standards/event-catalog-srs-2.8.md)
+- [**Quy chuẩn tiền tố và thời gian sống Redis (SCRUM-54)**](docs/standards/redis-key-conventions.md)
+- [**Hướng dẫn Vận hành & DevOps Toàn diện**](docs/DEVOPS_GUIDE.md)

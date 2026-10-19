@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 const workspaces = [
   {
     number: '01',
@@ -82,6 +84,15 @@ export default function AdminHomePage() {
               </article>
             ))}
           </div>
+
+          <Link className="admin-support-entry" href="/support">
+            <span className="support-entry-mark">◎</span>
+            <span>
+              <strong>Mở Support Staff workspace</strong>
+              <small>Tra cứu yêu cầu, đơn hàng, người dùng và vận đơn</small>
+            </span>
+            <b>→</b>
+          </Link>
 
           <footer className="page-footer">
             Project Nexus <span>·</span> Admin portal foundation

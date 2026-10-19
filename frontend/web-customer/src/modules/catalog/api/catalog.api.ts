@@ -1,5 +1,4 @@
-import { apiClient } from '../../../services/api-client';
-
-export function listProducts(params?: Record<string, string | number | boolean>) {
-  return apiClient.get('/products', { params });
-}
+import { createCatalogApi } from '../../../../../shared/catalog';
+import { appConfig } from '../../../configs/app.config';
+import { requestApi } from '../../../services/api-client';
+export const catalogApi = createCatalogApi(requestApi, appConfig.catalogSource);
