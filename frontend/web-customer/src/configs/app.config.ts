@@ -6,7 +6,7 @@ const apiBaseUrl =
 const timeoutValue = process.env.NEXT_PUBLIC_API_TIMEOUT_MS?.trim();
 const apiTimeoutMs = timeoutValue ? Number(timeoutValue) : 10_000;
 
-const source = process.env.NEXT_PUBLIC_CATALOG_SOURCE || 'mock';
+const source = process.env.NEXT_PUBLIC_CATALOG_SOURCE || 'api';
 if (!['api', 'mock'].includes(source))
   throw new Error('NEXT_PUBLIC_CATALOG_SOURCE must be api or mock.');
 
