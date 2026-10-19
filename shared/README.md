@@ -184,3 +184,93 @@ export enum Privilege {
   SYSTEM_HEALTH_VIEW = 'SYSTEM.HEALTH.VIEW',
 }
 ```
+
+---
+
+## 4. Hướng Dẫn Sử Dụng Cơ Chế Sự Kiện (Event Mechanism Guide - SCRUM-46)
+
+### 4.1. Cấu Trúc Lớp Cơ Sở & Cổng Phát Sự Kiện
+
+Toàn bộ sự kiện trong hệ thống kế thừa từ `DomainEvent<T>` (bất biến, tự sinh `eventId` UUID v4 và `occurredAt` ISO-8601).
+Tầng Application chỉ tương tác qua cổng `IEventPublisher` (Ports & Adapters pattern).
+
+### 4.2. Cách Thêm Một Event Contract Mới
+
+1. Tạo file hoặc mở file tương ứng trong `shared/contracts/src/events/` (VD: `auction.events.ts`).
+2. Khai báo interface Payload:
+   ```typescript
+   export interface MyNewEventPayload {
+     itemId: string;
+     amount: number;
+   }
+   ```
+3. Tạo class kế thừa `DomainEvent<MyNewEventPayload>`:
+   ```typescript
+   export class MyNewDomainEvent extends DomainEvent<MyNewEventPayload> {
+     public static readonly EVENT_TYPE = 'domain.entity.action';
+
+     constructor(payload: MyNewEventPayload) {
+       super({
+         type: MyNewDomainEvent.EVENT_TYPE,
+         sourceService: 'my-service',
+         payload,
+       });
+     }
+   }
+   ```
+4. Xuất class trong `shared/contracts/src/events/index.ts`.
+
+### 4.3. Cách Phát Tán Sự Kiện (Publish Event)
+
+```typescript
+import { IEventPublisher, UserRegisteredDomainEvent } from '@nexus/contracts';
+
+export class RegisterUserUseCase {
+  constructor(private readonly eventPublisher: IEventPublisher) {}
+
+  async execute(input) {
+    // Logic nghiệp vụ...
+    const event = new UserRegisteredDomainEvent({
+      userId: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      role: user.role,
+      registeredAt: new Date().toISOString(),
+    });
+
+    await this.eventPublisher.publish(event);
+  }
+}
+```
+
+### 4.4. Cách Lắng Nghe Sự Kiện (Subscribe / Handle Event)
+
+```typescript
+import { IEventPublisher } from '@nexus/contracts';
+
+// Trong module nhận (ví dụ: Notification Service)
+eventPublisher.subscribe('user.registered', async (event) => {
+  const { email, fullName } = event.payload;
+  console.log(`Gửi email kích hoạt tới: ${email}`);
+});
+
+// Lắng nghe toàn bộ sự kiện (Wildcard)
+eventPublisher.subscribe('*', async (event) => {
+  console.log(`[Audit Log] ${event.type} phát sinh từ ${event.sourceService}`);
+});
+```
+
+### 4.5. Mức Độ Đảm Bảo Độ Bền (Durability) & Retry Trong Phase 0
+
+- **Trong môi trường Unit Test & Local Fast CI:** Sử dụng `InMemoryEventPublisher`. Dữ liệu lưu trong RAM tiến trình, thời gian phản hồi tức thì (<1ms). **Không có tính bền vững khi crash**; chỉ phù hợp cho kiểm thử tự động độc lập.
+- **Trong môi trường Docker Compose phân tán:** Sử dụng `RabbitMqEventPublisher` kết nối tới container `nexus-rabbitmq:5672` (Topic Exchange `nexus.events`), tin nhắn cấu hình `deliveryMode = 2` (Persistent) và sẵn sàng tích hợp Dead Letter Exchange (`nexus.events.dlx`) ở Phase 1.
+
+### 4.6. Lệnh Chạy Kiểm Thử Sự Kiện
+
+```bash
+# Kiểm tra bộ test hợp đồng sự kiện & Publisher
+pnpm test:events
+
+# Kiểm tra luồng liên module mẫu end-to-end (SCRUM-45)
+node --test scripts/test-inter-module-event-flow.test.js
+```
