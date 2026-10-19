@@ -1,5 +1,7 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
+import swaggerUi from 'swagger-ui-express';
+import { userSpec, catalogSpec, auctionSpec, commerceSpec } from './swagger-specs';
 
 export function createApplication(): Application {
   const app = express();
@@ -64,51 +66,93 @@ export function createApplication(): Application {
     });
   });
 
-  const proxyToUserService = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const headers = new Headers();
-      for (const [name, value] of Object.entries(req.headers)) {
-        if (
-          [
-            'host',
-            'content-length',
-            'connection',
-            'transfer-encoding',
-            'content-encoding',
-          ].includes(name.toLowerCase())
-        )
-          continue;
-        if (Array.isArray(value)) {
-          for (const item of value) headers.append(name, item);
-        } else if (value !== undefined) {
-          headers.set(name, value);
+  // Endpoints cung cấp spec cho từng Service
+  app.get('/docs-json/user', (_req: Request, res: Response) => res.json(userSpec));
+  app.get('/docs-json/catalog', (_req: Request, res: Response) => res.json(catalogSpec));
+  app.get('/docs-json/auction', (_req: Request, res: Response) => res.json(auctionSpec));
+  app.get('/docs-json/commerce', (_req: Request, res: Response) => res.json(commerceSpec));
+
+  const swaggerUrls = [
+    { name: '1. User & Auth Service', url: '/docs-json/user' },
+    { name: '2. Catalog Service (Sản phẩm)', url: '/docs-json/catalog' },
+    { name: '3. Auction Service (Đấu giá)', url: '/docs-json/auction' },
+    { name: '4. Commerce Service (Đơn hàng)', url: '/docs-json/commerce' },
+  ];
+
+  // Swagger UI tổng với Dropdown chọn từng Service
+  app.use(
+    '/api-docs',
+    swaggerUi.serve,
+    swaggerUi.setup(undefined, {
+      explorer: true,
+      swaggerUrls: swaggerUrls,
+      customCss: `
+        .swagger-ui .topbar { display: block !important; background-color: #1b1b1b; padding: 10px 0; }
+        .swagger-ui .topbar .download-url-wrapper { display: flex !important; align-items: center; justify-content: flex-end; }
+        .swagger-ui .topbar .download-url-wrapper select { min-width: 320px; font-weight: bold; padding: 6px 12px; font-size: 14px; border-radius: 4px; }
+      `,
+    } as any),
+  );
+
+  const createProxy = (serviceName: string, targetBaseUrl: string) => {
+    return async (req: Request, res: Response): Promise<void> => {
+      try {
+        const headers = new Headers();
+        for (const [name, value] of Object.entries(req.headers)) {
+          if (
+            [
+              'host',
+              'content-length',
+              'connection',
+              'transfer-encoding',
+              'content-encoding',
+            ].includes(name.toLowerCase())
+          )
+            continue;
+          if (Array.isArray(value)) {
+            for (const item of value) headers.append(name, item);
+          } else if (value !== undefined) {
+            headers.set(name, value);
+          }
         }
-      }
 
-      const hasBody = req.method !== 'GET' && req.method !== 'HEAD';
-      if (hasBody && !headers.has('content-type')) {
-        headers.set('content-type', 'application/json');
-      }
-      const upstream = await fetch(`${SERVICE_ENDPOINTS.user}${req.originalUrl}`, {
-        method: req.method,
-        headers,
-        body: hasBody ? JSON.stringify(req.body ?? {}) : undefined,
-      });
+        const hasBody = req.method !== 'GET' && req.method !== 'HEAD';
+        if (hasBody && !headers.has('content-type')) {
+          headers.set('content-type', 'application/json');
+        }
+        const upstream = await fetch(`${targetBaseUrl}${req.originalUrl}`, {
+          method: req.method,
+          headers,
+          body: hasBody ? JSON.stringify(req.body ?? {}) : undefined,
+        });
 
-      res.status(upstream.status);
-      const contentType = upstream.headers.get('content-type');
-      if (contentType) res.setHeader('content-type', contentType);
-      res.send(await upstream.text());
-    } catch {
-      res.status(502).json({
-        success: false,
-        error: 'User service is currently unavailable.',
-      });
-    }
+        res.status(upstream.status);
+        const contentType = upstream.headers.get('content-type');
+        if (contentType) res.setHeader('content-type', contentType);
+        res.send(await upstream.text());
+      } catch (proxyErr) {
+        console.error(`[Gateway Proxy Error -> ${serviceName}]:`, proxyErr);
+        res.status(502).json({
+          success: false,
+          error: `${serviceName} is currently unavailable. Vui lòng kiểm tra cổng service đã được bật chưa.`,
+        });
+      }
+    };
   };
 
-  app.use('/api/v1/auth', proxyToUserService);
-  app.use('/api/v1/users', proxyToUserService);
+  app.use('/api/v1/auth', createProxy('User Service', SERVICE_ENDPOINTS.user));
+  app.use('/api/v1/users', createProxy('User Service', SERVICE_ENDPOINTS.user));
+  app.use('/api/v1/products', createProxy('Catalog Service', SERVICE_ENDPOINTS.catalog));
+  app.use('/api/v1/auctions', createProxy('Auction Service', SERVICE_ENDPOINTS.auction));
+  app.use('/api/v1/orders', createProxy('Commerce Service', SERVICE_ENDPOINTS.commerce));
+  app.use(
+    '/api/v1/fulfillments',
+    createProxy('Fulfillment Service', SERVICE_ENDPOINTS.fulfillment),
+  );
+  app.use(
+    '/api/v1/notifications',
+    createProxy('Notification Service', SERVICE_ENDPOINTS.notification),
+  );
 
   return app;
 }

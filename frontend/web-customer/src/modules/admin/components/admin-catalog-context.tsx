@@ -20,7 +20,7 @@ export function AdminCatalogProvider({
   children: React.ReactNode;
   productsPath?: string;
 }) {
-  const value = useMemo(() => ({ ...preview, productsPath }), [productsPath]);
+  const value = useMemo(() => ({ api: catalogApi, productsPath }), [productsPath]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 

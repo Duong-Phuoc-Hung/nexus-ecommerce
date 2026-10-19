@@ -8,6 +8,9 @@ export function createUserRoutes(controller: UserController): Router {
   router.get('/profile', requireAuth, requirePermission('PROFILE.VIEW'), (req, res) =>
     controller.getProfile(req, res),
   );
+  router.get('/', requireAuth, requirePermission('USER.VIEW'), (req, res) =>
+    controller.getProfile(req, res),
+  );
   router.get('/:id', requireAuth, requirePermission('USER.VIEW'), (req, res) =>
     controller.getProfile(req, res),
   );

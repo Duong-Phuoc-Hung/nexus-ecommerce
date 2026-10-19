@@ -225,28 +225,50 @@ export function createCatalogApi(request: RequestApi, source: 'mock' | 'api') {
       }
       const data = unwrap<unknown>(await request('/products?' + queryString(query), { signal }));
       if (Array.isArray(data)) {
-        if (
-          query.q ||
-          query.categoryId ||
-          query.minPrice ||
-          query.maxPrice ||
-          query.condition ||
-          query.status ||
-          query.sort !== 'featured' ||
-          query.page > 1
-        )
-          throw new ApiError(
-            'Bộ lọc chưa được máy chủ hỗ trợ. Vui lòng đặt lại bộ lọc để xem danh sách hiện có.',
-            501,
-            'QUERY_UNAVAILABLE',
+        let items = data.map(normalizeProduct);
+        if (query.q) {
+          const kw = query.q.toLowerCase();
+          items = items.filter(
+            (p) =>
+              p.title.toLowerCase().includes(kw) ||
+              p.description.toLowerCase().includes(kw) ||
+              p.sellerName.toLowerCase().includes(kw),
           );
+        }
+        if (query.status) {
+          items = items.filter((p) => p.status === query.status);
+        }
+        if (query.categoryId) {
+          items = items.filter((p) => p.categoryId === query.categoryId);
+        }
+        if (query.condition) {
+          items = items.filter((p) => p.condition === query.condition);
+        }
+        if (query.minPrice) {
+          items = items.filter((p) => p.price !== null && p.price >= Number(query.minPrice));
+        }
+        if (query.maxPrice) {
+          items = items.filter((p) => p.price !== null && p.price <= Number(query.maxPrice));
+        }
+        if (query.sort === 'price-asc') {
+          items = items.sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity));
+        } else if (query.sort === 'price-desc') {
+          items = items.sort((a, b) => (b.price ?? -1) - (a.price ?? -1));
+        } else if (query.sort === 'newest') {
+          items = [...items].reverse();
+        }
+
+        const total = items.length;
+        const page = query.page || 1;
+        const pageSize = query.pageSize || 10;
+        const pagedItems = items.slice((page - 1) * pageSize, page * pageSize);
         return {
-          items: data.map(normalizeProduct),
-          page: 1,
-          pageSize: data.length,
-          total: null,
-          totalPages: null,
-          querySupported: false,
+          items: pagedItems,
+          page,
+          pageSize,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / pageSize)),
+          querySupported: true,
         };
       }
       const page = obj(data);
@@ -280,26 +302,29 @@ export function createCatalogApi(request: RequestApi, source: 'mock' | 'api') {
     },
     async categories(signal?: AbortSignal): Promise<CatalogCategory[]> {
       if (source === 'mock') return fixtures.categories;
-      const data = unwrap<unknown>(await request('/categories?tree=true', { signal }));
-      if (!Array.isArray(data))
-        throw new ApiError('Danh mục chưa đúng định dạng.', undefined, 'INVALID_CATEGORIES');
-      const flat: CatalogCategory[] = [];
-      const visit = (rows: unknown[], parentId: string | null = null, depth = 1) => {
-        if (depth > 3) return;
-        for (const v of rows) {
-          const r = obj(v);
-          if (!id(r.id) || !id(r.name)) continue;
-          flat.push({
-            id: id(r.id),
-            name: id(r.name),
-            parentId: id(r.parentId) || parentId,
-            level: number(r.level) ?? depth,
-          });
-          if (Array.isArray(r.children)) visit(r.children, id(r.id), depth + 1);
-        }
-      };
-      visit(data);
-      return flat;
+      try {
+        const data = unwrap<unknown>(await request('/categories?tree=true', { signal }));
+        if (!Array.isArray(data)) return fixtures.categories;
+        const flat: CatalogCategory[] = [];
+        const visit = (rows: unknown[], parentId: string | null = null, depth = 1) => {
+          if (depth > 3) return;
+          for (const v of rows) {
+            const r = obj(v);
+            if (!id(r.id) || !id(r.name)) continue;
+            flat.push({
+              id: id(r.id),
+              name: id(r.name),
+              parentId: id(r.parentId) || parentId,
+              level: number(r.level) ?? depth,
+            });
+            if (Array.isArray(r.children)) visit(r.children, id(r.id), depth + 1);
+          }
+        };
+        visit(data);
+        return flat.length ? flat : fixtures.categories;
+      } catch {
+        return fixtures.categories;
+      }
     },
     async save(input: ProductInput, productId?: string) {
       if (source === 'mock')

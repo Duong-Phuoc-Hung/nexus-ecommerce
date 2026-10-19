@@ -134,7 +134,9 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
           await authApi.login(values.email.trim(), values.password, remember);
         }
         const profile = await authApi.getProfile().catch(() => null);
-        if (profile?.role === 'SELLER' && next === '/') {
+        if (profile?.role === 'ADMIN' && next === '/') {
+          window.location.assign('/admin');
+        } else if (profile?.role === 'SELLER' && next === '/') {
           window.location.assign('/seller');
         } else {
           window.location.assign(next);

@@ -52,8 +52,8 @@ CREATE TABLE IF NOT EXISTS catalog_products (
     -- Khóa chính: Số tự tăng (1, 2, 3...)
     id BIGSERIAL PRIMARY KEY,
 
-    -- Tham chiếu người bán / chủ sở hữu sản phẩm (Lấy 'id' từ user_users bên user-service)
-    seller_id BIGINT NOT NULL,
+    -- Tham chiếu người bán / chủ sở hữu sản phẩm (Lấy 'id' từ user_users bên user-service - UUID)
+    seller_id VARCHAR(36) NOT NULL,
 
     -- Thuộc danh mục nào (Khóa ngoại nối với catalog_categories)
     category_id BIGINT NOT NULL,

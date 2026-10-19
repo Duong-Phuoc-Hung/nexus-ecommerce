@@ -41,7 +41,7 @@ export class RegisterUserUseCase {
 
     const now = new Date();
     const user = new User({
-      id: `usr_${crypto.randomUUID()}`,
+      id: crypto.randomUUID(),
       email,
       fullName,
       passwordHash: hashPassword(password),

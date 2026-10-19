@@ -174,7 +174,7 @@ ON CONFLICT DO NOTHING;
 -- -----------------------------------------------------------------------------
 INSERT INTO user_users (id, email, phone, password_hash, full_name, identify_number, status, is_deleted)
 VALUES (
-    1,
+    '00000000-0000-0000-0000-000000000001',
     'admin@nexus.internal',
     '0900000001',
     '$2a$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW',
@@ -199,6 +199,3 @@ SELECT u.id, 'VIP', 100, 0, 0
 FROM user_users u
 WHERE u.email = 'admin@nexus.internal'
 ON CONFLICT (user_id) DO NOTHING;
-
--- Đặt lại Sequence tự tăng sau khi chèn ID chỉ định
-SELECT setval('user_users_id_seq', (SELECT COALESCE(MAX(id), 1) FROM user_users));

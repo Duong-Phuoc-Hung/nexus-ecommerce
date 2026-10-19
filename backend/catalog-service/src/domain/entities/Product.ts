@@ -16,6 +16,12 @@ export interface ProductProps {
   status: ProductStatus;
   createdAt: Date;
   updatedAt: Date;
+  images?: string[];
+  primaryImage?: string;
+  attributes?: Record<string, string>;
+  condition?: string;
+  slug?: string;
+  allowAuction?: boolean;
 }
 
 /**
@@ -34,6 +40,12 @@ export class Product {
   private _status: ProductStatus;
   private readonly _createdAt: Date;
   private _updatedAt: Date;
+  private _images: string[];
+  private _primaryImage?: string;
+  private _attributes: Record<string, string>;
+  private _condition?: string;
+  private _slug?: string;
+  private _allowAuction?: boolean;
 
   constructor(props: ProductProps) {
     this._id = props.id;
@@ -46,6 +58,13 @@ export class Product {
     this._status = props.status;
     this._createdAt = props.createdAt;
     this._updatedAt = props.updatedAt;
+    this._images = props.images || [];
+    this._primaryImage =
+      props.primaryImage || (this._images.length > 0 ? this._images[0] : undefined);
+    this._attributes = props.attributes || {};
+    this._condition = props.condition;
+    this._slug = props.slug;
+    this._allowAuction = props.allowAuction;
   }
 
   public get id(): string {
@@ -86,6 +105,30 @@ export class Product {
 
   public get updatedAt(): Date {
     return this._updatedAt;
+  }
+
+  public get images(): string[] {
+    return this._images;
+  }
+
+  public get primaryImage(): string | undefined {
+    return this._primaryImage;
+  }
+
+  public get attributes(): Record<string, string> {
+    return this._attributes;
+  }
+
+  public get condition(): string | undefined {
+    return this._condition;
+  }
+
+  public get slug(): string | undefined {
+    return this._slug;
+  }
+
+  public get allowAuction(): boolean | undefined {
+    return this._allowAuction;
   }
 
   public isAvailable(): boolean {
