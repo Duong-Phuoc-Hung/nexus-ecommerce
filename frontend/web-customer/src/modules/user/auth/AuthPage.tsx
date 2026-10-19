@@ -130,9 +130,15 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
             setNotice('Tài khoản đã được tạo. Vui lòng đăng nhập để tiếp tục.');
             return;
           }
-        } else await authApi.login(values.email.trim(), values.password, remember);
-        await authApi.getProfile();
-        window.location.assign(next);
+        } else {
+          await authApi.login(values.email.trim(), values.password, remember);
+        }
+        const profile = await authApi.getProfile().catch(() => null);
+        if (profile?.role === 'SELLER' && next === '/') {
+          window.location.assign('/seller');
+        } else {
+          window.location.assign(next);
+        }
       }
     } catch (error) {
       const e = error instanceof ApiError ? error : null;
