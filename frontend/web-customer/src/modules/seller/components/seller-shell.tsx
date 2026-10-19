@@ -65,7 +65,9 @@ export function SellerShell({ children }: { children: ReactNode }) {
         <nav aria-label="Seller navigation">
           {navigation.map((item) => {
             const active =
-              item.href === '/seller' ? pathname === item.href : pathname.startsWith(item.href);
+              item.href === '/seller'
+                ? pathname === item.href
+                : Boolean(pathname?.startsWith(item.href));
             return (
               <Link
                 className={`seller-nav-item ${active ? 'active' : ''}`}
@@ -94,7 +96,7 @@ export function SellerShell({ children }: { children: ReactNode }) {
               {navigation.find(
                 (item) =>
                   item.href === pathname ||
-                  (item.href !== '/seller' && pathname.startsWith(item.href)),
+                  (item.href !== '/seller' && Boolean(pathname?.startsWith(item.href))),
               )?.label ?? 'Tổng quan'}
             </span>
           </div>
