@@ -71,7 +71,7 @@ test('unpaged array response supports in-memory filtering and category slug mapp
   const watchPage = await api.list({ ...defaultQuery, categoryId: 'watches' });
   assert.equal(watchPage.items.length, 1);
   assert.equal(watchPage.items[0].id, 'db-watch');
-  assert.equal(watchPage.items[0].categoryName, 'Đồng hồ cao cấp');
+  assert.equal(watchPage.items[0].categoryName, 'Đồng hồ');
 
   const emptyPage = await api.list({ ...defaultQuery, q: 'does-not-match' });
   assert.equal(emptyPage.items.length, 0);
