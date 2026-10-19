@@ -55,16 +55,27 @@ test('malformed product and envelope are surfaced as errors instead of fake data
   const api = createCatalogApi(responder({ success: false, error: 'Failure' }), 'api');
   await assert.rejects(api.list(defaultQuery), { code: 'INVALID_RESPONSE' });
 });
-test('legacy unpaged list remains readable but cannot masquerade as filtered results', async () => {
-  const api = createCatalogApi(responder({ success: true, data: [product] }), 'api');
+test('unpaged array response supports in-memory filtering and category slug mapping', async () => {
+  const watchProduct = {
+    ...product,
+    id: 'db-watch',
+    categoryId: '16',
+    title: 'Đồng hồ cơ Rolex Submariner',
+  };
+  const api = createCatalogApi(responder({ success: true, data: [product, watchProduct] }), 'api');
   const page = await api.list(defaultQuery);
-  assert.equal(page.items.length, 1);
-  assert.equal(page.total, null);
-  assert.equal(page.querySupported, false);
-  await assert.rejects(api.list({ ...defaultQuery, q: 'does-not-match' }), {
-    code: 'QUERY_UNAVAILABLE',
-  });
-  await assert.rejects(api.list({ ...defaultQuery, page: 2 }), { code: 'QUERY_UNAVAILABLE' });
+  assert.equal(page.items.length, 2);
+  assert.equal(page.total, 2);
+  assert.equal(page.querySupported, true);
+
+  const watchPage = await api.list({ ...defaultQuery, categoryId: 'watches' });
+  assert.equal(watchPage.items.length, 1);
+  assert.equal(watchPage.items[0].id, 'db-watch');
+  assert.equal(watchPage.items[0].categoryName, 'Đồng hồ cao cấp');
+
+  const emptyPage = await api.list({ ...defaultQuery, q: 'does-not-match' });
+  assert.equal(emptyPage.items.length, 0);
+  assert.equal(emptyPage.total, 0);
 });
 test('HTTP list forwards query and abort signal and trusts server pagination', async () => {
   const controller = new AbortController();

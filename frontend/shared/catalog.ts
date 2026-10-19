@@ -64,6 +64,118 @@ function number(value: unknown): number | null {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
+export const CATEGORY_ID_NAME_MAP: Record<string, string> = {
+  '1': 'Thiết bị điện tử',
+  '2': 'Thời trang & Phụ kiện',
+  '3': 'Đồ gia dụng & Đời sống',
+  '10': 'Điện thoại & Tablet',
+  '11': 'Laptop & Máy tính',
+  '12': 'Thời trang Nam',
+  '13': 'Thời trang Nữ',
+  '14': 'Âm thanh & Tai nghe',
+  '15': 'Máy ảnh & Nhiếp ảnh',
+  '16': 'Đồng hồ cao cấp',
+  '17': 'Nhà thông minh & Đời sống',
+  '18': 'Đồ sưu tầm & Nghệ thuật',
+  '100': 'iPhone',
+  '101': 'Samsung Galaxy',
+  '102': 'MacBook',
+  '103': 'Laptop Gaming',
+  watches: 'Đồng hồ',
+  tech: 'Công nghệ',
+  audio: 'Âm thanh',
+  collectibles: 'Đồ sưu tầm',
+};
+
+export function matchCategory(
+  productCategoryId: string,
+  productCategoryName: string,
+  queryCategoryId: string,
+  productTitle = '',
+): boolean {
+  if (!queryCategoryId || queryCategoryId === 'all') return true;
+  if (productCategoryId === queryCategoryId) return true;
+
+  const q = queryCategoryId.toLowerCase().trim();
+  const catId = productCategoryId.toLowerCase().trim();
+  const catName = (productCategoryName || '').toLowerCase();
+  const title = (productTitle || '').toLowerCase();
+
+  // 1. Slug or alias mapping
+  if (q === 'watches' || q === '16' || q === 'dong-ho-cao-cap' || q === 'dong-ho') {
+    return (
+      ['16', 'watches', 'dong-ho-cao-cap', 'dong-ho'].includes(catId) ||
+      catName.includes('đồng hồ') ||
+      catName.includes('dong ho') ||
+      title.includes('đồng hồ') ||
+      title.includes('dong ho') ||
+      title.includes('rolex') ||
+      title.includes('omega')
+    );
+  }
+  if (q === 'audio' || q === '14' || q === 'am-thanh-tai-nghe' || q === 'am-thanh') {
+    return (
+      ['14', 'audio', 'am-thanh-tai-nghe', 'am-thanh'].includes(catId) ||
+      catName.includes('âm thanh') ||
+      catName.includes('am thanh') ||
+      catName.includes('tai nghe') ||
+      catName.includes('loa') ||
+      title.includes('tai nghe') ||
+      title.includes('loa') ||
+      title.includes('mâm đĩa') ||
+      title.includes('audio')
+    );
+  }
+  if (q === 'collectibles' || q === '18' || q === 'do-suu-tam-nghe-thuat' || q === 'do-suu-tam') {
+    return (
+      ['18', 'collectibles', 'do-suu-tam-nghe-thuat', 'do-suu-tam'].includes(catId) ||
+      catName.includes('sưu tầm') ||
+      catName.includes('suu tam') ||
+      title.includes('lego') ||
+      title.includes('sưu tầm') ||
+      title.includes('mô hình')
+    );
+  }
+  if (q === 'tech' || q === 'cong-nghe' || q === '1' || q === 'thiet-bi-dien-tu') {
+    return (
+      ['1', '10', '11', '14', '15', '100', '101', '102', '103', 'tech', 'cong-nghe'].includes(
+        catId,
+      ) ||
+      catName.includes('điện tử') ||
+      catName.includes('công nghệ') ||
+      catName.includes('điện thoại') ||
+      catName.includes('laptop') ||
+      catName.includes('máy tính') ||
+      catName.includes('máy ảnh')
+    );
+  }
+  if (q === '2' || q === 'thoi-trang-phu-kien') {
+    return (
+      ['2', '12', '13', '16', 'watches'].includes(catId) ||
+      catName.includes('thời trang') ||
+      catName.includes('phụ kiện') ||
+      catName.includes('đồng hồ')
+    );
+  }
+  if (q === '3' || q === 'do-gia-dung-doi-song') {
+    return (
+      ['3', '17', '18', 'collectibles'].includes(catId) ||
+      catName.includes('gia dụng') ||
+      catName.includes('đời sống') ||
+      catName.includes('nhà thông minh') ||
+      catName.includes('sưu tầm')
+    );
+  }
+  if (q === '10' || q === 'dien-thoai-tablet') {
+    return ['10', '100', '101'].includes(catId);
+  }
+  if (q === '11' || q === 'laptop-may-tinh') {
+    return ['11', '102', '103'].includes(catId);
+  }
+
+  return false;
+}
+
 export function normalizeProduct(value: unknown): CatalogProduct {
   const r = obj(value);
   const seller = obj(r.sellerSummary ?? r.seller);
@@ -78,6 +190,11 @@ export function normalizeProduct(value: unknown): CatalogProduct {
       ? [r.imageUrl]
       : [];
   const saleType = String(r.saleType ?? r.listingType ?? '').toUpperCase();
+  const categoryId = id(r.categoryId ?? category.id ?? r.category_id);
+  const categoryName =
+    id(r.categoryName ?? category.name ?? r.category_name) ||
+    CATEGORY_ID_NAME_MAP[categoryId] ||
+    '';
   return {
     id: id(r.id),
     title: String(r.title ?? r.name),
@@ -85,10 +202,10 @@ export function normalizeProduct(value: unknown): CatalogProduct {
     images,
     price: number(r.price ?? r.basePrice),
     currency: typeof r.currency === 'string' && /^[A-Z]{3}$/.test(r.currency) ? r.currency : null,
-    categoryId: id(r.categoryId ?? category.id),
-    categoryName: id(r.categoryName ?? category.name),
-    sellerId: id(r.sellerId ?? seller.id),
-    sellerName: id(seller.fullName ?? seller.name ?? r.sellerName),
+    categoryId,
+    categoryName,
+    sellerId: id(r.sellerId ?? seller.id ?? r.seller_id),
+    sellerName: id(seller.fullName ?? seller.name ?? r.sellerName ?? r.seller_name),
     condition: id(r.condition),
     status: id(r.status).toUpperCase(),
     saleType:
@@ -204,7 +321,8 @@ export function createCatalogApi(request: RequestApi, source: 'mock' | 'api') {
             (query.scope === 'admin' || (p.status === 'ACTIVE' && p.saleType !== 'AUCTION')) &&
             (!query.status || p.status === query.status) &&
             (!query.q || normalize(p.title + ' ' + p.sellerName).includes(normalize(query.q))) &&
-            (!query.categoryId || p.categoryId === query.categoryId) &&
+            (!query.categoryId ||
+              matchCategory(p.categoryId, p.categoryName, query.categoryId, p.title)) &&
             (!query.condition || p.condition === query.condition) &&
             (!query.minPrice || (p.price !== null && p.price >= Number(query.minPrice))) &&
             (!query.maxPrice || (p.price !== null && p.price <= Number(query.maxPrice))),
@@ -239,7 +357,9 @@ export function createCatalogApi(request: RequestApi, source: 'mock' | 'api') {
           items = items.filter((p) => p.status === query.status);
         }
         if (query.categoryId) {
-          items = items.filter((p) => p.categoryId === query.categoryId);
+          items = items.filter((p) =>
+            matchCategory(p.categoryId, p.categoryName, query.categoryId, p.title),
+          );
         }
         if (query.condition) {
           items = items.filter((p) => p.condition === query.condition);
