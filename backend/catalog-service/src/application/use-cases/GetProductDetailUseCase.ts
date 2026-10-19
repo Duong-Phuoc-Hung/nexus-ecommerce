@@ -22,6 +22,12 @@ export class GetProductDetailUseCase {
       stockQuantity: product.stockQuantity,
       status: product.status,
       createdAt: product.createdAt.toISOString(),
+      images: product.images,
+      primaryImage: product.primaryImage,
+      attributes: product.attributes,
+      condition: product.condition,
+      slug: product.slug,
+      allowAuction: product.allowAuction,
     };
   }
 }

@@ -10,11 +10,14 @@ import { UserProfileDto } from '../dtos/UserProfileDto';
 export class GetUserProfileUseCase {
   constructor(private readonly userRepository: IUserRepository) {}
 
-  public async execute(userId: string): Promise<UserProfileDto> {
-    const user = await this.userRepository.findById(userId);
+  public async execute(identifier: string): Promise<UserProfileDto> {
+    const trimmed = identifier.trim();
+    const user = trimmed.includes('@')
+      ? await this.userRepository.findByEmail(trimmed.toLowerCase())
+      : await this.userRepository.findById(trimmed);
 
     if (!user) {
-      throw new UserNotFoundException(userId);
+      throw new UserNotFoundException(identifier);
     }
 
     return {

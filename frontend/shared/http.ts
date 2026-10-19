@@ -37,6 +37,16 @@ export function getToken(): string | null {
     return null;
   }
 }
+
+export function getSessionUser(): SessionUser | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem('nexus.user') || localStorage.getItem('nexus.user');
+    return raw ? (JSON.parse(raw) as SessionUser) : null;
+  } catch {
+    return null;
+  }
+}
 export function clearSession() {
   if (typeof window === 'undefined') return;
   try {
@@ -133,6 +143,9 @@ export function unwrap<T>(value: unknown): T {
 }
 export function createAuthApi(request: RequestApi) {
   return {
+    getCurrentUser(): SessionUser | null {
+      return getSessionUser();
+    },
     async register(input: { email: string; fullName: string; password: string }) {
       return unwrap<RegisterResult>(
         await request('/auth/register', { method: 'POST', body: input }),

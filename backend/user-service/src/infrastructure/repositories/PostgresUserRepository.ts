@@ -74,11 +74,12 @@ export class PostgresUserRepository implements IUserRepository {
       await client.query('BEGIN');
 
       const insertUserQuery = `
-        INSERT INTO user_users (email, phone, password_hash, full_name, identify_number, status, is_deleted, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, false, $7, $8)
+        INSERT INTO user_users (id, email, phone, password_hash, full_name, identify_number, status, is_deleted, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, false, $8, $9)
         RETURNING id;
       `;
       const res = await client.query(insertUserQuery, [
+        user.id,
         user.email,
         '09' + Math.floor(10000000 + Math.random() * 90000000),
         user.passwordHash,
@@ -98,6 +99,14 @@ export class PostgresUserRepository implements IUserRepository {
         ON CONFLICT DO NOTHING;
       `;
       await client.query(insertRoleQuery, [newUserId, user.role]);
+
+      // Khởi tạo điểm uy tín ban đầu (100 điểm)
+      const insertReputationQuery = `
+        INSERT INTO user_reputations (user_id, trust_level, score, total_orders, total_penalties)
+        VALUES ($1, 'NEWBORN', $2, 0, 0)
+        ON CONFLICT (user_id) DO NOTHING;
+      `;
+      await client.query(insertReputationQuery, [newUserId, user.reputationScore || 100]);
 
       await client.query('COMMIT');
     } catch (err) {
@@ -160,6 +169,7 @@ export class PostgresUserRepository implements IUserRepository {
     let role = UserRole.BUYER;
     if (row.role_code === 'ADMIN') role = UserRole.ADMIN;
     else if (row.role_code === 'SELLER') role = UserRole.SELLER;
+    else if (row.role_code === 'SUPPORT_STAFF') role = UserRole.SUPPORT_STAFF;
 
     let status = UserStatus.ACTIVE;
     if (row.status === 'SUSPENDED') status = UserStatus.SUSPENDED;

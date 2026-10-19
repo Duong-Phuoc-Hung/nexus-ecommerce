@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS user_role_privileges (
 
 -- 2. CỤM BẢNG TÀI KHOẢN NGƯỜI DÙNG
 CREATE TABLE IF NOT EXISTS user_users (
-    id BIGSERIAL PRIMARY KEY,
+    id VARCHAR(36) PRIMARY KEY,
     email VARCHAR(100) NOT NULL UNIQUE,
     phone VARCHAR(20) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
@@ -51,7 +51,7 @@ CREATE INDEX IF NOT EXISTS idx_user_full_name ON user_users (full_name);
 CREATE INDEX IF NOT EXISTS idx_user_status ON user_users (status);
 
 CREATE TABLE IF NOT EXISTS user_user_roles (
-    user_id BIGINT NOT NULL,
+    user_id VARCHAR(36) NOT NULL,
     role_id BIGINT NOT NULL,
     PRIMARY KEY (user_id, role_id),
     CONSTRAINT fk_uur_user FOREIGN KEY (user_id) REFERENCES user_users(id) ON DELETE CASCADE,
@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS user_user_roles (
 
 CREATE TABLE IF NOT EXISTS user_password_reset_tokens (
     id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT NOT NULL,
+    user_id VARCHAR(36) NOT NULL,
     token_hash VARCHAR(255) NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL,
     used BOOLEAN NOT NULL DEFAULT FALSE,
@@ -73,7 +73,7 @@ CREATE INDEX IF NOT EXISTS idx_token_user_expires ON user_password_reset_tokens 
 -- 3. CỤM BẢNG ĐIỂM UY TÍN & ĐÁNH GIÁ (SRS 3.1.2)
 CREATE TABLE IF NOT EXISTS user_reputations (
     id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT NOT NULL UNIQUE,
+    user_id VARCHAR(36) NOT NULL UNIQUE,
     trust_level VARCHAR(20) NOT NULL DEFAULT 'NEWBORN',
     score INT NOT NULL DEFAULT 100,
     total_orders INT NOT NULL DEFAULT 0,
@@ -85,8 +85,8 @@ CREATE TABLE IF NOT EXISTS user_reputations (
 CREATE TABLE IF NOT EXISTS user_ratings (
     id BIGSERIAL PRIMARY KEY,
     order_id VARCHAR(64) NOT NULL,
-    from_user_id BIGINT NOT NULL,
-    to_user_id BIGINT NOT NULL,
+    from_user_id VARCHAR(36) NOT NULL,
+    to_user_id VARCHAR(36) NOT NULL,
     rating SMALLINT NOT NULL CHECK (rating >= 1 AND rating <= 5),
     comment TEXT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -97,7 +97,7 @@ CREATE INDEX IF NOT EXISTS idx_rating_to_user ON user_ratings (to_user_id);
 
 CREATE TABLE IF NOT EXISTS user_penalties (
     id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT NOT NULL,
+    user_id VARCHAR(36) NOT NULL,
     reason VARCHAR(255) NOT NULL,
     deduct_score INT NOT NULL DEFAULT 10,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -109,7 +109,7 @@ CREATE INDEX IF NOT EXISTS idx_penalty_user ON user_penalties (user_id);
 -- 4. BẢNG NHẬT KÝ KIỂM TOÁN (SRS 3.1.1)
 CREATE TABLE IF NOT EXISTS user_audit_logs (
     id BIGSERIAL PRIMARY KEY,
-    actor_id BIGINT NULL,
+    actor_id VARCHAR(36) NULL,
     action VARCHAR(50) NOT NULL,
     target_resource VARCHAR(50) NOT NULL,
     target_id VARCHAR(64) NOT NULL,

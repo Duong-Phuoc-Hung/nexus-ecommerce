@@ -8,4 +8,10 @@ export interface ProductDetailDto {
   stockQuantity: number;
   status: string;
   createdAt: string;
+  images?: string[];
+  primaryImage?: string;
+  attributes?: Record<string, string>;
+  condition?: string;
+  slug?: string;
+  allowAuction?: boolean;
 }

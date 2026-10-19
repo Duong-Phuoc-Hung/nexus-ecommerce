@@ -22,8 +22,8 @@ model AuctionRoom {
   // Tham chiếu sản phẩm đấu giá (Lấy 'id' từ catalog_products bên catalog-service)
   productId     BigInt             @map("product_id")
 
-  // Tham chiếu người bán / chủ phòng (Lấy 'id' từ user_users bên user-service)
-  sellerId      BigInt             @map("seller_id")
+  // Tham chiếu người bán / chủ phòng (Lấy 'id' từ user_users bên user-service - UUID)
+  sellerId      String             @map("seller_id") @db.VarChar(36)
 
   // Tiêu đề phòng đấu giá (VD: "Đấu giá iPhone 15 Pro Max 256GB Like New")
   title         String             @db.VarChar(255)
@@ -52,8 +52,8 @@ model AuctionRoom {
   // Trạng thái: SCHEDULED (Chờ mở), ACTIVE (Đang diễn ra), ENDED (Hết giờ), SETTLED (Đã chốt), CANCELLED (Đã hủy)
   status        String             @default("SCHEDULED") @db.VarChar(20)
 
-  // Tham chiếu người thắng cuộc khi phiên kết thúc (Lấy 'id' từ user_users bên user-service)
-  winnerId      BigInt?            @map("winner_id")
+  // Tham chiếu người thắng cuộc khi phiên kết thúc (Lấy 'id' từ user_users bên user-service - UUID)
+  winnerId      String?            @map("winner_id") @db.VarChar(36)
 
   // Thời gian tạo và cập nhật phòng đấu giá
   createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz()
@@ -81,8 +81,8 @@ model AuctionBid {
   // Thuộc phòng đấu giá nào (Khóa ngoại nối với bảng auction_rooms)
   auctionId BigInt      @map("auction_id")
 
-  // Tham chiếu người bấm nút trả giá (Lấy 'id' từ user_users bên user-service)
-  bidderId  BigInt      @map("bidder_id")
+  // Tham chiếu người bấm nút trả giá (Lấy 'id' từ user_users bên user-service - UUID)
+  bidderId  String      @map("bidder_id") @db.VarChar(36)
 
   // Số tiền người này đưa ra đấu giá
   bidAmount Decimal     @map("bid_amount") @db.Decimal(12, 2)
@@ -114,8 +114,8 @@ model AuctionSettlement {
   // Thuộc phiên đấu giá nào (Nối 1-1 với auction_rooms)
   auctionId        BigInt      @unique @map("auction_id")
 
-  // Tham chiếu người chiến thắng (Lấy 'id' từ user_users bên user-service)
-  winnerId         BigInt      @map("winner_id")
+  // Tham chiếu người chiến thắng (Lấy 'id' từ user_users bên user-service - UUID)
+  winnerId         String      @map("winner_id") @db.VarChar(36)
 
   // Số tiền trúng đấu giá cuối cùng phải thanh toán
   winningBidAmount Decimal     @map("winning_bid_amount") @db.Decimal(12, 2)
