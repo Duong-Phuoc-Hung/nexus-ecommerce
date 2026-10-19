@@ -1,9 +1,11 @@
 'use client';
+import { Button } from '@/components/ui/button';
 
 import { useEffect, useRef, useState } from 'react';
 import type { MarketplaceProduct } from '../types/marketplace.types';
 import { MarketplaceIcon } from './marketplace-icon';
 import { money, ProductPhoto } from './marketplace-card';
+import { appConfig } from '@/configs/app.config';
 
 const slides = [
   {
@@ -184,47 +186,53 @@ export function MarketplaceHero({
               KHÁM PHÁ THEO CÁCH CỦA BẠN
             </span>
           </p>
-          <button
-            onClick={() => onOpen(product)}
-            aria-label={`Xem sản phẩm nổi bật ${product.name}`}
-            className="group mt-auto w-full max-w-[350px] self-end rounded-2xl border border-white/25 bg-white/10 p-4 text-left shadow-[0_12px_40px_#00000020] backdrop-blur-xl transition duration-300 hover:border-white/50 hover:bg-white/15"
-          >
-            <p className="mb-3 flex items-center gap-2 text-[10px] font-medium tracking-wide text-white/75">
-              <MarketplaceIcon
-                name={product.mode === 'auction' ? 'gavel' : 'headphones'}
-                className="size-3.5"
-              />
-              {slide.label}
-            </p>
-            <div className="flex items-center gap-3">
-              <ProductPhoto
-                product={product}
-                priority
-                className="size-[72px] shrink-0 rounded-xl object-cover"
-              />
-              <div className="min-w-0">
-                <p className="line-clamp-2 text-sm font-semibold leading-5">{product.name}</p>
-                <p className="mt-1.5 text-[10px] text-white/65">
-                  {product.mode === 'auction'
-                    ? `${product.bids} lượt trả · Giá hiện tại`
-                    : 'Giá bán'}
-                </p>
-                <strong className="mt-1 block text-lg tracking-tight">
-                  {money(product.price)}
-                </strong>
+          {appConfig.catalogSource === 'mock' && product && (
+            <Button
+              variant="ghost"
+              size="plain"
+              onClick={() => onOpen(product)}
+              aria-label={`Xem sản phẩm nổi bật ${product.name}`}
+              className="group mt-auto w-full max-w-[350px] self-end rounded-2xl border border-white/25 bg-white/10 p-4 text-left shadow-[0_12px_40px_#00000020] backdrop-blur-xl transition duration-300 hover:border-white/50 hover:bg-white/15"
+            >
+              <p className="mb-3 flex items-center gap-2 text-[10px] font-medium tracking-wide text-white/75">
+                <MarketplaceIcon
+                  name={product.mode === 'auction' ? 'gavel' : 'headphones'}
+                  className="size-3.5"
+                />
+                {slide.label}
+              </p>
+              <div className="flex items-center gap-3">
+                <ProductPhoto
+                  product={product}
+                  priority
+                  className="size-[72px] shrink-0 rounded-xl object-cover"
+                />
+                <div className="min-w-0">
+                  <p className="line-clamp-2 text-sm font-semibold leading-5">{product.name}</p>
+                  <p className="mt-1.5 text-[10px] text-white/65">
+                    {product.mode === 'auction'
+                      ? `${product.bids} lượt trả · Giá hiện tại`
+                      : 'Giá bán'}
+                  </p>
+                  <strong className="mt-1 block text-lg tracking-tight">
+                    {money(product.price)}
+                  </strong>
+                </div>
+                <MarketplaceIcon
+                  name="arrow"
+                  className="ml-auto size-4 shrink-0 transition group-hover:translate-x-1"
+                />
               </div>
-              <MarketplaceIcon
-                name="arrow"
-                className="ml-auto size-4 shrink-0 transition group-hover:translate-x-1"
-              />
-            </div>
-          </button>
+            </Button>
+          )}
         </div>
       </div>
       <div className="relative flex items-center justify-between gap-3 px-6 pb-6 sm:px-10 lg:px-14">
         <div className="flex items-center gap-1">
           {slides.map((item, slideIndex) => (
-            <button
+            <Button
+              variant="ghost"
+              size="plain"
               key={item.productId}
               aria-label={`Xem banner ${slideIndex + 1}`}
               aria-pressed={index === slideIndex}
@@ -234,29 +242,33 @@ export function MarketplaceHero({
               <span
                 className={`h-1 rounded-full transition-all ${index === slideIndex ? 'w-6 bg-white' : 'w-2 bg-white/45'}`}
               />
-            </button>
+            </Button>
           ))}
           <span className="ml-2 whitespace-nowrap text-[10px] tracking-widest text-white/65">
             0{index + 1} / 03
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <Button
+            variant="ghost"
+            size="plain"
             aria-label="Banner trước"
             aria-controls="hero-slide"
             onClick={() => go(-1)}
             className="grid size-11 place-items-center rounded-full border border-white/30 bg-white/5 backdrop-blur-sm transition hover:bg-white/15"
           >
             <MarketplaceIcon name="chevron" className="size-5 rotate-180" />
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
+            size="plain"
             aria-label="Banner tiếp theo"
             aria-controls="hero-slide"
             onClick={() => go(1)}
             className="grid size-11 place-items-center rounded-full border border-white/30 bg-white/5 backdrop-blur-sm transition hover:bg-white/15"
           >
             <MarketplaceIcon name="chevron" className="size-5" />
-          </button>
+          </Button>
         </div>
       </div>
     </section>

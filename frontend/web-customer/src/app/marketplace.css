@@ -1,6 +1,16 @@
 @import 'tailwindcss';
+@import 'tw-animate-css';
 
 @theme {
+  --color-border: #e9e6e8;
+  --color-input: #e9e6e8;
+  --color-ring: #9e0b0f;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #242329;
+  --color-muted-foreground: #706d76;
+  --color-accent: #fff0ef;
+  --color-accent-foreground: #9e0b0f;
+  --color-destructive: #9e0b0f;
   --color-brand: #ed1c24;
   --color-brand-dark: #9e0b0f;
   --color-brand-soft: #fff0ef;
@@ -178,7 +188,7 @@ button:disabled {
   display: inline-flex;
   height: 46px;
   align-items: center;
-  gap: 2px;
+  gap: 12px;
   color: var(--color-brand);
 }
 .marketplace-logo .nexus-logo-mark {
@@ -192,7 +202,7 @@ button:disabled {
   animation: marketplace-mark-colors 4s ease-in-out infinite;
 }
 .marketplace-logo .nexus-logo-word {
-  margin-left: -3px;
+  margin-left: 0;
   font-size: 1.05rem;
   font-weight: 800;
   letter-spacing: 0.11em;

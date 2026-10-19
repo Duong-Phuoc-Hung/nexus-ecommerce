@@ -1,8 +1,10 @@
 'use client';
+import { Button } from '@/components/ui/button';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { NexusLogo } from './nexus-logo';
+import { AccountControls } from '@/modules/user/components/account-controls';
 import { MarketplaceIcon } from '@/modules/home/components/marketplace-icon';
 import {
   MarketplaceCard,
@@ -151,13 +153,7 @@ export function MarketplaceDirectory({
               Phiên đấu giá
             </Link>
           </nav>
-          <Link
-            href="/login"
-            className="flex min-h-11 items-center gap-2 rounded-xl bg-brand-dark px-4 text-sm font-semibold text-white hover:bg-brand"
-          >
-            <MarketplaceIcon name="users" className="size-4" />
-            Đăng nhập
-          </Link>
+          <AccountControls />
         </div>
       </header>
       <main id="directory-main" className="nexus-container pb-16 pt-6 sm:pt-8">
@@ -211,7 +207,9 @@ export function MarketplaceDirectory({
                 </div>
               </div>
               {spotlight ? (
-                <button
+                <Button
+                  variant="ghost"
+                  size="plain"
                   onClick={() => setPrompt(spotlight)}
                   className="group grid overflow-hidden rounded-2xl border border-white/30 bg-white text-left text-ink shadow-xl sm:grid-cols-[.9fr_1fr]"
                   aria-label={`Xem phiên nổi bật: ${spotlight.name}`}
@@ -244,7 +242,7 @@ export function MarketplaceDirectory({
                       </span>
                     </div>
                   </div>
-                </button>
+                </Button>
               ) : (
                 <div className="rounded-2xl border border-white/25 p-8">
                   <MarketplaceIcon name="clock" className="mb-4 size-8" />
@@ -301,7 +299,9 @@ export function MarketplaceDirectory({
             className="my-7 grid grid-cols-2 gap-3 lg:grid-cols-4"
           >
             {feed.categories.map((c) => (
-              <button
+              <Button
+                variant="ghost"
+                size="plain"
                 key={c.id}
                 onClick={() => change(setCategory, category === c.id ? 'all' : c.id)}
                 aria-pressed={category === c.id}
@@ -316,7 +316,7 @@ export function MarketplaceDirectory({
                     {source.filter((p) => p.category === c.id).length} sản phẩm
                   </span>
                 </span>
-              </button>
+              </Button>
             ))}
           </section>
         )}
@@ -345,7 +345,9 @@ export function MarketplaceDirectory({
             {auction ? 'Sàn đấu giá' : 'Tất cả sản phẩm'}{' '}
             <span className="ml-2 text-sm font-normal text-muted">({result.length})</span>
           </h2>
-          <button
+          <Button
+            variant="ghost"
+            size="plain"
             onClick={() => setFiltersOpen(!filtersOpen)}
             aria-expanded={filtersOpen}
             aria-controls="directory-filters"
@@ -353,7 +355,7 @@ export function MarketplaceDirectory({
           >
             <MarketplaceIcon name="sliders" className="size-4" />
             Bộ lọc{activeFilters > 0 && ` (${activeFilters})`}
-          </button>
+          </Button>
         </div>
         <div className="grid items-start gap-6 lg:grid-cols-[224px_minmax(0,1fr)]">
           <aside
@@ -366,12 +368,14 @@ export function MarketplaceDirectory({
                 <MarketplaceIcon name="sliders" className="size-4" />
                 Bộ lọc
               </h3>
-              <button
+              <Button
+                variant="ghost"
+                size="plain"
                 onClick={reset}
                 className="min-h-11 text-xs font-semibold text-brand-dark underline underline-offset-4"
               >
                 Đặt lại
-              </button>
+              </Button>
             </div>
             <fieldset className="border-b border-line pb-5">
               <legend className="mb-3 text-xs font-bold uppercase tracking-wider text-muted">
@@ -455,14 +459,16 @@ export function MarketplaceDirectory({
                   { id: 'upcoming', name: 'Sắp mở' },
                   { id: 'ended', name: 'Đã kết thúc' },
                 ].map((t) => (
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="plain"
                     key={t.id}
                     onClick={() => change(setStatus, t.id)}
                     aria-pressed={status === t.id}
                     className={`min-h-11 rounded-full border px-4 text-xs font-semibold transition ${status === t.id ? 'border-brand-dark bg-brand-dark text-white' : 'border-line bg-white hover:border-brand/40'}`}
                   >
                     {t.name}
-                  </button>
+                  </Button>
                 ))}
               </div>
             )}
@@ -532,12 +538,14 @@ export function MarketplaceDirectory({
                 <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted">
                   Thử từ khóa ngắn hơn hoặc mở rộng danh mục và khoảng giá.
                 </p>
-                <button
+                <Button
+                  variant="ghost"
+                  size="plain"
                   onClick={reset}
                   className="mt-5 min-h-11 rounded-xl bg-brand-dark px-5 text-sm font-semibold text-white"
                 >
                   Xóa bộ lọc
-                </button>
+                </Button>
               </div>
             )}
             {pageCount > 1 && (
@@ -545,16 +553,20 @@ export function MarketplaceDirectory({
                 aria-label="Phân trang danh sách"
                 className="mt-8 flex items-center justify-center gap-2"
               >
-                <button
+                <Button
+                  variant="ghost"
+                  size="plain"
                   onClick={() => changePage(currentPage - 1)}
                   disabled={currentPage === 1}
                   aria-label="Trang trước"
                   className="grid size-11 place-items-center rounded-xl border border-line bg-white disabled:opacity-35"
                 >
                   <MarketplaceIcon name="chevron" className="size-4 rotate-180" />
-                </button>
+                </Button>
                 {Array.from({ length: pageCount }, (_, i) => i + 1).map((n) => (
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="plain"
                     key={n}
                     onClick={() => changePage(n)}
                     aria-label={`Trang ${n}`}
@@ -562,16 +574,18 @@ export function MarketplaceDirectory({
                     className={`size-11 rounded-xl border text-sm font-semibold ${currentPage === n ? 'border-brand-dark bg-brand-dark text-white' : 'border-line bg-white hover:border-brand'}`}
                   >
                     {n}
-                  </button>
+                  </Button>
                 ))}
-                <button
+                <Button
+                  variant="ghost"
+                  size="plain"
                   onClick={() => changePage(currentPage + 1)}
                   disabled={currentPage === pageCount}
                   aria-label="Trang tiếp theo"
                   className="grid size-11 place-items-center rounded-xl border border-line bg-white disabled:opacity-35"
                 >
                   <MarketplaceIcon name="chevron" className="size-4" />
-                </button>
+                </Button>
               </nav>
             )}
           </div>
@@ -603,7 +617,7 @@ export function MarketplaceDirectory({
         <div className="nexus-container flex flex-wrap items-center justify-between gap-4 py-7">
           <NexusLogo className="marketplace-logo" />
           <p className="text-xs text-muted">Khám phá giá trị. Kết nối đam mê.</p>
-          <p className="text-[11px] text-muted">Giá và thời gian đang dùng dữ liệu mô phỏng.</p>
+          <p className="text-[11px] text-muted">Khám phá món đồ phù hợp với sở thích của bạn.</p>
         </div>
       </footer>
       {prompt && <AccountPromptDialog product={prompt} onClose={() => setPrompt(null)} />}

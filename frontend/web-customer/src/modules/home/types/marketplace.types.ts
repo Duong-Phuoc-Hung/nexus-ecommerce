@@ -1,4 +1,4 @@
-export type CategoryId = 'all' | 'tech' | 'watches' | 'audio' | 'collectibles';
+export type CategoryId = string;
 export type MarketplaceCategory = {
   id: CategoryId;
   name: string;
