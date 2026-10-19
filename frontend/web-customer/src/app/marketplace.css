@@ -232,3 +232,12 @@ button:disabled {
     animation: none;
   }
 }
+
+.directory-auction-hero {
+  background:
+    radial-gradient(ellipse at 95% 0%, rgb(255 255 255 / 13%), transparent 60%),
+    linear-gradient(115deg, #9e0b0f, #ed1c24);
+}
+.directory-catalog-art {
+  background: radial-gradient(circle at 65% 40%, #fff 0%, #fff0ef 55%, #f5dfde 100%);
+}

@@ -1,5 +1,6 @@
 import { ApiClient } from '../../../shared/api-client';
 import type { TokenStorage } from '../../../shared/api-client';
+import { adminConfig } from '../configs/admin.config';
 
 const adminTokenStorage: TokenStorage = {
   get: () =>
@@ -13,7 +14,7 @@ const adminTokenStorage: TokenStorage = {
   },
 };
 
-const adminClient = new ApiClient('http://localhost:4000/api/v1', adminTokenStorage);
+const adminClient = new ApiClient(adminConfig.api.baseUrl, adminTokenStorage);
 
 interface ApiEnvelope<T> {
   success: boolean;
