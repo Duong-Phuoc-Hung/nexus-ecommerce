@@ -10,7 +10,10 @@ const adminTokenStorage: TokenStorage = {
       window.sessionStorage.setItem('nexus.admin.accessToken', token);
   },
   clear: () => {
-    if (typeof window !== 'undefined') window.sessionStorage.removeItem('nexus.admin.accessToken');
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.removeItem('nexus.admin.accessToken');
+      window.sessionStorage.removeItem('nexus.admin.user');
+    }
   },
 };
 
@@ -46,7 +49,20 @@ export const adminApi = {
       body: JSON.stringify({ email, password }),
     });
     adminClient.setToken(response.data.token);
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem('nexus.admin.user', JSON.stringify(response.data.user));
+    }
     return response.data;
+  },
+
+  getCurrentUser(): AdminLoginResult['user'] | null {
+    if (typeof window === 'undefined') return null;
+    try {
+      const stored = window.sessionStorage.getItem('nexus.admin.user');
+      return stored ? (JSON.parse(stored) as AdminLoginResult['user']) : null;
+    } catch {
+      return null;
+    }
   },
 
   async logout(): Promise<void> {
