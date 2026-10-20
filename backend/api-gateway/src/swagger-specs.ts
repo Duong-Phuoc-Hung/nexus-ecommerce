@@ -178,7 +178,7 @@ export const userSpec = {
             in: 'path',
             required: true,
             description: 'UUID của người dùng cần đổi vai trò',
-            schema: { type: 'string', example: 'a0000000-0000-0000-0000-000000000003' },
+            schema: { type: 'string', example: '01a15822-43b8-78c3-a246-16bff78bc6e8' },
           },
         ],
         requestBody: {
@@ -299,7 +299,7 @@ export const auctionSpec = {
                 type: 'object',
                 required: ['bidderId', 'bidAmount'],
                 properties: {
-                  bidderId: { type: 'string', example: 'a0000000-0000-0000-0000-000000000003' },
+                  bidderId: { type: 'string', example: '01a15822-43b8-78c3-a246-16bff78bc6e8' },
                   bidAmount: { type: 'number', example: 15000000 },
                 },
               },
