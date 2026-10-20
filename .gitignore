@@ -28,8 +28,9 @@ lerna-debug.log*
 !*.env.example
 !.env.example
 
-# Test Coverage
+# Test Coverage & JaCoCo Reports
 coverage/
+target/
 .nyc_output/
 
 # IDE & Editor Specific

@@ -1,6 +1,7 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import { PostgresProductRepository } from './infrastructure/repositories/PostgresProductRepository';
+import { InMemoryProductRepository } from './infrastructure/repositories/InMemoryProductRepository';
 import { GetProductDetailUseCase } from './application/use-cases/GetProductDetailUseCase';
 import { ProductController } from './interfaces/http/controllers/ProductController';
 import { createProductRoutes } from './interfaces/http/routes/ProductRoutes';
@@ -22,7 +23,12 @@ export function createApplication(): Application {
     });
   });
 
-  const productRepository = new PostgresProductRepository();
+  const productRepository =
+    process.env.USE_IN_MEMORY_DB === 'true' ||
+    process.env.CATALOG_USE_IN_MEMORY === 'true' ||
+    process.env.NODE_ENV === 'test'
+      ? new InMemoryProductRepository()
+      : new PostgresProductRepository();
   const getProductDetailUseCase = new GetProductDetailUseCase(productRepository);
   const searchProductsUseCase = new SearchProductsUseCase(productRepository);
   const productController = new ProductController(

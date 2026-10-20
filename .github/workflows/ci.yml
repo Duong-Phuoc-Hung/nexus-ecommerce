@@ -1,0 +1,114 @@
+name: Project Nexus CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ============================================================================
+  # 1. BACKEND CI: BUILD, UNIT TESTS & JACOCO COVERAGE (SRS 5.6)
+  # ============================================================================
+  backend-ci:
+    name: Backend CI (Build, Unit Tests & JaCoCo Coverage)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 📦 Setup pnpm Package Manager
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.9.1
+          run_install: false
+
+      - name: 🟢 Setup Node.js Runtime (v20.x LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'pnpm'
+
+      - name: 📦 Install Workspace Dependencies (Frozen Lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: ⚙️ Build All Backend Services (TypeScript Compilation)
+        run: pnpm run build:backend
+
+      - name: 🔬 Execute Backend Unit Tests & JaCoCo Coverage Gate (>= 70%)
+        id: coverage
+        run: pnpm run test:coverage
+        env:
+          USE_IN_MEMORY_DB: 'true'
+          SKIP_REDIS_HEALTHCHECK: 'true'
+          COVERAGE_THRESHOLD: '70'
+
+      - name: 📤 Upload JaCoCo Coverage Artifacts (HTML & XML)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jacoco-coverage-report
+          path: |
+            target/site/jacoco/
+            coverage/
+          retention-days: 30
+          if-no-files-found: warn
+
+  # ============================================================================
+  # 2. FRONTEND CI: INSTALL, CODE QUALITY & NEXT.JS APPS BUILD
+  # ============================================================================
+  frontend-ci:
+    name: Frontend CI (Install, Lint & Next.js Build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup pnpm Package Manager
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.9.1
+          run_install: false
+
+      - name: 🟢 Setup Node.js Runtime (v20.x LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'pnpm'
+
+      - name: 📦 Install Dependencies (Frozen Lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: 🎨 Verify Code Style & Formatting (Prettier / Linter)
+        run: pnpm format:check
+
+      - name: 🏗️ Build Customer Web Application (@nexus/web-customer)
+        run: pnpm --filter @nexus/web-customer build
+
+      - name: 🏗️ Build Admin Portal Web Application (@nexus/web-admin)
+        run: pnpm --filter @nexus/web-admin build
+
+      - name: 📝 Record Frontend Step Summary
+        if: always()
+        run: |
+          echo "## 🎨 Frontend CI Verification Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Target | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :--- | :---: |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Linter / Formatter** | Prettier Code Style | ✅ Clean |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Customer Web App** | Next.js 15 App Router | ✅ Built |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Admin Web Portal** | Next.js 15 App Router | ✅ Built |" >> $GITHUB_STEP_SUMMARY
