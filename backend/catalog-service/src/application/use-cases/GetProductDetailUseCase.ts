@@ -19,6 +19,7 @@ export class GetProductDetailUseCase {
       title: product.title,
       description: product.description,
       price: product.price,
+      currency: 'VND',
       stockQuantity: product.stockQuantity,
       status: product.status,
       createdAt: product.createdAt.toISOString(),
