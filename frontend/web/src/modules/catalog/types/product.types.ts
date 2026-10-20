@@ -1,0 +1,51 @@
+export type CatalogCategory = { id: string; name: string; parentId: string | null; level: number };
+export type CatalogProduct = {
+  id: string;
+  title: string;
+  description: string;
+  images: string[];
+  price: number | null;
+  currency: string | null;
+  categoryId: string;
+  categoryName: string;
+  sellerId: string;
+  sellerName: string;
+  condition: string;
+  status: string;
+  saleType: 'FIXED_PRICE' | 'AUCTION' | 'UNKNOWN';
+  stockQuantity: number | null;
+  rating?: number;
+  soldCount?: number;
+};
+export type CatalogQuery = {
+  q: string;
+  categoryId: string;
+  minPrice: string;
+  maxPrice: string;
+  condition: string;
+  sort: string;
+  page: number;
+  pageSize: number;
+  scope?: 'admin';
+  status?: string;
+};
+export type CatalogPage = {
+  items: CatalogProduct[];
+  page: number;
+  pageSize: number;
+  total: number | null;
+  totalPages: number | null;
+  querySupported: boolean;
+};
+export type ProductInput = {
+  title: string;
+  description: string;
+  categoryId: string;
+  sellerId?: string;
+  price: string;
+  currency: string;
+  condition: string;
+  images: string[];
+  status: string;
+  saleType: string;
+};

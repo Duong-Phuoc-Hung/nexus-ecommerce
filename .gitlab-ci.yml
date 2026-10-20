@@ -126,7 +126,7 @@ frontend_build:
   needs:
     - install_dependencies
   script:
-    - echo "Building Frontend applications (@nexus/web-customer)..."
+    - echo "Building Frontend applications (@nexus/web)..."
     - pnpm -r --filter "./frontend/*" --if-present build
     - echo "Frontend build and typecheck completed successfully."
   rules:
