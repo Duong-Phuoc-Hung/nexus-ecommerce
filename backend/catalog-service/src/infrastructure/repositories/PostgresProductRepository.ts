@@ -29,6 +29,7 @@ export class PostgresProductRepository implements IProductRepository {
   }
 
   public async findById(id: string): Promise<Product | null> {
+    //Tìm 1 sản phẩm khi người dùng bấm vào xem chi tiết.
     const isNumeric = /^\d+$/.test(id);
     const query = `
       SELECT 
@@ -48,14 +49,15 @@ export class PostgresProductRepository implements IProductRepository {
 
     const row = result.rows[0];
     const [images, attributes] = await Promise.all([
-      this.getImagesByProductId(row.id),
-      this.getAttributesByProductId(row.id),
+      this.getImagesByProductId(row.id), //lấy danh sách ảnh
+      this.getAttributesByProductId(row.id), // lấy dạng thuộc tính
     ]);
 
     return this.mapRowToProduct(row, images, attributes);
   }
 
   public async findAll(limit = 50, offset = 0): Promise<Product[]> {
+    //Lấy toàn bộ danh sách sản phẩm để hiển thị lên trang chủ
     const query = `
       SELECT 
         p.id, p.seller_id, p.category_id, p.title, p.slug, p.description, 
@@ -183,6 +185,7 @@ export class PostgresProductRepository implements IProductRepository {
   }
 
   public async save(product: Product): Promise<void> {
+    // Lưu sản phẩm mới
     const query = `
       INSERT INTO catalog_products (
         seller_id, category_id, title, slug, description, status, condition, base_price, allow_auction, created_at, updated_at
@@ -206,6 +209,7 @@ export class PostgresProductRepository implements IProductRepository {
   }
 
   public async update(product: Product): Promise<void> {
+    // Cập nhật sản phẩm
     const query = `
       UPDATE catalog_products
       SET title = $1, description = $2, base_price = $3, status = $4, updated_at = NOW()
@@ -221,6 +225,7 @@ export class PostgresProductRepository implements IProductRepository {
   }
 
   public async delete(id: string): Promise<void> {
+    // Xoá mềm sản phẩm
     await this.pool.query('UPDATE catalog_products SET deleted_at = NOW() WHERE id = $1', [
       parseInt(id, 10),
     ]);
@@ -291,6 +296,7 @@ export class PostgresProductRepository implements IProductRepository {
     };
 
     return new Product({
+      // bốc dữ liệu về product
       id: String(row.id),
       sellerId: String(row.seller_id),
       categoryId: String(row.category_id),

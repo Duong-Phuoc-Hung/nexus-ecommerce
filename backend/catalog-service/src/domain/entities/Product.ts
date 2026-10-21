@@ -28,6 +28,7 @@ export interface ProductProps {
  * Domain Entity: Product
  * Đại diện cho sản phẩm hàng hóa trong Catalog Bounded Context (SRS 3.3).
  * Độc lập hoàn toàn với database và các service khác.
+ * Bất kỳ dữ liệu nào lấy từ PostgreSQL lên (dù có lộn xộn đến đâu) thì khi đi qua file này cũng phải được ép vào đúng khuôn mẫu chuẩn của hệ thống.
  */
 export class Product {
   private readonly _id: string;
@@ -132,10 +133,12 @@ export class Product {
   }
 
   public isAvailable(): boolean {
+    // Kiểm tra xem sản phẩm có sẵn sàng để được bán không
     return this._status === ProductStatus.ACTIVE && this._stockQuantity > 0;
   }
 
   public reduceStock(quantity: number): void {
+    // Giảm số lượng tồn kho
     if (quantity > this._stockQuantity) {
       throw new Error(
         `Insufficient stock for product ${this._id}. Current: ${this._stockQuantity}`,
@@ -143,7 +146,7 @@ export class Product {
     }
     this._stockQuantity -= quantity;
     if (this._stockQuantity === 0) {
-      this._status = ProductStatus.OUT_OF_STOCK;
+      this._status = ProductStatus.OUT_OF_STOCK; // Hết hàng
     }
     this._updatedAt = new Date();
   }
