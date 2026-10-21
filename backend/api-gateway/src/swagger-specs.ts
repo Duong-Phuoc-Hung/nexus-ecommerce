@@ -1,3 +1,22 @@
+// Header chuẩn: request có body gửi `Content-Type: application/json`;
+// route private gửi thêm `Authorization: Bearer <JWT>` (nhập ở nút Authorize).
+const jsonResponse = (description: string, example: unknown) => ({
+  description,
+  content: { 'application/json': { example } },
+});
+const errorResponse = (description: string, error: string) =>
+  jsonResponse(description, { success: false, error });
+const unauthorized = errorResponse(
+  'Thiếu hoặc sai token (401 Unauthorized)',
+  'Authentication required.',
+);
+const forbidden = errorResponse(
+  'Không đủ quyền (403 Forbidden)',
+  'Forbidden: missing permission "ROLE.VIEW".',
+);
+const PUBLIC = 'Route PUBLIC: không cần token.';
+const PRIVATE = 'Route PRIVATE: bắt buộc header `Authorization: Bearer <JWT>`.';
+
 export const userSpec = {
   openapi: '3.0.0',
   info: {
@@ -22,8 +41,7 @@ export const userSpec = {
       post: {
         tags: ['Authentication'],
         summary: 'Đăng nhập tài khoản',
-        description:
-          'Đăng nhập bằng Email và Password, trả về thông tin User kèm JWT Token. Tài khoản mẫu (Mật khẩu: 123456): admin@gmail.com (Admin), seller@gmail.com (Seller), buyer@gmail.com (Buyer), staff@gmail.com (Support Staff).',
+        description: `${PUBLIC} Method: POST. Header: Content-Type: application/json. Đăng nhập bằng Email và Password, trả về thông tin User kèm JWT Token (hạn 8 giờ). Sai mật khẩu 5 lần sẽ bị khóa tài khoản (423). Tài khoản mẫu (Mật khẩu: 123456): admin@gmail.com (Admin), seller@gmail.com (Seller), buyer@gmail.com (Buyer), staff@gmail.com (Support Staff).`,
         requestBody: {
           required: true,
           content: {
@@ -39,13 +57,35 @@ export const userSpec = {
             },
           },
         },
-        responses: { 200: { description: 'Đăng nhập thành công' } },
+        responses: {
+          200: jsonResponse('Đăng nhập thành công', {
+            success: true,
+            data: {
+              token: '<JWT>',
+              user: {
+                id: 'a0000000-0000-0000-0000-000000000003',
+                email: 'buyer@gmail.com',
+                fullName: 'Nguyễn Văn Buyer',
+                role: 'BUYER',
+                status: 'ACTIVE',
+                reputationScore: 100,
+                permissions: ['AUTH.LOGIN', 'PROFILE.VIEW'],
+              },
+            },
+          }),
+          401: errorResponse('Sai email hoặc mật khẩu', 'Invalid email or password.'),
+          423: errorResponse(
+            'Tài khoản bị khóa do nhập sai nhiều lần',
+            'Account is locked. Please try again later.',
+          ),
+        },
       },
     },
     '/api/v1/auth/register': {
       post: {
         tags: ['Authentication'],
         summary: 'Đăng ký tài khoản mới',
+        description: `${PUBLIC} Method: POST. Header: Content-Type: application/json. Tài khoản mới mặc định có vai trò BUYER. email bắt buộc đúng định dạng, fullName tối đa 100 ký tự, password tối thiểu 6 ký tự.`,
         requestBody: {
           required: true,
           content: {
@@ -62,13 +102,28 @@ export const userSpec = {
             },
           },
         },
-        responses: { 201: { description: 'Đăng ký thành công' } },
+        responses: {
+          201: jsonResponse('Đăng ký thành công', {
+            success: true,
+            data: {
+              id: '5b0f6a0e-0c2e-4a5e-9d55-1d0c1f4f7a10',
+              email: 'khachhangmoi@gmail.com',
+              fullName: 'Nguyễn Văn A',
+              role: 'BUYER',
+              status: 'ACTIVE',
+              reputationScore: 100,
+            },
+          }),
+          400: errorResponse('Dữ liệu không hợp lệ', 'A valid email is required.'),
+          409: errorResponse('Email đã tồn tại', 'An account with this email already exists.'),
+        },
       },
     },
     '/api/v1/auth/forgot-password': {
       post: {
         tags: ['Authentication'],
         summary: 'Yêu cầu đặt lại mật khẩu',
+        description: `${PUBLIC} Method: POST. Header: Content-Type: application/json. Luôn trả 200 dù email có tồn tại hay không. Ngoài môi trường production, response kèm resetToken (hạn 15 phút, dùng 1 lần) để demo.`,
         requestBody: {
           required: true,
           content: {
@@ -83,13 +138,20 @@ export const userSpec = {
             },
           },
         },
-        responses: { 200: { description: 'Tạo mã reset thành công' } },
+        responses: {
+          200: jsonResponse('Yêu cầu đã được ghi nhận', {
+            success: true,
+            message: 'If the account exists, password reset instructions will be sent.',
+            resetToken: '<chỉ có khi không ở production>',
+          }),
+        },
       },
     },
     '/api/v1/auth/reset-password': {
       post: {
         tags: ['Authentication'],
         summary: 'Đặt lại mật khẩu mới bằng reset token',
+        description: `${PUBLIC} Method: POST. Header: Content-Type: application/json. Dùng resetToken từ forgot-password (dùng 1 lần, hạn 15 phút). newPassword tối thiểu 6 ký tự.`,
         requestBody: {
           required: true,
           content: {
@@ -105,31 +167,70 @@ export const userSpec = {
             },
           },
         },
-        responses: { 200: { description: 'Đổi mật khẩu thành công' } },
+        responses: {
+          200: jsonResponse('Đổi mật khẩu thành công', {
+            success: true,
+            message: 'Password has been reset.',
+          }),
+          400: errorResponse(
+            'Token sai/hết hạn/đã dùng hoặc mật khẩu mới không hợp lệ',
+            'Password reset token is invalid or expired.',
+          ),
+        },
       },
     },
     '/api/v1/auth/logout': {
       post: {
         tags: ['Authentication'],
         summary: 'Đăng xuất tài khoản',
+        description: `${PRIVATE} Method: POST. Token bị thu hồi, dùng lại sẽ nhận 401.`,
         security: [{ BearerAuth: [] }],
-        responses: { 200: { description: 'Đăng xuất thành công' } },
+        responses: {
+          200: jsonResponse('Đăng xuất thành công', {
+            success: true,
+            data: { success: true, message: 'Logged out successfully.' },
+          }),
+          401: unauthorized,
+        },
       },
     },
     '/api/v1/auth/roles': {
       get: {
         tags: ['Authentication'],
         summary: 'Danh sách các quyền (Permissions) theo vai trò',
+        description: `${PRIVATE} Cần quyền ROLE.VIEW (ADMIN).`,
         security: [{ BearerAuth: [] }],
-        responses: { 200: { description: 'Thành công' } },
+        responses: {
+          200: jsonResponse('Thành công', {
+            success: true,
+            data: [{ role: 'BUYER', permissions: ['AUTH.LOGIN', 'PROFILE.VIEW'] }],
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
       },
     },
     '/api/v1/users/profile': {
       get: {
         tags: ['Users & Profile'],
         summary: 'Xem hồ sơ của chính mình (Từ JWT token)',
+        description: `${PRIVATE} Cần quyền PROFILE.VIEW.`,
         security: [{ BearerAuth: [] }],
-        responses: { 200: { description: 'Thông tin cá nhân' } },
+        responses: {
+          200: jsonResponse('Thông tin cá nhân', {
+            success: true,
+            data: {
+              id: 'a0000000-0000-0000-0000-000000000003',
+              email: 'buyer@gmail.com',
+              fullName: 'Nguyễn Văn Buyer',
+              role: 'BUYER',
+              status: 'ACTIVE',
+              reputationScore: 100,
+            },
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
       },
     },
     '/api/v1/users': {
@@ -147,13 +248,26 @@ export const userSpec = {
             schema: { type: 'string', example: 'buyer@gmail.com' },
           },
         ],
-        responses: { 200: { description: 'Tìm thấy khách hàng' } },
+        responses: {
+          200: jsonResponse('Tìm thấy khách hàng', {
+            success: true,
+            data: {
+              id: 'a0000000-0000-0000-0000-000000000003',
+              email: 'buyer@gmail.com',
+              role: 'BUYER',
+            },
+          }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy', 'User with identifier "x@gmail.com" was not found.'),
+        },
       },
     },
     '/api/v1/users/{id}': {
       get: {
         tags: ['Users & Profile'],
         summary: 'Xem thông tin người dùng theo UUID hoặc Email',
+        description: `${PRIVATE} Cần quyền USER.VIEW.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -164,13 +278,26 @@ export const userSpec = {
             schema: { type: 'string', example: 'buyer@gmail.com' },
           },
         ],
-        responses: { 200: { description: 'Thông tin người dùng' } },
+        responses: {
+          200: jsonResponse('Thông tin người dùng', {
+            success: true,
+            data: {
+              id: 'a0000000-0000-0000-0000-000000000003',
+              email: 'buyer@gmail.com',
+              role: 'BUYER',
+            },
+          }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy', 'User with identifier "x" was not found.'),
+        },
       },
     },
     '/api/v1/users/{id}/role': {
       put: {
         tags: ['Users & Profile'],
         summary: 'Cập nhật vai trò (Role) cho tài khoản',
+        description: `${PRIVATE} Cần quyền ROLE.UPDATE (ADMIN). Header: Content-Type: application/json. Sau khi đổi role, token cũ của user đó bị thu hồi.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -200,8 +327,14 @@ export const userSpec = {
           },
         },
         responses: {
-          200: { description: 'Cập nhật vai trò thành công' },
-          400: { description: 'Vai trò không hợp lệ' },
+          200: jsonResponse('Cập nhật vai trò thành công', {
+            success: true,
+            data: { id: 'a0000000-0000-0000-0000-000000000003', role: 'SELLER' },
+          }),
+          400: errorResponse('Vai trò không hợp lệ', 'Role must be BUYER, SELLER, or ADMIN.'),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy user', 'User not found.'),
         },
       },
     },
@@ -221,14 +354,106 @@ export const catalogSpec = {
       get: {
         tags: ['Products'],
         summary: 'Lấy danh sách tất cả sản phẩm',
-        description: 'Truy xuất toàn bộ sản phẩm đang được bày bán.',
-        responses: { 200: { description: 'Danh sách sản phẩm' } },
+        description: `${PUBLIC} Method: GET. Truy xuất toàn bộ sản phẩm đang được bày bán (không phân trang).`,
+        responses: {
+          200: jsonResponse('Danh sách sản phẩm', {
+            success: true,
+            data: [
+              {
+                id: '1',
+                sellerId: 'a0000000-0000-0000-0000-000000000002',
+                categoryId: '100',
+                title: 'iPhone 15 Pro Max 256GB Titan Tự Nhiên',
+                description: '...',
+                price: 29990000,
+                stockQuantity: 10,
+                status: 'ACTIVE',
+                images: ['https://...'],
+                primaryImage: 'https://...',
+                condition: 'NEW',
+                slug: 'iphone-15-pro-max-256gb-titan-tu-nhien',
+                allowAuction: false,
+                attributes: {},
+              },
+            ],
+          }),
+        },
+      },
+    },
+    '/api/v1/products/search': {
+      get: {
+        tags: ['Products'],
+        summary: 'Tìm kiếm sản phẩm',
+        description: `${PUBLIC} Method: GET. Query "q" là bắt buộc; các tham số khác tùy chọn. Tham số sai kiểu/âm trả 400.`,
+        parameters: [
+          {
+            name: 'q',
+            in: 'query',
+            required: true,
+            description: 'Từ khóa tìm kiếm',
+            schema: { type: 'string', example: 'iphone' },
+          },
+          {
+            name: 'categoryId',
+            in: 'query',
+            required: false,
+            description: 'Lọc theo danh mục',
+            schema: { type: 'string', example: '100' },
+          },
+          {
+            name: 'minPrice',
+            in: 'query',
+            required: false,
+            description: 'Giá tối thiểu (số >= 0)',
+            schema: { type: 'number', example: 1000000 },
+          },
+          {
+            name: 'maxPrice',
+            in: 'query',
+            required: false,
+            description: 'Giá tối đa (số >= 0, không nhỏ hơn minPrice)',
+            schema: { type: 'number', example: 50000000 },
+          },
+          {
+            name: 'page',
+            in: 'query',
+            required: false,
+            description: 'Trang (số nguyên >= 1, mặc định 1)',
+            schema: { type: 'integer', example: 1 },
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            required: false,
+            description: 'Số dòng mỗi trang (1-100, mặc định 20)',
+            schema: { type: 'integer', example: 20 },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Kết quả tìm kiếm', {
+            success: true,
+            data: [
+              {
+                id: '1',
+                sellerId: 'a0000000-0000-0000-0000-000000000002',
+                categoryId: '100',
+                title: 'iPhone 15 Pro Max 256GB Titan Tự Nhiên',
+                price: 29990000,
+                stockQuantity: 10,
+                status: 'ACTIVE',
+              },
+            ],
+            meta: { page: 1, limit: 20, total: 1, totalPages: 1 },
+          }),
+          400: errorResponse('Tham số không hợp lệ', 'Query parameter "q" is required.'),
+        },
       },
     },
     '/api/v1/products/{id}': {
       get: {
         tags: ['Products'],
         summary: 'Xem chi tiết sản phẩm theo ID hoặc Slug',
+        description: `${PUBLIC} Method: GET.`,
         parameters: [
           {
             name: 'id',
@@ -239,7 +464,22 @@ export const catalogSpec = {
             schema: { type: 'string', example: '1' },
           },
         ],
-        responses: { 200: { description: 'Chi tiết sản phẩm' } },
+        responses: {
+          200: jsonResponse('Chi tiết sản phẩm', {
+            success: true,
+            data: {
+              id: '1',
+              sellerId: 'a0000000-0000-0000-0000-000000000002',
+              categoryId: '100',
+              title: 'iPhone 15 Pro Max 256GB Titan Tự Nhiên',
+              price: 29990000,
+              stockQuantity: 10,
+              status: 'ACTIVE',
+              images: ['https://...'],
+            },
+          }),
+          404: errorResponse('Không tìm thấy sản phẩm', 'Product with ID "999999" was not found.'),
+        },
       },
     },
   },
@@ -258,37 +498,60 @@ export const auctionSpec = {
       get: {
         tags: ['Auctions'],
         summary: 'Lấy danh sách các phiên đấu giá đang diễn ra',
-        responses: { 200: { description: 'Danh sách phiên đấu giá' } },
+        description: `${PUBLIC} Method: GET.`,
+        responses: {
+          200: jsonResponse('Danh sách phiên đấu giá', {
+            success: true,
+            data: [
+              {
+                id: 'auc_01hqz777live',
+                productId: 'prod_01hqz999xyz',
+                currentHighestBid: 250,
+                highestBidderId: 'usr_01hqz789abc',
+                status: 'ACTIVE',
+                endTime: '2026-10-21T15:34:06.147Z',
+              },
+            ],
+          }),
+        },
       },
     },
     '/api/v1/auctions/{id}': {
       get: {
         tags: ['Auctions'],
         summary: 'Xem chi tiết một phiên đấu giá',
+        description: `${PUBLIC} Method: GET.`,
         parameters: [
           {
             name: 'id',
             in: 'path',
             required: true,
             description: 'Mã phòng đấu giá (Auction ID)',
-            schema: { type: 'string', example: '1' },
+            schema: { type: 'string', example: 'auc_01hqz777live' },
           },
         ],
-        responses: { 200: { description: 'Chi tiết phòng đấu giá' } },
+        responses: {
+          200: jsonResponse('Chi tiết phòng đấu giá', {
+            success: true,
+            data: { id: 'auc_01hqz777live', status: 'ACTIVE', currentHighestBid: 250 },
+          }),
+          404: errorResponse('Không tìm thấy', 'Auction with ID "999" was not found.'),
+        },
       },
     },
     '/api/v1/auctions/{id}/bids': {
       post: {
         tags: ['Auctions'],
         summary: 'Trả giá / Đặt giá thầu (Place Bid)',
-        description: 'Gửi lượt trả giá mới vào phiên đấu giá.',
+        description: `Route PRIVATE (theo thiết kế): cần header \`Authorization: Bearer <JWT>\` và Content-Type: application/json. LƯU Ý: hiện tại Auction Service chưa kiểm tra token và chưa validate body (chế độ Skeleton), nên request không token hoặc body sai vẫn trả 200. Gửi lượt trả giá mới vào phiên đấu giá.`,
+        security: [{ BearerAuth: [] }],
         parameters: [
           {
             name: 'id',
             in: 'path',
             required: true,
             description: 'Mã phòng đấu giá (Auction ID)',
-            schema: { type: 'string', example: '1' },
+            schema: { type: 'string', example: 'auc_01hqz777live' },
           },
         ],
         requestBody: {
@@ -306,7 +569,19 @@ export const auctionSpec = {
             },
           },
         },
-        responses: { 200: { description: 'Trả giá thành công' } },
+        responses: {
+          200: jsonResponse('Trả giá thành công (Skeleton)', {
+            success: true,
+            message: 'Bid accepted by bidding engine (Skeleton mode)',
+            data: {
+              auctionId: 'auc_01hqz777live',
+              bidderId: 'a0000000-0000-0000-0000-000000000003',
+              acceptedAmount: 15000000,
+              status: 'ACCEPTED',
+            },
+          }),
+          401: unauthorized,
+        },
       },
     },
   },
@@ -325,6 +600,7 @@ export const commerceSpec = {
       post: {
         tags: ['Orders & Checkout'],
         summary: 'Tạo đơn hàng & Thanh toán (Checkout)',
+        description: `Header: Content-Type: application/json. LƯU Ý: hiện tại Commerce Service chưa kiểm tra token và chưa validate body (chế độ Skeleton).`,
         requestBody: {
           required: true,
           content: {
@@ -348,13 +624,25 @@ export const commerceSpec = {
             },
           },
         },
-        responses: { 201: { description: 'Tạo đơn hàng thành công' } },
+        responses: {
+          201: jsonResponse('Tạo đơn hàng thành công (Skeleton)', {
+            success: true,
+            message: 'Checkout intent created (Skeleton mode)',
+            data: {
+              orderId: 'ord_1792593649250',
+              items: [{ productId: '1', quantity: 2 }],
+              shippingAddress: 'Khu Công Nghệ Cao, TP.HCM',
+              clientSecret: 'pi_skeleton_secret_test_123',
+            },
+          }),
+        },
       },
     },
     '/api/v1/orders/{id}': {
       get: {
         tags: ['Orders & Checkout'],
         summary: 'Tra cứu thông tin đơn hàng theo ID',
+        description: `${PUBLIC} (hiện chưa yêu cầu token) Method: GET.`,
         parameters: [
           {
             name: 'id',
@@ -364,7 +652,20 @@ export const commerceSpec = {
             schema: { type: 'string', example: '1' },
           },
         ],
-        responses: { 200: { description: 'Thông tin đơn hàng' } },
+        responses: {
+          200: jsonResponse('Thông tin đơn hàng', {
+            success: true,
+            data: {
+              id: 'ord_01hqz555abc',
+              buyerId: 'usr_01hqz789abc',
+              sellerId: 'usr_01hqz333sel',
+              totalAmount: 399.99,
+              status: 'PAID',
+              itemsCount: 1,
+            },
+          }),
+          404: errorResponse('Không tìm thấy đơn hàng', 'Order with ID "1" was not found.'),
+        },
       },
     },
   },
