@@ -22,12 +22,14 @@ export interface ProductProps {
   condition?: string;
   slug?: string;
   allowAuction?: boolean;
+  sellerName?: string;
 }
 
 /**
  * Domain Entity: Product
  * Đại diện cho sản phẩm hàng hóa trong Catalog Bounded Context (SRS 3.3).
  * Độc lập hoàn toàn với database và các service khác.
+ * Bất kỳ dữ liệu nào lấy từ PostgreSQL lên (dù có lộn xộn đến đâu) thì khi đi qua file này cũng phải được ép vào đúng khuôn mẫu chuẩn của hệ thống.
  */
 export class Product {
   private readonly _id: string;
@@ -46,6 +48,7 @@ export class Product {
   private _condition?: string;
   private _slug?: string;
   private _allowAuction?: boolean;
+  private _sellerName?: string;
 
   constructor(props: ProductProps) {
     this._id = props.id;
@@ -65,6 +68,7 @@ export class Product {
     this._condition = props.condition;
     this._slug = props.slug;
     this._allowAuction = props.allowAuction;
+    this._sellerName = props.sellerName;
   }
 
   public get id(): string {
@@ -131,11 +135,23 @@ export class Product {
     return this._allowAuction;
   }
 
+  public get sellerName(): string | undefined {
+    return this._sellerName;
+  }
+
+  public get saleType(): 'FIXED_PRICE' | 'AUCTION' {
+    // Toàn bộ sản phẩm trong Catalog hiện tại đều là mua sắm trực tiếp (có niêm yết base_price).
+    // Thuộc tính allowAuction vẫn được lưu trữ riêng để phục vụ khi có phiên đấu giá mở sau này.
+    return 'FIXED_PRICE';
+  }
+
   public isAvailable(): boolean {
+    // Kiểm tra xem sản phẩm có sẵn sàng để được bán không
     return this._status === ProductStatus.ACTIVE && this._stockQuantity > 0;
   }
 
   public reduceStock(quantity: number): void {
+    // Giảm số lượng tồn kho
     if (quantity > this._stockQuantity) {
       throw new Error(
         `Insufficient stock for product ${this._id}. Current: ${this._stockQuantity}`,
@@ -143,7 +159,7 @@ export class Product {
     }
     this._stockQuantity -= quantity;
     if (this._stockQuantity === 0) {
-      this._status = ProductStatus.OUT_OF_STOCK;
+      this._status = ProductStatus.OUT_OF_STOCK; // Hết hàng
     }
     this._updatedAt = new Date();
   }

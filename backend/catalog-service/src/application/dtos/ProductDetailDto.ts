@@ -1,10 +1,13 @@
 export interface ProductDetailDto {
   id: string;
   sellerId: string;
+  sellerName?: string;
+  saleType: 'FIXED_PRICE' | 'AUCTION';
   categoryId: string;
   title: string;
   description: string;
   price: number;
+  currency: string;
   stockQuantity: number;
   status: string;
   createdAt: string;
