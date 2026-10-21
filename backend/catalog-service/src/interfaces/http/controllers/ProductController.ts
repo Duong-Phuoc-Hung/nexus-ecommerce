@@ -26,6 +26,8 @@ export class ProductController {
         data: result.products.map((product) => ({
           id: product.id,
           sellerId: product.sellerId,
+          sellerName: product.sellerName || 'Nexus Official Store',
+          saleType: product.saleType,
           categoryId: product.categoryId,
           title: product.title,
           price: product.price,
@@ -47,6 +49,8 @@ export class ProductController {
       data: products.map((p) => ({
         id: p.id,
         sellerId: p.sellerId,
+        sellerName: p.sellerName || 'Nexus Official Store',
+        saleType: p.saleType,
         categoryId: p.categoryId,
         title: p.title,
         description: p.description,

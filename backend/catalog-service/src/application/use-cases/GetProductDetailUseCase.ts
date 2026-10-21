@@ -15,6 +15,8 @@ export class GetProductDetailUseCase {
     return {
       id: product.id,
       sellerId: product.sellerId,
+      sellerName: product.sellerName || 'Nexus Official Store',
+      saleType: product.saleType,
       categoryId: product.categoryId,
       title: product.title,
       description: product.description,

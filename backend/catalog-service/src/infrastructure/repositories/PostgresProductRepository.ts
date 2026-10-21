@@ -29,12 +29,12 @@ export class PostgresProductRepository implements IProductRepository {
   }
 
   public async findById(id: string): Promise<Product | null> {
-    //Tìm 1 sản phẩm khi người dùng bấm vào xem chi tiết.
+    // Tìm 1 sản phẩm khi người dùng bấm vào xem chi tiết.
     const isNumeric = /^\d+$/.test(id);
     const query = `
       SELECT 
         p.id, p.seller_id, p.category_id, p.title, p.slug, p.description, 
-        p.status, p.condition, p.base_price, p.allow_auction, p.created_at, p.updated_at
+        p.status, p.condition, p.base_price, p.allow_auction, p.stock_quantity, p.seller_name, p.created_at, p.updated_at
       FROM catalog_products p
       WHERE ${isNumeric ? '(p.id = $1 OR p.slug = $2)' : 'p.slug = $1'}
         AND p.deleted_at IS NULL
@@ -49,7 +49,7 @@ export class PostgresProductRepository implements IProductRepository {
 
     const row = result.rows[0];
     const [images, attributes] = await Promise.all([
-      this.getImagesByProductId(row.id), //lấy danh sách ảnh
+      this.getImagesByProductId(row.id), // lấy danh sách ảnh
       this.getAttributesByProductId(row.id), // lấy dạng thuộc tính
     ]);
 
@@ -57,11 +57,11 @@ export class PostgresProductRepository implements IProductRepository {
   }
 
   public async findAll(limit = 50, offset = 0): Promise<Product[]> {
-    //Lấy toàn bộ danh sách sản phẩm để hiển thị lên trang chủ
+    // Lấy toàn bộ danh sách sản phẩm để hiển thị lên trang chủ
     const query = `
       SELECT 
         p.id, p.seller_id, p.category_id, p.title, p.slug, p.description, 
-        p.status, p.condition, p.base_price, p.allow_auction, p.created_at, p.updated_at
+        p.status, p.condition, p.base_price, p.allow_auction, p.stock_quantity, p.seller_name, p.created_at, p.updated_at
       FROM catalog_products p
       WHERE p.deleted_at IS NULL
       ORDER BY p.id ASC
@@ -88,7 +88,7 @@ export class PostgresProductRepository implements IProductRepository {
     const query = `
       SELECT 
         p.id, p.seller_id, p.category_id, p.title, p.slug, p.description, 
-        p.status, p.condition, p.base_price, p.allow_auction, p.created_at, p.updated_at
+        p.status, p.condition, p.base_price, p.allow_auction, p.stock_quantity, p.seller_name, p.created_at, p.updated_at
       FROM catalog_products p
       WHERE ${isNumeric ? 'p.category_id = $1' : 'p.category_id = (SELECT id FROM catalog_categories WHERE slug = $1 LIMIT 1)'}
         AND p.deleted_at IS NULL
@@ -112,7 +112,7 @@ export class PostgresProductRepository implements IProductRepository {
   }
 
   public async search(criteria: ProductSearchCriteria): Promise<ProductSearchPage> {
-    const conditions: string[] = ['p.deleted_at IS NULL', "p.status = 'AVAILABLE'"];
+    const conditions: string[] = ['p.deleted_at IS NULL', "p.status = 'ACTIVE'"];
     const params: any[] = [];
 
     params.push(`%${criteria.q.trim().toLowerCase()}%`);
@@ -159,7 +159,7 @@ export class PostgresProductRepository implements IProductRepository {
     const query = `
       SELECT 
         p.id, p.seller_id, p.category_id, p.title, p.slug, p.description, 
-        p.status, p.condition, p.base_price, p.allow_auction, p.created_at, p.updated_at
+        p.status, p.condition, p.base_price, p.allow_auction, p.stock_quantity, p.seller_name, p.created_at, p.updated_at
       FROM catalog_products p
       WHERE ${whereClause}
       ORDER BY p.id ASC
@@ -177,19 +177,20 @@ export class PostgresProductRepository implements IProductRepository {
       this.getAttributesForProductIds(productIds),
     ]);
 
-    const products = result.rows.map((row: any) =>
-      this.mapRowToProduct(row, imagesMap[row.id] || [], attributesMap[row.id] || {}),
-    );
-
-    return { products, total };
+    return {
+      products: result.rows.map((row: any) =>
+        this.mapRowToProduct(row, imagesMap[row.id] || [], attributesMap[row.id] || {}),
+      ),
+      total,
+    };
   }
 
   public async save(product: Product): Promise<void> {
     // Lưu sản phẩm mới
     const query = `
       INSERT INTO catalog_products (
-        seller_id, category_id, title, slug, description, status, condition, base_price, allow_auction, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        seller_id, category_id, title, slug, description, status, condition, base_price, allow_auction, stock_quantity, seller_name, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING id;
     `;
     const params = [
@@ -202,6 +203,8 @@ export class PostgresProductRepository implements IProductRepository {
       product.condition || 'NEW',
       product.price,
       product.allowAuction ?? false,
+      product.stockQuantity ?? 1,
+      product.sellerName || 'Nexus Official Store',
       product.createdAt,
       product.updatedAt,
     ];
@@ -212,14 +215,16 @@ export class PostgresProductRepository implements IProductRepository {
     // Cập nhật sản phẩm
     const query = `
       UPDATE catalog_products
-      SET title = $1, description = $2, base_price = $3, status = $4, updated_at = NOW()
-      WHERE id = $5;
+      SET title = $1, description = $2, base_price = $3, status = $4, stock_quantity = $5, seller_name = $6, updated_at = NOW()
+      WHERE id = $7;
     `;
     await this.pool.query(query, [
       product.title,
       product.description,
       product.price,
       product.status,
+      product.stockQuantity,
+      product.sellerName || 'Nexus Official Store',
       parseInt(product.id, 10),
     ]);
   }
@@ -236,19 +241,7 @@ export class PostgresProductRepository implements IProductRepository {
       `SELECT image_url FROM catalog_product_images WHERE product_id = $1 ORDER BY display_order ASC;`,
       [productId],
     );
-    return res.rows.map((r) => r.image_url);
-  }
-
-  private async getAttributesByProductId(productId: number): Promise<Record<string, string>> {
-    const res = await this.pool.query(
-      `SELECT attribute_key, attribute_value FROM catalog_product_attributes WHERE product_id = $1;`,
-      [productId],
-    );
-    const attrs: Record<string, string> = {};
-    for (const row of res.rows) {
-      attrs[row.attribute_key] = row.attribute_value;
-    }
-    return attrs;
+    return res.rows.map((r: any) => r.image_url);
   }
 
   private async getImagesForProductIds(productIds: number[]): Promise<Record<number, string[]>> {
@@ -264,6 +257,18 @@ export class PostgresProductRepository implements IProductRepository {
       map[r.product_id].push(r.image_url);
     }
     return map;
+  }
+
+  private async getAttributesByProductId(productId: number): Promise<Record<string, string>> {
+    const res = await this.pool.query(
+      `SELECT attribute_key, attribute_value FROM catalog_product_attributes WHERE product_id = $1;`,
+      [productId],
+    );
+    const attrs: Record<string, string> = {};
+    for (const r of res.rows) {
+      attrs[r.attribute_key] = r.attribute_value;
+    }
+    return attrs;
   }
 
   private async getAttributesForProductIds(
@@ -295,15 +300,20 @@ export class PostgresProductRepository implements IProductRepository {
       OUT_OF_STOCK: ProductStatus.OUT_OF_STOCK,
     };
 
+    const stock =
+      row.stock_quantity !== undefined && row.stock_quantity !== null
+        ? parseInt(row.stock_quantity, 10)
+        : 1;
+
     return new Product({
-      // bốc dữ liệu về product
       id: String(row.id),
       sellerId: String(row.seller_id),
+      sellerName: row.seller_name || 'Nexus Official Store',
       categoryId: String(row.category_id),
       title: row.title,
       description: row.description,
       price: parseFloat(row.base_price),
-      stockQuantity: 10,
+      stockQuantity: isNaN(stock) ? 1 : stock,
       status: statusMap[row.status] || ProductStatus.ACTIVE,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),

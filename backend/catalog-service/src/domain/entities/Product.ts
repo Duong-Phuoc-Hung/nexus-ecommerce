@@ -22,6 +22,7 @@ export interface ProductProps {
   condition?: string;
   slug?: string;
   allowAuction?: boolean;
+  sellerName?: string;
 }
 
 /**
@@ -47,6 +48,7 @@ export class Product {
   private _condition?: string;
   private _slug?: string;
   private _allowAuction?: boolean;
+  private _sellerName?: string;
 
   constructor(props: ProductProps) {
     this._id = props.id;
@@ -66,6 +68,7 @@ export class Product {
     this._condition = props.condition;
     this._slug = props.slug;
     this._allowAuction = props.allowAuction;
+    this._sellerName = props.sellerName;
   }
 
   public get id(): string {
@@ -130,6 +133,16 @@ export class Product {
 
   public get allowAuction(): boolean | undefined {
     return this._allowAuction;
+  }
+
+  public get sellerName(): string | undefined {
+    return this._sellerName;
+  }
+
+  public get saleType(): 'FIXED_PRICE' | 'AUCTION' {
+    // Toàn bộ sản phẩm trong Catalog hiện tại đều là mua sắm trực tiếp (có niêm yết base_price).
+    // Thuộc tính allowAuction vẫn được lưu trữ riêng để phục vụ khi có phiên đấu giá mở sau này.
+    return 'FIXED_PRICE';
   }
 
   public isAvailable(): boolean {
