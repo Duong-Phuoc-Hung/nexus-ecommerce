@@ -106,6 +106,7 @@ export function createApplication(): Application {
               'connection',
               'transfer-encoding',
               'content-encoding',
+              'expect',
             ].includes(name.toLowerCase())
           )
             continue;

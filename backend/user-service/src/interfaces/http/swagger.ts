@@ -247,7 +247,7 @@ export const swaggerDocument = {
         tags: ['Users & Profile'],
         summary: 'Xem thông tin người dùng hoặc người bán theo UUID hoặc Email',
         description:
-          'Có thể truyền chuỗi UUID (VD: a0000000-0000-0000-0000-000000000003) hoặc địa chỉ Gmail vào đường dẫn.',
+          'Có thể truyền chuỗi UUID (VD: 01a15822-43b8-78c3-a246-16bff78bc6e8) hoặc địa chỉ Gmail vào đường dẫn.',
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -284,7 +284,7 @@ export const swaggerDocument = {
             description: 'UUID của người dùng cần đổi vai trò',
             schema: {
               type: 'string',
-              example: 'a0000000-0000-0000-0000-000000000003',
+              example: '01a15822-43b8-78c3-a246-16bff78bc6e8',
             },
           },
         ],

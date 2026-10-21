@@ -2,13 +2,17 @@
 -- Project Nexus - Seed Demo Accounts for Authentication & RBAC (Sprint 1)
 -- Database: nexus_user_db (Port 5432)
 -- Mật khẩu chung cho tất cả tài khoản: 123456 (Hash BCrypt cost 10)
+-- Sử dụng chuẩn UUID v7 (RFC 9562 - Time-ordered UUID)
 -- =============================================================================
 
--- 1. TẠO 4 TÀI KHOẢN GMAIL MẪU (ADMIN, SELLER, BUYER, SUPPORT_STAFF)
+-- Dọn dẹp dữ liệu cũ mang ID giả định a0000... nếu có
+DELETE FROM user_users WHERE id LIKE 'a0000000-%';
+
+-- 1. TẠO 4 TÀI KHOẢN GMAIL MẪU (ADMIN, SELLER, BUYER, SUPPORT_STAFF) VỚI UUID V7
 INSERT INTO user_users (id, email, phone, password_hash, full_name, identify_number, status, is_deleted)
 VALUES 
 (
-    'a0000000-0000-0000-0000-000000000001',
+    '01a15822-3be8-7505-a081-e0e45bd2e15e',
     'admin@gmail.com',
     '0900000011',
     '$2b$10$4JoMUiITb4AM9v0C3s62k.yEfkesgLxUdbZ6yvbmGQxebIRoIxoay',
@@ -18,7 +22,7 @@ VALUES
     FALSE
 ),
 (
-    'a0000000-0000-0000-0000-000000000002',
+    '01a15822-3fd0-7b39-ad01-f11da72d5b80',
     'seller@gmail.com',
     '0900000012',
     '$2b$10$4JoMUiITb4AM9v0C3s62k.yEfkesgLxUdbZ6yvbmGQxebIRoIxoay',
@@ -28,7 +32,7 @@ VALUES
     FALSE
 ),
 (
-    'a0000000-0000-0000-0000-000000000003',
+    '01a15822-43b8-78c3-a246-16bff78bc6e8',
     'buyer@gmail.com',
     '0900000013',
     '$2b$10$4JoMUiITb4AM9v0C3s62k.yEfkesgLxUdbZ6yvbmGQxebIRoIxoay',
@@ -38,7 +42,7 @@ VALUES
     FALSE
 ),
 (
-    'a0000000-0000-0000-0000-000000000004',
+    '01a15822-47a0-78fd-83de-477ceaa393a7',
     'staff@gmail.com',
     '0900000014',
     '$2b$10$4JoMUiITb4AM9v0C3s62k.yEfkesgLxUdbZ6yvbmGQxebIRoIxoay',
@@ -48,7 +52,8 @@ VALUES
     FALSE
 )
 ON CONFLICT (email) DO UPDATE 
-SET password_hash = EXCLUDED.password_hash,
+SET id = EXCLUDED.id,
+    password_hash = EXCLUDED.password_hash,
     full_name = EXCLUDED.full_name;
 
 -- 2. GÁN ĐÚNG VAI TRÒ (ROLE) CHO TỪNG TÀI KHOẢN
