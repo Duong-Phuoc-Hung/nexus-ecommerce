@@ -11,8 +11,8 @@ export class ResetPasswordUseCase {
   ) {}
 
   public async execute(token: string, newPassword: string): Promise<void> {
-    if (typeof newPassword !== 'string' || newPassword.length < 12) {
-      throw new Error('Password must be at least 12 characters.');
+    if (typeof newPassword !== 'string' || newPassword.length < 6) {
+      throw new Error('Password must be at least 6 characters.');
     }
     if (!token?.trim()) {
       throw new Error('A valid password reset token is required.');

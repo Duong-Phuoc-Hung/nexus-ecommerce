@@ -151,7 +151,7 @@ export const userSpec = {
       post: {
         tags: ['Authentication'],
         summary: 'Đặt lại mật khẩu mới bằng reset token',
-        description: `${PUBLIC} Method: POST. Header: Content-Type: application/json. Dùng resetToken từ forgot-password (dùng 1 lần, hạn 15 phút). newPassword tối thiểu 12 ký tự.`,
+        description: `${PUBLIC} Method: POST. Header: Content-Type: application/json. Dùng resetToken từ forgot-password (dùng 1 lần, hạn 15 phút). newPassword tối thiểu 6 ký tự.`,
         requestBody: {
           required: true,
           content: {
