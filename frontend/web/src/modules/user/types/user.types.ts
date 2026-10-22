@@ -7,4 +7,5 @@ export type SessionUser = {
   reputationScore?: number;
   permissions?: string[];
 };
+export type UserType = SessionUser;
 export type RegisterResult = Omit<SessionUser, 'permissions'>;

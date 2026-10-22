@@ -3,6 +3,8 @@ import { createContext, useCallback, useEffect, useRef, useState } from 'react';
 import { authApi, type AuthUser } from '@/modules/auth/api/auth.api';
 import { clearSession, getToken, SESSION_EVENT } from '../utils/session';
 import { userMessage } from '../../../lib/axios/http';
+import { useAppDispatch } from '@/store/hooks';
+import { sessionCleared, sessionEstablished } from '@/store/slices/authSlice';
 
 type Session = {
   user: AuthUser | null;
@@ -13,6 +15,7 @@ type Session = {
 };
 export const SessionContext = createContext<Session | null>(null);
 export function SessionProvider({ children }: { children: React.ReactNode }) {
+  const dispatch = useAppDispatch();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [phase, setPhase] = useState<Session['phase']>('loading');
   const [error, setError] = useState('');
@@ -25,6 +28,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     if (!getToken()) {
       setUser(null);
       setPhase('ready');
+      dispatch(sessionCleared());
       return;
     }
     setPhase('loading');
@@ -37,15 +41,17 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
           return;
         }
         setUser(profile);
+        dispatch(sessionEstablished({ user: profile, accessToken: getToken() }));
         setPhase('ready');
       })
       .catch((err) => {
         if (request.signal.aborted) return;
         setUser(null);
+        dispatch(sessionCleared());
         setError(userMessage(err));
         setPhase(getToken() ? 'error' : 'ready');
       });
-  }, []);
+  }, [dispatch]);
   useEffect(() => {
     retry();
     window.addEventListener(SESSION_EVENT, retry);
@@ -66,6 +72,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       );
     } finally {
       setUser(null);
+      dispatch(sessionCleared());
       setPhase('ready');
     }
   }
