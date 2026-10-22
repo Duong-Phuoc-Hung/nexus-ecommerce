@@ -1,7 +1,9 @@
 import { ApiError, unwrap, type RequestApi } from '../../../lib/axios/http';
 import { getSessionUser, saveSession, clearSession } from '../utils/session';
 import type { SessionUser, RegisterResult } from '../../user/types/user.types';
+import { createUserApi } from '../../user/api/user.api';
 export function createAuthApi(request: RequestApi) {
+  const users = createUserApi(request);
   return {
     getCurrentUser(): SessionUser | null {
       return getSessionUser();
@@ -28,7 +30,7 @@ export function createAuthApi(request: RequestApi) {
       }
     },
     async getProfile(signal?: AbortSignal) {
-      return unwrap<SessionUser>(await request('/users/profile', { signal }));
+      return users.getProfile(signal);
     },
     async requestPasswordReset(email: string) {
       return request<{ success: boolean; message: string }>('/auth/forgot-password', {
