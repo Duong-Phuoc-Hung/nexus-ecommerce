@@ -78,6 +78,7 @@ export class LoginUseCase {
 
         return {
           accessToken: tokenPair.accessToken,
+          token: tokenPair.accessToken,
           refreshToken: tokenPair.refreshToken,
           expiresIn: tokenPair.expiresIn,
           user: {
@@ -103,6 +104,7 @@ export class LoginUseCase {
 
       return {
         accessToken: token,
+        token,
         refreshToken: token,
         expiresIn: 900,
         user: {

@@ -8,9 +8,28 @@
 const { describe, it, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
+const fs = require('node:fs');
+const { execSync } = require('node:child_process');
 
 // Import từ compiled JavaScript trong dist/ để kiểm tra chính xác bundle runtime
 const DIST_DIR = path.resolve(__dirname, '../backend/user-service/dist');
+
+// Tự động kiểm tra và biên dịch user-service nếu dist/ chưa tồn tại (chống lỗi MODULE_NOT_FOUND trên môi trường CI/Clean clone)
+if (
+  !fs.existsSync(DIST_DIR) ||
+  !fs.existsSync(path.join(DIST_DIR, 'application/use-cases/RegisterUseCase.js'))
+) {
+  try {
+    execSync('pnpm --filter @nexus/user-service build', {
+      cwd: path.resolve(__dirname, '..'),
+      stdio: ['ignore', 'ignore', 'pipe'],
+      encoding: 'utf-8',
+    });
+  } catch {
+    const userDir = path.resolve(__dirname, '../backend/user-service');
+    execSync('npx tsc', { cwd: userDir, stdio: ['ignore', 'ignore', 'pipe'] });
+  }
+}
 
 const { InMemoryUserRepository } = require(
   path.join(DIST_DIR, 'infrastructure/repositories/InMemoryUserRepository.js'),

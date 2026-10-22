@@ -2,15 +2,18 @@ import { Request, Response } from 'express';
 import { GetUserProfileUseCase } from '../../../application/use-cases/GetUserProfileUseCase';
 import { LoginUseCase } from '../../../application/use-cases/LoginUseCase';
 import { LogoutUseCase } from '../../../application/use-cases/LogoutUseCase';
+import { RegisterUseCase } from '../../../application/use-cases/RegisterUseCase';
 import { RegisterUserUseCase } from '../../../application/use-cases/RegisterUserUseCase';
 import { RequestPasswordResetUseCase } from '../../../application/use-cases/RequestPasswordResetUseCase';
 import { ResetPasswordUseCase } from '../../../application/use-cases/ResetPasswordUseCase';
 import { AssignUserRoleUseCase } from '../../../application/use-cases/AssignUserRoleUseCase';
 import { AccountLockedException } from '../../../domain/exceptions/AccountLockedException';
+import { AccountSuspendedException } from '../../../domain/exceptions/AccountSuspendedException';
 import { InvalidCredentialsException } from '../../../domain/exceptions/InvalidCredentialsException';
 import { InvalidTokenException } from '../../../domain/exceptions/InvalidTokenException';
 import { UserInactiveException } from '../../../domain/exceptions/UserInactiveException';
 import { UserNotFoundException } from '../../../domain/exceptions/UserNotFoundException';
+import { UserAlreadyExistsException } from '../../../domain/exceptions/UserAlreadyExistsException';
 import { ROLE_PERMISSIONS } from '../../../infrastructure/security/authorization';
 
 export class UserController {
@@ -18,7 +21,7 @@ export class UserController {
     private readonly getUserProfileUseCase: GetUserProfileUseCase,
     private readonly loginUseCase: LoginUseCase,
     private readonly logoutUseCase: LogoutUseCase,
-    private readonly registerUserUseCase: RegisterUserUseCase,
+    private readonly registerUseCase: RegisterUseCase | RegisterUserUseCase,
     private readonly requestPasswordResetUseCase: RequestPasswordResetUseCase,
     private readonly resetPasswordUseCase: ResetPasswordUseCase,
     private readonly assignUserRoleUseCase: AssignUserRoleUseCase,
@@ -60,11 +63,16 @@ export class UserController {
 
   public async register(req: Request, res: Response): Promise<void> {
     try {
-      const user = await this.registerUserUseCase.execute(req.body || {});
+      const user = await this.registerUseCase.execute(req.body || {});
       res.status(201).json({ success: true, data: user });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Registration failed.';
-      const status = message.includes('already exists') ? 409 : 400;
+      const status =
+        error instanceof UserAlreadyExistsException ||
+        message.includes('already exists') ||
+        message.includes('đã tồn tại')
+          ? 409
+          : 400;
       res.status(status).json({ success: false, error: message });
     }
   }
@@ -127,7 +135,7 @@ export class UserController {
   public async login(req: Request, res: Response): Promise<void> {
     try {
       const { email, password } = req.body || {};
-      const result = await this.loginUseCase.execute(email, password);
+      const result = await this.loginUseCase.execute({ email, password });
 
       res.status(200).json({
         success: true,
@@ -136,11 +144,15 @@ export class UserController {
     } catch (error) {
       if (
         error instanceof AccountLockedException ||
+        error instanceof AccountSuspendedException ||
         error instanceof InvalidCredentialsException ||
         error instanceof UserInactiveException ||
         error instanceof UserNotFoundException
       ) {
-        const status = error instanceof AccountLockedException ? 423 : 401;
+        const status =
+          error instanceof AccountLockedException || error instanceof AccountSuspendedException
+            ? 423
+            : 401;
         res.status(status).json({
           success: false,
           error: error.message,
