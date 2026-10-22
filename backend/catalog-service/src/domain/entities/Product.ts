@@ -22,7 +22,10 @@ export interface ProductProps {
   condition?: string;
   slug?: string;
   allowAuction?: boolean;
+  currency?: string;
+  categoryName?: string;
   sellerName?: string;
+  saleType?: string;
 }
 
 /**
@@ -48,7 +51,10 @@ export class Product {
   private _condition?: string;
   private _slug?: string;
   private _allowAuction?: boolean;
+  private _currency: string;
+  private _categoryName?: string;
   private _sellerName?: string;
+  private _saleType?: string;
 
   constructor(props: ProductProps) {
     this._id = props.id;
@@ -68,7 +74,10 @@ export class Product {
     this._condition = props.condition;
     this._slug = props.slug;
     this._allowAuction = props.allowAuction;
+    this._currency = props.currency || 'VND';
+    this._categoryName = props.categoryName;
     this._sellerName = props.sellerName;
+    this._saleType = props.saleType || (props.allowAuction ? 'AUCTION' : 'FIXED_PRICE');
   }
 
   public get id(): string {
@@ -81,6 +90,33 @@ export class Product {
 
   public get categoryId(): string {
     return this._categoryId;
+  }
+
+  public get categoryName(): string | undefined {
+    return this._categoryName;
+  }
+
+  public setCategoryName(name: string): void {
+    this._categoryName = name;
+  }
+
+  public get sellerName(): string | undefined {
+    return this._sellerName;
+  }
+
+  public setSellerName(name: string): void {
+    this._sellerName = name;
+  }
+
+  public get currency(): string {
+    return this._currency;
+  }
+
+  public get saleType(): 'FIXED_PRICE' | 'AUCTION' {
+    return (
+      (this._saleType as 'FIXED_PRICE' | 'AUCTION') ||
+      (this._allowAuction ? 'AUCTION' : 'FIXED_PRICE')
+    );
   }
 
   public get title(): string {
@@ -135,19 +171,49 @@ export class Product {
     return this._allowAuction;
   }
 
-  public get sellerName(): string | undefined {
-    return this._sellerName;
-  }
-
-  public get saleType(): 'FIXED_PRICE' | 'AUCTION' {
-    // Toàn bộ sản phẩm trong Catalog hiện tại đều là mua sắm trực tiếp (có niêm yết base_price).
-    // Thuộc tính allowAuction vẫn được lưu trữ riêng để phục vụ khi có phiên đấu giá mở sau này.
-    return 'FIXED_PRICE';
-  }
-
   public isAvailable(): boolean {
     // Kiểm tra xem sản phẩm có sẵn sàng để được bán không
     return this._status === ProductStatus.ACTIVE && this._stockQuantity > 0;
+  }
+
+  public updateDetails(params: {
+    title?: string;
+    description?: string;
+    price?: number;
+    stockQuantity?: number;
+    status?: ProductStatus;
+    categoryId?: string;
+    images?: string[];
+    primaryImage?: string;
+    attributes?: Record<string, string>;
+    condition?: string;
+    slug?: string;
+    allowAuction?: boolean;
+    currency?: string;
+    categoryName?: string;
+    sellerName?: string;
+    saleType?: string;
+  }): void {
+    if (params.title !== undefined) this._title = params.title;
+    if (params.description !== undefined) this._description = params.description;
+    if (params.price !== undefined) this._price = params.price;
+    if (params.stockQuantity !== undefined) this._stockQuantity = params.stockQuantity;
+    if (params.status !== undefined) this._status = params.status;
+    if (params.categoryId !== undefined) this._categoryId = params.categoryId;
+    if (params.images !== undefined) {
+      this._images = params.images;
+      this._primaryImage =
+        params.primaryImage || (this._images.length > 0 ? this._images[0] : undefined);
+    }
+    if (params.attributes !== undefined) this._attributes = params.attributes;
+    if (params.condition !== undefined) this._condition = params.condition;
+    if (params.slug !== undefined) this._slug = params.slug;
+    if (params.allowAuction !== undefined) this._allowAuction = params.allowAuction;
+    if (params.currency !== undefined) this._currency = params.currency;
+    if (params.categoryName !== undefined) this._categoryName = params.categoryName;
+    if (params.sellerName !== undefined) this._sellerName = params.sellerName;
+    if (params.saleType !== undefined) this._saleType = params.saleType;
+    this._updatedAt = new Date();
   }
 
   public reduceStock(quantity: number): void {
