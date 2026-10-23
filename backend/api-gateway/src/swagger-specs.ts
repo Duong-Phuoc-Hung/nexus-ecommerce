@@ -419,251 +419,102 @@ export const catalogSpec = {
   },
   servers: [{ url: 'http://localhost:4000', description: 'API Gateway (Cổng 4000)' }],
   paths: {
-    '/api/v1/categories': {
-      get: {
-        tags: ['Categories'],
-        summary: 'Lấy danh mục sản phẩm (Hỗ trợ cấu trúc Cây phân cấp đa tầng)',
-        description:
-          'Truy xuất danh mục cho thanh menu, bộ lọc danh mục và form đăng bán. Truyền tree=true để nhận dạng cây 3 cấp.',
-        parameters: [
-          {
-            name: 'tree',
-            in: 'query',
-            required: false,
-            description:
-              'Nếu là true, trả về dạng cây lồng nhau (children). Nếu false, trả về danh sách phẳng.',
-            schema: { type: 'boolean', default: false },
-          },
-        ],
-        responses: { 200: { description: 'Danh sách hoặc Cây danh mục phân cấp' } },
-      },
-    },
-    '/api/v1/categories/{id}': {
-      get: {
-        tags: ['Categories'],
-        summary: 'Xem chi tiết danh mục theo ID hoặc Slug',
-        parameters: [
-          {
-            name: 'id',
-            in: 'path',
-            required: true,
-            description:
-              'ID danh mục (1, 2, 10...) hoặc Slug (thiet-bi-dien-tu, dien-thoai-tablet)',
-            schema: { type: 'string', example: '1' },
-          },
-        ],
-        responses: {
-          200: { description: 'Chi tiết danh mục' },
-          404: { description: 'Không tìm thấy' },
-        },
-      },
-    },
     '/api/v1/products': {
       get: {
         tags: ['Products'],
-        '/api/v1/products': {
-          get: {
-            tags: ['Products'],
-            summary: 'Lấy danh sách tất cả sản phẩm (Có phân trang, lọc, sắp xếp)',
-            description: `${PUBLIC} Method: GET. Truy xuất toàn bộ sản phẩm đang được bày bán có hỗ trợ phân trang và lọc theo danh mục, giá, tình trạng.`,
-            parameters: [
+        summary: 'Lấy danh sách tất cả sản phẩm',
+        description: `${PUBLIC} Method: GET. Truy xuất toàn bộ sản phẩm đang được bày bán (không phân trang).`,
+        responses: {
+          200: jsonResponse('Danh sách sản phẩm', {
+            success: true,
+            data: [
               {
-                name: 'page',
-                in: 'query',
-                schema: { type: 'integer', default: 1 },
-                description: 'Số trang hiện tại (mặc định: 1)',
-              },
-              {
-                name: 'limit',
-                in: 'query',
-                schema: { type: 'integer', default: 12 },
-                description: 'Số lượng sản phẩm mỗi trang (mặc định: 12)',
-              },
-              {
-                name: 'categoryId',
-                in: 'query',
-                schema: { type: 'string' },
-                description: 'Lọc theo danh mục (ID hoặc Slug)',
-              },
-              {
-                name: 'minPrice',
-                in: 'query',
-                schema: { type: 'number' },
-                description: 'Mức giá tối thiểu',
-              },
-              {
-                name: 'maxPrice',
-                in: 'query',
-                schema: { type: 'number' },
-                description: 'Mức giá tối đa',
-              },
-              {
-                name: 'condition',
-                in: 'query',
-                schema: { type: 'string', enum: ['NEW', 'LIKE_NEW', 'USED', 'REFURBISHED'] },
-                description: 'Tình trạng hàng hóa',
-              },
-              {
-                name: 'sort',
-                in: 'query',
-                schema: {
-                  type: 'string',
-                  enum: ['featured', 'price-asc', 'price-desc', 'newest', 'oldest'],
-                },
-                description: 'Tiêu chí sắp xếp',
+                id: '1',
+                sellerId: 'a0000000-0000-0000-0000-000000000002',
+                categoryId: '100',
+                title: 'iPhone 15 Pro Max 256GB Titan Tự Nhiên',
+                description: '...',
+                price: 29990000,
+                stockQuantity: 10,
+                status: 'ACTIVE',
+                images: ['https://...'],
+                primaryImage: 'https://...',
+                condition: 'NEW',
+                slug: 'iphone-15-pro-max-256gb-titan-tu-nhien',
+                allowAuction: false,
+                attributes: {},
               },
             ],
-            responses: {
-              200: jsonResponse('Danh sách sản phẩm có phân trang', {
-                success: true,
-                data: [
-                  {
-                    id: '1',
-                    sellerId: '01a15822-3fd0-7b39-ad01-f11da72d5b80',
-                    sellerName: 'Trần Thị Seller',
-                    categoryId: '100',
-                    categoryName: 'Điện thoại & Tablet',
-                    title: 'iPhone 15 Pro Max 256GB Titan Tự Nhiên',
-                    description: 'iPhone 15 Pro Max chính hãng VN/A, bảo hành 12 tháng',
-                    price: 29990000,
-                    currency: 'VND',
-                    stockQuantity: 10,
-                    status: 'ACTIVE',
-                    images: ['https://example.com/iphone15.jpg'],
-                    primaryImage: 'https://example.com/iphone15.jpg',
-                    condition: 'NEW',
-                    slug: 'iphone-15-pro-max-256gb-titan-tu-nhien',
-                    allowAuction: false,
-                    attributes: { Color: 'Natural Titanium', Storage: '256GB' },
-                  },
-                ],
-              }),
-            },
-          },
-          post: {
-            tags: ['Products'],
-            summary: 'Tạo sản phẩm mới (Dành cho Người bán - SELLER hoặc ADMIN)',
-            description:
-              'Đăng sản phẩm lên sàn giao dịch. Yêu cầu Bearer Token của tài khoản có vai trò SELLER hoặc ADMIN.',
-            security: [{ BearerAuth: [] }],
-            requestBody: {
-              required: true,
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'object',
-                    required: ['title', 'description', 'categoryId', 'price', 'stockQuantity'],
-                    properties: {
-                      title: {
-                        type: 'string',
-                        example: 'Bàn phím cơ không dây Custom Nexus MK-01',
-                      },
-                      description: {
-                        type: 'string',
-                        example:
-                          'Bàn phím cơ layout 75%, kết nối 3 chế độ Bluetooth 5.0 / 2.4GHz / Type-C',
-                      },
-                      categoryId: { type: 'string', example: '1' },
-                      price: { type: 'number', example: 1850000 },
-                      stockQuantity: { type: 'integer', example: 25 },
-                      condition: {
-                        type: 'string',
-                        enum: ['NEW', 'LIKE_NEW', 'USED', 'REFURBISHED'],
-                        example: 'NEW',
-                      },
-                      images: {
-                        type: 'array',
-                        items: { type: 'string' },
-                        example: ['https://example.com/p1.jpg'],
-                      },
-                      allowAuction: { type: 'boolean', example: false },
-                      attributes: {
-                        type: 'object',
-                        example: { Switch: 'Gateron Yellow Pro', Keycap: 'PBT Double-shot' },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-            responses: {
-              201: { description: 'Tạo sản phẩm thành công' },
-              400: { description: 'Dữ liệu không hợp lệ' },
-              401: { description: 'Chưa đăng nhập' },
-              403: { description: 'Không có quyền Seller/Admin' },
-            },
-          },
+          }),
         },
-        '/api/v1/products/search': {
-          get: {
-            tags: ['Products'],
-            summary: 'Tìm kiếm sản phẩm',
-            description: `${PUBLIC} Method: GET. Query "q" là bắt buộc; các tham số khác tùy chọn. Tham số sai kiểu/âm trả 400.`,
-            parameters: [
+      },
+    },
+    '/api/v1/products/search': {
+      get: {
+        tags: ['Products'],
+        summary: 'Tìm kiếm sản phẩm',
+        description: `${PUBLIC} Method: GET. Query "q" là bắt buộc; các tham số khác tùy chọn. Tham số sai kiểu/âm trả 400.`,
+        parameters: [
+          {
+            name: 'q',
+            in: 'query',
+            required: true,
+            description: 'Từ khóa tìm kiếm',
+            schema: { type: 'string', example: 'iphone' },
+          },
+          {
+            name: 'categoryId',
+            in: 'query',
+            required: false,
+            description: 'Lọc theo danh mục',
+            schema: { type: 'string', example: '100' },
+          },
+          {
+            name: 'minPrice',
+            in: 'query',
+            required: false,
+            description: 'Giá tối thiểu (số >= 0)',
+            schema: { type: 'number', example: 1000000 },
+          },
+          {
+            name: 'maxPrice',
+            in: 'query',
+            required: false,
+            description: 'Giá tối đa (số >= 0, không nhỏ hơn minPrice)',
+            schema: { type: 'number', example: 50000000 },
+          },
+          {
+            name: 'page',
+            in: 'query',
+            required: false,
+            description: 'Trang (số nguyên >= 1, mặc định 1)',
+            schema: { type: 'integer', example: 1 },
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            required: false,
+            description: 'Số dòng mỗi trang (1-100, mặc định 20)',
+            schema: { type: 'integer', example: 20 },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Kết quả tìm kiếm', {
+            success: true,
+            data: [
               {
-                name: 'q',
-                in: 'query',
-                required: true,
-                description: 'Từ khóa tìm kiếm',
-                schema: { type: 'string', example: 'iphone' },
-              },
-              {
-                name: 'categoryId',
-                in: 'query',
-                required: false,
-                description: 'Lọc theo danh mục',
-                schema: { type: 'string', example: '100' },
-              },
-              {
-                name: 'minPrice',
-                in: 'query',
-                required: false,
-                description: 'Giá tối thiểu (số >= 0)',
-                schema: { type: 'number', example: 1000000 },
-              },
-              {
-                name: 'maxPrice',
-                in: 'query',
-                required: false,
-                description: 'Giá tối đa (số >= 0, không nhỏ hơn minPrice)',
-                schema: { type: 'number', example: 50000000 },
-              },
-              {
-                name: 'page',
-                in: 'query',
-                required: false,
-                description: 'Trang (số nguyên >= 1, mặc định 1)',
-                schema: { type: 'integer', example: 1 },
-              },
-              {
-                name: 'limit',
-                in: 'query',
-                required: false,
-                description: 'Số dòng mỗi trang (1-100, mặc định 20)',
-                schema: { type: 'integer', example: 20 },
+                id: '1',
+                sellerId: 'a0000000-0000-0000-0000-000000000002',
+                categoryId: '100',
+                title: 'iPhone 15 Pro Max 256GB Titan Tự Nhiên',
+                price: 29990000,
+                stockQuantity: 10,
+                status: 'ACTIVE',
               },
             ],
-            responses: {
-              200: jsonResponse('Kết quả tìm kiếm', {
-                success: true,
-                data: [
-                  {
-                    id: '1',
-                    sellerId: '01a15822-3fd0-7b39-ad01-f11da72d5b80',
-                    sellerName: 'Trần Thị Seller',
-                    categoryId: '100',
-                    title: 'iPhone 15 Pro Max 256GB Titan Tự Nhiên',
-                    price: 29990000,
-                    currency: 'VND',
-                    stockQuantity: 10,
-                    status: 'ACTIVE',
-                  },
-                ],
-                meta: { page: 1, limit: 20, total: 1, totalPages: 1 },
-              }),
-              400: errorResponse('Tham số không hợp lệ', 'Query parameter "q" is required.'),
-            },
-          },
+            meta: { page: 1, limit: 20, total: 1, totalPages: 1 },
+          }),
+          400: errorResponse('Tham số không hợp lệ', 'Query parameter "q" is required.'),
         },
       },
     },
@@ -697,53 +548,6 @@ export const catalogSpec = {
             },
           }),
           404: errorResponse('Không tìm thấy sản phẩm', 'Product with ID "999999" was not found.'),
-        },
-      },
-      patch: {
-        tags: ['Products'],
-        summary: 'Sửa sản phẩm (Kiểm tra quyền sở hữu và xử lý xung đột đồng thời)',
-        description:
-          'Cập nhật thông tin sản phẩm. Chỉ người bán sở hữu sản phẩm hoặc ADMIN mới được sửa. Hỗ trợ Optimistic Concurrency Control qua expectedUpdatedAt để chống xung đột.',
-        security: [{ BearerAuth: [] }],
-        parameters: [
-          {
-            name: 'id',
-            in: 'path',
-            required: true,
-            description: 'Mã sản phẩm cần sửa',
-            schema: { type: 'string', example: '1' },
-          },
-        ],
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                properties: {
-                  title: { type: 'string', example: 'Tên sản phẩm cập nhật' },
-                  description: { type: 'string' },
-                  price: { type: 'number', example: 1750000 },
-                  stockQuantity: { type: 'integer', example: 30 },
-                  status: { type: 'string', enum: ['ACTIVE', 'DRAFT', 'ARCHIVED', 'OUT_OF_STOCK'] },
-                  expectedUpdatedAt: {
-                    type: 'string',
-                    example: '2026-10-21T08:00:00.000Z',
-                    description:
-                      'Thời điểm cập nhật cũ để phát hiện xung đột đồng thời (HTTP 409 Conflict)',
-                  },
-                },
-              },
-            },
-          },
-        },
-        responses: {
-          200: { description: 'Cập nhật thành công' },
-          400: { description: 'Dữ liệu không hợp lệ' },
-          401: { description: 'Chưa đăng nhập' },
-          403: { description: 'Không có quyền sở hữu sản phẩm này' },
-          404: { description: 'Không tìm thấy sản phẩm' },
-          409: { description: 'Xung đột đồng thời (Dữ liệu đã bị bên khác sửa trước)' },
         },
       },
     },

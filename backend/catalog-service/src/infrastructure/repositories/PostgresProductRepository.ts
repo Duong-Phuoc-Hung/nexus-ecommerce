@@ -1,8 +1,6 @@
 import { Pool } from 'pg';
 import {
   IProductRepository,
-  ProductFilterCriteria,
-  ProductListPage,
   ProductSearchCriteria,
   ProductSearchPage,
 } from '../../domain/repositories/IProductRepository';
@@ -85,112 +83,6 @@ export class PostgresProductRepository implements IProductRepository {
     );
   }
 
-  public async findFiltered(criteria: ProductFilterCriteria): Promise<ProductListPage> {
-    const conditions: string[] = ['p.deleted_at IS NULL'];
-    const params: any[] = [];
-
-    if (criteria.q && criteria.q.trim()) {
-      params.push(`%${criteria.q.trim().toLowerCase()}%`);
-      conditions.push(
-        `(LOWER(p.title) LIKE $${params.length} OR LOWER(COALESCE(p.description, '')) LIKE $${params.length})`,
-      );
-    }
-
-    if (criteria.categoryId) {
-      const isNumeric = /^\d+$/.test(criteria.categoryId);
-      if (isNumeric) {
-        params.push(parseInt(criteria.categoryId, 10));
-        conditions.push(`p.category_id = $${params.length}`);
-      } else {
-        params.push(criteria.categoryId);
-        conditions.push(
-          `EXISTS (SELECT 1 FROM catalog_categories c WHERE c.id = p.category_id AND c.slug = $${params.length})`,
-        );
-      }
-    }
-
-    if (criteria.sellerId) {
-      params.push(criteria.sellerId);
-      conditions.push(`p.seller_id = $${params.length}`);
-    }
-
-    if (criteria.status) {
-      params.push(criteria.status);
-      conditions.push(`p.status = $${params.length}`);
-    }
-
-    if (criteria.condition) {
-      params.push(criteria.condition);
-      conditions.push(`p.condition = $${params.length}`);
-    }
-
-    if (criteria.minPrice !== undefined) {
-      params.push(criteria.minPrice);
-      conditions.push(`p.base_price >= $${params.length}`);
-    }
-
-    if (criteria.maxPrice !== undefined) {
-      params.push(criteria.maxPrice);
-      conditions.push(`p.base_price <= $${params.length}`);
-    }
-
-    const whereClause = conditions.join(' AND ');
-
-    // Đếm tổng số bản ghi
-    const countResult = await this.pool.query(
-      `SELECT COUNT(*)::int as total FROM catalog_products p WHERE ${whereClause}`,
-      params,
-    );
-    const total = countResult.rows[0]?.total || 0;
-
-    // Sắp xếp
-    let orderBy = 'p.id DESC';
-    if (criteria.sort === 'price-asc') {
-      orderBy = 'p.base_price ASC';
-    } else if (criteria.sort === 'price-desc') {
-      orderBy = 'p.base_price DESC';
-    } else if (criteria.sort === 'newest') {
-      orderBy = 'p.created_at DESC';
-    } else if (criteria.sort === 'oldest') {
-      orderBy = 'p.created_at ASC';
-    }
-
-    const limit = criteria.limit || 12;
-    const offset = criteria.offset || 0;
-
-    params.push(limit);
-    const limitParam = `$${params.length}`;
-    params.push(offset);
-    const offsetParam = `$${params.length}`;
-
-    const query = `
-      SELECT 
-        p.id, p.seller_id, p.category_id, p.title, p.slug, p.description, 
-        p.status, p.condition, p.base_price, p.allow_auction, p.created_at, p.updated_at
-      FROM catalog_products p
-      WHERE ${whereClause}
-      ORDER BY ${orderBy}
-      LIMIT ${limitParam} OFFSET ${offsetParam};
-    `;
-
-    const result = await this.pool.query(query, params);
-    if (result.rows.length === 0) {
-      return { products: [], total };
-    }
-
-    const productIds = result.rows.map((r: any) => Number(r.id));
-    const [imagesMap, attributesMap] = await Promise.all([
-      this.getImagesForProductIds(productIds),
-      this.getAttributesForProductIds(productIds),
-    ]);
-
-    const products = result.rows.map((row: any) =>
-      this.mapRowToProduct(row, imagesMap[row.id] || [], attributesMap[row.id] || {}),
-    );
-
-    return { products, total };
-  }
-
   public async findByCategory(categoryId: string): Promise<Product[]> {
     const isNumeric = /^\d+$/.test(categoryId);
     const query = `
@@ -220,7 +112,7 @@ export class PostgresProductRepository implements IProductRepository {
   }
 
   public async search(criteria: ProductSearchCriteria): Promise<ProductSearchPage> {
-    const conditions: string[] = ['p.deleted_at IS NULL', "p.status IN ('ACTIVE', 'AVAILABLE')"];
+    const conditions: string[] = ['p.deleted_at IS NULL', "p.status = 'ACTIVE'"];
     const params: any[] = [];
 
     params.push(`%${criteria.q.trim().toLowerCase()}%`);
@@ -303,7 +195,7 @@ export class PostgresProductRepository implements IProductRepository {
     `;
     const params = [
       product.sellerId,
-      parseInt(product.categoryId, 10) || product.categoryId,
+      product.categoryId,
       product.title,
       product.slug || this.slugify(product.title),
       product.description,
@@ -316,90 +208,32 @@ export class PostgresProductRepository implements IProductRepository {
       product.createdAt,
       product.updatedAt,
     ];
-    const res = await this.pool.query(query, params);
-    const createdId = res.rows[0]?.id;
-
-    if (createdId && product.images && product.images.length > 0) {
-      for (let i = 0; i < Math.min(product.images.length, 5); i++) {
-        await this.pool.query(
-          `INSERT INTO catalog_product_images (product_id, image_url, display_order, is_primary)
-           VALUES ($1, $2, $3, $4)`,
-          [createdId, product.images[i], i + 1, i === 0],
-        );
-      }
-    }
-
-    if (createdId && product.attributes && Object.keys(product.attributes).length > 0) {
-      for (const [key, value] of Object.entries(product.attributes)) {
-        await this.pool.query(
-          `INSERT INTO catalog_product_attributes (product_id, attribute_key, attribute_value)
-           VALUES ($1, $2, $3)`,
-          [createdId, key, value],
-        );
-      }
-    }
+    await this.pool.query(query, params);
   }
 
   public async update(product: Product): Promise<void> {
     // Cập nhật sản phẩm
-    const isNumeric = /^\d+$/.test(product.id);
     const query = `
       UPDATE catalog_products
-      SET title = $1, description = $2, base_price = $3, status = $4, condition = $5,
-          category_id = $6, allow_auction = $7, stock_quantity = $8, seller_name = $9, updated_at = NOW()
-      WHERE ${isNumeric ? 'id = $10' : 'slug = $10'};
+      SET title = $1, description = $2, base_price = $3, status = $4, stock_quantity = $5, seller_name = $6, updated_at = NOW()
+      WHERE id = $7;
     `;
     await this.pool.query(query, [
       product.title,
       product.description,
       product.price,
       product.status,
-      product.condition || 'NEW',
-      parseInt(product.categoryId, 10) || product.categoryId,
-      product.allowAuction ?? false,
-      product.stockQuantity ?? 1,
+      product.stockQuantity,
       product.sellerName || 'Nexus Official Store',
-      isNumeric ? parseInt(product.id, 10) : product.id,
+      parseInt(product.id, 10),
     ]);
-
-    // Nếu có cập nhật danh sách ảnh
-    if (isNumeric && product.images && product.images.length > 0) {
-      const numericId = parseInt(product.id, 10);
-      await this.pool.query(`DELETE FROM catalog_product_images WHERE product_id = $1`, [
-        numericId,
-      ]);
-      for (let i = 0; i < Math.min(product.images.length, 5); i++) {
-        await this.pool.query(
-          `INSERT INTO catalog_product_images (product_id, image_url, display_order, is_primary)
-           VALUES ($1, $2, $3, $4)`,
-          [numericId, product.images[i], i + 1, i === 0],
-        );
-      }
-    }
-
-    // Nếu có cập nhật thuộc tính
-    if (isNumeric && product.attributes && Object.keys(product.attributes).length > 0) {
-      const numericId = parseInt(product.id, 10);
-      await this.pool.query(`DELETE FROM catalog_product_attributes WHERE product_id = $1`, [
-        numericId,
-      ]);
-      for (const [key, value] of Object.entries(product.attributes)) {
-        await this.pool.query(
-          `INSERT INTO catalog_product_attributes (product_id, attribute_key, attribute_value)
-           VALUES ($1, $2, $3)`,
-          [numericId, key, value],
-        );
-      }
-    }
   }
 
   public async delete(id: string): Promise<void> {
-    // Xoá mềm sản phẩm (hỗ trợ cả ID số hoặc slug)
-    const isNumeric = /^\d+$/.test(id);
-    await this.pool.query(
-      `UPDATE catalog_products SET deleted_at = NOW() WHERE ${isNumeric ? 'id = $1' : 'slug = $1'}`,
-      [isNumeric ? parseInt(id, 10) : id],
-    );
+    // Xoá mềm sản phẩm
+    await this.pool.query('UPDATE catalog_products SET deleted_at = NOW() WHERE id = $1', [
+      parseInt(id, 10),
+    ]);
   }
 
   private async getImagesByProductId(productId: number): Promise<string[]> {
@@ -464,7 +298,6 @@ export class PostgresProductRepository implements IProductRepository {
       DRAFT: ProductStatus.DRAFT,
       ARCHIVED: ProductStatus.ARCHIVED,
       OUT_OF_STOCK: ProductStatus.OUT_OF_STOCK,
-      AVAILABLE: ProductStatus.ACTIVE,
     };
 
     const stock =
@@ -482,14 +315,14 @@ export class PostgresProductRepository implements IProductRepository {
       price: parseFloat(row.base_price),
       stockQuantity: isNaN(stock) ? 1 : stock,
       status: statusMap[row.status] || ProductStatus.ACTIVE,
+      createdAt: new Date(row.created_at),
+      updatedAt: new Date(row.updated_at),
+      images: images,
+      primaryImage: images.length > 0 ? images[0] : undefined,
+      attributes: attributes,
       condition: row.condition,
       slug: row.slug,
       allowAuction: row.allow_auction,
-      images,
-      primaryImage: images.length > 0 ? images[0] : undefined,
-      attributes,
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.updated_at),
     });
   }
 
@@ -500,6 +333,6 @@ export class PostgresProductRepository implements IProductRepository {
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/đ/g, 'd')
       .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
+      .replace(/(^-|-$)+/g, '');
   }
 }

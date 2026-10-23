@@ -15,8 +15,6 @@ interface SearchErrorResponse {
 }
 
 async function withCatalogServer<T>(run: (baseUrl: string) => Promise<T>): Promise<T> {
-  process.env.NODE_ENV = 'test';
-  process.env.USE_IN_MEMORY = 'true';
   const server = createApplication().listen(0, '127.0.0.1');
   await new Promise<void>((resolve) => server.once('listening', resolve));
   const address = server.address();
