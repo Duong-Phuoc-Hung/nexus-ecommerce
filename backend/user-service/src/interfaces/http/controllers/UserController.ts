@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { GetUserProfileUseCase } from '../../../application/use-cases/GetUserProfileUseCase';
+import { SearchUsersUseCase } from '../../../application/use-cases/SearchUsersUseCase';
 import { LoginUseCase } from '../../../application/use-cases/LoginUseCase';
 import { LogoutUseCase } from '../../../application/use-cases/LogoutUseCase';
 import { RegisterUseCase } from '../../../application/use-cases/RegisterUseCase';
@@ -25,7 +26,53 @@ export class UserController {
     private readonly requestPasswordResetUseCase: RequestPasswordResetUseCase,
     private readonly resetPasswordUseCase: ResetPasswordUseCase,
     private readonly assignUserRoleUseCase: AssignUserRoleUseCase,
+    private readonly searchUsersUseCase?: SearchUsersUseCase,
   ) {}
+
+  public async listUsers(req: Request, res: Response): Promise<void> {
+    try {
+      if (!this.searchUsersUseCase) {
+        res.status(500).json({ success: false, error: 'SearchUsersUseCase not configured.' });
+        return;
+      }
+
+      const q = typeof req.query.q === 'string' ? req.query.q : undefined;
+      const email = typeof req.query.email === 'string' ? req.query.email : undefined;
+      const role = typeof req.query.role === 'string' ? req.query.role : undefined;
+      const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+      const page = req.query.page ? Number(req.query.page) : undefined;
+      const limit = req.query.limit ? Number(req.query.limit) : undefined;
+      const sortBy = typeof req.query.sortBy === 'string' ? (req.query.sortBy as any) : undefined;
+      const sortOrder =
+        typeof req.query.sortOrder === 'string' ? (req.query.sortOrder as any) : undefined;
+
+      const result = await this.searchUsersUseCase.execute({
+        q,
+        email,
+        role,
+        status,
+        page,
+        limit,
+        sortBy,
+        sortOrder,
+      });
+
+      res.status(200).json({
+        success: true,
+        data: result.items,
+        pagination: result.pagination,
+        total: result.pagination.total,
+        page: result.pagination.page,
+        limit: result.pagination.limit,
+        totalPages: result.pagination.totalPages,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal Server Error',
+      });
+    }
+  }
 
   public async getProfile(req: Request, res: Response): Promise<void> {
     try {

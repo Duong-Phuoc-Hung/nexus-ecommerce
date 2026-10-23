@@ -10,6 +10,7 @@ import { RegisterUserUseCase } from './application/use-cases/RegisterUserUseCase
 import { RequestPasswordResetUseCase } from './application/use-cases/RequestPasswordResetUseCase';
 import { ResetPasswordUseCase } from './application/use-cases/ResetPasswordUseCase';
 import { AssignUserRoleUseCase } from './application/use-cases/AssignUserRoleUseCase';
+import { SearchUsersUseCase } from './application/use-cases/SearchUsersUseCase';
 import { UserController } from './interfaces/http/controllers/UserController';
 import { createAuthRoutes, createUserRoutes } from './interfaces/http/routes/UserRoutes';
 import { authTokenStore } from './infrastructure/security/AuthTokenStore';
@@ -66,6 +67,7 @@ export function createApplication(): Application {
   const assignUserRoleUseCase = new AssignUserRoleUseCase(userRepository, (userId) =>
     authTokenStore.revokeUserTokens(userId),
   );
+  const searchUsersUseCase = new SearchUsersUseCase(userRepository);
   const userController = new UserController(
     getUserProfileUseCase,
     loginUseCase,
@@ -74,6 +76,7 @@ export function createApplication(): Application {
     requestPasswordResetUseCase,
     resetPasswordUseCase,
     assignUserRoleUseCase,
+    searchUsersUseCase,
   );
 
   app.use('/api/v1/auth', createAuthRoutes(userController));

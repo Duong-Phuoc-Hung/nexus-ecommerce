@@ -79,3 +79,78 @@ test('POST /api/v1/auth/login returns both accessToken and backward-compatible t
     assert.equal(json.data.user.role, 'BUYER');
   });
 });
+
+test('GET /api/v1/users enforces RBAC: 401 when unauthenticated, 403 for BUYER, 200 for SUPPORT_STAFF', async () => {
+  await withUserServer(async (baseUrl) => {
+    // 1. Unauthenticated -> 401
+    const unauthRes = await fetch(`${baseUrl}/api/v1/users`);
+    assert.equal(unauthRes.status, 401);
+
+    // 2. Authenticate as BUYER
+    const buyerLoginRes = await fetch(`${baseUrl}/api/v1/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'buyer.test@nexus-ecommerce.com',
+        password: 'Password123!',
+      }),
+    });
+    assert.equal(buyerLoginRes.status, 200);
+    const buyerLoginJson = (await buyerLoginRes.json()) as any;
+    const buyerToken = buyerLoginJson.data.accessToken;
+
+    // BUYER calls GET /api/v1/users -> 403 Forbidden
+    const buyerForbiddenRes = await fetch(`${baseUrl}/api/v1/users`, {
+      headers: { Authorization: `Bearer ${buyerToken}` },
+    });
+    assert.equal(buyerForbiddenRes.status, 403);
+
+    // 3. Authenticate as SUPPORT_STAFF
+    const staffLoginRes = await fetch(`${baseUrl}/api/v1/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'staff.test@nexus-ecommerce.com',
+        password: 'Password123!',
+      }),
+    });
+    assert.equal(staffLoginRes.status, 200);
+    const staffLoginJson = (await staffLoginRes.json()) as any;
+    const staffToken = staffLoginJson.data.accessToken;
+
+    // SUPPORT_STAFF calls GET /api/v1/users -> 200 OK
+    const staffListRes = await fetch(`${baseUrl}/api/v1/users`, {
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+    assert.equal(staffListRes.status, 200);
+    const staffListJson = (await staffListRes.json()) as any;
+    assert.equal(staffListJson.success, true);
+    assert.ok(Array.isArray(staffListJson.data));
+    assert.ok(staffListJson.data.length >= 4);
+    assert.ok(staffListJson.pagination);
+    assert.equal(staffListJson.pagination.page, 1);
+    assert.equal(staffListJson.pagination.limit, 10);
+    assert.ok(staffListJson.pagination.total >= 4);
+
+    // Verify dual-key compatibility fields for Frontend Support Staff screen (/support/users)
+    const sampleUser = staffListJson.data[0];
+    assert.ok(sampleUser.id);
+    assert.ok(sampleUser.fullName);
+    assert.equal(sampleUser.name, sampleUser.fullName);
+    assert.ok(sampleUser.email);
+    assert.ok(sampleUser.role);
+    assert.ok(sampleUser.status);
+    assert.equal(sampleUser.reputation, sampleUser.reputationScore);
+    assert.equal(sampleUser.orders, sampleUser.ordersCount);
+
+    // 4. SUPPORT_STAFF searches with keyword q=Retro
+    const staffSearchRes = await fetch(`${baseUrl}/api/v1/users?q=Retro`, {
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+    assert.equal(staffSearchRes.status, 200);
+    const staffSearchJson = (await staffSearchRes.json()) as any;
+    assert.equal(staffSearchJson.data.length, 1);
+    assert.equal(staffSearchJson.data[0].email, 'seller.test@nexus-ecommerce.com');
+    assert.equal(staffSearchJson.data[0].role, 'SELLER');
+  });
+});
