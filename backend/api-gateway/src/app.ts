@@ -86,6 +86,10 @@ export function createApplication(): Application {
     swaggerUi.setup(undefined, {
       explorer: true,
       swaggerUrls: swaggerUrls,
+      persistAuthorization: true,
+      swaggerOptions: {
+        persistAuthorization: true,
+      },
       customCss: `
         .swagger-ui .topbar { display: block !important; background-color: #1b1b1b; padding: 10px 0; }
         .swagger-ui .topbar .download-url-wrapper { display: flex !important; align-items: center; justify-content: flex-end; }
@@ -127,10 +131,12 @@ export function createApplication(): Application {
           body: hasBody ? JSON.stringify(req.body ?? {}) : undefined,
         });
 
+        const text = await upstream.text();
         res.status(upstream.status);
-        const contentType = upstream.headers.get('content-type');
-        if (contentType) res.setHeader('content-type', contentType);
-        res.send(await upstream.text());
+        const contentType = upstream.headers.get('content-type') || 'application/json';
+        res.setHeader('content-type', contentType);
+        res.setHeader('content-length', Buffer.byteLength(text));
+        res.end(text);
       } catch (proxyErr) {
         console.error(`[Gateway Proxy Error -> ${serviceName}]:`, proxyErr);
         res.status(502).json({
@@ -144,6 +150,7 @@ export function createApplication(): Application {
   app.use('/api/v1/auth', createProxy('User Service', SERVICE_ENDPOINTS.user));
   app.use('/api/v1/users', createProxy('User Service', SERVICE_ENDPOINTS.user));
   app.use('/api/v1/products', createProxy('Catalog Service', SERVICE_ENDPOINTS.catalog));
+  app.use('/api/v1/categories', createProxy('Catalog Service', SERVICE_ENDPOINTS.catalog));
   app.use('/api/v1/auctions', createProxy('Auction Service', SERVICE_ENDPOINTS.auction));
   app.use('/api/v1/orders', createProxy('Commerce Service', SERVICE_ENDPOINTS.commerce));
   app.use(
