@@ -63,3 +63,45 @@ test('gateway proxies auth requests with path, bearer header, body, and status',
   assert.equal(payload.authorization, 'Bearer test-token');
   assert.deepEqual(JSON.parse(payload.body), { email: 'proxy@example.com' });
 });
+
+test('gateway proxies category requests to catalog with query parameters', async (t) => {
+  const upstream = createServer((req, res) => {
+    res.statusCode = 200;
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ url: req.url }));
+  });
+
+  await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+  const upstreamAddress = upstream.address();
+  assert.ok(upstreamAddress && typeof upstreamAddress !== 'string');
+
+  const previousCatalogServiceUrl = process.env.CATALOG_SERVICE_URL;
+  process.env.CATALOG_SERVICE_URL = `http://127.0.0.1:${upstreamAddress.port}`;
+  const gateway = createApplication();
+  if (previousCatalogServiceUrl === undefined) delete process.env.CATALOG_SERVICE_URL;
+  else process.env.CATALOG_SERVICE_URL = previousCatalogServiceUrl;
+
+  const gatewayServer = gateway.listen(0, '127.0.0.1');
+  await new Promise<void>((resolve) => gatewayServer.once('listening', resolve));
+  const gatewayAddress = gatewayServer.address();
+  assert.ok(gatewayAddress && typeof gatewayAddress !== 'string');
+
+  t.after(async () => {
+    await Promise.all([
+      new Promise<void>((resolve, reject) =>
+        gatewayServer.close((error) => (error ? reject(error) : resolve())),
+      ),
+      new Promise<void>((resolve, reject) =>
+        upstream.close((error) => (error ? reject(error) : resolve())),
+      ),
+    ]);
+  });
+
+  const response = await fetch(
+    `http://127.0.0.1:${gatewayAddress.port}/api/v1/categories?tree=true`,
+  );
+  const payload = (await response.json()) as { url: string };
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.url, '/api/v1/categories?tree=true');
+});

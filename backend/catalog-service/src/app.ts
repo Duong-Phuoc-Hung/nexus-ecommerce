@@ -5,8 +5,14 @@ import { GetProductDetailUseCase } from './application/use-cases/GetProductDetai
 import { ProductController } from './interfaces/http/controllers/ProductController';
 import { createProductRoutes } from './interfaces/http/routes/ProductRoutes';
 import { SearchProductsUseCase } from './application/use-cases/SearchProductsUseCase';
+import { CategoryController } from './interfaces/http/controllers/CategoryController';
+import { createCategoryRoutes } from './interfaces/http/routes/CategoryRoutes';
+import { ICategoryRepository } from './domain/repositories/ICategoryRepository';
+import { PostgresCategoryRepository } from './infrastructure/repositories/PostgresCategoryRepository';
 
-export function createApplication(): Application {
+export function createApplication(
+  options: { categoryRepository?: ICategoryRepository } = {},
+): Application {
   const app = express();
 
   app.use(cors());
@@ -30,8 +36,12 @@ export function createApplication(): Application {
     productRepository,
     searchProductsUseCase,
   );
+  const categoryController = new CategoryController(
+    options.categoryRepository || new PostgresCategoryRepository(),
+  );
 
   app.use('/api/v1/products', createProductRoutes(productController));
+  app.use('/api/v1/categories', createCategoryRoutes(categoryController));
 
   return app;
 }
