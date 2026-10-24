@@ -2,6 +2,9 @@ import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import { InMemoryOrderRepository } from './infrastructure/repositories/InMemoryOrderRepository';
 import { GetOrderDetailUseCase } from './application/use-cases/GetOrderDetailUseCase';
+import { SearchOrdersUseCase } from './application/use-cases/SearchOrdersUseCase';
+import { CancelOrderUseCase } from './application/use-cases/CancelOrderUseCase';
+import { RefundOrderUseCase } from './application/use-cases/RefundOrderUseCase';
 import { OrderController } from './interfaces/http/controllers/OrderController';
 import { createOrderRoutes } from './interfaces/http/routes/OrderRoutes';
 
@@ -23,7 +26,16 @@ export function createApplication(): Application {
 
   const orderRepository = new InMemoryOrderRepository();
   const getOrderDetailUseCase = new GetOrderDetailUseCase(orderRepository);
-  const orderController = new OrderController(getOrderDetailUseCase);
+  const searchOrdersUseCase = new SearchOrdersUseCase(orderRepository);
+  const cancelOrderUseCase = new CancelOrderUseCase(orderRepository, getOrderDetailUseCase);
+  const refundOrderUseCase = new RefundOrderUseCase(orderRepository, getOrderDetailUseCase);
+
+  const orderController = new OrderController(
+    getOrderDetailUseCase,
+    searchOrdersUseCase,
+    cancelOrderUseCase,
+    refundOrderUseCase,
+  );
 
   app.use('/api/v1/orders', createOrderRoutes(orderController));
 

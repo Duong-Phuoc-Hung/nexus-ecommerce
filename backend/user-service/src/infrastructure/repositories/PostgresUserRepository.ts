@@ -1,5 +1,9 @@
 import { Pool } from 'pg';
-import { IUserRepository } from '../../domain/repositories/IUserRepository';
+import {
+  IUserRepository,
+  UserSearchCriteria,
+  UserSearchPage,
+} from '../../domain/repositories/IUserRepository';
 import { User, UserRole, UserStatus } from '../../domain/entities/User';
 
 /**
@@ -66,6 +70,100 @@ export class PostgresUserRepository implements IUserRepository {
     }
 
     return this.mapRowToUser(result.rows[0]);
+  }
+
+  public async search(criteria: UserSearchCriteria): Promise<UserSearchPage> {
+    const page = Math.max(1, criteria.page || 1);
+    const limit = Math.max(1, Math.min(100, criteria.limit || 10));
+    const offset = (page - 1) * limit;
+
+    const whereClauses: string[] = ['u.is_deleted = false'];
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    if (criteria.q && criteria.q.trim().length > 0) {
+      const qVal = `%${criteria.q.trim()}%`;
+      params.push(qVal);
+      whereClauses.push(
+        `(u.id::text ILIKE $${paramIndex} OR u.email ILIKE $${paramIndex} OR u.full_name ILIKE $${paramIndex} OR r.role_code ILIKE $${paramIndex})`,
+      );
+      paramIndex++;
+    }
+
+    if (criteria.email && criteria.email.trim().length > 0) {
+      params.push(criteria.email.trim().toLowerCase());
+      whereClauses.push(`LOWER(u.email) = $${paramIndex}`);
+      paramIndex++;
+    }
+
+    if (criteria.role && criteria.role.trim().length > 0) {
+      params.push(criteria.role.trim().toUpperCase());
+      whereClauses.push(`r.role_code = $${paramIndex}`);
+      paramIndex++;
+    }
+
+    if (criteria.status && criteria.status.trim().length > 0) {
+      params.push(criteria.status.trim().toUpperCase());
+      whereClauses.push(`u.status = $${paramIndex}`);
+      paramIndex++;
+    }
+
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+    const countQuery = `
+      SELECT COUNT(DISTINCT u.id) as total
+      FROM user_users u
+      LEFT JOIN user_user_roles ur ON u.id = ur.user_id
+      LEFT JOIN user_roles r ON ur.role_id = r.id
+      ${whereSql};
+    `;
+    const countResult = await this.pool.query(countQuery, params);
+    const total = parseInt(countResult.rows[0]?.total || '0', 10);
+    const totalPages = Math.ceil(total / limit) || 1;
+
+    let sortColumn = 'u.created_at';
+    switch (criteria.sortBy) {
+      case 'fullName':
+        sortColumn = 'u.full_name';
+        break;
+      case 'email':
+        sortColumn = 'u.email';
+        break;
+      case 'reputationScore':
+        sortColumn = 'reputation_score';
+        break;
+      case 'createdAt':
+      default:
+        sortColumn = 'u.created_at';
+        break;
+    }
+    const sortDirection = criteria.sortOrder === 'asc' ? 'ASC' : 'DESC';
+
+    const dataParams = [...params, limit, offset];
+    const dataQuery = `
+      SELECT u.id, u.email, u.full_name, u.password_hash, u.status,
+             u.failed_login_attempts, u.locked_until, u.created_at, u.updated_at,
+             COALESCE(r.role_code, 'BUYER') as role_code,
+             COALESCE(rep.score, 100) as reputation_score
+      FROM user_users u
+      LEFT JOIN user_user_roles ur ON u.id = ur.user_id
+      LEFT JOIN user_roles r ON ur.role_id = r.id
+      LEFT JOIN user_reputations rep ON u.id = rep.user_id
+      ${whereSql}
+      ORDER BY ${sortColumn} ${sortDirection}
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1};
+    `;
+
+    const dataResult = await this.pool.query(dataQuery, dataParams);
+    const users = dataResult.rows.map((row) => this.mapRowToUser(row));
+
+    return {
+      users,
+      total,
+      page,
+      limit,
+      totalPages,
+    };
   }
 
   public async save(user: User): Promise<void> {

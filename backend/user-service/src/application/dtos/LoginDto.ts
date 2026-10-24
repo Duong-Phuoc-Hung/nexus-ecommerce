@@ -25,6 +25,7 @@ export interface UserAuthView {
  */
 export interface LoginResponseDto {
   accessToken: string;
+  token: string; // Tương thích ngược với hợp đồng Frontend Web (auth.factory.ts)
   refreshToken: string;
   expiresIn: number;
   user: UserAuthView;

@@ -58,8 +58,6 @@ const ALLOWED_BRANCH_PATTERNS = [
   /^(feat|chore)\/(devops|shared|be|fe)-[a-z0-9-]+$/,
   // Nhánh sửa lỗi phát sinh
   /^(fix|hotfix|refactor|test|docs)\/(devops|shared|be|fe)-[a-z0-9-]+$/,
-  // Nhánh xác thực DEV 2 (MR !14)
-  /^feat\/authen$/,
   // Nhánh develop/staging
   /^(develop|staging)$/,
 ];

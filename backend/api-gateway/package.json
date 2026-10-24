@@ -5,6 +5,7 @@
   "description": "Project Nexus - API Gateway & Request Dispatcher (SRS 2.4)",
   "main": "dist/index.js",
   "scripts": {
+    "predev": "node ../../scripts/free-port.js 4000",
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts"
