@@ -1,7 +1,7 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
-import { userSpec, catalogSpec, auctionSpec, commerceSpec } from './swagger-specs';
+import { userSpec, catalogSpec, auctionSpec, commerceSpec, fulfillmentSpec } from './swagger-specs';
 
 export function createApplication(): Application {
   const app = express();
@@ -46,6 +46,7 @@ export function createApplication(): Application {
         { name: 'Auth', prefix: '/api/v1/auth', target: SERVICE_ENDPOINTS.user },
         { name: 'User & IAM', prefix: '/api/v1/users', target: SERVICE_ENDPOINTS.user },
         { name: 'Catalog', prefix: '/api/v1/products', target: SERVICE_ENDPOINTS.catalog },
+        { name: 'Categories', prefix: '/api/v1/categories', target: SERVICE_ENDPOINTS.catalog },
         { name: 'Commerce & Orders', prefix: '/api/v1/orders', target: SERVICE_ENDPOINTS.commerce },
         {
           name: 'Auction & Bidding',
@@ -55,6 +56,11 @@ export function createApplication(): Application {
         {
           name: 'Fulfillment & Shipping',
           prefix: '/api/v1/fulfillments',
+          target: SERVICE_ENDPOINTS.fulfillment,
+        },
+        {
+          name: 'Support & Staff Portal',
+          prefix: '/api/v1/support',
           target: SERVICE_ENDPOINTS.fulfillment,
         },
         {
@@ -71,12 +77,14 @@ export function createApplication(): Application {
   app.get('/docs-json/catalog', (_req: Request, res: Response) => res.json(catalogSpec));
   app.get('/docs-json/auction', (_req: Request, res: Response) => res.json(auctionSpec));
   app.get('/docs-json/commerce', (_req: Request, res: Response) => res.json(commerceSpec));
+  app.get('/docs-json/fulfillment', (_req: Request, res: Response) => res.json(fulfillmentSpec));
 
   const swaggerUrls = [
     { name: '1. User & Auth Service', url: '/docs-json/user' },
     { name: '2. Catalog Service (Sản phẩm)', url: '/docs-json/catalog' },
     { name: '3. Auction Service (Đấu giá)', url: '/docs-json/auction' },
-    { name: '4. Commerce Service (Đơn hàng)', url: '/docs-json/commerce' },
+    { name: '4. Commerce Service (Đơn hàng & Support)', url: '/docs-json/commerce' },
+    { name: '5. Fulfillment Service (Vận chuyển & Support)', url: '/docs-json/fulfillment' },
   ];
 
   // Swagger UI tổng với Dropdown chọn từng Service
@@ -144,11 +152,16 @@ export function createApplication(): Application {
   app.use('/api/v1/auth', createProxy('User Service', SERVICE_ENDPOINTS.user));
   app.use('/api/v1/users', createProxy('User Service', SERVICE_ENDPOINTS.user));
   app.use('/api/v1/products', createProxy('Catalog Service', SERVICE_ENDPOINTS.catalog));
+  app.use('/api/v1/categories', createProxy('Catalog Service', SERVICE_ENDPOINTS.catalog));
   app.use('/api/v1/auctions', createProxy('Auction Service', SERVICE_ENDPOINTS.auction));
   app.use('/api/v1/orders', createProxy('Commerce Service', SERVICE_ENDPOINTS.commerce));
   app.use(
     '/api/v1/fulfillments',
     createProxy('Fulfillment Service', SERVICE_ENDPOINTS.fulfillment),
+  );
+  app.use(
+    '/api/v1/support',
+    createProxy('Support / Fulfillment Service', SERVICE_ENDPOINTS.fulfillment),
   );
   app.use(
     '/api/v1/notifications',

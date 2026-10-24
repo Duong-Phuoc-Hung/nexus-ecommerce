@@ -236,30 +236,99 @@ export const userSpec = {
     '/api/v1/users': {
       get: {
         tags: ['Users & Profile'],
-        summary: 'Tìm kiếm khách hàng bằng Email',
-        description: 'Truy vấn thông tin người dùng thông qua địa chỉ Email.',
+        summary: 'Tra cứu & tìm kiếm danh sách người dùng (Support Staff & Admin)',
+        description: `${PRIVATE} Cần quyền USER.VIEW (Role: SUPPORT_STAFF hoặc ADMIN). Hỗ trợ tìm kiếm từ khóa q, lọc theo email, vai trò (role), trạng thái (status), sắp xếp và phân trang.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
+            name: 'q',
+            in: 'query',
+            required: false,
+            description: 'Từ khóa tìm kiếm theo tên, email, id, hoặc vai trò',
+            schema: { type: 'string', example: 'Minh Anh' },
+          },
+          {
             name: 'email',
             in: 'query',
-            required: true,
-            description: 'Địa chỉ Email của khách hàng cần tìm',
+            required: false,
+            description: 'Địa chỉ Email cần lọc chính xác',
             schema: { type: 'string', example: 'buyer@gmail.com' },
+          },
+          {
+            name: 'role',
+            in: 'query',
+            required: false,
+            description: 'Vai trò người dùng (BUYER, SELLER, SUPPORT_STAFF, ADMIN)',
+            schema: { type: 'string', example: 'BUYER' },
+          },
+          {
+            name: 'status',
+            in: 'query',
+            required: false,
+            description: 'Trạng thái tài khoản (ACTIVE, SUSPENDED, PENDING_VERIFICATION)',
+            schema: { type: 'string', example: 'ACTIVE' },
+          },
+          {
+            name: 'page',
+            in: 'query',
+            required: false,
+            description: 'Số trang (bắt đầu từ 1)',
+            schema: { type: 'integer', default: 1, example: 1 },
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            required: false,
+            description: 'Số lượng bản ghi trên một trang (tối đa 100)',
+            schema: { type: 'integer', default: 10, example: 10 },
+          },
+          {
+            name: 'sortBy',
+            in: 'query',
+            required: false,
+            description: 'Trường sắp xếp (createdAt, fullName, email, reputationScore)',
+            schema: {
+              type: 'string',
+              enum: ['createdAt', 'fullName', 'email', 'reputationScore'],
+              default: 'createdAt',
+            },
+          },
+          {
+            name: 'sortOrder',
+            in: 'query',
+            required: false,
+            description: 'Thứ tự sắp xếp (asc hoặc desc)',
+            schema: { type: 'string', enum: ['asc', 'desc'], default: 'desc' },
           },
         ],
         responses: {
-          200: jsonResponse('Tìm thấy khách hàng', {
+          200: jsonResponse('Danh sách người dùng và phân trang thành công', {
             success: true,
-            data: {
-              id: 'a0000000-0000-0000-0000-000000000003',
-              email: 'buyer@gmail.com',
-              role: 'BUYER',
+            data: [
+              {
+                id: 'usr_01hqz789abc',
+                fullName: 'Nguyen Van Buyer',
+                name: 'Nguyen Van Buyer',
+                email: 'buyer.test@nexus-ecommerce.com',
+                role: 'BUYER',
+                status: 'ACTIVE',
+                reputationScore: 98,
+                reputation: 98,
+                ordersCount: 0,
+                orders: 0,
+                createdAt: '2026-10-20T12:00:00.000Z',
+                updatedAt: '2026-10-20T12:00:00.000Z',
+              },
+            ],
+            pagination: {
+              total: 1,
+              page: 1,
+              limit: 10,
+              totalPages: 1,
             },
           }),
           401: unauthorized,
           403: forbidden,
-          404: errorResponse('Không tìm thấy', 'User with identifier "x@gmail.com" was not found.'),
         },
       },
     },
@@ -590,17 +659,89 @@ export const auctionSpec = {
 export const commerceSpec = {
   openapi: '3.0.0',
   info: {
-    title: 'Nexus - Commerce Service (Đơn hàng)',
+    title: 'Nexus - Commerce Service (Đơn hàng & Support)',
     version: '1.0.0',
-    description: 'Dịch vụ quản lý Giỏ hàng, Đặt hàng (Checkout) & Hóa đơn.',
+    description:
+      'Dịch vụ quản lý Giỏ hàng, Đặt hàng (Checkout), Hóa đơn & Xử lý khiếu nại (Support Staff).',
   },
   servers: [{ url: 'http://localhost:4000', description: 'API Gateway (Cổng 4000)' }],
+  components: {
+    securitySchemes: {
+      BearerAuth: {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        description: 'Nhập JWT token của SUPPORT_STAFF hoặc ADMIN',
+      },
+    },
+  },
   paths: {
+    '/api/v1/orders': {
+      get: {
+        tags: ['Support Staff / Tra cứu đơn hàng'],
+        summary: 'Tra cứu danh sách đơn hàng (Search, Filter & Pagination)',
+        description: `${PRIVATE} Yêu cầu quyền ORDER.LIST (SUPPORT_STAFF hoặc ADMIN). Hỗ trợ tìm kiếm theo từ khóa mã đơn, email, người mua, người bán.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'query',
+            in: 'query',
+            required: false,
+            description: 'Từ khóa tìm kiếm (mã đơn, tên/email khách hàng, gian hàng)',
+            schema: { type: 'string', example: 'NX-ORD-8021' },
+          },
+          {
+            name: 'status',
+            in: 'query',
+            required: false,
+            description:
+              'Lọc trạng thái (PENDING, PAID, PROCESSING, SHIPPED, DELIVERED, CANCELLED, REFUNDED)',
+            schema: { type: 'string', example: 'PENDING' },
+          },
+          {
+            name: 'page',
+            in: 'query',
+            required: false,
+            description: 'Số trang (mặc định: 1)',
+            schema: { type: 'integer', example: 1 },
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            required: false,
+            description: 'Số bản ghi trên trang (mặc định: 10)',
+            schema: { type: 'integer', example: 10 },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Danh sách đơn hàng', {
+            success: true,
+            data: [
+              {
+                id: 'NX-ORD-8021',
+                buyer: 'Minh Anh',
+                email: 'minhanh@example.com',
+                seller: 'Nexus Audio',
+                product: 'Tai nghe không dây Nexus Air',
+                total: 1290000,
+                status: 'Chờ xử lý',
+                statusCode: 'PENDING',
+                date: '18/10/2026',
+                tracking: 'GHN8829103VN',
+              },
+            ],
+            pagination: { total: 4, page: 1, limit: 10, totalPages: 1 },
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+    },
     '/api/v1/orders/checkout': {
       post: {
         tags: ['Orders & Checkout'],
         summary: 'Tạo đơn hàng & Thanh toán (Checkout)',
-        description: `Header: Content-Type: application/json. LƯU Ý: hiện tại Commerce Service chưa kiểm tra token và chưa validate body (chế độ Skeleton).`,
+        description: `Header: Content-Type: application/json. LƯU Ý: hiện tại Commerce Service hỗ trợ đặt hàng.`,
         requestBody: {
           required: true,
           content: {
@@ -625,14 +766,14 @@ export const commerceSpec = {
           },
         },
         responses: {
-          201: jsonResponse('Tạo đơn hàng thành công (Skeleton)', {
+          201: jsonResponse('Tạo đơn hàng thành công', {
             success: true,
-            message: 'Checkout intent created (Skeleton mode)',
+            message: 'Checkout intent created',
             data: {
-              orderId: 'ord_1792593649250',
+              orderId: 'NX-ORD-8021',
               items: [{ productId: '1', quantity: 2 }],
               shippingAddress: 'Khu Công Nghệ Cao, TP.HCM',
-              clientSecret: 'pi_skeleton_secret_test_123',
+              clientSecret: 'pi_test_secret_123',
             },
           }),
         },
@@ -640,31 +781,407 @@ export const commerceSpec = {
     },
     '/api/v1/orders/{id}': {
       get: {
-        tags: ['Orders & Checkout'],
-        summary: 'Tra cứu thông tin đơn hàng theo ID',
-        description: `${PUBLIC} (hiện chưa yêu cầu token) Method: GET.`,
+        tags: ['Support Staff / Tra cứu đơn hàng'],
+        summary: 'Chi tiết hồ sơ đơn hàng & diễn biến lịch sử (Timeline)',
+        description: `${PRIVATE} Yêu cầu token hợp lệ (SUPPORT_STAFF, ADMIN, hoặc chủ sở hữu đơn hàng).`,
+        security: [{ BearerAuth: [] }],
         parameters: [
           {
             name: 'id',
             in: 'path',
             required: true,
             description: 'Mã đơn hàng (Order ID)',
-            schema: { type: 'string', example: '1' },
+            schema: { type: 'string', example: 'NX-ORD-8021' },
           },
         ],
         responses: {
-          200: jsonResponse('Thông tin đơn hàng', {
+          200: jsonResponse('Thông tin hồ sơ chi tiết đơn hàng', {
             success: true,
             data: {
-              id: 'ord_01hqz555abc',
-              buyerId: 'usr_01hqz789abc',
-              sellerId: 'usr_01hqz333sel',
-              totalAmount: 399.99,
-              status: 'PAID',
-              itemsCount: 1,
+              id: 'NX-ORD-8021',
+              buyer: 'Minh Anh',
+              email: 'minhanh@example.com',
+              seller: 'Nexus Audio',
+              product: 'Tai nghe không dây Nexus Air',
+              total: 1290000,
+              status: 'Chờ xử lý',
+              statusCode: 'PENDING',
+              date: '18/10/2026',
+              tracking: 'GHN8829103VN',
+              items: [
+                {
+                  productId: 'prod_audio_01',
+                  name: 'Tai nghe không dây Nexus Air',
+                  quantity: 1,
+                  price: 1290000,
+                  total: 1290000,
+                },
+              ],
+              timeline: [
+                { title: 'Đơn hàng được tạo', status: 'done', timestamp: '18/10/2026 · 09:12' },
+                {
+                  title: 'Đã xác nhận thanh toán',
+                  status: 'done',
+                  timestamp: '18/10/2026 · 09:14',
+                },
+                {
+                  title: 'Chờ người bán xử lý',
+                  status: 'current',
+                  timestamp: '18/10/2026 · 14:30',
+                },
+                { title: 'Giao hàng hoàn tất', status: 'pending' },
+              ],
             },
           }),
-          404: errorResponse('Không tìm thấy đơn hàng', 'Order with ID "1" was not found.'),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse(
+            'Không tìm thấy đơn hàng',
+            'Order with ID "NX-ORD-8021" was not found.',
+          ),
+        },
+      },
+    },
+    '/api/v1/orders/{id}/cancel': {
+      post: {
+        tags: ['Support Staff / Thao tác xử lý'],
+        summary: 'Hủy đơn hàng trong trường hợp khiếu nại hoặc tranh chấp',
+        description: `${PRIVATE} Yêu cầu quyền ORDER.CANCEL (SUPPORT_STAFF hoặc ADMIN).`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã đơn hàng cần hủy',
+            schema: { type: 'string', example: 'NX-ORD-8021' },
+          },
+        ],
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  reason: { type: 'string', example: 'Khách hàng yêu cầu hủy qua hotline' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Hủy đơn hàng thành công', {
+            success: true,
+            message: 'Đơn hàng NX-ORD-8021 đã được hủy thành công bởi nhân viên hỗ trợ.',
+            data: { id: 'NX-ORD-8021', status: 'CANCELLED' },
+          }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse(
+            'Không tìm thấy đơn hàng',
+            'Order with ID "NX-ORD-8021" was not found.',
+          ),
+        },
+      },
+    },
+    '/api/v1/orders/{id}/refund': {
+      post: {
+        tags: ['Support Staff / Thao tác xử lý'],
+        summary: 'Hoàn tiền cho khách hàng khi tranh chấp được duyệt',
+        description: `${PRIVATE} Yêu cầu quyền ORDER.REFUND (SUPPORT_STAFF hoặc ADMIN).`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã đơn hàng cần hoàn tiền',
+            schema: { type: 'string', example: 'NX-ORD-8021' },
+          },
+        ],
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  reason: { type: 'string', example: 'Sản phẩm lỗi không đúng mô tả - CS-4021' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Hoàn tiền thành công', {
+            success: true,
+            message: 'Đã hoàn tiền thành công cho đơn hàng NX-ORD-8021.',
+            data: { id: 'NX-ORD-8021', status: 'REFUNDED' },
+          }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse(
+            'Không tìm thấy đơn hàng',
+            'Order with ID "NX-ORD-8021" was not found.',
+          ),
+        },
+      },
+    },
+  },
+};
+
+export const fulfillmentSpec = {
+  openapi: '3.0.0',
+  info: {
+    title: 'Nexus - Fulfillment & Shipping Service (Vận chuyển & Support)',
+    version: '1.0.0',
+    description:
+      'Dịch vụ Quản lý vận chuyển, Tra cứu mã vận đơn các hãng (GHN, GHTK, Viettel Post) & Bảng tin ca trực Support Staff.',
+  },
+  servers: [{ url: 'http://localhost:4000', description: 'API Gateway (Cổng 4000)' }],
+  components: {
+    securitySchemes: {
+      BearerAuth: {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        description: 'Nhập JWT token của SUPPORT_STAFF hoặc ADMIN',
+      },
+    },
+  },
+  paths: {
+    '/api/v1/fulfillments/shipments': {
+      get: {
+        tags: ['Support Staff / Tra cứu vận đơn'],
+        summary: 'Tra cứu danh sách vận đơn (Search & Filter theo Hãng, Mã, Người nhận)',
+        description: `${PRIVATE} Yêu cầu quyền SHIPPING.VIEW_SHIPMENT (SUPPORT_STAFF hoặc ADMIN).`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'query',
+            in: 'query',
+            required: false,
+            description: 'Từ khóa tìm kiếm (mã vận đơn, mã đơn, người nhận, hãng)',
+            schema: { type: 'string', example: 'GHN8829103VN' },
+          },
+          {
+            name: 'carrier',
+            in: 'query',
+            required: false,
+            description: 'Lọc hãng vận chuyển (GHN, GHTK, VNPOST, VIETTEL_POST)',
+            schema: { type: 'string', example: 'GHN' },
+          },
+          {
+            name: 'status',
+            in: 'query',
+            required: false,
+            description: 'Lọc trạng thái vận đơn',
+            schema: { type: 'string', example: 'IN_TRANSIT' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Danh sách vận đơn', {
+            success: true,
+            data: [
+              {
+                code: 'GHN8829103VN',
+                order: 'NX-ORD-8021',
+                carrier: 'GHN',
+                recipient: 'Minh Anh',
+                status: 'Đang lấy hàng',
+                statusCode: 'PICKED',
+                updated: '18/10/2026 · 14:30',
+                city: 'TP. Hồ Chí Minh',
+              },
+            ],
+            pagination: { total: 3, page: 1, limit: 10, totalPages: 1 },
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+    },
+    '/api/v1/fulfillments/shipments/{id}': {
+      get: {
+        tags: ['Support Staff / Tra cứu vận đơn'],
+        summary: 'Chi tiết vận đơn theo ID hoặc Mã vận đơn (Tracking Code)',
+        description: `${PRIVATE} Hỗ trợ tra cứu nhanh bằng cả id hệ thống hoặc mã vận đơn (VD: GHN8829103VN).`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã vận đơn hoặc Shipment ID',
+            schema: { type: 'string', example: 'GHN8829103VN' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Chi tiết hành trình vận chuyển', {
+            success: true,
+            data: {
+              code: 'GHN8829103VN',
+              order: 'NX-ORD-8021',
+              carrier: 'GHN',
+              recipient: 'Minh Anh',
+              city: 'TP. Hồ Chí Minh',
+              status: 'Đang lấy hàng',
+              statusCode: 'PICKED',
+              updated: '18/10/2026 · 14:30',
+              currentLocation: 'TP. Hồ Chí Minh · Trung tâm phân loại Tân Bình',
+              timeline: [
+                { title: 'Đã tạo vận đơn', status: 'done', timestamp: '18/10/2026 · 09:12' },
+                { title: 'Đã lấy hàng', status: 'done', timestamp: '18/10/2026 · 14:30' },
+                { title: 'Đang giao', status: 'current', timestamp: '18/10/2026 · 14:30' },
+                { title: 'Đã giao', status: 'pending' },
+              ],
+            },
+          }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy vận đơn', 'Shipment "GHN8829103VN" was not found.'),
+        },
+      },
+    },
+    '/api/v1/fulfillments/shipments/{id}/status': {
+      patch: {
+        tags: ['Support Staff / Thao tác xử lý'],
+        summary: 'Cập nhật trạng thái và vị trí hành trình vận đơn',
+        description: `${PRIVATE} Yêu cầu quyền SHIPPING.UPDATE_STATUS (SUPPORT_STAFF, ADMIN, hoặc CARRIER_AGENT).`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã vận đơn hoặc Shipment ID',
+            schema: { type: 'string', example: 'GHN8829103VN' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['status'],
+                properties: {
+                  status: { type: 'string', example: 'OUT_FOR_DELIVERY' },
+                  location: { type: 'string', example: 'Bưu cục Quận 1 · Đang phát cho khách' },
+                  note: { type: 'string', example: 'Bưu tá liên hệ trước khi phát hàng' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Cập nhật trạng thái thành công', {
+            success: true,
+            message: 'Cập nhật trạng thái vận đơn thành công.',
+            data: {
+              code: 'GHN8829103VN',
+              status: 'Đang phát hàng',
+              statusCode: 'OUT_FOR_DELIVERY',
+              currentLocation: 'Bưu cục Quận 1 · Đang phát cho khách',
+            },
+          }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy vận đơn', 'Shipment "GHN8829103VN" was not found.'),
+        },
+      },
+    },
+    '/api/v1/fulfillments/shipments/{id}/override': {
+      patch: {
+        tags: ['Support Staff / Thao tác xử lý'],
+        summary: 'Can thiệp thủ công (Manual Override) thông tin hãng, mã vận đơn, địa chỉ giao',
+        description: `${PRIVATE} Yêu cầu quyền SHIPPING.MANUAL_OVERRIDE (SUPPORT_STAFF hoặc ADMIN).`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã vận đơn hoặc Shipment ID',
+            schema: { type: 'string', example: 'GHN8829103VN' },
+          },
+        ],
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  carrier: { type: 'string', example: 'GHN' },
+                  trackingCode: { type: 'string', example: 'GHN8829103VN' },
+                  shippingAddress: {
+                    type: 'string',
+                    example: '12 Nguyễn Huệ, Phường Bến Nghé, Quận 1',
+                  },
+                  city: { type: 'string', example: 'TP. Hồ Chí Minh' },
+                  status: { type: 'string', example: 'IN_TRANSIT' },
+                  reason: {
+                    type: 'string',
+                    example: 'Điều chỉnh theo yêu cầu khiếu nại của khách hàng',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Điều chỉnh thành công', {
+            success: true,
+            message: 'Điều chỉnh thông tin vận đơn thủ công thành công.',
+            data: {
+              code: 'GHN8829103VN',
+              city: 'TP. Hồ Chí Minh',
+              status: 'Đang giao',
+            },
+          }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy vận đơn', 'Shipment "GHN8829103VN" was not found.'),
+        },
+      },
+    },
+    '/api/v1/support/dashboard/summary': {
+      get: {
+        tags: ['Support Staff / Dashboard Tổng quan'],
+        summary: 'Thống kê tổng quan ca trực Support Staff (Dashboard Summary)',
+        description: `${PRIVATE} Trả về số liệu ca trực: Đang chờ xử lý, Đang xử lý, Đã giải quyết hôm nay, Vận đơn cần theo dõi và Work Queue các ca trực gần nhất.`,
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: jsonResponse('Số liệu tổng quan ca trực', {
+            success: true,
+            data: {
+              pendingCases: 8,
+              processingCases: 5,
+              resolvedToday: 17,
+              flaggedShipments: 4,
+              metrics: {
+                highPriorityCount: 3,
+                nearOverdueCount: 2,
+                averageHandlingTimeMinutes: 24,
+                updatedTodayCount: 2,
+              },
+              recentCases: [
+                {
+                  id: 'CS-4021',
+                  type: 'Yêu cầu hoàn tiền',
+                  order: 'NX-ORD-8021',
+                  customer: 'Minh Anh',
+                  reason: 'Sản phẩm chưa đúng mô tả',
+                  priority: 'Cao',
+                  age: '12 phút',
+                },
+              ],
+            },
+          }),
+          401: unauthorized,
+          403: forbidden,
         },
       },
     },
