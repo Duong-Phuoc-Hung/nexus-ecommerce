@@ -1,13 +1,18 @@
 import { Category } from '../entities/Category';
 
-export interface ICategoryRepository {
-  /**
-   * Lấy toàn bộ danh mục đang hoạt động (isActive = true), sắp xếp theo thứ tự hiển thị
-   */
-  findAllActive(): Promise<Category[]>;
+export interface CategoryRecord {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  imageUrl: string | null;
+  parentId: string | null;
+  level: number;
+  displayOrder: number;
+}
 
-  /**
-   * Tìm danh mục theo ID
-   */
+export interface ICategoryRepository {
+  findActive(): Promise<CategoryRecord[]>;
+  findAllActive(): Promise<Category[]>;
   findById(id: string): Promise<Category | null>;
 }

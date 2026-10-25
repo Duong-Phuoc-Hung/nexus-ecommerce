@@ -1,4 +1,4 @@
-import { ICategoryRepository } from '../../domain/repositories/ICategoryRepository';
+import { CategoryRecord, ICategoryRepository } from '../../domain/repositories/ICategoryRepository';
 import { Category } from '../../domain/entities/Category';
 
 export class InMemoryCategoryRepository implements ICategoryRepository {
@@ -43,6 +43,21 @@ export class InMemoryCategoryRepository implements ICategoryRepository {
     for (const cat of sampleCategories) {
       this.categories.set(cat.id, cat);
     }
+  }
+
+  public async findActive(): Promise<CategoryRecord[]> {
+    return Array.from(this.categories.values())
+      .filter((c) => c.isActive)
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        slug: c.slug,
+        description: c.description || null,
+        imageUrl: c.imageUrl || null,
+        parentId: c.parentId || null,
+        level: c.level,
+        displayOrder: c.displayOrder,
+      }));
   }
 
   public async findAllActive(): Promise<Category[]> {

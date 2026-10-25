@@ -6,6 +6,23 @@ import {
 } from '../../domain/repositories/IProductRepository';
 import { Product, ProductStatus } from '../../domain/entities/Product';
 
+const PRODUCT_SELECT_COLUMNS = `
+  p.id,
+  p.seller_id,
+  p.category_id,
+  p.title,
+  p.slug,
+  p.description,
+  p.status,
+  p.condition,
+  p.base_price,
+  p.allow_auction,
+  COALESCE((to_jsonb(p)->>'stock_quantity')::int, 1) AS stock_quantity,
+  COALESCE(to_jsonb(p)->>'seller_name', 'Nexus Official Store') AS seller_name,
+  p.created_at,
+  p.updated_at
+`;
+
 /**
  * Infrastructure Repository: PostgresProductRepository (SRS 3.3)
  * Kết nối trực tiếp vào cơ sở dữ liệu PostgreSQL thật (nexus_catalog_db - Cổng 5433).
@@ -32,9 +49,7 @@ export class PostgresProductRepository implements IProductRepository {
     // Tìm 1 sản phẩm khi người dùng bấm vào xem chi tiết.
     const isNumeric = /^\d+$/.test(id);
     const query = `
-      SELECT 
-        p.id, p.seller_id, p.category_id, p.title, p.slug, p.description, 
-        p.status, p.condition, p.base_price, p.allow_auction, p.stock_quantity, p.seller_name, p.created_at, p.updated_at
+      SELECT ${PRODUCT_SELECT_COLUMNS}
       FROM catalog_products p
       WHERE ${isNumeric ? '(p.id = $1 OR p.slug = $2)' : 'p.slug = $1'}
         AND p.deleted_at IS NULL
@@ -59,9 +74,7 @@ export class PostgresProductRepository implements IProductRepository {
   public async findAll(limit = 50, offset = 0): Promise<Product[]> {
     // Lấy toàn bộ danh sách sản phẩm để hiển thị lên trang chủ
     const query = `
-      SELECT 
-        p.id, p.seller_id, p.category_id, p.title, p.slug, p.description, 
-        p.status, p.condition, p.base_price, p.allow_auction, p.stock_quantity, p.seller_name, p.created_at, p.updated_at
+      SELECT ${PRODUCT_SELECT_COLUMNS}
       FROM catalog_products p
       WHERE p.deleted_at IS NULL
       ORDER BY p.id ASC
@@ -86,9 +99,7 @@ export class PostgresProductRepository implements IProductRepository {
   public async findByCategory(categoryId: string): Promise<Product[]> {
     const isNumeric = /^\d+$/.test(categoryId);
     const query = `
-      SELECT 
-        p.id, p.seller_id, p.category_id, p.title, p.slug, p.description, 
-        p.status, p.condition, p.base_price, p.allow_auction, p.stock_quantity, p.seller_name, p.created_at, p.updated_at
+      SELECT ${PRODUCT_SELECT_COLUMNS}
       FROM catalog_products p
       WHERE ${isNumeric ? 'p.category_id = $1' : 'p.category_id = (SELECT id FROM catalog_categories WHERE slug = $1 LIMIT 1)'}
         AND p.deleted_at IS NULL
@@ -191,9 +202,7 @@ export class PostgresProductRepository implements IProductRepository {
     const offsetParam = `$${params.length}`;
 
     const query = `
-      SELECT 
-        p.id, p.seller_id, p.category_id, p.title, p.slug, p.description, 
-        p.status, p.condition, p.base_price, p.allow_auction, p.stock_quantity, p.seller_name, p.created_at, p.updated_at
+      SELECT ${PRODUCT_SELECT_COLUMNS}
       FROM catalog_products p
       WHERE ${whereClause}
       ORDER BY p.id ASC

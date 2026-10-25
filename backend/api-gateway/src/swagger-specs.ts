@@ -422,6 +422,61 @@ export const catalogSpec = {
   servers: [{ url: '/', description: 'API Gateway (Same Origin)' }],
   components: commonComponents,
   paths: {
+    '/api/v1/categories': {
+      get: {
+        tags: ['Categories'],
+        summary: 'Lấy danh sách danh mục',
+        description: `${PUBLIC} Method: GET. Mặc định trả cây danh mục đang hoạt động tối đa 3 cấp; dùng tree=false để lấy danh sách phẳng.`,
+        parameters: [
+          {
+            name: 'tree',
+            in: 'query',
+            required: false,
+            description: 'Trả cây phân cấp khi true (mặc định), danh sách phẳng khi false.',
+            schema: { type: 'boolean', default: true },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Danh sách danh mục đang hoạt động', {
+            success: true,
+            data: [
+              {
+                id: '1',
+                name: 'Thiết bị điện tử',
+                slug: 'thiet-bi-dien-tu',
+                parentId: null,
+                level: 1,
+                children: [
+                  {
+                    id: '10',
+                    name: 'Điện thoại & Tablet',
+                    slug: 'dien-thoai-tablet',
+                    parentId: '1',
+                    level: 2,
+                    children: [
+                      {
+                        id: '100',
+                        name: 'iPhone',
+                        slug: 'dien-thoai-iphone',
+                        parentId: '10',
+                        level: 3,
+                        children: [],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          }),
+          400: errorResponse(
+            'Tham số không hợp lệ',
+            'Query parameter "tree" must be true or false.',
+          ),
+          500: errorResponse('Không thể tải danh mục', 'Unable to load categories.'),
+        },
+      },
+    },
+
     '/api/v1/products/mine': {
       get: {
         tags: ['Products'],
@@ -764,49 +819,6 @@ export const catalogSpec = {
           401: errorResponse('Chưa xác thực', 'Vui lòng đăng nhập để thực hiện thao tác này.'),
           403: errorResponse('Từ chối truy cập', 'Bạn không có quyền xóa sản phẩm của người khác.'),
           404: errorResponse('Không tìm thấy', 'Product with ID "999" was not found.'),
-        },
-      },
-    },
-    '/api/v1/categories': {
-      get: {
-        tags: ['Categories'],
-        summary: 'Lấy danh sách cây danh mục ngành hàng',
-        description: `${PUBLIC} Method: GET. Lấy danh sách ngành hàng (hỗ trợ tham số query ?tree=true để dựng cây phân cấp cha-con tối đa 3 cấp theo SRS 3.3).`,
-        parameters: [
-          {
-            name: 'tree',
-            in: 'query',
-            required: false,
-            schema: { type: 'boolean', default: false },
-            description:
-              'Nếu true, trả về cấu trúc cây danh mục đa cấp (có mảng children). Mặc định false (danh sách phẳng).',
-          },
-        ],
-        responses: {
-          200: jsonResponse('Danh sách danh mục', {
-            success: true,
-            data: [
-              {
-                id: '1',
-                name: 'Thiết bị điện tử',
-                slug: 'thiet-bi-dien-tu',
-                level: 1,
-                isActive: true,
-                displayOrder: 1,
-                children: [
-                  {
-                    id: '10',
-                    name: 'Điện thoại & Tablet',
-                    slug: 'dien-thoai-tablet',
-                    level: 2,
-                    isActive: true,
-                    displayOrder: 1,
-                    children: [],
-                  },
-                ],
-              },
-            ],
-          }),
         },
       },
     },

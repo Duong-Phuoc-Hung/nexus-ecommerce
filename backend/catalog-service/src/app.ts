@@ -1,6 +1,8 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
+import { IProductRepository } from './domain/repositories/IProductRepository';
 import { PostgresProductRepository } from './infrastructure/repositories/PostgresProductRepository';
+import { InMemoryProductRepository } from './infrastructure/repositories/InMemoryProductRepository';
 import { GetProductDetailUseCase } from './application/use-cases/GetProductDetailUseCase';
 import { ProductController } from './interfaces/http/controllers/ProductController';
 import { createProductRoutes } from './interfaces/http/routes/ProductRoutes';
@@ -9,19 +11,24 @@ import { CreateProductUseCase } from './application/use-cases/CreateProductUseCa
 import { UpdateProductUseCase } from './application/use-cases/UpdateProductUseCase';
 import { DeleteProductUseCase } from './application/use-cases/DeleteProductUseCase';
 import { GetSellerProductsUseCase } from './application/use-cases/GetSellerProductsUseCase';
-
-import { PostgresCategoryRepository } from './infrastructure/repositories/PostgresCategoryRepository';
-import { InMemoryCategoryRepository } from './infrastructure/repositories/InMemoryCategoryRepository';
-import { GetCategoriesUseCase } from './application/use-cases/GetCategoriesUseCase';
 import { CategoryController } from './interfaces/http/controllers/CategoryController';
 import { createCategoryRoutes } from './interfaces/http/routes/CategoryRoutes';
+import { ICategoryRepository } from './domain/repositories/ICategoryRepository';
+import { PostgresCategoryRepository } from './infrastructure/repositories/PostgresCategoryRepository';
+import { InMemoryCategoryRepository } from './infrastructure/repositories/InMemoryCategoryRepository';
 
-export function createApplication(): Application {
+export interface CatalogAppOptions {
+  productRepository?: IProductRepository;
+  categoryRepository?: Partial<ICategoryRepository>;
+}
+
+export function createApplication(options: CatalogAppOptions = {}): Application {
   const app = express();
 
   app.use(cors());
   app.use(express.json());
 
+  // Health check endpoint
   app.get('/health', (_req: Request, res: Response) => {
     res.status(200).json({
       status: 'UP',
@@ -32,18 +39,37 @@ export function createApplication(): Application {
     });
   });
 
-  // DANH MỤC (CATEGORY):
-  const categoryRepository =
-    process.env.USE_IN_MEMORY_DB === 'true' || process.env.NODE_ENV === 'test'
-      ? new InMemoryCategoryRepository()
-      : new PostgresCategoryRepository();
-  const getCategoriesUseCase = new GetCategoriesUseCase(categoryRepository);
-  const categoryController = new CategoryController(getCategoriesUseCase);
+  const isTest = process.env.NODE_ENV === 'test' || process.env.USE_IN_MEMORY === 'true';
 
-  app.use('/api/v1/categories', createCategoryRoutes(categoryController));
+  // DANH MỤC (CATEGORY):
+  const defaultCategoryRepo = isTest
+    ? new InMemoryCategoryRepository()
+    : new PostgresCategoryRepository();
+
+  const categoryRepository: ICategoryRepository = options.categoryRepository
+    ? {
+        findActive: () =>
+          options.categoryRepository!.findActive
+            ? options.categoryRepository!.findActive()
+            : defaultCategoryRepo.findActive(),
+        findAllActive: () =>
+          options.categoryRepository!.findAllActive
+            ? options.categoryRepository!.findAllActive()
+            : defaultCategoryRepo.findAllActive(),
+        findById: (id: string) =>
+          options.categoryRepository!.findById
+            ? options.categoryRepository!.findById(id)
+            : defaultCategoryRepo.findById(id),
+      }
+    : defaultCategoryRepo;
+
+  const categoryController = new CategoryController(categoryRepository);
 
   // SẢN PHẨM (PRODUCT):
-  const productRepository = new PostgresProductRepository();
+  const productRepository =
+    options.productRepository ||
+    (isTest ? new InMemoryProductRepository() : new PostgresProductRepository());
+
   const getProductDetailUseCase = new GetProductDetailUseCase(productRepository);
   const searchProductsUseCase = new SearchProductsUseCase(productRepository);
   const createProductUseCase = new CreateProductUseCase(productRepository, categoryRepository);
@@ -61,6 +87,7 @@ export function createApplication(): Application {
     getSellerProductsUseCase,
   );
 
+  app.use('/api/v1/categories', createCategoryRoutes(categoryController));
   app.use('/api/v1/products', createProductRoutes(productController));
 
   return app;
