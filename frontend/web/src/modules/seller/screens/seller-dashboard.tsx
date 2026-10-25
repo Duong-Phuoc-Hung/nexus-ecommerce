@@ -65,6 +65,12 @@ export function SellerDashboard() {
             <small>Tra cứu số lượng khả dụng</small>
             <b>→</b>
           </Link>
+          <Link href="/seller/reputation">
+            <span>✦</span>
+            <strong>Điểm tín nhiệm</strong>
+            <small>Chỉ số uy tín & bảo đảm</small>
+            <b>→</b>
+          </Link>
         </div>
       </section>
       <section className="seller-panel">
