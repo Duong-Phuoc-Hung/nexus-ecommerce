@@ -1,18 +1,55 @@
 'use client';
+
 import Link from 'next/link';
-import { FormEvent, useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
+import { useEffect, useState } from 'react';
+import { ordersApi, type OrderListItem } from '@/modules/commerce/api/orders.api';
+import { sellerProductsApi } from '../api/seller-products.api';
+import { userMessage } from '@/lib/axios/http';
+import { useSession } from '@/modules/auth/hooks/use-session';
 import {
-  products,
-  auctions,
-  orders,
-  inventory,
+  products as mockProducts,
   PageHeading,
   DemoNote,
   MetricCard,
   OrdersTable,
 } from '../components/seller-shared';
+
 export function SellerDashboard() {
+  const { user } = useSession();
+  const [ordersData, setOrdersData] = useState<OrderListItem[]>([]);
+  const [ordersError, setOrdersError] = useState('');
+  const [productsCount, setProductsCount] = useState<number>(mockProducts.length);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    // 1. Tải danh sách sản phẩm từ Catalog API
+    sellerProductsApi
+      .list(controller.signal)
+      .then((items) => {
+        if (!controller.signal.aborted && items.length > 0) {
+          setProductsCount(items.length);
+        }
+      })
+      .catch(() => {
+        // Fallback giữ nguyên mockProducts.length
+      });
+
+    // 2. Tải đơn hàng từ Commerce API
+    if (user?.id) {
+      ordersApi
+        .list({ sellerId: user.id, limit: 50 }, controller.signal)
+        .then((page) => {
+          if (!controller.signal.aborted) {
+            setOrdersData(page.items);
+          }
+        })
+        .catch((err) => !controller.signal.aborted && setOrdersError(userMessage(err)));
+    }
+
+    return () => controller.abort();
+  }, [user?.id]);
+
   return (
     <>
       <PageHeading
@@ -20,15 +57,20 @@ export function SellerDashboard() {
         title="Chào mừng trở lại"
         description="Theo dõi cửa hàng và các hoạt động bán hàng gần đây."
       />
-      <DemoNote />
-      <section className="seller-metrics-grid" aria-label="Chỉ số minh họa">
+      <DemoNote message="Số lượng sản phẩm và danh sách đơn hàng được đồng bộ trực tiếp từ Catalog & Commerce API." />
+      <section className="seller-metrics-grid" aria-label="Chỉ số hoạt động">
         <MetricCard
           label="Sản phẩm đang bán"
-          value="12"
-          change="2 bản nháp cần hoàn thiện"
+          value={String(productsCount)}
+          change="Dữ liệu từ Catalog API"
           icon="▦"
         />
-        <MetricCard label="Đơn hàng mới" value="08" change="3 đơn cần theo dõi" icon="▤" />
+        <MetricCard
+          label="Đơn hàng gần đây"
+          value={String(ordersData.length)}
+          change="Dữ liệu từ Commerce API"
+          icon="▤"
+        />
         <MetricCard label="Phiên đấu giá" value="02" change="1 phiên đang diễn ra" icon="◷" />
         <MetricCard label="Điểm uy tín" value="96 / 100" change="Mức uy tín tốt" icon="✦" />
       </section>
@@ -75,7 +117,11 @@ export function SellerDashboard() {
           </div>
           <Link href="/seller/orders">Xem danh sách →</Link>
         </div>
-        <OrdersTable compact />
+        {ordersError ? (
+          <p className="seller-readonly-note">{ordersError}</p>
+        ) : (
+          <OrdersTable compact items={ordersData} />
+        )}
       </section>
     </>
   );

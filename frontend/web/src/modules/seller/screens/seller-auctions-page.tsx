@@ -39,7 +39,7 @@ export function SellerAuctionsPage() {
             <p className="seller-eyebrow">DANH SÁCH PHIÊN</p>
             <h2>Phiên của cửa hàng</h2>
           </div>
-          <span className="seller-muted">2 / 5 phiên đang hoạt động (minh họa)</span>
+          <span className="seller-muted">2 / 5 phiên đang hoạt động</span>
         </div>
         <div className="seller-table-wrap">
           <table className="seller-table">

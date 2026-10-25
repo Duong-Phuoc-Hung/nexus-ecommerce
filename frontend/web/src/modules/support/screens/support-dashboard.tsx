@@ -1,16 +1,20 @@
 'use client';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
-import {
-  orders,
-  users,
-  shipments,
-  Heading,
-  DemoBanner,
-  CaseTable,
-} from '../components/support-shared';
+import { useEffect, useState } from 'react';
+import { supportApi, type SupportSummary } from '../api/support.api';
+import { userMessage } from '@/lib/axios/http';
+import { Heading, DemoBanner, CaseTable } from '../components/support-shared';
 export function SupportDashboard() {
+  const [summary, setSummary] = useState<SupportSummary | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    const controller = new AbortController();
+    supportApi
+      .dashboard(controller.signal)
+      .then(setSummary)
+      .catch((err) => !controller.signal.aborted && setError(userMessage(err)));
+    return () => controller.abort();
+  }, []);
   return (
     <>
       <Heading
@@ -18,38 +22,50 @@ export function SupportDashboard() {
         title="Chào ca trực"
         description="Tổng quan yêu cầu hỗ trợ và các hồ sơ cần tra cứu."
       />
-      <DemoBanner />
+      <DemoBanner message="Số liệu ca trực được tải từ Support API." />
       <section className="support-stats">
         <article>
           <span>Đang chờ xử lý</span>
-          <strong>08</strong>
-          <small>3 ưu tiên cao</small>
+          <strong>{summary?.pendingCases ?? '—'}</strong>
+          <small>{summary ? `${summary.metrics.highPriorityCount} ưu tiên cao` : 'Đang tải'}</small>
         </article>
         <article>
           <span>Đang xử lý</span>
-          <strong>05</strong>
-          <small>2 hồ sơ gần quá hạn</small>
+          <strong>{summary?.processingCases ?? '—'}</strong>
+          <small>
+            {summary ? `${summary.metrics.nearOverdueCount} hồ sơ gần quá hạn` : 'Đang tải'}
+          </small>
         </article>
         <article>
           <span>Đã giải quyết hôm nay</span>
-          <strong>17</strong>
-          <small>Thời gian xử lý TB 24 phút</small>
+          <strong>{summary?.resolvedToday ?? '—'}</strong>
+          <small>
+            {summary
+              ? `Thời gian xử lý TB ${summary.metrics.averageHandlingTimeMinutes} phút`
+              : 'Đang tải'}
+          </small>
         </article>
         <article>
           <span>Vận đơn cần theo dõi</span>
-          <strong>04</strong>
-          <small>2 đơn cập nhật hôm nay</small>
+          <strong>{summary?.flaggedShipments ?? '—'}</strong>
+          <small>
+            {summary ? `${summary.metrics.updatedTodayCount} đơn cập nhật hôm nay` : 'Đang tải'}
+          </small>
         </article>
       </section>
       <section className="support-panel">
         <div className="support-panel-heading">
           <div>
-            <p className="support-eyebrow">WORK QUEUE · DEMO</p>
+            <p className="support-eyebrow">WORK QUEUE · API</p>
             <h2>Yêu cầu đang chờ</h2>
           </div>
           <Link href="/support/orders">Tra cứu đơn hàng →</Link>
         </div>
-        <CaseTable compact />
+        {error ? (
+          <p className="support-empty">{error}</p>
+        ) : (
+          <CaseTable compact items={summary?.recentCases ?? []} />
+        )}
       </section>
       <section className="support-quick-links">
         <Link href="/support/orders">

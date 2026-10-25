@@ -9,6 +9,14 @@ import { ApiError, userMessage } from '../../../lib/axios/http';
 import { safeNextPath } from '../../../lib/utils/navigation';
 import './auth.css';
 type Mode = 'login' | 'register' | 'forgot-password' | 'reset-password';
+
+const DEMO_ACCOUNTS = [
+  { label: 'Người bán (Seller)', email: 'seller@gmail.com' },
+  { label: 'Hỗ trợ (Support)', email: 'staff@gmail.com' },
+  { label: 'Quản trị (Admin)', email: 'admin@gmail.com' },
+  { label: 'Người mua (Buyer)', email: 'buyer@gmail.com' },
+];
+
 export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
   const params = useSearchParams();
   const token = useRef(params?.get('token') || '');
@@ -142,7 +150,13 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
         if (profile.role === 'ADMIN' && next === '/') destination = '/admin';
         else if (profile.role === 'BUYER' && next === '/') destination = '/';
         else if (profile.role === 'SELLER' && next === '/') destination = '/seller';
-        else if (profile.role === 'BUYER' && next.startsWith('/admin')) destination = '/';
+        else if (profile.role === 'SUPPORT_STAFF' && next === '/') destination = '/support';
+        else if (
+          profile.role === 'BUYER' &&
+          (next.startsWith('/admin') || next.startsWith('/seller') || next.startsWith('/support'))
+        ) {
+          destination = '/';
+        }
         window.location.assign(destination);
       }
     } catch (error) {
@@ -286,6 +300,30 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
             )}
             <form className="auth-form" noValidate onSubmit={submit} aria-busy={busy}>
               <fieldset disabled={busy} className="auth-week-fieldset">
+                {mode === 'login' && (
+                  <div className="auth-demo-accounts">
+                    <span className="auth-demo-label">⚡ Đăng nhập nhanh tài khoản mẫu:</span>
+                    <div className="auth-demo-pills">
+                      {DEMO_ACCOUNTS.map((acc) => (
+                        <button
+                          key={acc.email}
+                          type="button"
+                          className={`auth-demo-pill ${values.email === acc.email ? 'active' : ''}`}
+                          onClick={() => {
+                            field('email', acc.email);
+                            field('password', '123456');
+                            setNotice('');
+                            setErrors({});
+                          }}
+                          disabled={busy}
+                          title={`Điền thông tin ${acc.email} / 123456`}
+                        >
+                          {acc.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {!isReset && input('email', 'Email', 'email', 'email')}
                 {isRegister && input('fullName', 'Họ và tên', 'text', 'name')}
                 {!isForgot && (
