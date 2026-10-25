@@ -120,14 +120,16 @@ unit_tests:
         - 'pnpm-lock.yaml'
         - '.gitlab-ci.yml'
 
-# Frontend Build & Typecheck (chạy siêu nhanh ~3-5s, chỉ kích hoạt khi sửa frontend)
+# Frontend Build & Typecheck — chỉ build @nexus/web (unified frontend/web)
+# NOTE: Filter targets @nexus/web explicitly to avoid picking up stale cache
+#       directories (e.g. frontend/web-customer removed in refactor/fe-unified-structure).
 frontend_build:
   stage: test
   needs:
     - install_dependencies
   script:
-    - echo "Building Frontend applications (@nexus/web)..."
-    - pnpm -r --filter "./frontend/*" --if-present build
+    - echo "Building Frontend application (@nexus/web)..."
+    - pnpm --filter @nexus/web build
     - echo "Frontend build and typecheck completed successfully."
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
