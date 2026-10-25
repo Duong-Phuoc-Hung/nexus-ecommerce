@@ -1,3 +1,5 @@
+process.env.NODE_ENV = 'test';
+process.env.USE_IN_MEMORY = 'true';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import test from 'node:test';
