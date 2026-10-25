@@ -1,12 +1,23 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import { PostgresProductRepository } from './infrastructure/repositories/PostgresProductRepository';
+import { InMemoryProductRepository } from './infrastructure/repositories/InMemoryProductRepository';
+import { IProductRepository } from './domain/repositories/IProductRepository';
 import { GetProductDetailUseCase } from './application/use-cases/GetProductDetailUseCase';
 import { ProductController } from './interfaces/http/controllers/ProductController';
 import { createProductRoutes } from './interfaces/http/routes/ProductRoutes';
 import { SearchProductsUseCase } from './application/use-cases/SearchProductsUseCase';
+import { CategoryController } from './interfaces/http/controllers/CategoryController';
+import { createCategoryRoutes } from './interfaces/http/routes/CategoryRoutes';
+import { ICategoryRepository } from './domain/repositories/ICategoryRepository';
+import { PostgresCategoryRepository } from './infrastructure/repositories/PostgresCategoryRepository';
 
-export function createApplication(): Application {
+export interface CatalogAppOptions {
+  productRepository?: IProductRepository;
+  categoryRepository?: ICategoryRepository;
+}
+
+export function createApplication(options: CatalogAppOptions = {}): Application {
   const app = express();
 
   app.use(cors());
@@ -22,7 +33,11 @@ export function createApplication(): Application {
     });
   });
 
-  const productRepository = new PostgresProductRepository();
+  const isTest = process.env.NODE_ENV === 'test' || process.env.USE_IN_MEMORY === 'true';
+
+  const productRepository =
+    options.productRepository ||
+    (isTest ? new InMemoryProductRepository() : new PostgresProductRepository());
   const getProductDetailUseCase = new GetProductDetailUseCase(productRepository);
   const searchProductsUseCase = new SearchProductsUseCase(productRepository);
   const productController = new ProductController(
@@ -30,8 +45,12 @@ export function createApplication(): Application {
     productRepository,
     searchProductsUseCase,
   );
+  const categoryController = new CategoryController(
+    options.categoryRepository || new PostgresCategoryRepository(),
+  );
 
   app.use('/api/v1/products', createProductRoutes(productController));
+  app.use('/api/v1/categories', createCategoryRoutes(categoryController));
 
   return app;
 }
