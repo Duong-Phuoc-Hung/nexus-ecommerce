@@ -11,11 +11,13 @@ import { CreateProductUseCase } from './application/use-cases/CreateProductUseCa
 import { UpdateProductUseCase } from './application/use-cases/UpdateProductUseCase';
 import { DeleteProductUseCase } from './application/use-cases/DeleteProductUseCase';
 import { GetSellerProductsUseCase } from './application/use-cases/GetSellerProductsUseCase';
+import { GetCategoriesUseCase } from './application/use-cases/GetCategoriesUseCase';
 import { CategoryController } from './interfaces/http/controllers/CategoryController';
 import { createCategoryRoutes } from './interfaces/http/routes/CategoryRoutes';
 import { ICategoryRepository } from './domain/repositories/ICategoryRepository';
 import { PostgresCategoryRepository } from './infrastructure/repositories/PostgresCategoryRepository';
 import { InMemoryCategoryRepository } from './infrastructure/repositories/InMemoryCategoryRepository';
+import { Category } from './domain/entities/Category';
 
 export interface CatalogAppOptions {
   productRepository?: IProductRepository;
@@ -48,14 +50,33 @@ export function createApplication(options: CatalogAppOptions = {}): Application 
 
   const categoryRepository: ICategoryRepository = options.categoryRepository
     ? {
-        findActive: () =>
+        findActive: async () =>
           options.categoryRepository!.findActive
             ? options.categoryRepository!.findActive()
             : defaultCategoryRepo.findActive(),
-        findAllActive: () =>
-          options.categoryRepository!.findAllActive
-            ? options.categoryRepository!.findAllActive()
-            : defaultCategoryRepo.findAllActive(),
+        findAllActive: async () => {
+          if (options.categoryRepository!.findAllActive) {
+            return options.categoryRepository!.findAllActive();
+          }
+          if (options.categoryRepository!.findActive) {
+            const records = await options.categoryRepository!.findActive();
+            return records.map(
+              (r) =>
+                new Category({
+                  id: r.id,
+                  name: r.name,
+                  slug: r.slug,
+                  description: r.description,
+                  imageUrl: r.imageUrl,
+                  parentId: r.parentId,
+                  level: r.level,
+                  isActive: true,
+                  displayOrder: r.displayOrder,
+                }),
+            );
+          }
+          return defaultCategoryRepo.findAllActive();
+        },
         findById: (id: string) =>
           options.categoryRepository!.findById
             ? options.categoryRepository!.findById(id)
@@ -63,7 +84,8 @@ export function createApplication(options: CatalogAppOptions = {}): Application 
       }
     : defaultCategoryRepo;
 
-  const categoryController = new CategoryController(categoryRepository);
+  const getCategoriesUseCase = new GetCategoriesUseCase(categoryRepository);
+  const categoryController = new CategoryController(getCategoriesUseCase);
 
   // SẢN PHẨM (PRODUCT):
   const productRepository =
