@@ -163,4 +163,37 @@ export class Product {
     }
     this._updatedAt = new Date();
   }
+  public updateDetails(props: {
+    title?: string;
+    description?: string;
+    price?: number;
+    stockQuantity?: number;
+    categoryId?: string;
+    condition?: string;
+    status?: ProductStatus;
+    images?: string[];
+    attributes?: Record<string, string>;
+    allowAuction?: boolean;
+  }): void {
+    if (props.title !== undefined) this._title = props.title.trim();
+    if (props.description !== undefined) this._description = props.description.trim();
+    if (props.price !== undefined) {
+      if (props.price <= 0) throw new Error('Giá sản phẩm phải lớn hơn 0 VND.');
+      this._price = props.price;
+    }
+    if (props.stockQuantity !== undefined) {
+      if (props.stockQuantity < 0) throw new Error('Số lượng tồn kho không được âm.');
+      this._stockQuantity = props.stockQuantity;
+    }
+    if (props.categoryId !== undefined) this._categoryId = props.categoryId;
+    if (props.condition !== undefined) this._condition = props.condition;
+    if (props.status !== undefined) this._status = props.status;
+    if (props.images !== undefined) {
+      this._images = props.images;
+      this._primaryImage = props.images.length > 0 ? props.images[0] : undefined;
+    }
+    if (props.attributes !== undefined) this._attributes = props.attributes;
+    if (props.allowAuction !== undefined) this._allowAuction = props.allowAuction;
+    this._updatedAt = new Date();
+  }
 }

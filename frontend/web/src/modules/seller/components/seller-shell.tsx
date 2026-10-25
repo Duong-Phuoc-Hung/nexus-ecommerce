@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import { SellerRouteGuard } from './seller-route-guard';
+import { ReputationBadge } from '@/components/reputation';
 
 const navigation = [
   { href: '/seller', label: 'Tổng quan', icon: '⌂' },
@@ -12,6 +13,7 @@ const navigation = [
   { href: '/seller/auctions', label: 'Đấu giá', icon: '◷' },
   { href: '/seller/orders', label: 'Đơn hàng', icon: '▤' },
   { href: '/seller/inventory', label: 'Tồn kho', icon: '▥' },
+  { href: '/seller/reputation', label: 'Điểm uy tín', icon: '✦' },
 ];
 
 export function SellerShell({ children }: { children: ReactNode }) {
@@ -83,6 +85,7 @@ export function SellerShell({ children }: { children: ReactNode }) {
             </span>
           </div>
           <div className="seller-account">
+            <ReputationBadge score={user?.reputationScore ?? 98} size="sm" />
             <span className="seller-avatar">{displayName.slice(0, 1).toUpperCase()}</span>
             <span>
               <strong>{displayName}</strong>
