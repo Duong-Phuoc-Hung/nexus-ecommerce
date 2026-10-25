@@ -1,9 +1,9 @@
 import { Pool } from 'pg';
-import { CategoryRecord, ICategoryRepository } from '../../domain/repositories/ICategoryRepository';
+import { ICategoryRepository } from '../../domain/repositories/ICategoryRepository';
 import { Category } from '../../domain/entities/Category';
 
 export class PostgresCategoryRepository implements ICategoryRepository {
-  private readonly pool: Pool;
+  private pool: Pool;
 
   constructor(pool?: Pool) {
     this.pool =
@@ -17,25 +17,6 @@ export class PostgresCategoryRepository implements ICategoryRepository {
         max: 10,
         idleTimeoutMillis: 30000,
       });
-  }
-
-  public async findActive(): Promise<CategoryRecord[]> {
-    const result = await this.pool.query<CategoryRecord>(`
-      SELECT
-        id::text AS id,
-        name,
-        slug,
-        description,
-        image_url AS "imageUrl",
-        parent_id::text AS "parentId",
-        level,
-        display_order AS "displayOrder"
-      FROM catalog_categories
-      WHERE is_active = TRUE
-      ORDER BY level ASC, display_order ASC, id ASC;
-    `);
-
-    return result.rows;
   }
 
   public async findAllActive(): Promise<Category[]> {

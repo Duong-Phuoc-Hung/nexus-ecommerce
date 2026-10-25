@@ -1,4 +1,4 @@
-import { CategoryRecord, ICategoryRepository } from '../../domain/repositories/ICategoryRepository';
+import { ICategoryRepository } from '../../domain/repositories/ICategoryRepository';
 import { Category } from '../../domain/entities/Category';
 
 export class InMemoryCategoryRepository implements ICategoryRepository {
@@ -11,6 +11,24 @@ export class InMemoryCategoryRepository implements ICategoryRepository {
         name: 'Công nghệ & Điện tử',
         slug: 'cong-nghe-dien-tu',
         level: 1,
+        isActive: true,
+        displayOrder: 1,
+      }),
+      new Category({
+        id: '10',
+        name: 'Điện thoại & Tablet',
+        slug: 'dien-thoai-tablet',
+        parentId: '1',
+        level: 2,
+        isActive: true,
+        displayOrder: 1,
+      }),
+      new Category({
+        id: '100',
+        name: 'iPhone',
+        slug: 'dien-thoai-iphone',
+        parentId: '10',
+        level: 3,
         isActive: true,
         displayOrder: 1,
       }),
@@ -43,21 +61,6 @@ export class InMemoryCategoryRepository implements ICategoryRepository {
     for (const cat of sampleCategories) {
       this.categories.set(cat.id, cat);
     }
-  }
-
-  public async findActive(): Promise<CategoryRecord[]> {
-    return Array.from(this.categories.values())
-      .filter((c) => c.isActive)
-      .map((c) => ({
-        id: c.id,
-        name: c.name,
-        slug: c.slug,
-        description: c.description || null,
-        imageUrl: c.imageUrl || null,
-        parentId: c.parentId || null,
-        level: c.level,
-        displayOrder: c.displayOrder,
-      }));
   }
 
   public async findAllActive(): Promise<Category[]> {
