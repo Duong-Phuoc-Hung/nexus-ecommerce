@@ -1,3 +1,5 @@
+import { Category } from '../entities/Category';
+
 export interface CategoryRecord {
   id: string;
   name: string;
@@ -11,4 +13,6 @@ export interface CategoryRecord {
 
 export interface ICategoryRepository {
   findActive(): Promise<CategoryRecord[]>;
+  findAllActive(): Promise<Category[]>;
+  findById(id: string): Promise<Category | null>;
 }

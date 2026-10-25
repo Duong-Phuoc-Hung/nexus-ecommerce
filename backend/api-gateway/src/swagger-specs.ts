@@ -17,6 +17,17 @@ const forbidden = errorResponse(
 const PUBLIC = 'Route PUBLIC: không cần token.';
 const PRIVATE = 'Route PRIVATE: bắt buộc header `Authorization: Bearer <JWT>`.';
 
+const commonComponents = {
+  securitySchemes: {
+    BearerAuth: {
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'JWT',
+      description: 'Nhập JWT token sau khi đăng nhập (không cần gõ Bearer)',
+    },
+  },
+};
+
 export const userSpec = {
   openapi: '3.0.0',
   info: {
@@ -25,17 +36,8 @@ export const userSpec = {
     description:
       'Dịch vụ quản lý Người dùng, Đăng nhập (Auth) & Phân quyền (RBAC). Hỗ trợ UUID và tìm kiếm theo Email.',
   },
-  servers: [{ url: 'http://localhost:4000', description: 'API Gateway (Cổng 4000)' }],
-  components: {
-    securitySchemes: {
-      BearerAuth: {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        description: 'Nhập JWT token sau khi đăng nhập',
-      },
-    },
-  },
+  servers: [{ url: '/', description: 'API Gateway (Same Origin)' }],
+  components: commonComponents,
   paths: {
     '/api/v1/auth/login': {
       post: {
@@ -417,7 +419,8 @@ export const catalogSpec = {
     version: '1.0.0',
     description: 'Dịch vụ quản lý Danh mục & Sản phẩm bán trên sàn Nexus.',
   },
-  servers: [{ url: 'http://localhost:4000', description: 'API Gateway (Cổng 4000)' }],
+  servers: [{ url: '/', description: 'API Gateway (Same Origin)' }],
+  components: commonComponents,
   paths: {
     '/api/v1/categories': {
       get: {
@@ -473,11 +476,56 @@ export const catalogSpec = {
         },
       },
     },
+
+    '/api/v1/products/mine': {
+      get: {
+        tags: ['Products'],
+        summary: 'Xem kho hàng (Seller)',
+        description: `${PRIVATE} Method: GET. Bắt buộc đăng nhập tài khoản Seller. Trả về toàn bộ danh sách sản phẩm thuộc về chính người bán đó (bao gồm cả ACTIVE, DRAFT, ARCHIVED để quản lý kho).`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'status',
+            in: 'query',
+            required: false,
+            schema: { type: 'string', enum: ['ACTIVE', 'DRAFT', 'ARCHIVED', 'OUT_OF_STOCK'] },
+            description: 'Lọc kho hàng theo trạng thái (tùy chọn)',
+          },
+        ],
+        responses: {
+          200: jsonResponse('Kho hàng của Seller', {
+            success: true,
+            total: 15,
+            data: [
+              {
+                id: '15',
+                sellerId: '01a15822-3fd0-7b39-ad01-f11da72d5b80',
+                sellerName: 'Trần Thị Seller',
+                title: 'Mô hình LEGO Icons NASA Apollo 11 Lunar Lander 10266',
+                price: 3450000,
+                stockQuantity: 10,
+                status: 'ACTIVE',
+                createdAt: '2026-10-24T18:00:00.000Z',
+                updatedAt: '2026-10-24T18:00:00.000Z',
+              },
+            ],
+          }),
+          401: errorResponse(
+            'Chưa xác thực',
+            'Vui lòng đăng nhập tài khoản Seller để thực hiện thao tác này.',
+          ),
+          403: errorResponse(
+            'Không có quyền',
+            'Chỉ tài khoản vai trò SELLER hoặc ADMIN mới có quyền truy cập.',
+          ),
+        },
+      },
+    },
     '/api/v1/products': {
       get: {
         tags: ['Products'],
-        summary: 'Lấy danh sách tất cả sản phẩm',
-        description: `${PUBLIC} Method: GET. Truy xuất toàn bộ sản phẩm đang được bày bán (không phân trang).`,
+        summary: 'Danh sách tất cả sản phẩm (khách hàng)',
+        description: `${PUBLIC} Method: GET. Truy xuất toàn bộ sản phẩm đang được bày bán công khai ngoài trang chủ (không cần đăng nhập).`,
         responses: {
           200: jsonResponse('Danh sách sản phẩm', {
             success: true,
@@ -500,6 +548,73 @@ export const catalogSpec = {
               },
             ],
           }),
+        },
+      },
+      post: {
+        tags: ['Products'],
+        summary: 'Tạo sản phẩm mới (Seller)',
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['title', 'description', 'categoryId', 'price'],
+                properties: {
+                  title: { type: 'string', example: 'iPhone 15 Pro Max 512GB Blue Titanium' },
+                  description: {
+                    type: 'string',
+                    example: 'Điện thoại chính hãng VN/A nguyên seal bảo hành 12 tháng',
+                  },
+                  categoryId: { type: 'string', example: '100' },
+                  price: { type: 'number', example: 34990000 },
+                  stockQuantity: { type: 'integer', example: 15 },
+                  condition: {
+                    type: 'string',
+                    enum: ['NEW', 'LIKE_NEW', 'USED', 'REFURBISHED'],
+                    default: 'NEW',
+                  },
+                  allowAuction: { type: 'boolean', default: false },
+                  images: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    example: ['https://images.unsplash.com/photo-1695048133142-1a20484d2569'],
+                  },
+                  attributes: {
+                    type: 'object',
+                    description: 'Các thuộc tính kỹ thuật chi tiết của sản phẩm (dạng key-value)',
+                    example: {
+                      'Màu sắc': 'Blue Titanium',
+                      'Dung lượng': '512GB',
+                      RAM: '8GB',
+                      'Bảo hành': '12 tháng VN/A',
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: jsonResponse('Tạo sản phẩm thành công', {
+            success: true,
+            message: 'Tạo sản phẩm mới thành công!',
+            data: {
+              id: '16',
+              slug: 'iphone-15-pro-max-512gb-blue-titanium-123456',
+              title: 'iPhone 15 Pro Max 512GB Blue Titanium',
+            },
+          }),
+          400: errorResponse('Dữ liệu không hợp lệ', 'Giá sản phẩm phải lớn hơn 0 VND.'),
+          401: errorResponse(
+            'Chưa xác thực',
+            'Vui lòng đăng nhập tài khoản Seller để thực hiện thao tác này.',
+          ),
+          403: errorResponse(
+            'Không có quyền',
+            'Tài khoản với vai trò BUYER không có quyền đăng bán sản phẩm.',
+          ),
         },
       },
     },
@@ -604,6 +719,108 @@ export const catalogSpec = {
           404: errorResponse('Không tìm thấy sản phẩm', 'Product with ID "999999" was not found.'),
         },
       },
+      put: {
+        tags: ['Products'],
+        summary: 'Cập nhật sản phẩm (Seller)',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã ID của sản phẩm cần cập nhật (ví dụ: 17)',
+            schema: { type: 'string', example: '17' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  title: {
+                    type: 'string',
+                    example: 'iPhone 15 Pro Max 512GB Blue Titanium (Đã giảm giá)',
+                  },
+                  description: {
+                    type: 'string',
+                    example: 'Bản chính hãng VN/A nguyên seal bảo hành 12 tháng tại Apple Store',
+                  },
+                  categoryId: { type: 'string', example: '100' },
+                  price: { type: 'number', example: 32990000 },
+                  stockQuantity: { type: 'integer', example: 20 },
+                  condition: {
+                    type: 'string',
+                    enum: ['NEW', 'LIKE_NEW', 'USED', 'REFURBISHED'],
+                    default: 'NEW',
+                  },
+                  status: {
+                    type: 'string',
+                    enum: ['ACTIVE', 'DRAFT', 'ARCHIVED', 'OUT_OF_STOCK'],
+                    default: 'ACTIVE',
+                  },
+                  allowAuction: { type: 'boolean', default: false },
+                  images: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    example: ['https://images.unsplash.com/photo-1695048133142-1a20484d2569'],
+                  },
+                  attributes: {
+                    type: 'object',
+                    example: {
+                      'Màu sắc': 'Blue Titanium',
+                      'Dung lượng': '512GB',
+                      RAM: '8GB',
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Cập nhật thành công', {
+            success: true,
+            message: 'Cập nhật sản phẩm thành công!',
+            data: {
+              id: '17',
+              title: 'iPhone 15 Pro Max 512GB Blue Titanium (Đã giảm giá)',
+              price: 32990000,
+              stockQuantity: 20,
+              status: 'ACTIVE',
+              updatedAt: '2026-10-25T01:20:00.000Z',
+            },
+          }),
+          400: errorResponse('Dữ liệu không hợp lệ', 'Giá sản phẩm phải lớn hơn 0 VND.'),
+          401: errorResponse('Chưa xác thực', 'Vui lòng đăng nhập để thực hiện thao tác này.'),
+          403: errorResponse('Từ chối truy cập', 'Bạn không có quyền chỉnh sửa sản phẩm này.'),
+          404: errorResponse('Không tìm thấy', 'Product with ID "999" was not found.'),
+        },
+      },
+      delete: {
+        tags: ['Products'],
+        summary: 'Xóa sản phẩm (Seller)',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã ID của sản phẩm cần xóa',
+            schema: { type: 'string', example: '15' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Xóa thành công', {
+            success: true,
+            message: "Đã xóa thành công sản phẩm với mã ID '15'.",
+          }),
+          401: errorResponse('Chưa xác thực', 'Vui lòng đăng nhập để thực hiện thao tác này.'),
+          403: errorResponse('Từ chối truy cập', 'Bạn không có quyền xóa sản phẩm của người khác.'),
+          404: errorResponse('Không tìm thấy', 'Product with ID "999" was not found.'),
+        },
+      },
     },
   },
 };
@@ -615,7 +832,8 @@ export const auctionSpec = {
     version: '1.0.0',
     description: 'Dịch vụ quản lý các Phiên đấu giá và Đặt giá thầu (Bidding).',
   },
-  servers: [{ url: 'http://localhost:4000', description: 'API Gateway (Cổng 4000)' }],
+  servers: [{ url: '/', description: 'API Gateway (Same Origin)' }],
+  components: commonComponents,
   paths: {
     '/api/v1/auctions': {
       get: {
@@ -718,17 +936,8 @@ export const commerceSpec = {
     description:
       'Dịch vụ quản lý Giỏ hàng, Đặt hàng (Checkout), Hóa đơn & Xử lý khiếu nại (Support Staff).',
   },
-  servers: [{ url: 'http://localhost:4000', description: 'API Gateway (Cổng 4000)' }],
-  components: {
-    securitySchemes: {
-      BearerAuth: {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        description: 'Nhập JWT token của SUPPORT_STAFF hoặc ADMIN',
-      },
-    },
-  },
+  servers: [{ url: '/', description: 'API Gateway (Same Origin)' }],
+  components: commonComponents,
   paths: {
     '/api/v1/orders': {
       get: {

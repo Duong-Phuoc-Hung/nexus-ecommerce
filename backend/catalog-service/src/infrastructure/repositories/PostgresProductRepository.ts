@@ -122,6 +122,40 @@ export class PostgresProductRepository implements IProductRepository {
     );
   }
 
+  public async findBySellerId(sellerId: string, status?: string): Promise<Product[]> {
+    const conditions: string[] = ['p.seller_id = $1'];
+    const params: any[] = [sellerId];
+
+    if (status) {
+      params.push(status.toUpperCase());
+      conditions.push(`p.status = $${params.length}`);
+    }
+
+    const whereClause = conditions.join(' AND ');
+    const query = `
+      SELECT 
+        p.id, p.seller_id, p.category_id, p.title, p.slug, p.description, 
+        p.status, p.condition, p.base_price, p.allow_auction, p.stock_quantity, p.seller_name, p.created_at, p.updated_at
+      FROM catalog_products p
+      WHERE ${whereClause}
+      ORDER BY p.id DESC;
+    `;
+    const result = await this.pool.query(query, params);
+    if (result.rows.length === 0) {
+      return [];
+    }
+
+    const productIds = result.rows.map((r: any) => Number(r.id));
+    const [imagesMap, attributesMap] = await Promise.all([
+      this.getImagesForProductIds(productIds),
+      this.getAttributesForProductIds(productIds),
+    ]);
+
+    return result.rows.map((row: any) =>
+      this.mapRowToProduct(row, imagesMap[row.id] || [], attributesMap[row.id] || {}),
+    );
+  }
+
   public async search(criteria: ProductSearchCriteria): Promise<ProductSearchPage> {
     const conditions: string[] = ['p.deleted_at IS NULL', "p.status = 'ACTIVE'"];
     const params: any[] = [];
@@ -194,7 +228,7 @@ export class PostgresProductRepository implements IProductRepository {
     };
   }
 
-  public async save(product: Product): Promise<void> {
+  public async save(product: Product): Promise<string> {
     // Lưu sản phẩm mới
     const query = `
       INSERT INTO catalog_products (
@@ -217,32 +251,107 @@ export class PostgresProductRepository implements IProductRepository {
       product.createdAt,
       product.updatedAt,
     ];
-    await this.pool.query(query, params);
+    const result = await this.pool.query(query, params);
+    const newProductId = result.rows[0]?.id;
+
+    if (newProductId) {
+      // 1. Tự động lưu mảng ảnh sang bảng catalog_product_images
+      if (product.images && product.images.length > 0) {
+        for (let i = 0; i < product.images.length; i++) {
+          await this.pool.query(
+            `INSERT INTO catalog_product_images (product_id, image_url, display_order, is_primary)
+             VALUES ($1, $2, $3, $4);\n`,
+            [newProductId, product.images[i], i + 1, i === 0],
+          );
+        }
+      }
+
+      // 2. Tự động lưu thuộc tính sang bảng catalog_product_attributes
+      if (product.attributes && typeof product.attributes === 'object') {
+        for (const [key, val] of Object.entries(product.attributes)) {
+          if (val) {
+            await this.pool.query(
+              `INSERT INTO catalog_product_attributes (product_id, attribute_key, attribute_value)
+               VALUES ($1, $2, $3);\n`,
+              [newProductId, key, String(val)],
+            );
+          }
+        }
+      }
+    }
+
+    return String(newProductId || '0');
   }
 
   public async update(product: Product): Promise<void> {
-    // Cập nhật sản phẩm
+    const productId = parseInt(product.id, 10);
+
+    // 1. Cập nhật thông tin chính trong bảng catalog_products
     const query = `
       UPDATE catalog_products
-      SET title = $1, description = $2, base_price = $3, status = $4, stock_quantity = $5, seller_name = $6, updated_at = NOW()
-      WHERE id = $7;
+      SET 
+        category_id = $1,
+        title = $2, 
+        description = $3, 
+        base_price = $4, 
+        status = $5, 
+        stock_quantity = $6, 
+        condition = $7,
+        allow_auction = $8,
+        seller_name = $9, 
+        updated_at = NOW()
+      WHERE id = $10;
     `;
     await this.pool.query(query, [
+      parseInt(product.categoryId, 10),
       product.title,
       product.description,
       product.price,
       product.status,
       product.stockQuantity,
+      product.condition || 'NEW',
+      product.allowAuction ?? false,
       product.sellerName || 'Nexus Official Store',
-      parseInt(product.id, 10),
+      productId,
     ]);
+
+    // 2. Đồng bộ lại danh sách ảnh (nếu có truyền ảnh mới)
+    if (product.images && product.images.length > 0) {
+      await this.pool.query('DELETE FROM catalog_product_images WHERE product_id = $1;', [
+        productId,
+      ]);
+      for (let i = 0; i < product.images.length; i++) {
+        await this.pool.query(
+          `INSERT INTO catalog_product_images (product_id, image_url, display_order, is_primary)
+           VALUES ($1, $2, $3, $4);`,
+          [productId, product.images[i], i + 1, i === 0],
+        );
+      }
+    }
+
+    // 3. Đồng bộ lại thuộc tính chi tiết attributes (nếu có truyền)
+    if (product.attributes && Object.keys(product.attributes).length > 0) {
+      await this.pool.query('DELETE FROM catalog_product_attributes WHERE product_id = $1;', [
+        productId,
+      ]);
+      for (const [key, val] of Object.entries(product.attributes)) {
+        if (val) {
+          await this.pool.query(
+            `INSERT INTO catalog_product_attributes (product_id, attribute_key, attribute_value)
+             VALUES ($1, $2, $3);`,
+            [productId, key, String(val)],
+          );
+        }
+      }
+    }
   }
 
   public async delete(id: string): Promise<void> {
     // Xoá mềm sản phẩm
-    await this.pool.query('UPDATE catalog_products SET deleted_at = NOW() WHERE id = $1', [
-      parseInt(id, 10),
-    ]);
+    await this.pool.query(
+      "UPDATE catalog_products SET deleted_at = NOW(), status = 'ARCHIVED', updated_at = NOW() WHERE id = $1",
+      [parseInt(id, 10)],
+    );
   }
 
   private async getImagesByProductId(productId: number): Promise<string[]> {
