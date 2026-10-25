@@ -80,6 +80,10 @@ export class User {
     return this._role;
   }
 
+  public get roles(): string[] {
+    return [this._role];
+  }
+
   public get status(): UserStatus {
     return this._status;
   }

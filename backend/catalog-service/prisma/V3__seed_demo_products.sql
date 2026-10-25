@@ -19,13 +19,16 @@ SET name = EXCLUDED.name, description = EXCLUDED.description;
 
 SELECT setval('catalog_categories_id_seq', (SELECT MAX(id) FROM catalog_categories));
 
+-- Cập nhật seller_id cũ nếu có
+UPDATE catalog_products SET seller_id = '01a15822-3fd0-7b39-ad01-f11da72d5b80' WHERE seller_id = 'a0000000-0000-0000-0000-000000000002';
+
 -- 2. Thêm 15 sản phẩm mẫu thực tế trải đều các danh mục
--- Người bán: a0000000-0000-0000-0000-000000000002 (Trần Thị Seller)
+-- Người bán: 01a15822-3fd0-7b39-ad01-f11da72d5b80 (Trần Thị Seller)
 INSERT INTO catalog_products (id, seller_id, category_id, title, slug, description, status, condition, base_price, allow_auction)
 VALUES 
 (
     1,
-    'a0000000-0000-0000-0000-000000000002',
+    '01a15822-3fd0-7b39-ad01-f11da72d5b80',
     100,
     'iPhone 15 Pro Max 256GB Titan Tự Nhiên',
     'iphone-15-pro-max-256gb-titan-tu-nhien',
@@ -37,7 +40,7 @@ VALUES
 ),
 (
     2,
-    'a0000000-0000-0000-0000-000000000002',
+    '01a15822-3fd0-7b39-ad01-f11da72d5b80',
     102,
     'MacBook Pro 14 inch M3 Pro 18GB/512GB Space Black',
     'macbook-pro-14-m3-pro-space-black',
@@ -49,7 +52,7 @@ VALUES
 ),
 (
     3,
-    'a0000000-0000-0000-0000-000000000002',
+    '01a15822-3fd0-7b39-ad01-f11da72d5b80',
     15,
     'Máy ảnh Leica Q3 Full-Frame Compact Camera',
     'may-anh-leica-q3-full-frame-compact',
@@ -61,7 +64,7 @@ VALUES
 ),
 (
     4,
-    'a0000000-0000-0000-0000-000000000002',
+    '01a15822-3fd0-7b39-ad01-f11da72d5b80',
     14,
     'Tai nghe chống ồn Sony WH-1000XM5 Silver',
     'tai-nghe-chong-on-sony-wh-1000xm5-silver',
@@ -73,7 +76,7 @@ VALUES
 ),
 (
     5,
-    'a0000000-0000-0000-0000-000000000002',
+    '01a15822-3fd0-7b39-ad01-f11da72d5b80',
     16,
     'Đồng hồ Rolex Submariner Date 41mm Oystersteel',
     'dong-ho-rolex-submariner-date-41mm-oystersteel',
@@ -85,7 +88,7 @@ VALUES
 ),
 (
     6,
-    'a0000000-0000-0000-0000-000000000002',
+    '01a15822-3fd0-7b39-ad01-f11da72d5b80',
     11,
     'Bàn phím cơ Custom Keychron Q1 Pro Wireless',
     'ban-phim-co-keychron-q1-pro-wireless',
@@ -97,7 +100,7 @@ VALUES
 ),
 (
     7,
-    'a0000000-0000-0000-0000-000000000002',
+    '01a15822-3fd0-7b39-ad01-f11da72d5b80',
     101,
     'Samsung Galaxy S24 Ultra 512GB Titanium Gray',
     'samsung-galaxy-s24-ultra-512gb-titanium-gray',
@@ -109,7 +112,7 @@ VALUES
 ),
 (
     8,
-    'a0000000-0000-0000-0000-000000000002',
+    '01a15822-3fd0-7b39-ad01-f11da72d5b80',
     103,
     'Laptop Gaming ASUS ROG Zephyrus G14 OLED 2024',
     'asus-rog-zephyrus-g14-oled-2024',
@@ -121,7 +124,7 @@ VALUES
 ),
 (
     9,
-    'a0000000-0000-0000-0000-000000000002',
+    '01a15822-3fd0-7b39-ad01-f11da72d5b80',
     12,
     'Áo khoác da thật nam Biker AllSaints Milo Leather',
     'ao-khoac-da-nam-allsaints-milo-leather',
@@ -133,7 +136,7 @@ VALUES
 ),
 (
     10,
-    'a0000000-0000-0000-0000-000000000002',
+    '01a15822-3fd0-7b39-ad01-f11da72d5b80',
     13,
     'Túi xách Chanel Classic Double Flap Bag Da Caviar',
     'tui-xach-chanel-classic-double-flap-caviar',
@@ -145,7 +148,7 @@ VALUES
 ),
 (
     11,
-    'a0000000-0000-0000-0000-000000000002',
+    '01a15822-3fd0-7b39-ad01-f11da72d5b80',
     14,
     'Mâm đĩa than Audio-Technica AT-LP120XUSB Direct-Drive',
     'mam-dia-than-audio-technica-at-lp120xusb',
@@ -157,7 +160,7 @@ VALUES
 ),
 (
     12,
-    'a0000000-0000-0000-0000-000000000002',
+    '01a15822-3fd0-7b39-ad01-f11da72d5b80',
     15,
     'Máy ảnh Film Vintage Canon AE-1 Program kèm Lens 50mm f/1.4',
     'may-anh-film-canon-ae-1-program-50mm-f14',
@@ -169,7 +172,7 @@ VALUES
 ),
 (
     13,
-    'a0000000-0000-0000-0000-000000000002',
+    '01a15822-3fd0-7b39-ad01-f11da72d5b80',
     16,
     'Đồng hồ cơ Omega Speedmaster Moonwatch Professional',
     'dong-ho-omega-speedmaster-moonwatch-professional',
@@ -181,7 +184,7 @@ VALUES
 ),
 (
     14,
-    'a0000000-0000-0000-0000-000000000002',
+    '01a15822-3fd0-7b39-ad01-f11da72d5b80',
     17,
     'Robot hút bụi lau nhà thông minh Dreame L20 Ultra',
     'robot-hut-bui-dreame-l20-ultra-smart',
@@ -193,7 +196,7 @@ VALUES
 ),
 (
     15,
-    'a0000000-0000-0000-0000-000000000002',
+    '01a15822-3fd0-7b39-ad01-f11da72d5b80',
     18,
     'Mô hình LEGO Icons NASA Apollo 11 Lunar Lander 10266',
     'lego-icons-nasa-apollo-11-lunar-lander-10266',

@@ -17,6 +17,7 @@ export type CatalogProduct = {
   rating?: number;
   soldCount?: number;
 };
+export type ProductType = CatalogProduct;
 export type CatalogQuery = {
   q: string;
   categoryId: string;

@@ -27,7 +27,13 @@ const TEST_FILES = [
   'scripts/test-infrastructure.test.js',
   'scripts/test-architecture-boundaries.test.js',
   'scripts/test-services-unit.test.js',
+  'scripts/test-auth-application.test.js',
+  'backend/api-gateway/dist/app.test.js',
+  'backend/commerce-service/dist/app.test.js',
+  'backend/fulfillment-service/dist/app.test.js',
+  'backend/user-service/dist/app.test.js',
   'backend/user-service/dist/application/use-cases/IAM.test.js',
+  'backend/user-service/dist/application/use-cases/SearchUsersUseCase.test.js',
   'backend/user-service/dist/infrastructure/security/authorization.test.js',
 ];
 

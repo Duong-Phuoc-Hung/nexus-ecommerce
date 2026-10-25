@@ -12,6 +12,7 @@ export enum CarrierCode {
   GHN = 'GHN',
   GHTK = 'GHTK',
   VNPOST = 'VNPOST',
+  VIETTEL_POST = 'VIETTEL_POST',
 }
 
 export interface ShipmentProps {
@@ -21,6 +22,10 @@ export interface ShipmentProps {
   trackingCode: string;
   status: ShipmentStatus;
   shippingAddress: string;
+  recipientName?: string;
+  recipientPhone?: string;
+  city?: string;
+  currentLocation?: string;
   estimatedDeliveryDate?: Date;
   actualDeliveryDate?: Date;
   createdAt: Date;
@@ -34,10 +39,14 @@ export interface ShipmentProps {
 export class Shipment {
   private readonly _id: string;
   private readonly _orderId: string;
-  private readonly _carrier: CarrierCode;
+  private _carrier: CarrierCode;
   private _trackingCode: string;
   private _status: ShipmentStatus;
-  private readonly _shippingAddress: string;
+  private _shippingAddress: string;
+  private _recipientName: string;
+  private _recipientPhone: string;
+  private _city: string;
+  private _currentLocation: string;
   private _estimatedDeliveryDate?: Date;
   private _actualDeliveryDate?: Date;
   private readonly _createdAt: Date;
@@ -50,6 +59,10 @@ export class Shipment {
     this._trackingCode = props.trackingCode;
     this._status = props.status;
     this._shippingAddress = props.shippingAddress;
+    this._recipientName = props.recipientName || 'Người nhận';
+    this._recipientPhone = props.recipientPhone || '';
+    this._city = props.city || 'TP. Hồ Chí Minh';
+    this._currentLocation = props.currentLocation || `${this._city} · Trung tâm phân loại`;
     this._estimatedDeliveryDate = props.estimatedDeliveryDate;
     this._actualDeliveryDate = props.actualDeliveryDate;
     this._createdAt = props.createdAt;
@@ -80,15 +93,61 @@ export class Shipment {
     return this._shippingAddress;
   }
 
+  public get recipientName(): string {
+    return this._recipientName;
+  }
+
+  public get recipientPhone(): string {
+    return this._recipientPhone;
+  }
+
+  public get city(): string {
+    return this._city;
+  }
+
+  public get currentLocation(): string {
+    return this._currentLocation;
+  }
+
+  public get estimatedDeliveryDate(): Date | undefined {
+    return this._estimatedDeliveryDate;
+  }
+
+  public get actualDeliveryDate(): Date | undefined {
+    return this._actualDeliveryDate;
+  }
+
   public get createdAt(): Date {
     return this._createdAt;
   }
 
-  public updateStatus(newStatus: ShipmentStatus): void {
+  public get updatedAt(): Date {
+    return this._updatedAt;
+  }
+
+  public updateStatus(newStatus: ShipmentStatus, location?: string): void {
     this._status = newStatus;
     if (newStatus === ShipmentStatus.DELIVERED) {
       this._actualDeliveryDate = new Date();
     }
+    if (location) {
+      this._currentLocation = location;
+    }
+    this._updatedAt = new Date();
+  }
+
+  public manualOverride(params: {
+    carrier?: CarrierCode;
+    trackingCode?: string;
+    shippingAddress?: string;
+    city?: string;
+    status?: ShipmentStatus;
+  }): void {
+    if (params.carrier) this._carrier = params.carrier;
+    if (params.trackingCode) this._trackingCode = params.trackingCode;
+    if (params.shippingAddress) this._shippingAddress = params.shippingAddress;
+    if (params.city) this._city = params.city;
+    if (params.status) this._status = params.status;
     this._updatedAt = new Date();
   }
 }

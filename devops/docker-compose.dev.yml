@@ -21,7 +21,7 @@ services:
       POSTGRES_PASSWORD: nexus_password
       POSTGRES_DB: nexus_catalog_db
     ports:
-      - '5433:5432'
+      - '${CATALOG_DB_PORT:-5433}:5432'
     volumes:
       - catalog_db_data:/var/lib/postgresql/data
 

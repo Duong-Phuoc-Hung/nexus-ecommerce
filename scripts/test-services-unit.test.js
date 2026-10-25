@@ -156,7 +156,9 @@ describe('🔬 [Unit & Integration] 6 Bounded Contexts & API Gateway Verificatio
       assert.equal(healthRes.status, 200);
 
       // GET /api/v1/orders/ord_01hqz555abc
-      const orderRes = await fetch(`${baseUrl}/api/v1/orders/ord_01hqz555abc`);
+      const orderRes = await fetch(`${baseUrl}/api/v1/orders/ord_01hqz555abc`, {
+        headers: { 'x-user-id': 'usr_staff_001', 'x-user-role': 'SUPPORT_STAFF' },
+      });
       assert.equal(orderRes.status, 200);
       const orderData = await orderRes.json();
       assert.equal(orderData.success, true);
@@ -206,7 +208,9 @@ describe('🔬 [Unit & Integration] 6 Bounded Contexts & API Gateway Verificatio
       assert.equal(healthRes.status, 200);
 
       // GET /api/v1/fulfillments/shp_01hqz222trk
-      const shpRes = await fetch(`${baseUrl}/api/v1/fulfillments/shp_01hqz222trk`);
+      const shpRes = await fetch(`${baseUrl}/api/v1/fulfillments/shp_01hqz222trk`, {
+        headers: { 'x-user-id': 'usr_staff_001', 'x-user-role': 'SUPPORT_STAFF' },
+      });
       assert.equal(shpRes.status, 200);
       const shpData = await shpRes.json();
       assert.equal(shpData.success, true);
@@ -217,7 +221,11 @@ describe('🔬 [Unit & Integration] 6 Bounded Contexts & API Gateway Verificatio
         `${baseUrl}/api/v1/fulfillments/shipments/shp_01hqz222trk/status`,
         {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': 'usr_staff_001',
+            'x-user-role': 'SUPPORT_STAFF',
+          },
           body: JSON.stringify({ status: 'DELIVERED', trackingCode: 'VNPOST998811' }),
         },
       );

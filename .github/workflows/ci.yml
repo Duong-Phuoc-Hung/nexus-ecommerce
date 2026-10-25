@@ -96,11 +96,8 @@ jobs:
       - name: 🎨 Verify Code Style & Formatting (Prettier / Linter)
         run: pnpm format:check
 
-      - name: 🏗️ Build Customer Web Application (@nexus/web-customer)
-        run: pnpm --filter @nexus/web-customer build
-
-      - name: 🏗️ Build Admin Portal Web Application (@nexus/web-admin)
-        run: pnpm --filter @nexus/web-admin build
+      - name: 🏗️ Build Unified Next.js Web Application (@nexus/web)
+        run: pnpm --filter @nexus/web build
 
       - name: 📝 Record Frontend Step Summary
         if: always()
@@ -110,5 +107,4 @@ jobs:
           echo "| Check | Target | Status |" >> $GITHUB_STEP_SUMMARY
           echo "| :--- | :--- | :---: |" >> $GITHUB_STEP_SUMMARY
           echo "| **Linter / Formatter** | Prettier Code Style | ✅ Clean |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Customer Web App** | Next.js 15 App Router | ✅ Built |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Admin Web Portal** | Next.js 15 App Router | ✅ Built |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Unified Web App** | Next.js 15 App Router | ✅ Built |" >> $GITHUB_STEP_SUMMARY

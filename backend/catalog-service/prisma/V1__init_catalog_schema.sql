@@ -76,6 +76,9 @@ CREATE TABLE IF NOT EXISTS catalog_products (
     -- Giá bán niêm yết ban đầu (VND)
     base_price DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
 
+    -- Đơn vị tiền tệ (Mặc định: VND theo SRS 3.3)
+    currency VARCHAR(3) NOT NULL DEFAULT 'VND',
+
     -- Sản phẩm này có được phép mang đi đấu giá hay không
     allow_auction BOOLEAN NOT NULL DEFAULT FALSE,
 

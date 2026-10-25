@@ -1,7 +1,6 @@
-import crypto from 'node:crypto';
 import { User, UserRole, UserStatus } from '../../domain/entities/User';
 import { IUserRepository } from '../../domain/repositories/IUserRepository';
-import { hashPassword } from '../../infrastructure/security/auth';
+import { hashPassword, generateUuidV7 } from '../../infrastructure/security/auth';
 
 export interface RegisterUserResult {
   id: string;
@@ -41,7 +40,7 @@ export class RegisterUserUseCase {
 
     const now = new Date();
     const user = new User({
-      id: crypto.randomUUID(),
+      id: generateUuidV7(),
       email,
       fullName,
       passwordHash: hashPassword(password),
