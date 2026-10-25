@@ -1,7 +1,7 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
-import { userSpec, catalogSpec, auctionSpec, commerceSpec } from './swagger-specs';
+import { userSpec, catalogSpec, auctionSpec, commerceSpec, fulfillmentSpec } from './swagger-specs';
 
 export function createApplication(): Application {
   const app = express();
@@ -59,6 +59,11 @@ export function createApplication(): Application {
           target: SERVICE_ENDPOINTS.fulfillment,
         },
         {
+          name: 'Support & Staff Portal',
+          prefix: '/api/v1/support',
+          target: SERVICE_ENDPOINTS.fulfillment,
+        },
+        {
           name: 'Notification',
           prefix: '/api/v1/notifications',
           target: SERVICE_ENDPOINTS.notification,
@@ -72,12 +77,14 @@ export function createApplication(): Application {
   app.get('/docs-json/catalog', (_req: Request, res: Response) => res.json(catalogSpec));
   app.get('/docs-json/auction', (_req: Request, res: Response) => res.json(auctionSpec));
   app.get('/docs-json/commerce', (_req: Request, res: Response) => res.json(commerceSpec));
+  app.get('/docs-json/fulfillment', (_req: Request, res: Response) => res.json(fulfillmentSpec));
 
   const swaggerUrls = [
     { name: '1. User & Auth Service', url: '/docs-json/user' },
     { name: '2. Catalog Service (Sản phẩm)', url: '/docs-json/catalog' },
     { name: '3. Auction Service (Đấu giá)', url: '/docs-json/auction' },
-    { name: '4. Commerce Service (Đơn hàng)', url: '/docs-json/commerce' },
+    { name: '4. Commerce Service (Đơn hàng & Support)', url: '/docs-json/commerce' },
+    { name: '5. Fulfillment Service (Vận chuyển & Support)', url: '/docs-json/fulfillment' },
   ];
 
   // Swagger UI tổng với Dropdown chọn từng Service
@@ -151,6 +158,10 @@ export function createApplication(): Application {
   app.use(
     '/api/v1/fulfillments',
     createProxy('Fulfillment Service', SERVICE_ENDPOINTS.fulfillment),
+  );
+  app.use(
+    '/api/v1/support',
+    createProxy('Support / Fulfillment Service', SERVICE_ENDPOINTS.fulfillment),
   );
   app.use(
     '/api/v1/notifications',

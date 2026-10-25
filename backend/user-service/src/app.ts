@@ -5,14 +5,19 @@ import { PostgresUserRepository } from './infrastructure/repositories/PostgresUs
 import { GetUserProfileUseCase } from './application/use-cases/GetUserProfileUseCase';
 import { LoginUseCase } from './application/use-cases/LoginUseCase';
 import { LogoutUseCase } from './application/use-cases/LogoutUseCase';
+import { RegisterUseCase } from './application/use-cases/RegisterUseCase';
 import { RegisterUserUseCase } from './application/use-cases/RegisterUserUseCase';
 import { RequestPasswordResetUseCase } from './application/use-cases/RequestPasswordResetUseCase';
 import { ResetPasswordUseCase } from './application/use-cases/ResetPasswordUseCase';
 import { AssignUserRoleUseCase } from './application/use-cases/AssignUserRoleUseCase';
+import { SearchUsersUseCase } from './application/use-cases/SearchUsersUseCase';
 import { UserController } from './interfaces/http/controllers/UserController';
 import { createAuthRoutes, createUserRoutes } from './interfaces/http/routes/UserRoutes';
 import { authTokenStore } from './infrastructure/security/AuthTokenStore';
 import { passwordResetTokenStore } from './infrastructure/security/PasswordResetTokenStore';
+import { BcryptPasswordHasher } from './infrastructure/security/BcryptPasswordHasher';
+import { JwtTokenService } from './infrastructure/security/JwtTokenService';
+import { RabbitMqEventPublisher } from './infrastructure/messaging/RabbitMqEventPublisher';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerDocument } from './interfaces/http/swagger';
 
@@ -37,10 +42,19 @@ export function createApplication(): Application {
     process.env.USE_IN_MEMORY_DB === 'true'
       ? new InMemoryUserRepository()
       : new PostgresUserRepository();
+  const passwordHasher = new BcryptPasswordHasher();
+  const tokenService = new JwtTokenService();
+  const eventPublisher = new RabbitMqEventPublisher();
+
   const getUserProfileUseCase = new GetUserProfileUseCase(userRepository);
-  const loginUseCase = new LoginUseCase(userRepository);
+  const loginUseCase = new LoginUseCase(
+    userRepository,
+    passwordHasher,
+    tokenService,
+    eventPublisher,
+  );
   const logoutUseCase = new LogoutUseCase();
-  const registerUserUseCase = new RegisterUserUseCase(userRepository);
+  const registerUseCase = new RegisterUseCase(userRepository, passwordHasher, eventPublisher);
   const requestPasswordResetUseCase = new RequestPasswordResetUseCase(
     userRepository,
     passwordResetTokenStore,
@@ -53,14 +67,16 @@ export function createApplication(): Application {
   const assignUserRoleUseCase = new AssignUserRoleUseCase(userRepository, (userId) =>
     authTokenStore.revokeUserTokens(userId),
   );
+  const searchUsersUseCase = new SearchUsersUseCase(userRepository);
   const userController = new UserController(
     getUserProfileUseCase,
     loginUseCase,
     logoutUseCase,
-    registerUserUseCase,
+    registerUseCase,
     requestPasswordResetUseCase,
     resetPasswordUseCase,
     assignUserRoleUseCase,
+    searchUsersUseCase,
   );
 
   app.use('/api/v1/auth', createAuthRoutes(userController));

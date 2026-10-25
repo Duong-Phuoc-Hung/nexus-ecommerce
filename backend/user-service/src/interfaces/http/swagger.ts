@@ -217,27 +217,105 @@ export const swaggerDocument = {
     '/api/v1/users': {
       get: {
         tags: ['Users & Profile'],
-        summary: 'Tìm kiếm khách hàng bằng Email',
-        description: 'Truy vấn thông tin người dùng thông qua địa chỉ Email.',
+        summary: 'Tra cứu & tìm kiếm danh sách người dùng (Support Staff & Admin)',
+        description:
+          'Hỗ trợ tìm kiếm theo từ khóa (q), lọc theo email, vai trò (role), trạng thái (status), sắp xếp và phân trang. Cung cấp dữ liệu phục vụ màn hình Tra cứu người dùng (/support/users).',
         security: [{ BearerAuth: [] }],
         parameters: [
           {
+            name: 'q',
+            in: 'query',
+            required: false,
+            description: 'Từ khóa tìm kiếm theo tên, email, id, hoặc vai trò',
+            schema: {
+              type: 'string',
+              example: 'Minh Anh',
+            },
+          },
+          {
             name: 'email',
             in: 'query',
-            required: true,
-            description: 'Địa chỉ Email của khách hàng cần tìm',
+            required: false,
+            description: 'Địa chỉ Email cần lọc chính xác',
             schema: {
               type: 'string',
               example: 'buyer@gmail.com',
             },
           },
+          {
+            name: 'role',
+            in: 'query',
+            required: false,
+            description: 'Vai trò người dùng (BUYER, SELLER, SUPPORT_STAFF, ADMIN)',
+            schema: {
+              type: 'string',
+              example: 'BUYER',
+            },
+          },
+          {
+            name: 'status',
+            in: 'query',
+            required: false,
+            description: 'Trạng thái tài khoản (ACTIVE, SUSPENDED, PENDING_VERIFICATION)',
+            schema: {
+              type: 'string',
+              example: 'ACTIVE',
+            },
+          },
+          {
+            name: 'page',
+            in: 'query',
+            required: false,
+            description: 'Số trang (bắt đầu từ 1)',
+            schema: {
+              type: 'integer',
+              default: 1,
+              example: 1,
+            },
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            required: false,
+            description: 'Số lượng bản ghi trên một trang (tối đa 100)',
+            schema: {
+              type: 'integer',
+              default: 10,
+              example: 10,
+            },
+          },
+          {
+            name: 'sortBy',
+            in: 'query',
+            required: false,
+            description: 'Trường sắp xếp (createdAt, fullName, email, reputationScore)',
+            schema: {
+              type: 'string',
+              enum: ['createdAt', 'fullName', 'email', 'reputationScore'],
+              default: 'createdAt',
+            },
+          },
+          {
+            name: 'sortOrder',
+            in: 'query',
+            required: false,
+            description: 'Thứ tự sắp xếp (asc hoặc desc)',
+            schema: {
+              type: 'string',
+              enum: ['asc', 'desc'],
+              default: 'desc',
+            },
+          },
         ],
         responses: {
           200: {
-            description: 'Tìm thấy khách hàng thành công',
+            description: 'Danh sách người dùng và thông tin phân trang thành công',
           },
-          404: {
-            description: 'Không tìm thấy người dùng với email này',
+          401: {
+            description: 'Chưa đăng nhập hoặc token không hợp lệ',
+          },
+          403: {
+            description: 'Không đủ quyền hạn (Yêu cầu quyền USER.VIEW)',
           },
         },
       },
