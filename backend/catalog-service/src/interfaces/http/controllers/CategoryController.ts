@@ -5,26 +5,23 @@ export class CategoryController {
   constructor(private readonly getCategoriesUseCase: GetCategoriesUseCase) {}
 
   public async getAll(req: Request, res: Response): Promise<void> {
-    const treeQuery = req.query.tree;
-    if (treeQuery !== undefined && treeQuery !== 'true' && treeQuery !== 'false') {
-      res.status(400).json({
-        success: false,
-        error: 'Query parameter "tree" must be true or false.',
-      });
-      return;
-    }
-
     try {
-      const asTree = treeQuery !== 'false';
+      // Kiểm tra xem client có truyền ?tree=true hay không
+      const asTree = req.query.tree === 'true';
+
+      // Gọi Use Case xử lý nghiệp vụ
       const categories = await this.getCategoriesUseCase.execute(asTree);
 
+      // Trả về JSON thành công
       res.status(200).json({
         success: true,
         data: categories,
       });
     } catch (error) {
-      console.error('[Catalog Categories Error]:', error);
-      res.status(500).json({ success: false, error: 'Unable to load categories.' });
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal Server Error',
+      });
     }
   }
 }
