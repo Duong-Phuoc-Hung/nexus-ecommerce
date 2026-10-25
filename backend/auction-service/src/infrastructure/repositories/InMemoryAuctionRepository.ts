@@ -7,7 +7,7 @@ export class InMemoryAuctionRepository implements IAuctionRepository {
   constructor() {
     const sampleAuction = new Auction({
       id: 'auc_01hqz777live',
-      productId: 'prod_01hqz999xyz',
+      productId: '1',
       sellerId: 'usr_01hqz333sel',
       startingPrice: 100.0,
       currentHighestBid: 250.0,

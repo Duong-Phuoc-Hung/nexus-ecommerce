@@ -419,6 +419,60 @@ export const catalogSpec = {
   },
   servers: [{ url: 'http://localhost:4000', description: 'API Gateway (Cổng 4000)' }],
   paths: {
+    '/api/v1/categories': {
+      get: {
+        tags: ['Categories'],
+        summary: 'Lấy danh sách danh mục',
+        description: `${PUBLIC} Method: GET. Mặc định trả cây danh mục đang hoạt động tối đa 3 cấp; dùng tree=false để lấy danh sách phẳng.`,
+        parameters: [
+          {
+            name: 'tree',
+            in: 'query',
+            required: false,
+            description: 'Trả cây phân cấp khi true (mặc định), danh sách phẳng khi false.',
+            schema: { type: 'boolean', default: true },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Danh sách danh mục đang hoạt động', {
+            success: true,
+            data: [
+              {
+                id: '1',
+                name: 'Thiết bị điện tử',
+                slug: 'thiet-bi-dien-tu',
+                parentId: null,
+                level: 1,
+                children: [
+                  {
+                    id: '10',
+                    name: 'Điện thoại & Tablet',
+                    slug: 'dien-thoai-tablet',
+                    parentId: '1',
+                    level: 2,
+                    children: [
+                      {
+                        id: '100',
+                        name: 'iPhone',
+                        slug: 'dien-thoai-iphone',
+                        parentId: '10',
+                        level: 3,
+                        children: [],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          }),
+          400: errorResponse(
+            'Tham số không hợp lệ',
+            'Query parameter "tree" must be true or false.',
+          ),
+          500: errorResponse('Không thể tải danh mục', 'Unable to load categories.'),
+        },
+      },
+    },
     '/api/v1/products': {
       get: {
         tags: ['Products'],
