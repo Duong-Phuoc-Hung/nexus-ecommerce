@@ -757,6 +757,27 @@
   background: #fff5f5;
   color: #c71720;
 }
+.seller-to-store-btn {
+  margin-left: 8px;
+  padding: 6px 12px;
+  border: 1px solid #d0d7de;
+  border-radius: 7px;
+  background: #f6f8fa;
+  color: #0969da;
+  font-size: 0.69rem;
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.seller-to-store-btn:hover {
+  background: #ebf5ff;
+  border-color: #0969da;
+  color: #0969da;
+}
 .seller-guard-status {
   display: flex;
   flex-direction: column;

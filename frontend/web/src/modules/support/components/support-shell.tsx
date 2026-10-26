@@ -87,6 +87,10 @@ export function SupportShell({ children }: { children: ReactNode }) {
               <strong>{displayName}</strong>
               <small>{roleLabel}</small>
             </span>
+            <Link href="/" className="support-to-store-btn" title="Quay về trang chủ cửa hàng">
+              <span aria-hidden="true">⌂</span>
+              <span>Về cửa hàng</span>
+            </Link>
             <button type="button" onClick={logout}>
               Đăng xuất
             </button>

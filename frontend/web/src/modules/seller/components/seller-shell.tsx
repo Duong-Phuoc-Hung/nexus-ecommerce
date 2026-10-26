@@ -91,6 +91,10 @@ export function SellerShell({ children }: { children: ReactNode }) {
               <strong>{displayName}</strong>
               <small>{roleLabel}</small>
             </span>
+            <Link href="/" className="seller-to-store-btn" title="Quay về trang chủ cửa hàng">
+              <span aria-hidden="true">⌂</span>
+              <span>Về cửa hàng</span>
+            </Link>
             {user && (
               <button type="button" onClick={logout} title="Đăng xuất khỏi tài khoản">
                 Đăng xuất

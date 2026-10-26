@@ -152,6 +152,27 @@
   font-size: 0.69rem;
   cursor: pointer;
 }
+.support-to-store-btn {
+  margin-left: 8px;
+  padding: 7px 11px;
+  border: 1px solid #d0d7de;
+  border-radius: 7px;
+  background: #f6f8fa;
+  color: #0284c7;
+  font-size: 0.69rem;
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.support-to-store-btn:hover {
+  background: #f0f9ff;
+  border-color: #0284c7;
+  color: #0369a1;
+}
 .support-content {
   width: min(100%, 1370px);
   margin: 0 auto;
