@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { Gavel, LayoutDashboard, LogOut, PackageSearch } from 'lucide-react';
+import { Gavel, LayoutDashboard, LogOut, PackageSearch, ReceiptText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { NexusLogo } from '@/components/layout/nexus-logo';
 import { useSession } from '@/modules/auth/hooks/use-session';
@@ -12,6 +12,7 @@ const navigation = [
   { href: '/admin', label: 'Tổng quan', icon: LayoutDashboard },
   { href: '/admin/products', label: 'Sản phẩm', icon: PackageSearch },
   { href: '/admin/auctions', label: 'Phiên đấu giá', icon: Gavel },
+  { href: '/admin/orders', label: 'Đơn hàng', icon: ReceiptText },
 ];
 
 export function AdminFrame({
@@ -85,7 +86,9 @@ export function AdminFrame({
                 ? 'Phiên đấu giá'
                 : pathname.includes('/products')
                   ? 'Sản phẩm'
-                  : 'Tổng quan'}
+                  : pathname.includes('/orders')
+                    ? 'Đơn hàng'
+                    : 'Tổng quan'}
             </span>
           </div>
           <div className="admin-topbar-right">
