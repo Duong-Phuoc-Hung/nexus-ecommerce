@@ -21,21 +21,47 @@ export type BackendProduct = {
   id: string;
   sellerId: string;
   sellerName?: string;
-  saleType: string;
+  saleType?: string;
   categoryId: string;
   title: string;
   description?: string;
   price: number;
-  currency: string;
+  currency?: string;
   stockQuantity: number;
   status: string;
   images?: string[];
   primaryImage?: string;
   condition?: string;
   slug?: string;
+  allowAuction?: boolean;
   attributes?: Record<string, string>;
   createdAt?: string;
   updatedAt?: string;
+};
+
+export type CreateProductInput = {
+  title: string;
+  description: string;
+  categoryId: string;
+  price: number;
+  stockQuantity?: number;
+  condition?: string;
+  images?: string[];
+  attributes?: Record<string, any>;
+  allowAuction?: boolean;
+};
+
+export type UpdateProductInput = {
+  title?: string;
+  description?: string;
+  categoryId?: string;
+  price?: number;
+  stockQuantity?: number;
+  condition?: string;
+  status?: string;
+  images?: string[];
+  attributes?: Record<string, any>;
+  allowAuction?: boolean;
 };
 
 export const sellerProductsApi = {
@@ -71,7 +97,21 @@ export const sellerProductsApi = {
   },
 
   /**
-   * API 2: GET /api/v1/products
+   * API 2 (MỚI): GET /api/v1/products/mine
+   * Lấy danh sách sản phẩm trong kho của chính Seller
+   */
+  async getMine(status?: string, signal?: AbortSignal): Promise<BackendProduct[]> {
+    const query = status && status !== 'ALL' ? `?status=${encodeURIComponent(status)}` : '';
+    const raw = await requestApi<{ success: boolean; total?: number; data: BackendProduct[] }>(
+      `/products/mine${query}`,
+      { signal },
+    );
+    const list = unwrap<BackendProduct[]>(raw);
+    return Array.isArray(list) ? list : [];
+  },
+
+  /**
+   * API 3: GET /api/v1/products
    * Lấy danh sách sản phẩm hiển thị trên sàn
    */
   async list(signal?: AbortSignal): Promise<BackendProduct[]> {
@@ -83,7 +123,7 @@ export const sellerProductsApi = {
   },
 
   /**
-   * API 3: GET /api/v1/products/search?q=...
+   * API 4: GET /api/v1/products/search?q=...
    * Tìm kiếm sản phẩm theo từ khóa
    */
   async search(query: string, signal?: AbortSignal): Promise<BackendProduct[]> {
@@ -96,7 +136,7 @@ export const sellerProductsApi = {
   },
 
   /**
-   * API 4: GET /api/v1/products/:id
+   * API 5: GET /api/v1/products/:id
    * Xem chi tiết sản phẩm theo ID hoặc Slug
    */
   async getById(id: string, signal?: AbortSignal): Promise<BackendProduct> {
@@ -105,5 +145,61 @@ export const sellerProductsApi = {
       { signal },
     );
     return unwrap<BackendProduct>(raw);
+  },
+
+  /**
+   * API 6 (MỚI): POST /api/v1/products
+   * Đăng bán sản phẩm mới cho Seller
+   */
+  async create(
+    payload: CreateProductInput,
+    signal?: AbortSignal,
+  ): Promise<{ id: string; slug?: string; title: string }> {
+    const raw = await requestApi<{
+      success: boolean;
+      message: string;
+      data: { id: string; slug: string; title: string };
+    }>('/products', {
+      method: 'POST',
+      body: payload,
+      signal,
+    });
+    return unwrap<{ id: string; slug: string; title: string }>(raw);
+  },
+
+  /**
+   * API 7 (MỚI): PUT /api/v1/products/:id
+   * Cập nhật thông tin sản phẩm của Seller
+   */
+  async update(
+    id: string,
+    payload: UpdateProductInput,
+    signal?: AbortSignal,
+  ): Promise<Partial<BackendProduct>> {
+    const raw = await requestApi<{
+      success: boolean;
+      message: string;
+      data: Partial<BackendProduct>;
+    }>(`/products/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: payload,
+      signal,
+    });
+    return unwrap<Partial<BackendProduct>>(raw);
+  },
+
+  /**
+   * API 8 (MỚI): DELETE /api/v1/products/:id
+   * Xóa sản phẩm khỏi kho của Seller
+   */
+  async delete(id: string, signal?: AbortSignal): Promise<{ success: boolean; message: string }> {
+    const raw = await requestApi<{ success: boolean; message: string }>(
+      `/products/${encodeURIComponent(id)}`,
+      {
+        method: 'DELETE',
+        signal,
+      },
+    );
+    return raw;
   },
 };

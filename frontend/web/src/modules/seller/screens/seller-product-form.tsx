@@ -18,7 +18,8 @@ export function SellerProductForm({ productId }: { productId?: string }) {
   const [productLoading, setProductLoading] = useState(Boolean(productId));
   const [productError, setProductError] = useState('');
 
-  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const [errors, setErrors] = useState<string[]>([]);
 
   // 1. API 1: GET /api/v1/categories?tree=true
@@ -54,7 +55,7 @@ export function SellerProductForm({ productId }: { productId?: string }) {
     return () => controller.abort();
   }, []);
 
-  // 2. API 4: GET /api/v1/products/:id
+  // 2. API 5: GET /api/v1/products/:id
   useEffect(() => {
     if (!productId) return;
 
@@ -97,34 +98,82 @@ export function SellerProductForm({ productId }: { productId?: string }) {
     return () => controller.abort();
   }, [productId]);
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  const isEditMode = Boolean(productId);
+  const title = isEditMode ? 'Chỉnh sửa sản phẩm' : 'Thêm sản phẩm';
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const nextErrors: string[] = [];
-    if (!String(data.get('name') ?? '').trim()) nextErrors.push('Nhập tên sản phẩm.');
-    if (!String(data.get('sku') ?? '').trim()) nextErrors.push('Nhập mã SKU/Slug.');
-    if (Number(data.get('price')) <= 0) nextErrors.push('Giá bán phải lớn hơn 0.');
-    if (Number(data.get('stock')) < 0) nextErrors.push('Tồn kho không được âm.');
-    setErrors(nextErrors);
-    setSubmitted(nextErrors.length === 0);
-  }
 
-  const isEditMode = Boolean(productId);
-  const title = isEditMode ? 'Chỉnh sửa sản phẩm' : 'Thêm sản phẩm';
+    const name = String(data.get('name') ?? '').trim();
+    const sku = String(data.get('sku') ?? '').trim();
+    const category = String(data.get('category') ?? '').trim();
+    const price = Number(data.get('price'));
+    const stock = Number(data.get('stock'));
+    const description = String(data.get('description') ?? '').trim() || `Sản phẩm ${name}`;
+    const status = String(data.get('status') ?? 'ACTIVE');
+
+    if (!name) nextErrors.push('Nhập tên sản phẩm.');
+    if (!sku) nextErrors.push('Nhập mã SKU/Slug.');
+    if (!category) nextErrors.push('Vui lòng chọn danh mục.');
+    if (!price || price <= 0) nextErrors.push('Giá bán phải lớn hơn 0.');
+    if (stock < 0) nextErrors.push('Tồn kho không được âm.');
+
+    if (nextErrors.length > 0) {
+      setErrors(nextErrors);
+      setSuccessMessage('');
+      return;
+    }
+
+    setErrors([]);
+    setSubmitting(true);
+    setSuccessMessage('');
+
+    try {
+      if (isEditMode && productId) {
+        // API 7: PUT /api/v1/products/:id
+        await sellerProductsApi.update(productId, {
+          title: name,
+          description,
+          categoryId: category,
+          price,
+          stockQuantity: stock,
+          status,
+        });
+        setSuccessMessage('Cập nhật sản phẩm thành công!');
+      } else {
+        // API 6: POST /api/v1/products
+        const res = await sellerProductsApi.create({
+          title: name,
+          description,
+          categoryId: category,
+          price,
+          stockQuantity: stock,
+          condition: 'NEW',
+        });
+        setSuccessMessage(`Đã đăng bán sản phẩm thành công! (ID: ${res.id})`);
+      }
+    } catch (err) {
+      setErrors([userMessage(err)]);
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <>
       <PageHeading
         eyebrow="SELLER CENTER / CATALOG"
         title={title}
-        description="Tạo hoặc cập nhật nội dung sản phẩm. Danh mục và thông tin chi tiết được tải trực tiếp từ Catalog API."
+        description="Tạo hoặc cập nhật nội dung sản phẩm. Danh mục và thông tin chi tiết được kết nối trực tiếp với Catalog API."
         action={
           <Link className="seller-button seller-button-quiet" href="/seller/products">
             ← Danh sách
           </Link>
         }
       />
-      <DemoNote message="Danh mục sản phẩm được đồng bộ từ Category API (tree=true); chi tiết sản phẩm được tải từ Product Detail API." />
+      <DemoNote message="Tích hợp đầy đủ API: Danh mục (tree=true), Chi tiết sản phẩm (GET :id), Tạo mới (POST /products) và Cập nhật (PUT /products/:id)." />
 
       {productLoading && (
         <p className="seller-loading" style={{ margin: '16px 0' }}>
@@ -150,7 +199,7 @@ export function SellerProductForm({ productId }: { productId?: string }) {
             <span className="seller-muted">
               {isEditMode
                 ? `Trạng thái: ${productData?.status ?? 'ACTIVE'}`
-                : 'Trạng thái khởi tạo: Bản nháp'}
+                : 'Trạng thái khởi tạo: ACTIVE'}
             </span>
           </div>
 
@@ -215,13 +264,13 @@ export function SellerProductForm({ productId }: { productId?: string }) {
             </label>
 
             <label className="seller-form-full">
-              Mô tả
+              Mô tả *
               <textarea
                 key={`desc-${productData?.description ?? ''}`}
                 name="description"
                 rows={4}
                 defaultValue={productData?.description ?? ''}
-                placeholder="Mô tả đặc điểm và thông tin sản phẩm"
+                placeholder="Mô tả đặc điểm và thông tin chi tiết sản phẩm"
               />
             </label>
 
@@ -234,7 +283,8 @@ export function SellerProductForm({ productId }: { productId?: string }) {
               >
                 <option value="ACTIVE">Đang bán (ACTIVE)</option>
                 <option value="DRAFT">Bản nháp (DRAFT)</option>
-                <option value="INACTIVE">Ẩn sản phẩm (INACTIVE)</option>
+                <option value="ARCHIVED">Lưu trữ (ARCHIVED)</option>
+                <option value="OUT_OF_STOCK">Hết hàng (OUT_OF_STOCK)</option>
               </select>
             </label>
           </div>
@@ -247,10 +297,17 @@ export function SellerProductForm({ productId }: { productId?: string }) {
             </div>
           )}
 
-          {submitted && (
+          {successMessage && (
             <div className="seller-form-alert success" role="status">
-              Biểu mẫu hợp lệ. (Lưu ý: API POST / PUT sản phẩm của Seller hiện chưa có trên backend
-              để ghi dữ liệu).
+              <p>{successMessage}</p>
+              <div style={{ marginTop: 8 }}>
+                <Link
+                  href="/seller/products"
+                  style={{ textDecoration: 'underline', fontWeight: 600 }}
+                >
+                  Quay lại danh sách sản phẩm →
+                </Link>
+              </div>
             </div>
           )}
 
@@ -258,8 +315,12 @@ export function SellerProductForm({ productId }: { productId?: string }) {
             <Link className="seller-button seller-button-quiet" href="/seller/products">
               Hủy
             </Link>
-            <button className="seller-button seller-button-primary" type="submit">
-              {isEditMode ? 'Cập nhật thông tin' : 'Kiểm tra biểu mẫu'}
+            <button
+              className="seller-button seller-button-primary"
+              type="submit"
+              disabled={submitting}
+            >
+              {submitting ? 'Đang lưu...' : isEditMode ? 'Cập nhật thông tin' : 'Đăng bán sản phẩm'}
             </button>
           </div>
         </form>
