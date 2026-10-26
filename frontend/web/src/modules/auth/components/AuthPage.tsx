@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { NexusLogo } from '@/components/layout/nexus-logo';
 import { authApi } from '@/modules/auth/api/auth.api';
 import { ApiError, userMessage } from '../../../lib/axios/http';
-import { safeNextPath } from '../../../lib/utils/navigation';
+import { safeNextPath, resolveAuthDestination } from '../../../lib/utils/navigation';
 import './auth.css';
 type Mode = 'login' | 'register' | 'forgot-password' | 'reset-password';
 
@@ -146,17 +146,7 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
         if (profile.status !== 'ACTIVE') {
           throw new ApiError('Tài khoản chưa ở trạng thái hoạt động.', 423);
         }
-        let destination = next;
-        if (profile.role === 'ADMIN' && next === '/') destination = '/admin';
-        else if (profile.role === 'BUYER' && next === '/') destination = '/';
-        else if (profile.role === 'SELLER' && next === '/') destination = '/seller';
-        else if (profile.role === 'SUPPORT_STAFF' && next === '/') destination = '/support';
-        else if (
-          profile.role === 'BUYER' &&
-          (next.startsWith('/admin') || next.startsWith('/seller') || next.startsWith('/support'))
-        ) {
-          destination = '/';
-        }
+        const destination = resolveAuthDestination(profile.role, next);
         window.location.assign(destination);
       }
     } catch (error) {
@@ -314,6 +304,9 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
                             field('password', '123456');
                             setNotice('');
                             setErrors({});
+                            if (acc.email !== 'admin@gmail.com' && next.startsWith('/admin')) {
+                              history.replaceState(null, '', `/${mode}`);
+                            }
                           }}
                           disabled={busy}
                           title={`Điền thông tin ${acc.email} / 123456`}
