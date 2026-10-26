@@ -66,6 +66,12 @@ export default function AccountPage() {
                 Thông tin được xác minh từ phiên hiện tại. Chức năng chỉnh sửa hồ sơ sẽ được mở sau
                 khi hệ thống hỗ trợ.
               </p>
+              <Link
+                href="/account/orders"
+                className="mt-5 inline-flex min-h-11 items-center rounded-xl border border-line px-5 text-sm font-semibold"
+              >
+                Xem đơn hàng của tôi
+              </Link>
             </>
           )}
         </section>
