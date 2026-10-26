@@ -47,8 +47,31 @@ export function AccountControls() {
         )}
       </div>
     );
+  const isSeller = user.role === 'SELLER';
+  const isSupport = user.role === 'SUPPORT_STAFF' || user.role === 'SUPPORT';
+
   return (
-    <div className="flex max-w-full items-center gap-3">
+    <div className="flex max-w-full items-center gap-2.5 sm:gap-3">
+      {isSeller && (
+        <Link
+          href="/seller"
+          className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900 shadow-sm transition hover:bg-amber-100 hover:border-amber-400"
+          title="Quay lại bảng điều khiển Người bán"
+        >
+          <span aria-hidden="true">▦</span>
+          <span>Dashboard Seller</span>
+        </Link>
+      )}
+      {isSupport && (
+        <Link
+          href="/support"
+          className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-sky-300 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-900 shadow-sm transition hover:bg-sky-100 hover:border-sky-400"
+          title="Quay lại bảng điều khiển Hỗ trợ"
+        >
+          <span aria-hidden="true">⌂</span>
+          <span>Dashboard Support</span>
+        </Link>
+      )}
       <Link
         href="/account"
         className="max-w-40 truncate text-sm font-semibold text-ink"

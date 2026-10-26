@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { cases, orders, users, shipments } from '../fixtures/support';
+import type { SupportCase } from '../api/support.api';
 export { cases, orders, users, shipments } from '../fixtures/support';
 export const money = (amount: number) => `${new Intl.NumberFormat('vi-VN').format(amount)} ₫`;
 export const slug = (value: string) => value.toLowerCase().replaceAll(' ', '-');
@@ -32,15 +33,11 @@ export function Heading({
   );
 }
 
-export function DemoBanner() {
-  return (
-    <div className="support-demo-banner">
-      <span>●</span> Dữ liệu minh họa cho bản demo · Chưa kết nối API nghiệp vụ Support
-    </div>
-  );
+export function DemoBanner(_props?: { message?: string }) {
+  return null;
 }
 
-export function CaseTable({ compact = false }: { compact?: boolean }) {
+export function CaseTable({ compact = false, items }: { compact?: boolean; items: SupportCase[] }) {
   return (
     <div className="support-table-wrap">
       <table className="support-table">
@@ -57,7 +54,7 @@ export function CaseTable({ compact = false }: { compact?: boolean }) {
           </tr>
         </thead>
         <tbody>
-          {cases.slice(0, compact ? 3 : undefined).map((item) => (
+          {items.slice(0, compact ? 3 : undefined).map((item) => (
             <tr key={item.id}>
               <td>
                 <strong>{item.id}</strong>

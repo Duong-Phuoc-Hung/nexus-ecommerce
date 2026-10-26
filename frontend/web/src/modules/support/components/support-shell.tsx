@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useSession } from '@/modules/auth/hooks/use-session';
+import { SupportRouteGuard } from './support-route-guard';
 
 const items = [
   { href: '/support', label: 'Tổng quan', icon: '⌂' },
@@ -16,7 +17,17 @@ export function SupportShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout: logoutSession } = useSession();
-  const name = user?.role === 'SUPPORT_STAFF' ? user.fullName || user.email : 'Nhân viên hỗ trợ';
+
+  const displayName = user?.fullName || user?.email || 'Nhân viên hỗ trợ';
+  const roleLabel =
+    user?.role === 'SUPPORT_STAFF'
+      ? 'Support Staff · Demo'
+      : user?.role === 'ADMIN'
+        ? 'Admin · Quản trị'
+        : user?.role
+          ? `Vai trò: ${user.role}`
+          : 'Chưa đăng nhập';
+
   async function logout() {
     await logoutSession();
     router.push('/');
@@ -71,17 +82,23 @@ export function SupportShell({ children }: { children: ReactNode }) {
             </small>
           </div>
           <div className="support-agent">
-            <span className="support-agent-avatar">{name.slice(0, 1).toUpperCase()}</span>
+            <span className="support-agent-avatar">{displayName.slice(0, 1).toUpperCase()}</span>
             <span>
-              <strong>{name}</strong>
-              <small>Support Staff · Demo</small>
+              <strong>{displayName}</strong>
+              <small>{roleLabel}</small>
             </span>
+            <Link href="/" className="support-to-store-btn" title="Quay về trang chủ cửa hàng">
+              <span aria-hidden="true">⌂</span>
+              <span>Về cửa hàng</span>
+            </Link>
             <button type="button" onClick={logout}>
               Đăng xuất
             </button>
           </div>
         </header>
-        <main className="support-content">{children}</main>
+        <main className="support-content">
+          <SupportRouteGuard>{children}</SupportRouteGuard>
+        </main>
       </div>
     </div>
   );

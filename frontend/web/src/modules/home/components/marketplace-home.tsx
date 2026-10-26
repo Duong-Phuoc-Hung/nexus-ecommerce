@@ -276,6 +276,32 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
                 </Link>
               </Button>
             )}
+            {user?.role === 'SELLER' && (
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="min-h-10 gap-2 rounded-lg border-amber-300 bg-amber-50 px-3 text-xs font-semibold text-amber-900 hover:border-amber-400 hover:bg-amber-100"
+              >
+                <Link href="/seller" aria-label="Mở bảng điều khiển Người bán">
+                  <LayoutDashboard aria-hidden="true" className="size-4" />
+                  Dashboard Người bán
+                </Link>
+              </Button>
+            )}
+            {(user?.role === 'SUPPORT_STAFF' || user?.role === 'SUPPORT') && (
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="min-h-10 gap-2 rounded-lg border-sky-300 bg-sky-50 px-3 text-xs font-semibold text-sky-900 hover:border-sky-400 hover:bg-sky-100"
+              >
+                <Link href="/support" aria-label="Mở bảng điều khiển Hỗ trợ">
+                  <LayoutDashboard aria-hidden="true" className="size-4" />
+                  Dashboard Support
+                </Link>
+              </Button>
+            )}
             <a
               href="#how-it-works"
               className="hidden min-h-11 items-center hover:text-brand-dark md:flex"

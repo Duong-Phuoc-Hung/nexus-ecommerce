@@ -740,6 +740,133 @@
   }
 }
 
+.seller-account button {
+  margin-left: 8px;
+  padding: 6px 12px;
+  border: 1px solid #e1e5eb;
+  border-radius: 7px;
+  background: #fff;
+  color: #687386;
+  font-size: 0.69rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.seller-account button:hover {
+  border-color: #f1bdc0;
+  background: #fff5f5;
+  color: #c71720;
+}
+.seller-to-store-btn {
+  margin-left: 8px;
+  padding: 6px 12px;
+  border: 1px solid #d0d7de;
+  border-radius: 7px;
+  background: #f6f8fa;
+  color: #0969da;
+  font-size: 0.69rem;
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.seller-to-store-btn:hover {
+  background: #ebf5ff;
+  border-color: #0969da;
+  color: #0969da;
+}
+.seller-guard-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 320px;
+  color: #788396;
+  font-size: 0.86rem;
+}
+.seller-guard-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e7e9ed;
+  border-top-color: #ed1c24;
+  border-radius: 50%;
+  animation: seller-spin 0.8s linear infinite;
+}
+@keyframes seller-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.seller-guard-card {
+  max-width: 580px;
+  margin: 40px auto;
+  padding: 34px 38px;
+  border: 1px solid #e5e8ed;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 4px 16px rgb(30 45 70 / 4%);
+  text-align: center;
+}
+.seller-guard-card h2 {
+  margin: 0 0 10px;
+  color: #202a3b;
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+.seller-guard-desc {
+  margin: 0 0 24px;
+  color: #687386;
+  font-size: 0.83rem;
+  line-height: 1.6;
+}
+.seller-guard-desc code {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #f0f2f5;
+  color: #d51d27;
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+.seller-guard-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.seller-guard-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.seller-guard-btn.primary {
+  border: 1px solid #ed1c24;
+  background: #ed1c24;
+  color: #fff;
+}
+.seller-guard-btn.primary:hover {
+  background: #c71720;
+}
+.seller-guard-btn.secondary {
+  border: 1px solid #d9dce1;
+  background: #fff;
+  color: #4b5563;
+}
+.seller-guard-btn.secondary:hover {
+  border-color: #9ca3af;
+  background: #f9fafb;
+}
+
 /* --- Reputation & Trust System Styles --- */
 .reputation-badge {
   display: inline-flex;
