@@ -28,6 +28,18 @@ export function StoreHeader() {
           >
             Phiên đấu giá
           </Link>
+          <Link
+            href="/cart"
+            className="inline-flex min-h-11 items-center text-muted hover:text-brand-dark"
+          >
+            Giỏ hàng
+          </Link>
+          <Link
+            href="/account/orders"
+            className="inline-flex min-h-11 items-center text-muted hover:text-brand-dark"
+          >
+            Đơn mua
+          </Link>
         </nav>
         <AccountControls />
       </div>
