@@ -40,9 +40,56 @@ export class UpdateProductUseCase {
     // 3. Nếu Seller đổi danh mục mới, kiểm tra danh mục đó có tồn tại không
     if (input.categoryId && input.categoryId !== product.categoryId) {
       const category = await this.categoryRepository.findById(input.categoryId);
-      if (!category) {
+      if (!category || !category.isActive) {
         throw new Error(`Danh mục với ID '${input.categoryId}' không tồn tại.`);
       }
+    }
+
+    if (input.title !== undefined && (!input.title.trim() || input.title.trim().length > 255)) {
+      throw new Error('Tên sản phẩm phải có từ 1 đến 255 ký tự.');
+    }
+    if (input.description !== undefined && !input.description.trim()) {
+      throw new Error('Mô tả sản phẩm là bắt buộc.');
+    }
+    if (
+      input.price !== undefined &&
+      (!Number.isFinite(input.price) ||
+        input.price <= 0 ||
+        !/^\d+(\.\d{1,2})?$/.test(String(input.price)))
+    ) {
+      throw new Error('Giá sản phẩm phải lớn hơn 0 VND và có tối đa 2 chữ số thập phân.');
+    }
+    if (
+      input.stockQuantity !== undefined &&
+      (!Number.isSafeInteger(input.stockQuantity) || input.stockQuantity < 0)
+    ) {
+      throw new Error('Số lượng tồn kho phải là số nguyên không âm.');
+    }
+    if (
+      input.condition !== undefined &&
+      !['NEW', 'LIKE_NEW', 'USED', 'REFURBISHED'].includes(input.condition)
+    ) {
+      throw new Error('Tình trạng sản phẩm không hợp lệ.');
+    }
+    if (
+      input.status !== undefined &&
+      !Object.values(ProductStatus).includes(input.status)
+    ) {
+      throw new Error('Trạng thái sản phẩm không hợp lệ.');
+    }
+    if (
+      input.images !== undefined &&
+      (input.images.length > 5 ||
+        input.images.some((image) => {
+          try {
+            const url = new URL(image);
+            return url.protocol !== 'http:' && url.protocol !== 'https:';
+          } catch {
+            return true;
+          }
+        }))
+    ) {
+      throw new Error('Sản phẩm được phép có tối đa 5 ảnh URL HTTP hoặc HTTPS.');
     }
 
     // 4. Gọi hàm nghiệp vụ Entity để validate và cập nhật dữ liệu

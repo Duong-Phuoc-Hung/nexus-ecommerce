@@ -5,6 +5,7 @@ export interface AuthenticatedUser {
   id: string;
   email: string;
   role: string;
+  permissions: string[];
   fullName?: string;
 }
 
@@ -54,11 +55,17 @@ export function verifyJwtToken(token: string): AuthenticatedUser | null {
 
     const userId = payload.sub || payload.userId || payload.id;
     const role = payload.role || (Array.isArray(payload.roles) ? payload.roles[0] : 'BUYER');
+    const rawPermissions = payload.privileges || payload.permissions;
 
     return {
       id: String(userId),
       email: payload.email || '',
       role: String(role).toUpperCase(),
+      permissions: Array.isArray(rawPermissions)
+        ? rawPermissions.filter((permission: unknown): permission is string =>
+            typeof permission === 'string',
+          )
+        : [],
       fullName: payload.fullName || payload.name || 'Nexus Seller',
     };
   } catch {
@@ -77,19 +84,6 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
       (req as AuthenticatedRequest).user = user;
       return next();
     }
-  }
-
-  // 2. Dự phòng: Đọc header chuyển tiếp từ API Gateway (x-user-id, x-user-role)
-  const forwardedId = req.headers['x-user-id'];
-  const forwardedRole = req.headers['x-user-role'];
-  if (forwardedId && typeof forwardedId === 'string') {
-    (req as AuthenticatedRequest).user = {
-      id: forwardedId,
-      email: (req.headers['x-user-email'] as string) || '',
-      role: ((forwardedRole as string) || 'BUYER').toUpperCase(),
-      fullName: (req.headers['x-user-name'] as string) || 'Nexus Seller',
-    };
-    return next();
   }
 
   res.status(401).json({
@@ -115,6 +109,27 @@ export function requireSellerOrAdmin(req: Request, res: Response, next: NextFunc
   });
 }
 
+export function requireAdminPermission(permission: string) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const user = (req as AuthenticatedRequest).user;
+    if (user?.role !== 'ADMIN') {
+      next();
+      return;
+    }
+
+    if (!user.permissions.includes(permission)) {
+      res.status(403).json({
+        success: false,
+        error: `Admin token is missing required permission '${permission}'.`,
+        code: 'FORBIDDEN',
+      });
+      return;
+    }
+
+    next();
+  };
+}
+
 export function optionalAuth(req: Request, _res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization || '';
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
@@ -124,16 +139,6 @@ export function optionalAuth(req: Request, _res: Response, next: NextFunction): 
       (req as AuthenticatedRequest).user = user;
       return next();
     }
-  }
-  const forwardedId = req.headers['x-user-id'];
-  const forwardedRole = req.headers['x-user-role'];
-  if (forwardedId && typeof forwardedId === 'string') {
-    (req as AuthenticatedRequest).user = {
-      id: forwardedId,
-      email: (req.headers['x-user-email'] as string) || '',
-      role: ((forwardedRole as string) || 'BUYER').toUpperCase(),
-      fullName: (req.headers['x-user-name'] as string) || 'Nexus Seller',
-    };
   }
   next();
 }

@@ -412,6 +412,86 @@ export const userSpec = {
   },
 };
 
+const productQueryParameters = [
+  {
+    name: 'scope',
+    in: 'query',
+    required: false,
+    description: 'Dùng scope=admin kèm JWT Admin để xem cả sản phẩm không công khai.',
+    schema: { type: 'string', enum: ['admin'] },
+  },
+  {
+    name: 'q',
+    in: 'query',
+    required: false,
+    description: 'Từ khóa tìm kiếm; bỏ trống để duyệt danh sách.',
+    schema: { type: 'string', example: 'iphone' },
+  },
+  {
+    name: 'categoryId',
+    in: 'query',
+    required: false,
+    description: 'Lọc theo danh mục.',
+    schema: { type: 'string', example: '100' },
+  },
+  {
+    name: 'minPrice',
+    in: 'query',
+    required: false,
+    description: 'Giá tối thiểu (>= 0).',
+    schema: { type: 'number', example: 1000000 },
+  },
+  {
+    name: 'maxPrice',
+    in: 'query',
+    required: false,
+    description: 'Giá tối đa (>= 0 và không nhỏ hơn minPrice).',
+    schema: { type: 'number', example: 50000000 },
+  },
+  {
+    name: 'condition',
+    in: 'query',
+    required: false,
+    schema: { type: 'string', enum: ['NEW', 'LIKE_NEW', 'USED', 'REFURBISHED'] },
+  },
+  {
+    name: 'status',
+    in: 'query',
+    required: false,
+    description: 'Chỉ dùng với scope=admin.',
+    schema: {
+      type: 'string',
+      enum: ['DRAFT', 'ACTIVE', 'INACTIVE', 'ARCHIVED', 'OUT_OF_STOCK'],
+    },
+  },
+  {
+    name: 'sort',
+    in: 'query',
+    required: false,
+    schema: { type: 'string', enum: ['featured', 'newest', 'price-asc', 'price-desc'] },
+  },
+  {
+    name: 'page',
+    in: 'query',
+    required: false,
+    schema: { type: 'integer', minimum: 1, default: 1 },
+  },
+  {
+    name: 'pageSize',
+    in: 'query',
+    required: false,
+    description: 'Số sản phẩm mỗi trang (1-100); có thể dùng alias limit.',
+    schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+  },
+  {
+    name: 'limit',
+    in: 'query',
+    required: false,
+    description: 'Alias tương thích của pageSize (1-100).',
+    schema: { type: 'integer', minimum: 1, maximum: 100 },
+  },
+];
+
 export const catalogSpec = {
   openapi: '3.0.0',
   info: {
@@ -524,35 +604,43 @@ export const catalogSpec = {
     '/api/v1/products': {
       get: {
         tags: ['Products'],
-        summary: 'Danh sách tất cả sản phẩm (khách hàng)',
-        description: `${PUBLIC} Method: GET. Truy xuất toàn bộ sản phẩm đang được bày bán công khai ngoài trang chủ (không cần đăng nhập).`,
+        summary: 'Danh sách sản phẩm (Buyer/Public hoặc Admin)',
+        description:
+          'Public chỉ nhận sản phẩm ACTIVE còn hàng. Thêm scope=admin và JWT Admin để xem kho gồm sản phẩm không công khai; bộ lọc status chỉ dùng trong scope này.',
+        security: [{ BearerAuth: [] }, {}],
+        parameters: productQueryParameters,
         responses: {
-          200: jsonResponse('Danh sách sản phẩm', {
+          200: jsonResponse('Danh sách sản phẩm đã phân trang', {
             success: true,
-            data: [
-              {
-                id: '1',
-                sellerId: 'a0000000-0000-0000-0000-000000000002',
-                categoryId: '100',
-                title: 'iPhone 15 Pro Max 256GB Titan Tự Nhiên',
-                description: '...',
-                price: 29990000,
-                stockQuantity: 10,
-                status: 'ACTIVE',
-                images: ['https://...'],
-                primaryImage: 'https://...',
-                condition: 'NEW',
-                slug: 'iphone-15-pro-max-256gb-titan-tu-nhien',
-                allowAuction: false,
-                attributes: {},
-              },
-            ],
+            data: {
+              items: [
+                {
+                  id: '1',
+                  sellerId: 'a0000000-0000-0000-0000-000000000002',
+                  categoryId: '100',
+                  title: 'iPhone 15 Pro Max 256GB Titan Tự Nhiên',
+                  price: 29990000,
+                  stockQuantity: 10,
+                  status: 'ACTIVE',
+                },
+              ],
+              page: 1,
+              pageSize: 20,
+              total: 1,
+              totalPages: 1,
+            },
+            meta: { page: 1, limit: 20, total: 1, totalPages: 1 },
           }),
+          400: errorResponse('Tham số không hợp lệ', 'Query parameter "page" must be positive.'),
+          401: unauthorized,
+          403: forbidden,
         },
       },
       post: {
         tags: ['Products'],
-        summary: 'Tạo sản phẩm mới (Seller)',
+        summary: 'Tạo sản phẩm mới (Seller hoặc Admin có quyền)',
+        description:
+          'Seller tạo cho chính mình. Admin cần quyền PRODUCT.CREATE, gửi sellerId và được kiểm tra Seller đang ACTIVE qua User Service.',
         security: [{ BearerAuth: [] }],
         requestBody: {
           required: true,
@@ -568,8 +656,18 @@ export const catalogSpec = {
                     example: 'Điện thoại chính hãng VN/A nguyên seal bảo hành 12 tháng',
                   },
                   categoryId: { type: 'string', example: '100' },
+                  sellerId: {
+                    type: 'string',
+                    description: 'Bắt buộc với Admin; Seller lấy theo JWT.',
+                    example: 'a0000000-0000-0000-0000-000000000002',
+                  },
                   price: { type: 'number', example: 34990000 },
                   stockQuantity: { type: 'integer', example: 15 },
+                  status: {
+                    type: 'string',
+                    enum: ['DRAFT', 'ACTIVE', 'INACTIVE', 'ARCHIVED', 'OUT_OF_STOCK'],
+                    description: 'Admin có thể chọn trạng thái khởi tạo.',
+                  },
                   condition: {
                     type: 'string',
                     enum: ['NEW', 'LIKE_NEW', 'USED', 'REFURBISHED'],
@@ -613,8 +711,10 @@ export const catalogSpec = {
           ),
           403: errorResponse(
             'Không có quyền',
-            'Tài khoản với vai trò BUYER không có quyền đăng bán sản phẩm.',
+            'Không có quyền PRODUCT.CREATE hoặc vai trò không được phép đăng bán.',
           ),
+          422: errorResponse('Seller không hợp lệ', 'Seller được chọn không tồn tại hoặc không hoạt động.'),
+          503: errorResponse('User Service không khả dụng', 'Seller account validation failed.'),
         },
       },
     },
@@ -622,68 +722,35 @@ export const catalogSpec = {
       get: {
         tags: ['Products'],
         summary: 'Tìm kiếm sản phẩm',
-        description: `${PUBLIC} Method: GET. Query "q" là bắt buộc; các tham số khác tùy chọn. Tham số sai kiểu/âm trả 400.`,
-        parameters: [
-          {
-            name: 'q',
-            in: 'query',
-            required: true,
-            description: 'Từ khóa tìm kiếm',
-            schema: { type: 'string', example: 'iphone' },
-          },
-          {
-            name: 'categoryId',
-            in: 'query',
-            required: false,
-            description: 'Lọc theo danh mục',
-            schema: { type: 'string', example: '100' },
-          },
-          {
-            name: 'minPrice',
-            in: 'query',
-            required: false,
-            description: 'Giá tối thiểu (số >= 0)',
-            schema: { type: 'number', example: 1000000 },
-          },
-          {
-            name: 'maxPrice',
-            in: 'query',
-            required: false,
-            description: 'Giá tối đa (số >= 0, không nhỏ hơn minPrice)',
-            schema: { type: 'number', example: 50000000 },
-          },
-          {
-            name: 'page',
-            in: 'query',
-            required: false,
-            description: 'Trang (số nguyên >= 1, mặc định 1)',
-            schema: { type: 'integer', example: 1 },
-          },
-          {
-            name: 'limit',
-            in: 'query',
-            required: false,
-            description: 'Số dòng mỗi trang (1-100, mặc định 20)',
-            schema: { type: 'integer', example: 20 },
-          },
-        ],
+        description:
+          'Dùng cùng bộ lọc/phân trang với GET /api/v1/products. Query q không bắt buộc; có thể dùng để duyệt sản phẩm.',
+        security: [{ BearerAuth: [] }, {}],
+        parameters: productQueryParameters,
         responses: {
-          200: jsonResponse('Kết quả tìm kiếm', {
+          200: jsonResponse('Kết quả tìm kiếm đã phân trang', {
             success: true,
-            data: [
-              {
-                id: '1',
-                sellerId: 'a0000000-0000-0000-0000-000000000002',
-                categoryId: '100',
-                title: 'iPhone 15 Pro Max 256GB Titan Tự Nhiên',
-                price: 29990000,
-                stockQuantity: 10,
-                status: 'ACTIVE',
-              },
-            ],
+            data: {
+              items: [
+                {
+                  id: '1',
+                  sellerId: 'a0000000-0000-0000-0000-000000000002',
+                  categoryId: '100',
+                  title: 'iPhone 15 Pro Max 256GB Titan Tự Nhiên',
+                  price: 29990000,
+                  stockQuantity: 10,
+                  status: 'ACTIVE',
+                },
+              ],
+              page: 1,
+              pageSize: 20,
+              total: 1,
+              totalPages: 1,
+            },
             meta: { page: 1, limit: 20, total: 1, totalPages: 1 },
           }),
-          400: errorResponse('Tham số không hợp lệ', 'Query parameter "q" is required.'),
+          400: errorResponse('Tham số không hợp lệ', 'Query parameters are invalid.'),
+          401: unauthorized,
+          403: forbidden,
         },
       },
     },
@@ -691,7 +758,9 @@ export const catalogSpec = {
       get: {
         tags: ['Products'],
         summary: 'Xem chi tiết sản phẩm theo ID hoặc Slug',
-        description: `${PUBLIC} Method: GET.`,
+        description:
+          'Không cần đăng nhập để xem sản phẩm ACTIVE còn hàng. JWT Admin có thể xem chi tiết sản phẩm không công khai.',
+        security: [{ BearerAuth: [] }, {}],
         parameters: [
           {
             name: 'id',
@@ -721,7 +790,8 @@ export const catalogSpec = {
       },
       put: {
         tags: ['Products'],
-        summary: 'Cập nhật sản phẩm (Seller)',
+        summary: 'Cập nhật sản phẩm (Seller hoặc Admin có quyền)',
+        description: 'Seller chỉ được cập nhật sản phẩm của mình. Admin cần quyền PRODUCT.UPDATE.',
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -757,8 +827,7 @@ export const catalogSpec = {
                   },
                   status: {
                     type: 'string',
-                    enum: ['ACTIVE', 'DRAFT', 'ARCHIVED', 'OUT_OF_STOCK'],
-                    default: 'ACTIVE',
+                    enum: ['ACTIVE', 'DRAFT', 'INACTIVE', 'ARCHIVED', 'OUT_OF_STOCK'],
                   },
                   allowAuction: { type: 'boolean', default: false },
                   images: {
@@ -800,7 +869,8 @@ export const catalogSpec = {
       },
       delete: {
         tags: ['Products'],
-        summary: 'Xóa sản phẩm (Seller)',
+        summary: 'Xóa sản phẩm (Seller hoặc Admin có quyền)',
+        description: 'Seller chỉ được xóa sản phẩm của mình. Admin cần quyền PRODUCT.DELETE.',
         security: [{ BearerAuth: [] }],
         parameters: [
           {

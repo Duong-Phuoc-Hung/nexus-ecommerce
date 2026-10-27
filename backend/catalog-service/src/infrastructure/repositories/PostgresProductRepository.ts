@@ -146,13 +146,23 @@ export class PostgresProductRepository implements IProductRepository {
   }
 
   public async search(criteria: ProductSearchCriteria): Promise<ProductSearchPage> {
-    const conditions: string[] = ['p.deleted_at IS NULL', "p.status = 'ACTIVE'"];
+    const conditions: string[] = ['p.deleted_at IS NULL'];
     const params: any[] = [];
 
-    params.push(`%${criteria.q.trim().toLowerCase()}%`);
-    conditions.push(
-      `(LOWER(p.title) LIKE $${params.length} OR LOWER(COALESCE(p.description, '')) LIKE $${params.length})`,
-    );
+    if (criteria.visibility === 'PUBLIC') {
+      conditions.push("p.status = 'ACTIVE'");
+      conditions.push('p.stock_quantity > 0');
+    } else if (criteria.status) {
+      params.push(criteria.status);
+      conditions.push(`p.status = $${params.length}`);
+    }
+
+    if (criteria.q) {
+      params.push(`%${criteria.q.trim().toLowerCase()}%`);
+      conditions.push(
+        `(LOWER(p.title) LIKE $${params.length} OR LOWER(COALESCE(p.description, '')) LIKE $${params.length})`,
+      );
+    }
 
     if (criteria.categoryId) {
       const isNumeric = /^\d+$/.test(criteria.categoryId);
@@ -177,6 +187,11 @@ export class PostgresProductRepository implements IProductRepository {
       conditions.push(`p.base_price <= $${params.length}`);
     }
 
+    if (criteria.condition) {
+      params.push(criteria.condition);
+      conditions.push(`p.condition = $${params.length}`);
+    }
+
     const whereClause = conditions.join(' AND ');
 
     const countResult = await this.pool.query(
@@ -190,13 +205,20 @@ export class PostgresProductRepository implements IProductRepository {
     params.push(criteria.offset);
     const offsetParam = `$${params.length}`;
 
+    const sortOrder = {
+      featured: 'p.id ASC',
+      newest: 'p.created_at DESC, p.id DESC',
+      'price-asc': 'p.base_price ASC, p.id ASC',
+      'price-desc': 'p.base_price DESC, p.id ASC',
+    }[criteria.sort || 'featured'];
+
     const query = `
       SELECT 
         p.id, p.seller_id, p.category_id, p.title, p.slug, p.description, 
         p.status, p.condition, p.base_price, p.allow_auction, p.stock_quantity, p.seller_name, p.created_at, p.updated_at
       FROM catalog_products p
       WHERE ${whereClause}
-      ORDER BY p.id ASC
+      ORDER BY ${sortOrder}
       LIMIT ${limitParam} OFFSET ${offsetParam};
     `;
 
@@ -220,120 +242,127 @@ export class PostgresProductRepository implements IProductRepository {
   }
 
   public async save(product: Product): Promise<string> {
-    // Lưu sản phẩm mới
-    const query = `
-      INSERT INTO catalog_products (
-        seller_id, category_id, title, slug, description, status, condition, base_price, allow_auction, stock_quantity, seller_name, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-      RETURNING id;
-    `;
-    const params = [
-      product.sellerId,
-      product.categoryId,
-      product.title,
-      product.slug || this.slugify(product.title),
-      product.description,
-      product.status,
-      product.condition || 'NEW',
-      product.price,
-      product.allowAuction ?? false,
-      product.stockQuantity ?? 1,
-      product.sellerName || 'Nexus Official Store',
-      product.createdAt,
-      product.updatedAt,
-    ];
-    const result = await this.pool.query(query, params);
-    const newProductId = result.rows[0]?.id;
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await client.query(
+        `INSERT INTO catalog_products (
+          seller_id, category_id, title, slug, description, status, condition, base_price,
+          allow_auction, stock_quantity, seller_name, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        RETURNING id;`,
+        [
+          product.sellerId,
+          parseInt(product.categoryId, 10),
+          product.title,
+          product.slug || this.slugify(product.title),
+          product.description,
+          product.status,
+          product.condition || 'NEW',
+          product.price,
+          product.allowAuction ?? false,
+          product.stockQuantity,
+          product.sellerName || 'Nexus Official Store',
+          product.createdAt,
+          product.updatedAt,
+        ],
+      );
+      const newProductId = result.rows[0]?.id;
+      if (newProductId === undefined) throw new Error('Product insert did not return an ID.');
 
-    if (newProductId) {
-      // 1. Tự động lưu mảng ảnh sang bảng catalog_product_images
-      if (product.images && product.images.length > 0) {
-        for (let i = 0; i < product.images.length; i++) {
-          await this.pool.query(
-            `INSERT INTO catalog_product_images (product_id, image_url, display_order, is_primary)
-             VALUES ($1, $2, $3, $4);\n`,
-            [newProductId, product.images[i], i + 1, i === 0],
+      for (let i = 0; i < product.images.length; i++) {
+        await client.query(
+          `INSERT INTO catalog_product_images (product_id, image_url, display_order, is_primary)
+           VALUES ($1, $2, $3, $4);`,
+          [newProductId, product.images[i], i + 1, i === 0],
+        );
+      }
+
+      for (const [key, value] of Object.entries(product.attributes)) {
+        if (value) {
+          await client.query(
+            `INSERT INTO catalog_product_attributes (product_id, attribute_key, attribute_value)
+             VALUES ($1, $2, $3);`,
+            [newProductId, key, value],
           );
         }
       }
 
-      // 2. Tự động lưu thuộc tính sang bảng catalog_product_attributes
-      if (product.attributes && typeof product.attributes === 'object') {
-        for (const [key, val] of Object.entries(product.attributes)) {
-          if (val) {
-            await this.pool.query(
-              `INSERT INTO catalog_product_attributes (product_id, attribute_key, attribute_value)
-               VALUES ($1, $2, $3);\n`,
-              [newProductId, key, String(val)],
-            );
-          }
-        }
+      await client.query('COMMIT');
+      return String(newProductId);
+    } catch (error) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('[Catalog Product Create Rollback Error]:', rollbackError);
       }
+      throw error;
+    } finally {
+      client.release();
     }
-
-    return String(newProductId || '0');
   }
 
   public async update(product: Product): Promise<void> {
     const productId = parseInt(product.id, 10);
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await client.query(
+        `UPDATE catalog_products
+         SET category_id = $1, title = $2, description = $3, base_price = $4,
+             status = $5, stock_quantity = $6, condition = $7, allow_auction = $8,
+             seller_name = $9, updated_at = NOW()
+         WHERE id = $10 AND deleted_at IS NULL
+         RETURNING id;`,
+        [
+          parseInt(product.categoryId, 10),
+          product.title,
+          product.description,
+          product.price,
+          product.status,
+          product.stockQuantity,
+          product.condition || 'NEW',
+          product.allowAuction ?? false,
+          product.sellerName || 'Nexus Official Store',
+          productId,
+        ],
+      );
+      if (result.rowCount === 0) {
+        throw new Error(`Product with ID "${product.id}" was not found.`);
+      }
 
-    // 1. Cập nhật thông tin chính trong bảng catalog_products
-    const query = `
-      UPDATE catalog_products
-      SET 
-        category_id = $1,
-        title = $2, 
-        description = $3, 
-        base_price = $4, 
-        status = $5, 
-        stock_quantity = $6, 
-        condition = $7,
-        allow_auction = $8,
-        seller_name = $9, 
-        updated_at = NOW()
-      WHERE id = $10;
-    `;
-    await this.pool.query(query, [
-      parseInt(product.categoryId, 10),
-      product.title,
-      product.description,
-      product.price,
-      product.status,
-      product.stockQuantity,
-      product.condition || 'NEW',
-      product.allowAuction ?? false,
-      product.sellerName || 'Nexus Official Store',
-      productId,
-    ]);
-
-    // 2. Đồng bộ lại danh sách ảnh (nếu có truyền ảnh mới)
-    if (product.images && product.images.length > 0) {
-      await this.pool.query('DELETE FROM catalog_product_images WHERE product_id = $1;', [
-        productId,
-      ]);
+      await client.query('DELETE FROM catalog_product_images WHERE product_id = $1;', [productId]);
       for (let i = 0; i < product.images.length; i++) {
-        await this.pool.query(
+        await client.query(
           `INSERT INTO catalog_product_images (product_id, image_url, display_order, is_primary)
            VALUES ($1, $2, $3, $4);`,
           [productId, product.images[i], i + 1, i === 0],
         );
       }
-    }
 
-    // 3. Đồng bộ lại thuộc tính chi tiết attributes (nếu có truyền)
-    if (product.attributes && Object.keys(product.attributes).length > 0) {
-      await this.pool.query('DELETE FROM catalog_product_attributes WHERE product_id = $1;', [
+      await client.query('DELETE FROM catalog_product_attributes WHERE product_id = $1;', [
         productId,
       ]);
-      for (const [key, val] of Object.entries(product.attributes)) {
-        if (val) {
-          await this.pool.query(
+      for (const [key, value] of Object.entries(product.attributes)) {
+        if (value) {
+          await client.query(
             `INSERT INTO catalog_product_attributes (product_id, attribute_key, attribute_value)
              VALUES ($1, $2, $3);`,
-            [productId, key, String(val)],
+            [productId, key, value],
           );
         }
       }
+
+      await client.query('COMMIT');
+    } catch (error) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('[Catalog Product Update Rollback Error]:', rollbackError);
+      }
+      throw error;
+    } finally {
+      client.release();
     }
   }
 
@@ -404,6 +433,7 @@ export class PostgresProductRepository implements IProductRepository {
   ): Product {
     const statusMap: Record<string, ProductStatus> = {
       ACTIVE: ProductStatus.ACTIVE,
+      INACTIVE: ProductStatus.INACTIVE,
       DRAFT: ProductStatus.DRAFT,
       ARCHIVED: ProductStatus.ARCHIVED,
       OUT_OF_STOCK: ProductStatus.OUT_OF_STOCK,

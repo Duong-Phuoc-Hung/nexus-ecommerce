@@ -45,10 +45,14 @@ export class InMemoryProductRepository implements IProductRepository {
   }
 
   public async search(criteria: ProductSearchCriteria): Promise<ProductSearchPage> {
-    const keyword = criteria.q.toLocaleLowerCase();
+    const keyword = criteria.q?.toLocaleLowerCase();
     const matches = Array.from(this.products.values()).filter((product) => {
-      if (!product.isAvailable()) return false;
+      if (criteria.visibility === 'PUBLIC' && !product.isAvailable()) return false;
+      if (criteria.visibility === 'ADMIN' && criteria.status && product.status !== criteria.status)
+        return false;
+      if (criteria.condition && product.condition !== criteria.condition) return false;
       if (
+        keyword &&
         !product.title.toLocaleLowerCase().includes(keyword) &&
         !product.description.toLocaleLowerCase().includes(keyword)
       ) {
@@ -59,6 +63,18 @@ export class InMemoryProductRepository implements IProductRepository {
       if (criteria.maxPrice !== undefined && product.price > criteria.maxPrice) return false;
       return true;
     });
+
+    if (criteria.sort === 'price-asc') {
+      matches.sort((a, b) => a.price - b.price || a.id.localeCompare(b.id));
+    } else if (criteria.sort === 'price-desc') {
+      matches.sort((a, b) => b.price - a.price || a.id.localeCompare(b.id));
+    } else if (criteria.sort === 'newest') {
+      matches.sort(
+        (a, b) => b.createdAt.getTime() - a.createdAt.getTime() || a.id.localeCompare(b.id),
+      );
+    } else {
+      matches.sort((a, b) => a.id.localeCompare(b.id));
+    }
 
     return {
       products: matches.slice(criteria.offset, criteria.offset + criteria.limit),

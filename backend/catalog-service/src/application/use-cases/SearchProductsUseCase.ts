@@ -22,6 +22,10 @@ export class SearchProductsUseCase {
       categoryId: query.categoryId,
       minPrice: query.minPrice,
       maxPrice: query.maxPrice,
+      condition: query.condition,
+      status: query.status,
+      visibility: query.visibility,
+      sort: query.sort,
       offset,
       limit: query.limit,
     });

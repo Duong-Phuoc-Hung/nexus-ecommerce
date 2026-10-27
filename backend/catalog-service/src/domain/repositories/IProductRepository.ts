@@ -1,10 +1,14 @@
 import { Product } from '../entities/Product';
 
 export interface ProductSearchCriteria {
-  q: string;
+  q?: string;
   categoryId?: string;
   minPrice?: number;
   maxPrice?: number;
+  condition?: string;
+  status?: string;
+  visibility: 'PUBLIC' | 'ADMIN';
+  sort?: 'featured' | 'newest' | 'price-asc' | 'price-desc';
   offset: number;
   limit: number;
 }

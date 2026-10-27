@@ -16,8 +16,18 @@ import { InMemoryCategoryRepository } from './infrastructure/repositories/InMemo
 import { GetCategoriesUseCase } from './application/use-cases/GetCategoriesUseCase';
 import { CategoryController } from './interfaces/http/controllers/CategoryController';
 import { createCategoryRoutes } from './interfaces/http/routes/CategoryRoutes';
+import { IProductRepository } from './domain/repositories/IProductRepository';
+import { ICategoryRepository } from './domain/repositories/ICategoryRepository';
+import { IUserDirectory } from './application/ports/IUserDirectory';
+import { HttpUserDirectory } from './infrastructure/clients/HttpUserDirectory';
 
-export function createApplication(): Application {
+export interface CatalogApplicationOptions {
+  productRepository?: IProductRepository;
+  categoryRepository?: ICategoryRepository;
+  userDirectory?: IUserDirectory;
+}
+
+export function createApplication(options: CatalogApplicationOptions = {}): Application {
   const app = express();
 
   app.use(cors());
@@ -36,21 +46,25 @@ export function createApplication(): Application {
   const isTest = process.env.NODE_ENV === 'test' || process.env.USE_IN_MEMORY === 'true';
 
   // DANH MỤC (CATEGORY):
-  const categoryRepository = isTest
-    ? new InMemoryCategoryRepository()
-    : new PostgresCategoryRepository();
+  const categoryRepository =
+    options.categoryRepository ||
+    (isTest ? new InMemoryCategoryRepository() : new PostgresCategoryRepository());
   const getCategoriesUseCase = new GetCategoriesUseCase(categoryRepository);
   const categoryController = new CategoryController(getCategoriesUseCase);
 
   app.use('/api/v1/categories', createCategoryRoutes(categoryController));
 
   // SẢN PHẨM (PRODUCT):
-  const productRepository = isTest
-    ? new InMemoryProductRepository()
-    : new PostgresProductRepository();
+  const productRepository =
+    options.productRepository ||
+    (isTest ? new InMemoryProductRepository() : new PostgresProductRepository());
   const getProductDetailUseCase = new GetProductDetailUseCase(productRepository);
   const searchProductsUseCase = new SearchProductsUseCase(productRepository);
-  const createProductUseCase = new CreateProductUseCase(productRepository, categoryRepository);
+  const createProductUseCase = new CreateProductUseCase(
+    productRepository,
+    categoryRepository,
+    options.userDirectory || new HttpUserDirectory(),
+  );
   const updateProductUseCase = new UpdateProductUseCase(productRepository, categoryRepository);
   const deleteProductUseCase = new DeleteProductUseCase(productRepository);
   const getSellerProductsUseCase = new GetSellerProductsUseCase(productRepository);
