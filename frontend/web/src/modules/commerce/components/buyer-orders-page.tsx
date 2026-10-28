@@ -3,13 +3,13 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { StoreHeader } from '@/components/layout/store-header';
 import { useSession } from '@/modules/auth/hooks/use-session';
-import { ordersApi } from '@/modules/commerce/api/orders.api';
-import type { OrderListItem } from '@/modules/commerce/api/orders.api';
+import { commerceApi } from '../api/commerce.api';
+import type { OrderSummary } from '../types/order.types';
 import { userMessage } from '@/lib/axios/http';
 const money = (n: number) => `${new Intl.NumberFormat('vi-VN').format(n)} ₫`;
 export default function BuyerOrdersPage() {
   const { user, phase } = useSession();
-  const [orders, setOrders] = useState<OrderListItem[]>([]);
+  const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
@@ -20,8 +20,8 @@ export default function BuyerOrdersPage() {
     }
     const c = new AbortController();
     setLoading(true);
-    ordersApi
-      .list({ buyerId: user.id, page: 1, limit: 20 }, c.signal)
+    commerceApi
+      .listOrders({ buyerId: user.id, page: 1, limit: 20 }, c.signal)
       .then((r) => setOrders(r.items))
       .catch((e) => {
         if (!c.signal.aborted) setError(userMessage(e));

@@ -1,9 +1,9 @@
 'use client';
 
-import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { useSession } from '@/modules/auth/hooks/use-session';
+import { roleHomePath } from '@/lib/utils/navigation';
 
 export function AdminRouteGuard({ children }: { children: React.ReactNode }) {
   const { user, phase, error, retry } = useSession();
@@ -15,6 +15,12 @@ export function AdminRouteGuard({ children }: { children: React.ReactNode }) {
       router.replace('/login?next=' + encodeURIComponent(pathname));
     }
   }, [phase, user, pathname, router]);
+
+  useEffect(() => {
+    if (phase === 'ready' && user && (user.role !== 'ADMIN' || user.status !== 'ACTIVE')) {
+      router.replace(roleHomePath(user.role));
+    }
+  }, [phase, user, router]);
 
   if (phase === 'loading' || (phase === 'ready' && !user)) {
     return (
@@ -38,17 +44,10 @@ export function AdminRouteGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (user?.role !== 'ADMIN') {
+  if (user?.role !== 'ADMIN' || user.status !== 'ACTIVE') {
     return (
-      <main className="admin-status">
-        <section className="admin-card admin-access-card">
-          <p className="admin-eyebrow">NEXUS ADMIN</p>
-          <h1>Tài khoản chưa có quyền truy cập</h1>
-          <p>Khu vực này chỉ dành cho tài khoản Admin đang hoạt động.</p>
-          <Link className="admin-button" href="/">
-            Về trang Buyer
-          </Link>
-        </section>
+      <main className="admin-status" role="status">
+        Đang chuyển bạn đến không gian phù hợp…
       </main>
     );
   }

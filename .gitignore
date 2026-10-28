@@ -53,5 +53,6 @@ temp/
 
 # Docker Local Data
 data/
+!frontend/web/src/modules/user/data/
 *.dump
 *.sql.gz

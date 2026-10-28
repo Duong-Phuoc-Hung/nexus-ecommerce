@@ -15,6 +15,9 @@ import {
   type CatalogQuery,
 } from '../api/catalog.factory';
 import { userMessage } from '../../../lib/axios/http';
+import { Heart } from 'lucide-react';
+import { useSession } from '@/modules/auth/hooks/use-session';
+import { FAVORITES_EVENT, readFavorites, toggleFavorite } from '@/modules/commerce/utils/favorites';
 import { MarketplaceIcon } from '@/modules/home/components/marketplace-icon';
 import { StoreHeader } from '@/components/layout/store-header';
 import {
@@ -66,8 +69,16 @@ export function CatalogListing({ embedded = false }: { embedded?: boolean }) {
   const [revision, setRevision] = useState(0);
   const [openFilters, setOpenFilters] = useState(false);
   const [validation, setValidation] = useState('');
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  const { user } = useSession();
   const resultsHeading = useRef<HTMLHeadingElement>(null);
   const requestedNavigation = useRef(false);
+  useEffect(() => {
+    const syncFavorites = () => setFavoriteIds(readFavorites().map((item) => item.id));
+    syncFavorites();
+    window.addEventListener(FAVORITES_EVENT, syncFavorites);
+    return () => window.removeEventListener(FAVORITES_EVENT, syncFavorites);
+  }, []);
   useEffect(() => {
     setDraft(parseCatalogQuery(new URLSearchParams(key)));
   }, [key]);
@@ -457,28 +468,58 @@ export function CatalogListing({ embedded = false }: { embedded?: boolean }) {
               key={product.id}
               className="group overflow-hidden rounded-2xl border border-line bg-white transition duration-200 hover:-translate-y-1 hover:shadow-lg motion-reduce:transform-none"
             >
-              <Button
-                variant="ghost"
-                size="plain"
-                type="button"
-
-                onClick={() => open(product)}
-                aria-label={'Xem ' + product.title}
-                className="block aspect-square w-full overflow-hidden bg-stone-100 disabled:cursor-wait"
-              >
-                <img
-                  src={product.images[0] || '/images/nexus-product-placeholder.svg'}
-                  onError={(e) => {
-                    if (!e.currentTarget.src.endsWith('/images/nexus-product-placeholder.svg'))
-                      e.currentTarget.src = '/images/nexus-product-placeholder.svg';
-                  }}
-                  alt={product.title}
-                  width={600}
-                  height={600}
-                  loading="lazy"
-                  className="size-full object-cover transition duration-300 group-hover:scale-105 motion-reduce:transform-none"
-                />
-              </Button>
+              <div className="relative aspect-square overflow-hidden bg-stone-100">
+                <Button
+                  variant="ghost"
+                  size="plain"
+                  type="button"
+                  onClick={() => open(product)}
+                  aria-label={'Xem ' + product.title}
+                  className="block size-full disabled:cursor-wait"
+                >
+                  <img
+                    src={product.images[0] || '/images/nexus-product-placeholder.svg'}
+                    onError={(e) => {
+                      if (!e.currentTarget.src.endsWith('/images/nexus-product-placeholder.svg'))
+                        e.currentTarget.src = '/images/nexus-product-placeholder.svg';
+                    }}
+                    alt={product.title}
+                    width={600}
+                    height={600}
+                    loading="lazy"
+                    className="size-full object-cover transition duration-300 group-hover:scale-105 motion-reduce:transform-none"
+                  />
+                </Button>
+                {user?.role === 'BUYER' && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={
+                      favoriteIds.includes(product.id)
+                        ? `Bỏ ${product.title} khỏi yêu thích`
+                        : `Thêm ${product.title} vào yêu thích`
+                    }
+                    aria-pressed={favoriteIds.includes(product.id)}
+                    onClick={() =>
+                      toggleFavorite({
+                        id: product.id,
+                        name: product.title,
+                        image: product.images[0] || '/images/nexus-product-placeholder.svg',
+                        price: product.price ?? 0,
+                        href: '/products/' + encodeURIComponent(product.id),
+                      })
+                    }
+                    className={`absolute right-3 top-3 size-11 rounded-full bg-white/95 shadow-sm ${favoriteIds.includes(product.id) ? 'text-brand' : 'text-ink'}`}
+                  >
+                    <Heart
+                      aria-hidden="true"
+                      className="size-5"
+                      fill={favoriteIds.includes(product.id) ? 'currentColor' : 'none'}
+                    />
+                  </Button>
+                )}
+              </div>
               <div className="p-3 sm:p-4">
                 <p className="mb-1 text-[11px] text-muted">
                   {product.categoryName ||

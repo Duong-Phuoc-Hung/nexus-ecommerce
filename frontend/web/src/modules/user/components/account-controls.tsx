@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useSession } from '@/modules/auth/hooks/use-session';
+import { LayoutDashboard } from 'lucide-react';
 export function AccountControls() {
   const { user, phase, retry, logout, error } = useSession();
   const [busy, setBusy] = useState(false);
@@ -52,6 +53,17 @@ export function AccountControls() {
 
   return (
     <div className="flex max-w-full items-center gap-2.5 sm:gap-3">
+      {user.role === 'ADMIN' && (
+        <Link
+          href="/admin"
+          className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-brand/25 bg-brand-soft px-3 text-xs font-semibold text-brand-dark shadow-sm transition hover:border-brand/40 hover:bg-brand/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+          aria-label="Quay lại trang quản trị"
+          title="Quay lại trang quản trị"
+        >
+          <LayoutDashboard aria-hidden="true" className="size-4" />
+          <span>Trang quản trị</span>
+        </Link>
+      )}{' '}
       {isSeller && (
         <Link
           href="/seller"

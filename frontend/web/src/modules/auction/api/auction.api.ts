@@ -1,4 +1,8 @@
 import { getMarketplaceFeed } from '../../home/api/marketplace.api';
+import { appConfig } from '../../../configs/app.config';
+import { requestApi } from '../../../lib/axios/api-client';
+import { ApiError, unwrap } from '../../../lib/axios/http';
+import { catalogApi } from '../../catalog/api/catalog.api';
 export type AuctionStatus = 'SCHEDULED' | 'ACTIVE' | 'ENDED' | 'CANCELLED';
 export type AuctionBid = { id: string; bidder: string; amount: number; time: number; key?: string };
 export type Auction = {
@@ -16,6 +20,9 @@ export type Auction = {
   status: AuctionStatus;
   version: number;
   bids: AuctionBid[];
+  currentHighestBid?: number | null;
+  bidCount?: number | null;
+  bidHistoryAvailable?: boolean;
   cancelReason?: string;
 };
 export type AuctionInput = {
@@ -25,7 +32,19 @@ export type AuctionInput = {
   startAt: number;
   endAt: number;
 };
-export type Actor = { id: string; role: string; status: string };
+export type Actor = { id: string; role: string; status: string; permissions?: string[] };
+export function canManageAuction(actor: Actor | null | undefined, permission: string): boolean {
+  return (
+    !!actor &&
+    actor.role === 'ADMIN' &&
+    actor.status === 'ACTIVE' &&
+    (!actor.permissions || actor.permissions.includes(permission))
+  );
+}
+export function assertAuctionAdmin(actor: Actor | undefined, permission: string) {
+  if (!canManageAuction(actor, permission))
+    throw new AuctionError('Tài khoản không có quyền thực hiện thao tác này.', 'FORBIDDEN');
+}
 const KEY = 'nexus.auctions.v1';
 const EVENT = 'nexus:auctions-changed';
 export const auctionStatusLabel: Record<AuctionStatus, string> = {
@@ -43,10 +62,12 @@ export class AuctionError extends Error {
   }
 }
 export function currentPrice(a: Auction) {
-  return a.bids[0]?.amount ?? a.startingPrice;
+  return a.currentHighestBid ?? a.bids[0]?.amount ?? a.startingPrice;
 }
 export function nextPrice(a: Auction) {
-  return a.bids.length ? currentPrice(a) + a.increment : a.startingPrice;
+  return a.currentHighestBid != null || a.bids.length
+    ? currentPrice(a) + a.increment
+    : a.startingPrice;
 }
 export function lifecycle(a: Auction, now = Date.now()): AuctionStatus {
   return a.status === 'CANCELLED'
@@ -82,7 +103,11 @@ export function acceptBid(
   key: string,
   now = Date.now(),
 ): Auction {
-  if (actor.role !== 'BUYER' || actor.status !== 'ACTIVE')
+  if (
+    actor.role !== 'BUYER' ||
+    actor.status !== 'ACTIVE' ||
+    (actor.permissions && !actor.permissions.includes('AUCTION.BID'))
+  )
     throw new AuctionError('Chỉ tài khoản Buyer đang hoạt động được đặt giá.', 'FORBIDDEN');
   const previous = a.bids.find((b) => b.key === key);
   if (previous) {
@@ -189,11 +214,75 @@ async function mutation<T>(fn: () => Promise<T>): Promise<T> {
   if (navigator.locks) return navigator.locks.request(KEY, fn);
   return fn(); // Single-tab fallback; not a distributed bid engine.
 }
+function row(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+}
+function numberValue(value: unknown, fallback = 0): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+function timestamp(value: unknown, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallback;
+}
+async function mapServerAuction(value: unknown): Promise<Auction> {
+  const source = row(value);
+  const productId = String(source.productId ?? '');
+  const id = String(source.id ?? '');
+  if (!id || !productId)
+    throw new ApiError('Phiên đấu thiếu mã phiên hoặc mã sản phẩm.', undefined, 'INVALID_AUCTION');
+  const product = await catalogApi.detail(productId);
+  const now = Date.now();
+  const currentHighestBid =
+    source.currentHighestBid == null ? null : numberValue(source.currentHighestBid);
+  const statusValue = String(source.status ?? 'ACTIVE').toUpperCase();
+  const status: AuctionStatus = ['ACTIVE', 'SCHEDULED', 'ENDED', 'CANCELLED'].includes(statusValue)
+    ? (statusValue as AuctionStatus)
+    : 'ACTIVE';
+  const endAt = timestamp(source.endTime ?? source.endAt, now);
+  const bidCountValue = source.bidCount ?? source.totalBids;
+  return {
+    id,
+    productId,
+    title: product.title,
+    image: product.images[0] || '/images/nexus-product-placeholder.svg',
+    seller: product.sellerName || product.sellerId || 'Người bán Nexus',
+    condition: product.condition || 'Đang cập nhật',
+    description: product.description,
+    startingPrice: product.price ?? currentHighestBid ?? 0,
+    increment: Math.max(1, numberValue(source.bidIncrement, 1)),
+    startAt: timestamp(source.startTime ?? source.startAt, status === 'SCHEDULED' ? endAt : now),
+    endAt,
+    status,
+    version: numberValue(source.version, 1),
+    bids: [],
+    currentHighestBid,
+    bidCount: bidCountValue == null ? null : numberValue(bidCountValue),
+    bidHistoryAvailable: Array.isArray(source.bids),
+  };
+}
+async function readServerAuctions(): Promise<Auction[]> {
+  const values = unwrap<unknown>(await requestApi('/auctions'));
+  if (!Array.isArray(values))
+    throw new ApiError('Danh sách phiên đấu chưa đúng định dạng.', undefined, 'INVALID_AUCTIONS');
+  return Promise.all(values.map(mapServerAuction));
+}
+async function readServerAuction(id: string) {
+  const value = unwrap<unknown>(await requestApi('/auctions/' + encodeURIComponent(id)));
+  const auction = await mapServerAuction(value);
+  return { auction, serverTime: Date.now() };
+}
 export const auctionApi = {
   async list() {
+    if (appConfig.auctionSource === 'api') return readServerAuctions();
     return (await read()).map((a) => ({ ...a, status: lifecycle(a) }));
   },
   async detail(id: string) {
+    if (appConfig.auctionSource === 'api') return readServerAuction(id);
     const a = (await this.list()).find((a) => a.id === id);
     if (!a) throw new AuctionError('Không tìm thấy phiên đấu.', 'NOT_FOUND');
     return { auction: a, serverTime: Date.now() };
@@ -202,6 +291,11 @@ export const auctionApi = {
     return (await getMarketplaceFeed()).products;
   },
   async bid(id: string, amount: number, actor: Actor, version: number, key: string) {
+    if (appConfig.auctionSource === 'api')
+      throw new AuctionError(
+        'Backend chưa hoàn thiện xử lý đặt giá; yêu cầu chưa được gửi.',
+        'BIDDING_UNAVAILABLE',
+      );
     return mutation(async () => {
       const rows = await read(),
         i = rows.findIndex((a) => a.id === id);
@@ -212,7 +306,13 @@ export const auctionApi = {
       return next;
     });
   },
-  async save(input: AuctionInput, id?: string, version?: number) {
+  async save(input: AuctionInput, id?: string, version?: number, actor?: Actor) {
+    if (appConfig.auctionSource === 'api')
+      throw new AuctionError(
+        'Backend chưa cung cấp API tạo hoặc sửa phiên đấu.',
+        'AUCTION_MANAGEMENT_UNAVAILABLE',
+      );
+    assertAuctionAdmin(actor, id ? 'AUCTION.UPDATE' : 'AUCTION.CREATE');
     return mutation(async () => {
       validateAuction(input);
       const rows = await read(),
@@ -250,12 +350,19 @@ export const auctionApi = {
       return item;
     });
   },
-  async cancel(id: string, reason: string, version: number) {
+  async cancel(id: string, reason: string, version: number, actor?: Actor) {
+    if (appConfig.auctionSource === 'api')
+      throw new AuctionError(
+        'Backend chưa cung cấp API hủy phiên đấu.',
+        'AUCTION_MANAGEMENT_UNAVAILABLE',
+      );
+    assertAuctionAdmin(actor, 'AUCTION.ADMIN_CANCEL');
     return mutation(async () => {
       const rows = await read(),
         a = rows.find((a) => a.id === id);
       if (!a) throw new AuctionError('Không tìm thấy phiên đấu.', 'NOT_FOUND');
-      if (!reason.trim()) throw new AuctionError('Nhập lý do hủy phiên.', 'VALIDATION');
+      if (!reason.trim() || reason.length > 500)
+        throw new AuctionError('Nhập lý do hủy phiên.', 'VALIDATION');
       if (!['SCHEDULED', 'ACTIVE'].includes(lifecycle(a)) || a.version !== version)
         throw new AuctionError('Phiên đã thay đổi hoặc không thể hủy.', 'CONFLICT');
       save(
@@ -268,6 +375,7 @@ export const auctionApi = {
     });
   },
   subscribe(listener: () => void) {
+    if (appConfig.auctionSource === 'api') return () => undefined;
     window.addEventListener(EVENT, listener);
     window.addEventListener('storage', listener);
     return () => {

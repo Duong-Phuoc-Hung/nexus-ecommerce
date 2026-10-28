@@ -9,6 +9,9 @@ import { LayoutDashboard } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { CatalogListing, CatalogSkeleton } from '@/modules/catalog/components/catalog-listing';
 import { catalogApi } from '@/modules/catalog/api/catalog.api';
+import { defaultQuery } from '@/modules/catalog/api/catalog.factory';
+import { appConfig } from '@/configs/app.config';
+import { userMessage } from '@/lib/axios/http';
 import { AccountControls } from '@/modules/user/components/account-controls';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import type { CategoryId, MarketplaceFeed, MarketplaceProduct } from '../types/marketplace.types';
@@ -17,6 +20,7 @@ import { MarketplaceCard, timeLeft } from './marketplace-card';
 import { MarketplaceHero } from './marketplace-hero';
 import { AccountPromptDialog } from './account-prompt-dialog';
 import { NexusLogo } from '@/components/layout/nexus-logo';
+import { FAVORITES_EVENT, readFavorites, toggleFavorite } from '@/modules/commerce/utils/favorites';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,19 +32,72 @@ import {
 
 export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
   const [auctionRows, setAuctionRows] = useState<Auction[] | null>(null);
+  const [catalogProducts, setCatalogProducts] = useState<MarketplaceProduct[]>([]);
+  const [apiError, setApiError] = useState('');
   useEffect(() => {
     let active = true;
     const load = async () => {
       try {
-        const rows = await auctionApi.list();
-        if (active) setAuctionRows(rows);
-      } catch {
-        /* Keep the initial read-only feed if local storage is unavailable. */
+        const page = await catalogApi.list({ ...defaultQuery, pageSize: 24 });
+        let rows: Auction[] = [];
+        let auctionError = '';
+        try {
+          rows = await auctionApi.list();
+        } catch (error) {
+          auctionError = userMessage(error);
+        }
+        if (!active) return;
+        setAuctionRows(rows);
+        const toCategory = (name: string): MarketplaceProduct['category'] => {
+          const value = name.toLocaleLowerCase('vi');
+          if (value.includes('đồng hồ') || value.includes('watch')) return 'watches';
+          if (value.includes('âm thanh') || value.includes('audio')) return 'audio';
+          if (value.includes('sưu tầm') || value.includes('collect')) return 'collectibles';
+          return 'tech';
+        };
+        const mapped = page.items.map((product): MarketplaceProduct => {
+          const auction = rows.find((item) => item.productId === product.id);
+          const endAt = auction?.endAt ?? Date.now();
+          return {
+            id: product.id,
+            auctionId: auction?.id,
+            name: product.title,
+            category: toCategory(product.categoryName),
+            categoryName: product.categoryName || 'Sản phẩm Nexus',
+            image: product.images[0] || '/images/nexus-product-placeholder.svg',
+            imageAlt: product.title,
+            mode: auction ? 'auction' : 'fixed',
+            status: auction?.status === 'SCHEDULED' ? 'scheduled' : 'active',
+            price: auction ? currentPrice(auction) : (product.price ?? 0),
+            rating: product.rating,
+            soldCount: product.soldCount,
+            startingPrice: auction?.startingPrice ?? product.price ?? 0,
+            increment: auction?.increment ?? 0,
+            remainingSeconds: auction ? Math.max(0, Math.ceil((endAt - Date.now()) / 1000)) : 0,
+            bids: auction?.bidCount ?? auction?.bids.length ?? 0,
+            bidCountKnown: auction ? auction.bidCount !== null : true,
+            condition: product.condition || 'Đang cập nhật',
+            seller: product.sellerName || product.sellerId || 'Người bán Nexus',
+            reputation: 0,
+            location: 'Việt Nam',
+            description: product.description,
+            history: [],
+          };
+        });
+        setCatalogProducts(mapped);
+        setApiError(auctionError);
+      } catch (error) {
+        if (active) setApiError(userMessage(error));
       }
     };
     void load();
     const off = auctionApi.subscribe(() => void load());
-    const timer = setInterval(() => void load(), 3000);
+    const timer = setInterval(
+      () => {
+        if (!document.hidden) void load();
+      },
+      appConfig.auctionSource === 'api' ? 15000 : 3000,
+    );
     return () => {
       active = false;
       off();
@@ -70,16 +127,26 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
       });
     return () => controller.abort();
   }, [feed.categories]);
+  const featuredCategories = useMemo(() => {
+    const priorityIds = ['1', '2', '3', '18'];
+    const selected = priorityIds
+      .map((id) => headerCategories.find((category) => category.id === id))
+      .filter((category): category is (typeof headerCategories)[number] => Boolean(category));
+
+    return selected.length === 4 ? selected : headerCategories.slice(0, 4);
+  }, [headerCategories]);
   const [elapsed, setElapsed] = useState(0);
-  const products = feed.products.flatMap((product) => {
+  const sourceProducts = appConfig.catalogSource === 'api' ? catalogProducts : feed.products;
+  const products = sourceProducts.flatMap((product) => {
     if (product.mode !== 'auction' || !auctionRows) return [product];
-    const a = auctionRows.find((row) => row.id === product.id);
+    const a = auctionRows.find((row) => row.productId === product.id);
     if (!a || a.status === 'ENDED' || a.status === 'CANCELLED') return [];
     return [
       {
         ...product,
         price: currentPrice(a),
-        bids: a.bids.length,
+        bids: a.bidCount ?? a.bids.length,
+        bidCountKnown: a.bidCount !== null,
         status: a.status === 'ACTIVE' ? ('active' as const) : ('scheduled' as const),
         remainingSeconds: Math.max(0, Math.ceil((a.endAt - Date.now()) / 1000)) + elapsed,
       },
@@ -89,6 +156,14 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
   const [auctionTab, setAuctionTab] = useState('all');
   const [showAllAuctions, setShowAllAuctions] = useState(false);
   const [prompt, setPrompt] = useState<{ product?: MarketplaceProduct } | null>(null);
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    const syncFavorites = () => setFavoriteIds(readFavorites().map((item) => item.id));
+    syncFavorites();
+    window.addEventListener(FAVORITES_EVENT, syncFavorites);
+    return () => window.removeEventListener(FAVORITES_EVENT, syncFavorites);
+  }, []);
 
   useEffect(() => {
     const started = Date.now();
@@ -126,7 +201,7 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
       router.push('/products/' + encodeURIComponent(product.id));
       return;
     }
-    router.push('/auctions/' + encodeURIComponent(product.id));
+    router.push('/auctions/' + encodeURIComponent(product.auctionId ?? product.id));
   }
   function scrollToCatalog() {
     document.getElementById('discover')?.scrollIntoView({
@@ -263,45 +338,6 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
             >
               Tất cả sản phẩm
             </a>
-            {user?.role === 'ADMIN' && (
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-                className="min-h-10 gap-2 rounded-lg border-line px-3 text-xs font-semibold text-ink hover:border-brand/30 hover:bg-brand-soft hover:text-brand-dark"
-              >
-                <Link href="/admin" aria-label="Mở không gian quản trị">
-                  <LayoutDashboard aria-hidden="true" className="size-4" />
-                  Quản trị
-                </Link>
-              </Button>
-            )}
-            {user?.role === 'SELLER' && (
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-                className="min-h-10 gap-2 rounded-lg border-amber-300 bg-amber-50 px-3 text-xs font-semibold text-amber-900 hover:border-amber-400 hover:bg-amber-100"
-              >
-                <Link href="/seller" aria-label="Mở bảng điều khiển Người bán">
-                  <LayoutDashboard aria-hidden="true" className="size-4" />
-                  Dashboard Người bán
-                </Link>
-              </Button>
-            )}
-            {(user?.role === 'SUPPORT_STAFF' || user?.role === 'SUPPORT') && (
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-                className="min-h-10 gap-2 rounded-lg border-sky-300 bg-sky-50 px-3 text-xs font-semibold text-sky-900 hover:border-sky-400 hover:bg-sky-100"
-              >
-                <Link href="/support" aria-label="Mở bảng điều khiển Hỗ trợ">
-                  <LayoutDashboard aria-hidden="true" className="size-4" />
-                  Dashboard Support
-                </Link>
-              </Button>
-            )}
             <a
               href="#how-it-works"
               className="hidden min-h-11 items-center hover:text-brand-dark md:flex"
@@ -317,6 +353,17 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
       </header>
 
       <main id="main-content" className="nexus-container pb-16 pt-6 sm:pt-7">
+        {apiError && appConfig.catalogSource === 'api' && (
+          <div
+            role="alert"
+            className="mb-4 flex items-center justify-between gap-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+          >
+            <span>Chưa tải được dữ liệu từ hệ thống: {apiError}</span>
+            <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+              Thử lại
+            </Button>
+          </div>
+        )}
         <MarketplaceHero products={products} onOpen={openProduct} suspended={prompt !== null} />
 
         <section
@@ -335,7 +382,7 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
               </h2>
             </div>
           </div>
-          {headerCategories.map((item, index) => (
+          {featuredCategories.map((item, index) => (
             <Button
               variant="ghost"
               size="plain"
@@ -429,8 +476,20 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
                     compact
                     product={product}
                     elapsed={elapsed}
-                    favorite={false}
-                    onFavorite={() => openProduct(product)}
+                    canFavorite={user?.role === 'BUYER'}
+                    favorite={favoriteIds.includes(product.id)}
+                    onFavorite={() => {
+                      toggleFavorite({
+                        id: product.id,
+                        name: product.name,
+                        image: product.image,
+                        price: product.price,
+                        href:
+                          product.mode === 'auction'
+                            ? '/auctions/' + encodeURIComponent(product.auctionId ?? product.id)
+                            : '/products/' + encodeURIComponent(product.id),
+                      });
+                    }}
                     onOpen={() => openProduct(product)}
                   />
                 </div>

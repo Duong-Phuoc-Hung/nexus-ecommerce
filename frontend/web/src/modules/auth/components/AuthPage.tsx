@@ -6,7 +6,8 @@ import { useSearchParams } from 'next/navigation';
 import { NexusLogo } from '@/components/layout/nexus-logo';
 import { authApi } from '@/modules/auth/api/auth.api';
 import { ApiError, userMessage } from '../../../lib/axios/http';
-import { safeNextPath } from '../../../lib/utils/navigation';
+import { canRoleVisitPath, roleHomePath, safeNextPath } from '../../../lib/utils/navigation';
+import { saveContactPhone } from '@/modules/user/utils/address-book';
 import './auth.css';
 type Mode = 'login' | 'register' | 'forgot-password' | 'reset-password';
 
@@ -24,6 +25,7 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
   const [values, setValues] = useState({
     email: '',
     fullName: '',
+    phone: '',
     password: '',
     confirmPassword: '',
   });
@@ -86,6 +88,8 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
       validation.email = 'Nhập địa chỉ email hợp lệ.';
     if (isRegister && (!values.fullName.trim() || values.fullName.trim().length > 100))
       validation.fullName = 'Nhập họ và tên từ 1 đến 100 ký tự.';
+    if (isRegister && !/^(?:0|\+84)\d{9}$/.test(values.phone.replace(/[\s.-]/g, '')))
+      validation.phone = 'Nhập số điện thoại Việt Nam hợp lệ để liên hệ giao hàng.';
     if (
       !isForgot &&
       (!values.password ||
@@ -146,17 +150,13 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
         if (profile.status !== 'ACTIVE') {
           throw new ApiError('Tài khoản chưa ở trạng thái hoạt động.', 423);
         }
-        let destination = next;
-        if (profile.role === 'ADMIN' && next === '/') destination = '/admin';
-        else if (profile.role === 'BUYER' && next === '/') destination = '/';
-        else if (profile.role === 'SELLER' && next === '/') destination = '/seller';
-        else if (profile.role === 'SUPPORT_STAFF' && next === '/') destination = '/support';
-        else if (
-          profile.role === 'BUYER' &&
-          (next.startsWith('/admin') || next.startsWith('/seller') || next.startsWith('/support'))
-        ) {
-          destination = '/';
+        if (isRegister && profile.role === 'BUYER') {
+          saveContactPhone(profile.id, values.phone.replace(/[\s.-]/g, ''));
+          window.location.assign('/account/addresses?setup=1&next=' + encodeURIComponent(next));
+          return;
         }
+        const destination =
+          next !== '/' && canRoleVisitPath(profile.role, next) ? next : roleHomePath(profile.role);
         window.location.assign(destination);
       }
     } catch (error) {
@@ -326,6 +326,14 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
                 )}
                 {!isReset && input('email', 'Email', 'email', 'email')}
                 {isRegister && input('fullName', 'Họ và tên', 'text', 'name')}
+                {isRegister && (
+                  <>
+                    {input('phone', 'Số điện thoại liên hệ', 'tel', 'tel')}
+                    <p className="auth-week-hint">
+                      Số này dùng để điền nhanh thông tin giao hàng; hiện lưu trên trình duyệt này.
+                    </p>
+                  </>
+                )}
                 {!isForgot && (
                   <>
                     <div className="form-field">

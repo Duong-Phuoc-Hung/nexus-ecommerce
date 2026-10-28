@@ -42,7 +42,7 @@ export function SellerRouteGuard({ children }: { children: React.ReactNode }) {
   if (user?.role !== 'SELLER' && user?.role !== 'ADMIN') {
     const handleSwitchAccount = async () => {
       await logout();
-      router.push('/login?next=' + encodeURIComponent(pathname));
+      window.location.replace('/login?next=' + encodeURIComponent(pathname));
     };
 
     return (

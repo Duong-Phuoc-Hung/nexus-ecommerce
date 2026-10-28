@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import { SupportRouteGuard } from './support-route-guard';
@@ -15,7 +15,6 @@ const items = [
 
 export function SupportShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
   const { user, logout: logoutSession } = useSession();
 
   const displayName = user?.fullName || user?.email || 'Nhân viên hỗ trợ';
@@ -30,7 +29,7 @@ export function SupportShell({ children }: { children: ReactNode }) {
 
   async function logout() {
     await logoutSession();
-    router.push('/');
+    window.location.replace('/login');
   }
 
   return (

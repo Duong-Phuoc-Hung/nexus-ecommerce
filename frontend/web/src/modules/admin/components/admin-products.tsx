@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useEffect, useState } from 'react';
 import { useAdminCatalog } from './admin-catalog-context';
@@ -87,6 +88,7 @@ export function AdminProducts() {
                     <th scope="col">Giá</th>
                     <th scope="col">Người bán</th>
                     <th scope="col">Trạng thái</th>
+                    <th scope="col">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -126,6 +128,13 @@ export function AdminProducts() {
                         >
                           {statusLabel[p.status] || p.status || 'Đang cập nhật'}
                         </span>
+                      </td>
+                      <td>
+                        <Button asChild variant="outline" size="sm">
+                          <Link href={`/admin/products/${encodeURIComponent(p.id)}/edit`}>
+                            Chỉnh sửa
+                          </Link>
+                        </Button>
                       </td>
                     </tr>
                   ))}
