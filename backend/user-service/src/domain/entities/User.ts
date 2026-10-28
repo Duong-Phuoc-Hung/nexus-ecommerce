@@ -16,6 +16,7 @@ export interface UserProps {
   email: string;
   fullName: string;
   passwordHash: string;
+  phone?: string;
   role: UserRole;
   status: UserStatus;
   reputationScore: number;
@@ -38,6 +39,7 @@ export class User {
   private _email: string;
   private _fullName: string;
   private _passwordHash: string;
+  private _phone: string;
   private _role: UserRole;
   private _status: UserStatus;
   private _reputationScore: number;
@@ -51,6 +53,7 @@ export class User {
     this._email = props.email;
     this._fullName = props.fullName;
     this._passwordHash = props.passwordHash;
+    this._phone = props.phone || '';
     this._role = props.role;
     this._status = props.status;
     this._reputationScore = props.reputationScore;
@@ -70,6 +73,10 @@ export class User {
 
   public get fullName(): string {
     return this._fullName;
+  }
+
+  public get phone(): string {
+    return this._phone;
   }
 
   public get passwordHash(): string {
@@ -153,6 +160,16 @@ export class User {
 
   public setRole(role: UserRole): void {
     this._role = role;
+    this._updatedAt = new Date();
+  }
+
+  public setFullName(fullName: string): void {
+    this._fullName = fullName;
+    this._updatedAt = new Date();
+  }
+
+  public setPhone(phone: string): void {
+    this._phone = phone;
     this._updatedAt = new Date();
   }
 }

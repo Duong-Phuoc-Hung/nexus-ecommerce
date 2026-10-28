@@ -15,6 +15,7 @@ export class InMemoryUserRepository implements IUserRepository {
       id: 'usr_01hqz789abc',
       email: 'buyer.test@nexus-ecommerce.com',
       fullName: 'Nguyen Van Buyer',
+      phone: '0901234567',
       passwordHash: hashPassword('Password123!'),
       role: UserRole.BUYER,
       status: UserStatus.ACTIVE,
@@ -28,6 +29,7 @@ export class InMemoryUserRepository implements IUserRepository {
       id: 'usr_seller_001',
       email: 'seller.test@nexus-ecommerce.com',
       fullName: 'Retro Lab Store',
+      phone: '0909888999',
       passwordHash: hashPassword('Password123!'),
       role: UserRole.SELLER,
       status: UserStatus.ACTIVE,
@@ -41,6 +43,7 @@ export class InMemoryUserRepository implements IUserRepository {
       id: 'usr_staff_001',
       email: 'staff.test@nexus-ecommerce.com',
       fullName: 'Nguyen Support Staff',
+      phone: '0912345678',
       passwordHash: hashPassword('Password123!'),
       role: UserRole.SUPPORT_STAFF,
       status: UserStatus.ACTIVE,
@@ -54,6 +57,7 @@ export class InMemoryUserRepository implements IUserRepository {
       id: 'usr_suspended_001',
       email: 'suspended.test@nexus-ecommerce.com',
       fullName: 'Pham Van Suspended',
+      phone: '0933333333',
       passwordHash: hashPassword('Password123!'),
       role: UserRole.BUYER,
       status: UserStatus.SUSPENDED,
@@ -77,6 +81,7 @@ export class InMemoryUserRepository implements IUserRepository {
         id: 'usr_bootstrap_admin',
         email: adminEmail,
         fullName: 'Nexus Administrator',
+        phone: '0988888888',
         passwordHash: hashPassword(adminPassword),
         role: UserRole.ADMIN,
         status: UserStatus.ACTIVE,
@@ -95,6 +100,16 @@ export class InMemoryUserRepository implements IUserRepository {
   public async findByEmail(email: string): Promise<User | null> {
     for (const user of this.users.values()) {
       if (user.email === email) {
+        return user;
+      }
+    }
+    return null;
+  }
+
+  public async findByPhone(phone: string): Promise<User | null> {
+    const trimmed = phone.trim();
+    for (const user of this.users.values()) {
+      if (user.phone && user.phone === trimmed) {
         return user;
       }
     }

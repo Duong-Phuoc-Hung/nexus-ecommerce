@@ -24,6 +24,7 @@ export class GetUserProfileUseCase {
       id: user.id,
       email: user.email,
       fullName: user.fullName,
+      phone: user.phone || undefined,
       role: user.role,
       status: user.status,
       reputationScore: user.reputationScore,

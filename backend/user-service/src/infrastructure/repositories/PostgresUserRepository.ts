@@ -30,7 +30,7 @@ export class PostgresUserRepository implements IUserRepository {
 
   public async findByEmail(email: string): Promise<User | null> {
     const query = `
-            SELECT u.id, u.email, u.full_name, u.password_hash, u.status,
+            SELECT u.id, u.email, u.phone, u.full_name, u.password_hash, u.status,
               u.failed_login_attempts, u.locked_until, u.created_at, u.updated_at,
              COALESCE(r.role_code, 'BUYER') as role_code,
              COALESCE(rep.score, 100) as reputation_score
@@ -52,7 +52,7 @@ export class PostgresUserRepository implements IUserRepository {
 
   public async findById(id: string): Promise<User | null> {
     const query = `
-            SELECT u.id, u.email, u.full_name, u.password_hash, u.status,
+            SELECT u.id, u.email, u.phone, u.full_name, u.password_hash, u.status,
               u.failed_login_attempts, u.locked_until, u.created_at, u.updated_at,
              COALESCE(r.role_code, 'BUYER') as role_code,
              COALESCE(rep.score, 100) as reputation_score
@@ -65,6 +65,28 @@ export class PostgresUserRepository implements IUserRepository {
     `;
 
     const result = await this.pool.query(query, [id]);
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return this.mapRowToUser(result.rows[0]);
+  }
+
+  public async findByPhone(phone: string): Promise<User | null> {
+    const query = `
+            SELECT u.id, u.email, u.phone, u.full_name, u.password_hash, u.status,
+              u.failed_login_attempts, u.locked_until, u.created_at, u.updated_at,
+             COALESCE(r.role_code, 'BUYER') as role_code,
+             COALESCE(rep.score, 100) as reputation_score
+      FROM user_users u
+      LEFT JOIN user_user_roles ur ON u.id = ur.user_id
+      LEFT JOIN user_roles r ON ur.role_id = r.id
+      LEFT JOIN user_reputations rep ON u.id = rep.user_id
+      WHERE u.phone = $1 AND u.is_deleted = false
+      LIMIT 1;
+    `;
+
+    const result = await this.pool.query(query, [phone.trim()]);
     if (result.rows.length === 0) {
       return null;
     }
@@ -179,7 +201,7 @@ export class PostgresUserRepository implements IUserRepository {
       const res = await client.query(insertUserQuery, [
         user.id,
         user.email,
-        '09' + Math.floor(10000000 + Math.random() * 90000000),
+        user.phone || '09' + Math.floor(10000000 + Math.random() * 90000000),
         user.passwordHash,
         user.fullName,
         '001' + Math.floor(100000000 + Math.random() * 900000000),
@@ -221,11 +243,12 @@ export class PostgresUserRepository implements IUserRepository {
       await client.query('BEGIN');
       await client.query(
         `UPDATE user_users
-         SET full_name = $1, status = $2, password_hash = $3,
-             failed_login_attempts = $4, locked_until = $5, updated_at = $6
-         WHERE id = $7;`,
+         SET full_name = $1, phone = $2, status = $3, password_hash = $4,
+             failed_login_attempts = $5, locked_until = $6, updated_at = $7
+         WHERE id = $8;`,
         [
           user.fullName,
+          user.phone,
           user.status,
           user.passwordHash,
           user.failedLoginAttempts,
@@ -277,6 +300,7 @@ export class PostgresUserRepository implements IUserRepository {
       id: String(row.id),
       email: row.email,
       fullName: row.full_name,
+      phone: row.phone || '',
       passwordHash: row.password_hash,
       role: role,
       status: status,

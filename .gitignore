@@ -55,3 +55,6 @@ temp/
 data/
 *.dump
 *.sql.gz
+
+# Local Knowledge Graph
+graphify-out/

@@ -225,6 +225,7 @@ export const userSpec = {
               id: 'a0000000-0000-0000-0000-000000000003',
               email: 'buyer@gmail.com',
               fullName: 'Nguyễn Văn Buyer',
+              phone: '0901234567',
               role: 'BUYER',
               status: 'ACTIVE',
               reputationScore: 100,
@@ -232,6 +233,195 @@ export const userSpec = {
           }),
           401: unauthorized,
           403: forbidden,
+        },
+      },
+      patch: {
+        tags: ['Users & Profile'],
+        summary: 'Cập nhật họ tên và số điện thoại của chính mình (P0 #2)',
+        description: `${PRIVATE} Cần quyền PROFILE.UPDATE. Cho phép cập nhật fullName và phone thật. Số điện thoại được đối chiếu chống trùng lặp.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  fullName: { type: 'string', example: 'Nguyễn Văn Buyer Mới' },
+                  phone: { type: 'string', example: '0912345678' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Cập nhật thành công', {
+            success: true,
+            data: {
+              id: 'a0000000-0000-0000-0000-000000000003',
+              email: 'buyer@gmail.com',
+              fullName: 'Nguyễn Văn Buyer Mới',
+              phone: '0912345678',
+              role: 'BUYER',
+              status: 'ACTIVE',
+              reputationScore: 100,
+            },
+          }),
+          400: errorResponse(
+            'Dữ liệu không hợp lệ',
+            'Số điện thoại không đúng định dạng Việt Nam.',
+          ),
+          401: unauthorized,
+          409: errorResponse(
+            'Số điện thoại trùng lặp',
+            'Số điện thoại này đã được đăng ký bởi tài khoản khác.',
+          ),
+        },
+      },
+    },
+    '/api/v1/users/me/addresses': {
+      get: {
+        tags: ['Buyer Address Book'],
+        summary: 'Lấy sổ địa chỉ nhận hàng của Buyer (P0 #3)',
+        description: `${PRIVATE} Lấy danh sách địa chỉ đã lưu của chính Buyer (tối đa 5 địa chỉ). Luôn có tối đa 1 địa chỉ mặc định được ưu tiên lên đầu.`,
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: jsonResponse('Danh sách địa chỉ', {
+            success: true,
+            data: [
+              {
+                id: 'addr_123',
+                userId: 'usr_01',
+                label: 'Nhà riêng',
+                recipientName: 'Nguyễn Văn Buyer',
+                phone: '0901234567',
+                provinceCode: '79',
+                provinceName: 'Thành phố Hồ Chí Minh',
+                wardCode: '26734',
+                wardName: 'Phường Bến Nghé',
+                street: '123 Lê Lợi',
+                note: 'Giao giờ hành chính',
+                isDefault: true,
+                createdAt: '2026-10-28T07:00:00.000Z',
+              },
+            ],
+          }),
+          401: unauthorized,
+        },
+      },
+      post: {
+        tags: ['Buyer Address Book'],
+        summary: 'Tạo địa chỉ nhận hàng mới (P0 #4)',
+        description: `${PRIVATE} Thêm địa chỉ mới theo chuẩn 2 cấp (Tỉnh/Thành -> Phường/Xã). Giới hạn tối đa 5 địa chỉ active. Địa chỉ đầu tiên tự động đặt làm mặc định.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: [
+                  'recipientName',
+                  'phone',
+                  'provinceCode',
+                  'provinceName',
+                  'wardCode',
+                  'wardName',
+                  'street',
+                ],
+                properties: {
+                  label: { type: 'string', example: 'Nhà riêng' },
+                  recipientName: { type: 'string', example: 'Nguyễn Văn Buyer' },
+                  phone: { type: 'string', example: '0901234567' },
+                  provinceCode: { type: 'string', example: '79' },
+                  provinceName: { type: 'string', example: 'Thành phố Hồ Chí Minh' },
+                  wardCode: { type: 'string', example: '26734' },
+                  wardName: { type: 'string', example: 'Phường Bến Nghé' },
+                  street: { type: 'string', example: '123 Lê Lợi' },
+                  note: { type: 'string', example: 'Giao giờ hành chính' },
+                  isDefault: { type: 'boolean', example: false },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: jsonResponse('Tạo địa chỉ thành công', {
+            success: true,
+            data: { id: 'addr_new', isDefault: true },
+          }),
+          400: errorResponse(
+            'Dữ liệu không hợp lệ',
+            'Thiếu thông tin hoặc số điện thoại không hợp lệ.',
+          ),
+          401: unauthorized,
+          422: errorResponse(
+            'Vượt quá giới hạn',
+            'ADDRESS_LIMIT_REACHED: Mỗi khách hàng chỉ được lưu tối đa 5 địa chỉ đang hoạt động.',
+          ),
+        },
+      },
+    },
+    '/api/v1/users/me/addresses/{addressId}': {
+      patch: {
+        tags: ['Buyer Address Book'],
+        summary: 'Cập nhật địa chỉ nhận hàng (P0 #5)',
+        description: `${PRIVATE} Sửa địa chỉ thuộc sở hữu của Buyer. Không làm thay đổi snapshot trong các đơn hàng cũ đã đặt.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'addressId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  label: { type: 'string' },
+                  recipientName: { type: 'string' },
+                  phone: { type: 'string' },
+                  street: { type: 'string' },
+                  note: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Cập nhật thành công', { success: true }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy', 'Địa chỉ không tồn tại.'),
+        },
+      },
+      delete: {
+        tags: ['Buyer Address Book'],
+        summary: 'Xóa địa chỉ nhận hàng (P0 #6)',
+        description: `${PRIVATE} Xóa địa chỉ. Nếu xóa đúng địa chỉ mặc định, tự động chuyển mặc định cho địa chỉ còn lại tạo sớm nhất.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'addressId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: jsonResponse('Xóa thành công', {
+            success: true,
+            message: 'Địa chỉ đã được xóa thành công.',
+          }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy', 'Địa chỉ không tồn tại.'),
+        },
+      },
+    },
+    '/api/v1/users/me/addresses/{addressId}/default': {
+      put: {
+        tags: ['Buyer Address Book'],
+        summary: 'Đặt địa chỉ làm mặc định (P0 #7)',
+        description: `${PRIVATE} Chuyển địa chỉ chỉ định thành mặc định duy nhất trong 1 giao dịch cơ sở dữ liệu.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'addressId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: jsonResponse('Đặt mặc định thành công', { success: true }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy', 'Địa chỉ không tồn tại.'),
         },
       },
     },
