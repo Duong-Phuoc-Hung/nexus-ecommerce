@@ -29,11 +29,28 @@ export function getShipmentStatusLabel(statusCode: string, fallback?: string): s
   return match ? match.label : fallback || statusCode;
 }
 
+function formatSafeDate(val?: string): string {
+  if (!val) return '';
+  try {
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return val;
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return `${day}/${month}/${year} · ${hours}:${minutes}`;
+  } catch {
+    return val;
+  }
+}
+
 const LIFECYCLE_STEPS = [
-  { key: 'READY_TO_PICK', label: 'Tạo vận đơn' },
-  { key: 'PICKED', label: 'Lấy hàng' },
-  { key: 'IN_TRANSIT', label: 'Đang giao' },
-  { key: 'DELIVERED', label: 'Đã giao' },
+  { key: 'READY_TO_PICK', label: 'Tạo vận đơn', classKey: 'step-ready-to-pick' },
+  { key: 'PICKED', label: 'Lấy hàng', classKey: 'step-picked' },
+  { key: 'IN_TRANSIT', label: 'Đang vận chuyển', classKey: 'step-in-transit' },
+  { key: 'OUT_FOR_DELIVERY', label: 'Đang giao hàng', classKey: 'step-out-for-delivery' },
+  { key: 'DELIVERED', label: 'Đã giao hàng', classKey: 'step-delivered' },
 ];
 
 export function SupportShipmentsPage() {
@@ -120,42 +137,119 @@ export function SupportShipmentsPage() {
     }
   }
 
-  // Calculate current lifecycle step index (0: Tạo, 1: Lấy, 2: Giao, 3: Đã giao)
+  // Calculate current lifecycle step index (0: Tạo vận đơn, 1: Lấy hàng, 2: Đang vận chuyển, 3: Đang giao hàng, 4: Đã giao hàng)
   const currentStepIndex = useMemo(() => {
     if (!selected) return 0;
     const code = selected.statusCode || selected.status;
     switch (code) {
       case 'DELIVERED':
-        return 4; // all done
+        return 4;
       case 'OUT_FOR_DELIVERY':
+        return 3;
       case 'IN_TRANSIT':
-        return 2; // currently delivering
+        return 2;
       case 'PICKED':
-        return 1; // picked up
+        return 1;
       case 'READY_TO_PICK':
       default:
-        return 0; // created
+        return 0;
     }
   }, [selected]);
 
-  // Deduplicate timeline entries to fix duplicate "Đã giao" or repeating titles
+  // Synchronize timeline with the 5 lifecycle steps cleanly without duplication
   const cleanTimeline = useMemo(() => {
-    if (!selected?.timeline) return [];
-    const filtered: typeof selected.timeline = [];
-    for (const item of selected.timeline) {
-      const last = filtered[filtered.length - 1];
-      const isDuplicate =
-        last &&
-        (last.title.trim().toLowerCase() === item.title.trim().toLowerCase() ||
-          (last.title.includes('Đã giao') && item.title.includes('Đã giao')));
-      if (isDuplicate) {
-        if (!last.location && item.location) last.location = item.location;
-        if (!last.timestamp && item.timestamp) last.timestamp = item.timestamp;
-        continue;
+    if (!selected) return [];
+    const code = selected.statusCode || selected.status;
+    const stepIdx = (() => {
+      switch (code) {
+        case 'DELIVERED':
+          return 4;
+        case 'OUT_FOR_DELIVERY':
+          return 3;
+        case 'IN_TRANSIT':
+          return 2;
+        case 'PICKED':
+          return 1;
+        case 'READY_TO_PICK':
+        default:
+          return 0;
       }
-      filtered.push({ ...item });
-    }
-    return filtered;
+    })();
+
+    const createdTime = formatSafeDate(selected.createdAt) || selected.updated;
+    const updatedTime = selected.updated || formatSafeDate(selected.updatedAt);
+    const location = selected.currentLocation || selected.city || 'Trung tâm xử lý';
+    const recipient = selected.recipient || selected.recipientName || 'người nhận';
+
+    const items: {
+      key: string;
+      title: string;
+      status: 'done' | 'current' | 'pending';
+      statusClass?: string;
+      timestamp?: string;
+      location?: string;
+      description?: string;
+    }[] = [
+      {
+        key: 'READY_TO_PICK',
+        title: 'Đã tạo vận đơn',
+        status: stepIdx > 0 ? 'done' : 'current',
+        statusClass: stepIdx === 0 ? 'timeline-ready-to-pick' : undefined,
+        timestamp: createdTime,
+        location: stepIdx === 0 ? location : undefined,
+        description: 'Hệ thống đã phát hành vận đơn và mã vận chuyển thành công.',
+      },
+      {
+        key: 'PICKED',
+        title: stepIdx >= 1 ? 'Đã lấy hàng' : 'Lấy hàng',
+        status: stepIdx > 1 ? 'done' : stepIdx === 1 ? 'current' : 'pending',
+        statusClass: stepIdx === 1 ? 'timeline-picked' : undefined,
+        timestamp: stepIdx >= 1 ? updatedTime : undefined,
+        location: stepIdx === 1 ? location : undefined,
+        description:
+          stepIdx >= 1
+            ? 'Bưu tá đã lấy hàng thành công từ kho của người bán.'
+            : 'Đang đợi bưu tá tới kho người bán để lấy hàng.',
+      },
+      {
+        key: 'IN_TRANSIT',
+        title: stepIdx >= 2 ? 'Đang vận chuyển' : 'Vận chuyển liên tỉnh',
+        status: stepIdx > 2 ? 'done' : stepIdx === 2 ? 'current' : 'pending',
+        statusClass: stepIdx === 2 ? 'timeline-in-transit' : undefined,
+        timestamp: stepIdx >= 2 ? updatedTime : undefined,
+        location: stepIdx === 2 ? location : undefined,
+        description:
+          stepIdx >= 2
+            ? `Kiện hàng đang trung chuyển qua: ${location}.`
+            : 'Kiện hàng sẽ được chuyển tới trung tâm phân loại.',
+      },
+      {
+        key: 'OUT_FOR_DELIVERY',
+        title: stepIdx >= 3 ? 'Đang giao hàng' : 'Giao hàng tận nơi',
+        status: stepIdx > 3 ? 'done' : stepIdx === 3 ? 'current' : 'pending',
+        statusClass: stepIdx === 3 ? 'timeline-out-for-delivery' : undefined,
+        timestamp: stepIdx >= 3 ? updatedTime : undefined,
+        location: stepIdx === 3 ? location : undefined,
+        description:
+          stepIdx >= 3
+            ? `Bưu tá đang phát hàng tới ${recipient}.`
+            : 'Bưu cục phát sẽ phân công bưu tá giao hàng tới địa chỉ người nhận.',
+      },
+      {
+        key: 'DELIVERED',
+        title: stepIdx === 4 ? 'Đã giao hàng thành công' : 'Đã giao hàng',
+        status: stepIdx === 4 ? 'current' : 'pending',
+        statusClass: stepIdx === 4 ? 'timeline-delivered' : undefined,
+        timestamp: stepIdx === 4 ? updatedTime : undefined,
+        location: stepIdx === 4 ? location : undefined,
+        description:
+          stepIdx === 4
+            ? `Đã giao kiện hàng thành công tới ${recipient}.`
+            : 'Dự kiến phát hàng trong 24-48 giờ tới.',
+      },
+    ];
+
+    return items;
   }, [selected]);
 
   return (
@@ -283,10 +377,12 @@ export function SupportShipmentsPage() {
                   return (
                     <div
                       key={step.key}
-                      className={`support-step-item ${isDone ? 'is-done' : isCurrent ? 'is-current' : 'is-pending'}`}
+                      className={`support-step-item ${isDone ? 'is-done' : isCurrent ? `is-current ${step.classKey}` : 'is-pending'}`}
                     >
                       <div className="support-step-indicator">
-                        <div className="support-step-badge">{isDone ? '✓' : idx + 1}</div>
+                        <div className="support-step-badge">
+                          {isDone || (isCurrent && step.key === 'DELIVERED') ? '✓' : idx + 1}
+                        </div>
                         {idx < LIFECYCLE_STEPS.length - 1 && (
                           <div className={`support-step-line ${isDone ? 'is-active' : ''}`} />
                         )}
@@ -305,8 +401,8 @@ export function SupportShipmentsPage() {
             <ol className="support-timeline">
               {cleanTimeline.map((item, idx) => (
                 <li
-                  className={item.status === 'done' ? 'complete' : item.status}
-                  key={`${item.title}-${item.timestamp ?? idx}`}
+                  className={`${item.status === 'done' ? 'complete' : item.status} ${item.statusClass || ''}`}
+                  key={item.key || `${item.title}-${item.timestamp ?? idx}`}
                 >
                   <span />
                   <div>

@@ -627,17 +627,64 @@
 }
 .support-timeline li.complete > span,
 .support-timeline li.done > span {
-  border-color: #10b981;
-  background: #10b981;
+  border-color: #475569;
+  background: #475569;
+}
+.support-timeline li.complete strong,
+.support-timeline li.done strong {
+  color: #334155;
 }
 .support-timeline li.current > span {
   border-color: #3b82f6;
-  background: #eff6ff;
+  background: #ffffff;
   box-shadow: 0 0 0 4px #dbeafe;
+}
+.support-timeline li.current.timeline-ready-to-pick > span {
+  border-color: #d97706;
+  background: #ffffff;
+  box-shadow: 0 0 0 4px #fef3c7;
+}
+.support-timeline li.current.timeline-ready-to-pick strong {
+  color: #b45309;
+}
+.support-timeline li.current.timeline-picked > span {
+  border-color: #0d9488;
+  background: #ffffff;
+  box-shadow: 0 0 0 4px #ccfbf1;
+}
+.support-timeline li.current.timeline-picked strong {
+  color: #0f766e;
+}
+.support-timeline li.current.timeline-in-transit > span {
+  border-color: #4f46e5;
+  background: #ffffff;
+  box-shadow: 0 0 0 4px #e0e7ff;
+}
+.support-timeline li.current.timeline-in-transit strong {
+  color: #3730a3;
+}
+.support-timeline li.current.timeline-out-for-delivery > span {
+  border-color: #0284c7;
+  background: #ffffff;
+  box-shadow: 0 0 0 4px #e0f2fe;
+}
+.support-timeline li.current.timeline-out-for-delivery strong {
+  color: #0369a1;
+}
+.support-timeline li.current.timeline-delivered > span {
+  border-color: #10b981;
+  background: #ffffff;
+  box-shadow: 0 0 0 4px #d1fae5;
+}
+.support-timeline li.current.timeline-delivered strong {
+  color: #047857;
 }
 .support-timeline li.pending > span {
   border-color: #cbd5e1;
   background: #f8fafc;
+}
+.support-timeline li.pending strong {
+  color: #94a3b8;
 }
 .support-timeline-desc {
   margin: 4px 0 0;
@@ -695,21 +742,93 @@
   z-index: 2;
   transition: all 0.2s ease;
 }
+/* Stepper Done - Clean slate without neon green clutter */
 .support-step-item.is-done .support-step-badge {
-  background: #10b981;
+  background: #334155;
   color: #ffffff;
-  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.35);
+  box-shadow: 0 1px 3px rgba(51, 65, 85, 0.2);
 }
+.support-step-item.is-done .support-step-text {
+  color: #475569;
+  font-weight: 600;
+}
+
+/* Stepper Active - Distinct status colors */
 .support-step-item.is-current .support-step-badge {
   background: #3b82f6;
   color: #ffffff;
   box-shadow: 0 0 0 4px #dbeafe;
 }
+.support-step-item.is-current .support-step-text {
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+/* 1. READY_TO_PICK: Cam hổ phách */
+.support-step-item.is-current.step-ready-to-pick .support-step-badge {
+  background: #d97706;
+  color: #ffffff;
+  box-shadow: 0 0 0 4px #fef3c7, 0 2px 6px rgba(217, 119, 6, 0.25);
+}
+.support-step-item.is-current.step-ready-to-pick .support-step-text {
+  color: #b45309;
+  font-weight: 700;
+}
+
+/* 2. PICKED: Teal ngọc */
+.support-step-item.is-current.step-picked .support-step-badge {
+  background: #0d9488;
+  color: #ffffff;
+  box-shadow: 0 0 0 4px #ccfbf1, 0 2px 6px rgba(13, 148, 136, 0.25);
+}
+.support-step-item.is-current.step-picked .support-step-text {
+  color: #0f766e;
+  font-weight: 700;
+}
+
+/* 3. IN_TRANSIT: Indigo xanh tím */
+.support-step-item.is-current.step-in-transit .support-step-badge {
+  background: #4f46e5;
+  color: #ffffff;
+  box-shadow: 0 0 0 4px #e0e7ff, 0 2px 6px rgba(79, 70, 229, 0.25);
+}
+.support-step-item.is-current.step-in-transit .support-step-text {
+  color: #3730a3;
+  font-weight: 700;
+}
+
+/* 4. OUT_FOR_DELIVERY: Sky Blue xanh dương */
+.support-step-item.is-current.step-out-for-delivery .support-step-badge {
+  background: #0284c7;
+  color: #ffffff;
+  box-shadow: 0 0 0 4px #e0f2fe, 0 2px 6px rgba(2, 132, 199, 0.25);
+}
+.support-step-item.is-current.step-out-for-delivery .support-step-text {
+  color: #0369a1;
+  font-weight: 700;
+}
+
+/* 5. DELIVERED: Emerald Green thành công */
+.support-step-item.is-current.step-delivered .support-step-badge {
+  background: #10b981;
+  color: #ffffff;
+  box-shadow: 0 0 0 4px #d1fae5, 0 2px 6px rgba(16, 185, 129, 0.25);
+}
+.support-step-item.is-current.step-delivered .support-step-text {
+  color: #047857;
+  font-weight: 700;
+}
+
+/* Stepper Pending */
 .support-step-item.is-pending .support-step-badge {
-  background: #f1f5f9;
+  background: #f8fafc;
   border: 2px solid #cbd5e1;
   color: #94a3b8;
 }
+.support-step-item.is-pending .support-step-text {
+  color: #94a3b8;
+}
+
 .support-step-line {
   position: absolute;
   top: 16px;
@@ -721,20 +840,13 @@
   transition: background 0.3s ease;
 }
 .support-step-line.is-active {
-  background: #10b981;
+  background: #64748b;
 }
 .support-step-text {
   margin-top: 8px;
   font-size: 0.72rem;
   font-weight: 600;
   color: #64748b;
-}
-.support-step-item.is-done .support-step-text {
-  color: #059669;
-}
-.support-step-item.is-current .support-step-text {
-  color: #1d4ed8;
-  font-weight: 700;
 }
 .support-timeline strong,
 .support-timeline small {
