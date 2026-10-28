@@ -899,9 +899,16 @@
   flex-wrap: wrap;
   gap: 8px;
 }
-.support-action-buttons button:hover {
+.support-action-buttons button:hover:not(:disabled) {
   border-color: #9ebed0;
   color: #347899;
+}
+.support-action-buttons button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #94a3b8;
 }
 .support-action-notice {
   width: 100%;
