@@ -19,6 +19,7 @@ export interface RegisterResponseDto {
   id: string;
   email: string;
   fullName: string;
+  phone?: string;
   role: string;
   status: string;
   reputationScore: number;
