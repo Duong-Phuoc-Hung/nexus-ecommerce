@@ -66,11 +66,52 @@ export const swaggerDocument = {
         },
       },
     },
+    '/api/v1/auth/send-otp': {
+      post: {
+        tags: ['Authentication'],
+        summary: 'Gửi mã OTP xác thực đăng ký đến Gmail',
+        description:
+          'Gửi mã OTP 6 số ngẫu nhiên qua Gmail SMTP (thời hạn 5 phút). Kiểm tra trùng lặp email trước khi gửi. Trong môi trường test/dev trả kèm devOtp.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['email'],
+                properties: {
+                  email: {
+                    type: 'string',
+                    example: 'nguyen.buyer@gmail.com',
+                  },
+                  fullName: {
+                    type: 'string',
+                    example: 'Nguyễn Văn Buyer',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Gửi mã OTP thành công',
+          },
+          400: {
+            description: 'Email không hợp lệ',
+          },
+          409: {
+            description: 'Email đã được đăng ký',
+          },
+        },
+      },
+    },
     '/api/v1/auth/register': {
       post: {
         tags: ['Authentication'],
         summary: 'Đăng ký tài khoản mới',
-        description: 'Tạo tài khoản Buyer mới với ID định dạng UUID 36 ký tự chuẩn.',
+        description:
+          'Tạo tài khoản Buyer mới. Nếu đã yêu cầu gửi OTP, bắt buộc truyền trường otp để xác thực.',
         requestBody: {
           required: true,
           content: {
@@ -90,6 +131,15 @@ export const swaggerDocument = {
                   password: {
                     type: 'string',
                     example: 'Password@123',
+                  },
+                  phone: {
+                    type: 'string',
+                    example: '0912345678',
+                  },
+                  otp: {
+                    type: 'string',
+                    example: '123456',
+                    description: 'Mã xác thực OTP 6 số nhận từ Gmail',
                   },
                 },
               },

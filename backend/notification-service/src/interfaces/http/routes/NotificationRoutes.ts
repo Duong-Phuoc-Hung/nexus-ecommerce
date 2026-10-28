@@ -6,6 +6,9 @@ export function createNotificationRoutes(controller: NotificationController): Ro
 
   router.get('/:id', (req, res) => controller.getById(req, res));
   router.post('/send', (req, res) => controller.send(req, res));
+  router.post('/email/otp', (req, res) => controller.sendOtpEmail(req, res));
+  router.post('/email/welcome', (req, res) => controller.sendWelcomeEmail(req, res));
+  router.post('/email/send', (req, res) => controller.sendCustomEmail(req, res));
 
   return router;
 }

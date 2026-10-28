@@ -83,11 +83,43 @@ export const userSpec = {
         },
       },
     },
+    '/api/v1/auth/send-otp': {
+      post: {
+        tags: ['Authentication'],
+        summary: 'Gửi mã OTP xác thực đăng ký đến Gmail',
+        description: `${PUBLIC} Method: POST. Header: Content-Type: application/json. Gửi mã OTP 6 số ngẫu nhiên qua Gmail SMTP (thời hạn 5 phút). Kiểm tra trùng lặp email trước khi gửi. Trong môi trường test/dev, response trả kèm trường devOtp để kiểm thử tự động.`,
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['email'],
+                properties: {
+                  email: { type: 'string', example: 'nguyen.buyer@gmail.com' },
+                  fullName: { type: 'string', example: 'Nguyễn Văn Buyer' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Gửi OTP thành công', {
+            success: true,
+            message:
+              'Mã xác thực OTP đã được gửi đến hòm thư Gmail của bạn. Vui lòng kiểm tra hộp thư (kể cả mục Spam).',
+            devOtp: '123456',
+          }),
+          400: errorResponse('Dữ liệu không hợp lệ', 'Định dạng email không hợp lệ.'),
+          409: errorResponse('Email đã tồn tại', 'Email này đã được đăng ký trong hệ thống.'),
+        },
+      },
+    },
     '/api/v1/auth/register': {
       post: {
         tags: ['Authentication'],
         summary: 'Đăng ký tài khoản mới',
-        description: `${PUBLIC} Method: POST. Header: Content-Type: application/json. Tài khoản mới mặc định có vai trò BUYER. email bắt buộc đúng định dạng, fullName tối đa 100 ký tự, password tối thiểu 6 ký tự.`,
+        description: `${PUBLIC} Method: POST. Header: Content-Type: application/json. Tài khoản mới mặc định có vai trò BUYER. email bắt buộc đúng định dạng, fullName tối đa 100 ký tự, password tối thiểu 6 ký tự. Nếu đã yêu cầu gửi OTP, bắt buộc truyền trường otp để hoàn tất xác thực.`,
         requestBody: {
           required: true,
           content: {
@@ -99,6 +131,12 @@ export const userSpec = {
                   email: { type: 'string', example: 'khachhangmoi@gmail.com' },
                   fullName: { type: 'string', example: 'Nguyễn Văn A' },
                   password: { type: 'string', example: 'Password@123' },
+                  phone: { type: 'string', example: '0912345678' },
+                  otp: {
+                    type: 'string',
+                    example: '123456',
+                    description: 'Mã xác thực OTP 6 số đã gửi qua Gmail',
+                  },
                 },
               },
             },
