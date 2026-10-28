@@ -302,9 +302,41 @@ export function createCatalogApi(request: RequestApi, source: 'mock' | 'api') {
           querySupported: true,
         };
       }
-      const data = unwrap<unknown>(await request('/products?' + queryString(query), { signal }));
+      let data: unknown;
+      let searchMeta: Row | null = null;
+      if (query.q.trim()) {
+        const params = new URLSearchParams({
+          q: query.q.trim(),
+          page: String(query.page),
+          limit: String(query.pageSize),
+        });
+        if (query.categoryId) params.set('categoryId', query.categoryId);
+        if (query.minPrice) params.set('minPrice', query.minPrice);
+        if (query.maxPrice) params.set('maxPrice', query.maxPrice);
+        const response = await request<unknown>('/products/search?' + params.toString(), {
+          signal,
+        });
+        const envelope = obj(response);
+        if (envelope.success !== true || !Array.isArray(envelope.data))
+          throw new ApiError(
+            'Catalog API trả về kết quả tìm kiếm không hợp lệ.',
+            undefined,
+            'INVALID_SEARCH_RESPONSE',
+          );
+        data = envelope.data;
+        searchMeta = obj(envelope.meta);
+      } else {
+        data = unwrap<unknown>(await request('/products?' + queryString(query), { signal }));
+      }
       if (Array.isArray(data)) {
         let items = data.map(normalizeProduct);
+        // Keep non-public listings out of the Buyer UI. Catalog must enforce the same
+        // rule server-side; this is only a presentation safeguard.
+        if (query.scope !== 'admin') {
+          items = items.filter(
+            (product) => product.status === 'ACTIVE' && product.saleType !== 'AUCTION',
+          );
+        }
         if (query.q) {
           const kw = query.q.toLowerCase();
           items = items.filter(
@@ -339,10 +371,12 @@ export function createCatalogApi(request: RequestApi, source: 'mock' | 'api') {
           items = [...items].reverse();
         }
 
-        const total = items.length;
-        const page = query.page || 1;
-        const pageSize = query.pageSize || 10;
-        const pagedItems = items.slice((page - 1) * pageSize, page * pageSize);
+        const total = number(searchMeta?.total) ?? items.length;
+        const page = number(searchMeta?.page) ?? query.page;
+        const pageSize = number(searchMeta?.limit) ?? query.pageSize;
+        // Search results are already paged by Catalog. Only apply local slicing to the
+        // public all-products endpoint, which currently returns the full array.
+        const pagedItems = searchMeta ? items : items.slice((page - 1) * pageSize, page * pageSize);
         return {
           items: pagedItems,
           page,
@@ -385,7 +419,12 @@ export function createCatalogApi(request: RequestApi, source: 'mock' | 'api') {
       if (source === 'mock') return fixtures.categories;
       try {
         const data = unwrap<unknown>(await request('/categories?tree=true', { signal }));
-        if (!Array.isArray(data)) return fixtures.categories;
+        if (!Array.isArray(data))
+          throw new ApiError(
+            'Catalog API trả về danh mục không hợp lệ.',
+            undefined,
+            'INVALID_CATEGORIES',
+          );
         const flat: CatalogCategory[] = [];
         const visit = (rows: unknown[], parentId: string | null = null, depth = 1) => {
           if (depth > 3) return;
@@ -402,9 +441,11 @@ export function createCatalogApi(request: RequestApi, source: 'mock' | 'api') {
           }
         };
         visit(data);
-        return flat.length ? flat : fixtures.categories;
-      } catch {
-        return fixtures.categories;
+        return flat;
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        if (error instanceof ApiError) throw error;
+        throw new ApiError('Không tải được danh mục từ Catalog API. Vui lòng thử lại.');
       }
     },
     async save(input: ProductInput, productId?: string) {
@@ -422,19 +463,24 @@ export function createCatalogApi(request: RequestApi, source: 'mock' | 'api') {
           'VALIDATION_ERROR',
           errors,
         );
-      return normalizeProduct(
-        unwrap(
-          await request(productId ? '/products/' + encodeURIComponent(productId) : '/products', {
-            method: productId ? 'PATCH' : 'POST',
-            body: {
-              ...input,
-              title: input.title.trim(),
-              description: input.description.trim(),
-              price: input.price,
-            },
-          }),
-        ),
+      const body = {
+        title: input.title.trim(),
+        description: input.description.trim(),
+        categoryId: input.categoryId,
+        price: Number(input.price),
+        stockQuantity: input.stockQuantity,
+        condition: input.condition,
+        images: input.images,
+        status: input.status,
+        allowAuction: input.saleType === 'AUCTION',
+      };
+      const response = unwrap(
+        await request(productId ? '/products/' + encodeURIComponent(productId) : '/products', {
+          method: productId ? 'PUT' : 'POST',
+          body,
+        }),
       );
+      return normalizeProduct(response);
     },
   };
 }

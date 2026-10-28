@@ -10,10 +10,15 @@ const source = process.env.NEXT_PUBLIC_CATALOG_SOURCE || 'api';
 if (!['api', 'mock'].includes(source))
   throw new Error('NEXT_PUBLIC_CATALOG_SOURCE must be api or mock.');
 
+const auctionSource = process.env.NEXT_PUBLIC_AUCTION_SOURCE || 'api';
+if (!['api', 'mock'].includes(auctionSource))
+  throw new Error('NEXT_PUBLIC_AUCTION_SOURCE must be api or mock.');
+
 export const appConfig = {
   api: {
     baseUrl: apiBaseUrl,
     timeoutMs: Number.isFinite(apiTimeoutMs) && apiTimeoutMs > 0 ? apiTimeoutMs : 10_000,
   },
   catalogSource: source as 'api' | 'mock',
+  auctionSource: auctionSource as 'api' | 'mock',
 } as const;

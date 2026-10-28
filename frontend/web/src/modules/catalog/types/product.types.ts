@@ -49,4 +49,5 @@ export type ProductInput = {
   images: string[];
   status: string;
   saleType: string;
+  stockQuantity?: number;
 };

@@ -133,6 +133,19 @@ test('category tree preserves DB identifiers and stops beyond SRS default depth'
     ],
   );
 });
+test('Buyer listing hides non-public and auction products while Admin can review them', async () => {
+  const rows = [
+    product,
+    { ...product, id: 'draft-1', status: 'DRAFT' },
+    { ...product, id: 'auction-1', saleType: 'AUCTION' },
+  ];
+  const api = createCatalogApi(responder({ success: true, data: rows }), 'api');
+  assert.deepEqual(
+    (await api.list(defaultQuery)).items.map((item) => item.id),
+    ['db-42'],
+  );
+  assert.equal((await api.list({ ...defaultQuery, scope: 'admin' })).items.length, 3);
+});
 test('preview supports search and paging but cannot perform successful writes', async () => {
   let requests = 0;
   const request: RequestApi = async () => {
@@ -155,7 +168,7 @@ test('detail failure stays a failure and is never replaced by a preview item', a
   };
   await assert.rejects(createCatalogApi(request, 'api').detail('bad-id'), { status: 404 });
 });
-test('create/update use their own methods and encoded IDs', async () => {
+test('create/update use backend methods, payload fields and encoded IDs', async () => {
   const calls: Array<{ path: string; method?: string; body?: unknown }> = [];
   const request: RequestApi = async <T>(path: string, options?: RequestOptions) => {
     calls.push({ path, ...options });
@@ -166,8 +179,37 @@ test('create/update use their own methods and encoded IDs', async () => {
   await api.save(input, 'id/with/slash');
   assert.equal(calls[0].method, 'POST');
   assert.equal(calls[0].path, '/products');
-  assert.equal(calls[1].method, 'PATCH');
+  assert.equal(calls[0].body && (calls[0].body as { allowAuction?: boolean }).allowAuction, false);
+  assert.equal((calls[1].body as { price?: number }).price, 12_500_000);
+  assert.equal((calls[1].body as { stockQuantity?: number }).stockQuantity, undefined);
+  assert.equal(calls[1].method, 'PUT');
   assert.equal(calls[1].path, '/products/id%2Fwith%2Fslash');
+});
+test('search maps pageSize to limit and reads the backend metadata envelope', async () => {
+  let requested = '';
+  const request: RequestApi = async <T>(path: string) => {
+    requested = path;
+    return {
+      success: true,
+      data: [product],
+      meta: { page: 2, limit: 8, total: 17, totalPages: 3 },
+    } as T;
+  };
+  const page = await createCatalogApi(request, 'api').list({
+    ...defaultQuery,
+    q: 'máy ảnh',
+    categoryId: 'db-category',
+    page: 2,
+    pageSize: 8,
+  });
+  assert.match(requested, /^\/products\/search\?/);
+  assert.match(requested, /limit=8/);
+  assert.doesNotMatch(requested, /pageSize=/);
+  assert.equal(page.items.length, 1);
+  assert.equal(page.page, 2);
+  assert.equal(page.pageSize, 8);
+  assert.equal(page.total, 17);
+  assert.equal(page.totalPages, 3);
 });
 test('product validation rejects unsafe image URLs, too many images and nonfinite prices', () => {
   assert.deepEqual(validateProduct(input), {});
