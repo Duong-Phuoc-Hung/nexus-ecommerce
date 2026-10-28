@@ -1,4 +1,4 @@
-import { AdminAuctions } from '@/modules/admin/components/admin-auctions';
+import { AuctionWorkspace } from '@/modules/admin/components/auction-workspace';
 export default function Page() {
-  return <AdminAuctions />;
+  return <AuctionWorkspace />;
 }

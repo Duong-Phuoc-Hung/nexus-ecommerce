@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { Gavel, LayoutDashboard, LogOut, PackageSearch, ReceiptText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -31,7 +31,6 @@ export function AdminFrame({
   productsPath?: string;
 }) {
   const pathname = usePathname() || homePath;
-  const router = useRouter();
   const { user, logout } = useSession();
   const [loggingOut, setLoggingOut] = useState(false);
   const displayName = user?.fullName || name || 'Quản trị viên';
@@ -40,7 +39,8 @@ export function AdminFrame({
     setLoggingOut(true);
     try {
       await logout();
-      router.replace('/login');
+      // Leave the protected route with a clean URL so its guard cannot re-add `next=/admin/...`.
+      window.location.replace('/login');
     } finally {
       setLoggingOut(false);
     }

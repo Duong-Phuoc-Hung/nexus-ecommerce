@@ -1,10 +1,11 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { ordersApi, type OrderListItem } from '@/modules/commerce/api/orders.api';
+import { commerceApi } from '@/modules/commerce/api/commerce.api';
+import type { OrderSummary } from '@/modules/commerce/types/order.types';
 import { userMessage } from '@/lib/axios/http';
 export function AdminOrders() {
   const [query, setQuery] = useState('');
-  const [orders, setOrders] = useState<OrderListItem[]>([]);
+  const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
@@ -12,8 +13,8 @@ export function AdminOrders() {
     const c = new AbortController();
     setLoading(true);
     setError('');
-    ordersApi
-      .list({ q: query, page: 1, limit: 30 }, c.signal)
+    commerceApi
+      .listOrders({ q: query, page: 1, limit: 30 }, c.signal)
       .then((r) => setOrders(r.items))
       .catch((e) => {
         if (!c.signal.aborted) setError(userMessage(e));
