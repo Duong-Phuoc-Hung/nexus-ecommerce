@@ -2,8 +2,6 @@
 
 Ngày đối chiếu: 26/10/2026. Scope được suy ra từ kế hoạch tuần 2 (cart/checkout/payment thuộc tuần 3; fulfillment và Support thuộc tuần 4), source code hiện tại và API Gateway. Trong repository không có file SRS nghiệp vụ Nexus đầy đủ; vì vậy các API ghi “đề xuất/chốt với nhóm” cần được đối chiếu SRS gốc trước khi BE cam kết.
 
-Phạm vi request hiện tại: Buyer cart/checkout/orders và Admin order view. Seller Orders cùng các màn hình Support Orders/Shipments/Users đã có trên origin/main (commit 9868ce3), nên request này không lặp lại các file đó.
-
 ## FE đã làm
 
 ### Tuần 3 — Buyer / Commerce
