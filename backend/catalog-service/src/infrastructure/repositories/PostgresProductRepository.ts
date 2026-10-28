@@ -424,6 +424,7 @@ export class PostgresProductRepository implements IProductRepository {
       DRAFT: ProductStatus.DRAFT,
       ARCHIVED: ProductStatus.ARCHIVED,
       OUT_OF_STOCK: ProductStatus.OUT_OF_STOCK,
+      DELETED: ProductStatus.DELETED,
     };
 
     const stock =
