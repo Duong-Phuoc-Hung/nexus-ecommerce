@@ -1,10 +1,48 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { userApi, type SupportUser } from '@/modules/user/api/user.api';
 import { userMessage } from '@/lib/axios/http';
 import { Heading, DemoBanner, slug } from '../components/support-shared';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
+export function getRoleLabel(role: string): string {
+  switch (role) {
+    case 'BUYER':
+      return 'Người mua';
+    case 'SELLER':
+      return 'Người bán';
+    case 'SUPPORT_STAFF':
+    case 'SUPPORT':
+      return 'Nhân viên hỗ trợ';
+    case 'ADMIN':
+      return 'Quản trị viên';
+    default:
+      return role || 'Người dùng';
+  }
+}
+
+export function getUserStatusLabel(status: string): string {
+  switch (status) {
+    case 'ACTIVE':
+      return 'Đang hoạt động';
+    case 'INACTIVE':
+      return 'Ngừng hoạt động';
+    case 'LOCKED':
+    case 'SUSPENDED':
+    case 'BANNED':
+      return 'Tạm khóa';
+    default:
+      return status || 'Hoạt động';
+  }
+}
 
 export function SupportUsersPage() {
   const [query, setQuery] = useState('');
@@ -33,6 +71,12 @@ export function SupportUsersPage() {
     return () => controller.abort();
   }, [search, role]);
 
+  // Bộ phận hỗ trợ chỉ quản lý và tra cứu người dùng thương mại (Người mua, Người bán)
+  // Không bao gồm Quản trị viên (ADMIN) để đảm bảo phân cấp quyền hạn hợp lý
+  const displayUsers = useMemo(() => {
+    return (users || []).filter((u) => u.role !== 'ADMIN');
+  }, [users]);
+
   async function viewProfile(id: string) {
     setError('');
     try {
@@ -45,11 +89,11 @@ export function SupportUsersPage() {
   return (
     <>
       <Heading
-        label="SUPPORT STAFF / USERS"
+        label="BỘ PHẬN HỖ TRỢ / NGƯỜI DÙNG"
         title="Tra cứu người dùng"
-        description="Tra cứu thông tin cơ bản, vai trò, trạng thái và điểm uy tín."
+        description="Tra cứu thông tin khách hàng (Người mua) và đối tác (Người bán), trạng thái và điểm uy tín."
       />
-      <DemoBanner message="Danh sách và hồ sơ người dùng được tải từ User API." />
+      <DemoBanner message="Danh sách và hồ sơ người dùng được kết nối qua API." />
       <section className="support-panel">
         <div className="support-toolbar">
           <label className="support-search">
@@ -57,41 +101,35 @@ export function SupportUsersPage() {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Tìm tên, email, mã người dùng hoặc vai trò"
+              placeholder="Tìm tên, email, mã người dùng..."
               aria-label="Tìm người dùng"
             />
           </label>
-          <label
+          <div
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              fontSize: '0.7rem',
+              fontSize: '0.75rem',
               color: '#687386',
             }}
           >
-            Vai trò:
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              style={{
-                padding: '6px 10px',
-                border: '1px solid #e1e5ea',
-                borderRadius: '6px',
-                background: 'white',
-                fontSize: '0.7rem',
-                color: '#334055',
-              }}
-            >
-              <option value="ALL">Tất cả vai trò</option>
-              <option value="BUYER">Người mua (BUYER)</option>
-              <option value="SELLER">Người bán (SELLER)</option>
-              <option value="SUPPORT_STAFF">Hỗ trợ (SUPPORT_STAFF)</option>
-              <option value="ADMIN">Quản trị viên (ADMIN)</option>
-            </select>
-          </label>
+            <span>Vai trò:</span>
+            <div style={{ minWidth: 220 }}>
+              <Select value={role} onValueChange={setRole}>
+                <SelectTrigger aria-label="Lọc theo vai trò">
+                  <SelectValue placeholder="Chọn vai trò" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Tất cả khách hàng & đối tác</SelectItem>
+                  <SelectItem value="BUYER">Người mua (Khách hàng)</SelectItem>
+                  <SelectItem value="SELLER">Người bán (Đối tác)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
           <span style={{ marginLeft: 'auto' }}>
-            {loading ? 'Đang tải…' : `${users.length} kết quả`}
+            {loading ? 'Đang tải…' : `${displayUsers.length} kết quả`}
           </span>
         </div>
         {error ? (
@@ -102,7 +140,7 @@ export function SupportUsersPage() {
               <thead>
                 <tr>
                   <th>Mã người dùng</th>
-                  <th>Họ tên / gian hàng</th>
+                  <th>Họ tên / Gian hàng</th>
                   <th>Email</th>
                   <th>Vai trò</th>
                   <th>Trạng thái</th>
@@ -112,7 +150,7 @@ export function SupportUsersPage() {
                 </tr>
               </thead>
               <tbody>
-                {(users || []).map((user) => (
+                {displayUsers.map((user) => (
                   <tr key={user.id}>
                     <td>
                       <strong>{user.id}</strong>
@@ -120,11 +158,11 @@ export function SupportUsersPage() {
                     <td>{user.fullName || (user as any).name || '—'}</td>
                     <td>{user.email}</td>
                     <td>
-                      <span className="support-role">{user.role}</span>
+                      <span className="support-role">{getRoleLabel(user.role)}</span>
                     </td>
                     <td>
                       <span className={`support-status ${slug(user.status || 'ACTIVE')}`}>
-                        {user.status}
+                        {getUserStatusLabel(user.status)}
                       </span>
                     </td>
                     <td>{user.reputationScore ?? (user as any).reputation ?? 100} / 100</td>
@@ -135,24 +173,25 @@ export function SupportUsersPage() {
                         type="button"
                         onClick={() => viewProfile(user.id)}
                       >
-                        Hồ sơ
+                        Xem hồ sơ
                       </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {!loading && users.length === 0 && (
+            {!loading && displayUsers.length === 0 && (
               <div className="support-empty">Không tìm thấy người dùng phù hợp.</div>
             )}
           </div>
         )}
       </section>
+
       {selectedUser && (
         <section className="support-panel support-user-card">
           <div className="support-panel-heading">
             <div>
-              <p className="support-eyebrow">USER PROFILE · API</p>
+              <p className="support-eyebrow">HỒ SƠ NGƯỜI DÙNG · HỆ THỐNG</p>
               <h2>{selectedUser.fullName || (selectedUser as any).name}</h2>
             </div>
             <button
@@ -160,7 +199,7 @@ export function SupportUsersPage() {
               type="button"
               onClick={() => setSelectedUser(null)}
             >
-              Đóng
+              Đóng lại
             </button>
           </div>
           <div className="support-detail-content">
@@ -170,25 +209,25 @@ export function SupportUsersPage() {
                 <strong>{selectedUser.id}</strong>
               </div>
               <div>
-                <small>Email</small>
+                <small>Địa chỉ email</small>
                 <strong>{selectedUser.email}</strong>
               </div>
               <div>
-                <small>Vai trò</small>
-                <strong>{selectedUser.role}</strong>
+                <small>Vai trò tài khoản</small>
+                <strong>{getRoleLabel(selectedUser.role)}</strong>
               </div>
               <div>
-                <small>Trạng thái</small>
-                <strong>{selectedUser.status}</strong>
+                <small>Trạng thái hoạt động</small>
+                <strong>{getUserStatusLabel(selectedUser.status)}</strong>
               </div>
               <div>
-                <small>Điểm uy tín</small>
+                <small>Điểm uy tín sàn</small>
                 <strong>
                   {selectedUser.reputationScore ?? (selectedUser as any).reputation ?? 100} / 100
                 </strong>
               </div>
               <div>
-                <small>Số giao dịch</small>
+                <small>Số giao dịch đã thực hiện</small>
                 <strong>{selectedUser.ordersCount ?? (selectedUser as any).orders ?? 0}</strong>
               </div>
               <div>

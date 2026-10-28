@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useState } from 'react';
 import {
   sellerProductsApi,
@@ -9,14 +10,25 @@ import {
 } from '../api/seller-products.api';
 import { userMessage } from '@/lib/axios/http';
 import { products as mockProducts, PageHeading, DemoNote } from '../components/seller-shared';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 export function SellerProductForm({ productId }: { productId?: string }) {
+  const router = useRouter();
   const [categories, setCategories] = useState<FlatCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
 
   const [productData, setProductData] = useState<Partial<BackendProduct> | null>(null);
   const [productLoading, setProductLoading] = useState(Boolean(productId));
   const [productError, setProductError] = useState('');
+
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('ACTIVE');
 
   const [submitting, setSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
@@ -32,18 +44,25 @@ export function SellerProductForm({ productId }: { productId?: string }) {
       .then((data) => {
         if (!controller.signal.aborted) {
           setCategories(data);
+          if (!selectedCategory && data.length > 0) {
+            setSelectedCategory(data[0].id);
+          }
         }
       })
       .catch(() => {
         // Fallback default danh mục
         if (!controller.signal.aborted) {
-          setCategories([
+          const fallbackCats = [
             { id: '1', name: 'Thiết bị điện tử', rawName: 'Điện tử', level: 0 },
             { id: '100', name: '— iPhone', rawName: 'iPhone', level: 1 },
             { id: '102', name: '— MacBook', rawName: 'MacBook', level: 1 },
             { id: '16', name: 'Đồng hồ cao cấp', rawName: 'Đồng hồ', level: 0 },
             { id: '2', name: 'Thời trang & Phụ kiện', rawName: 'Thời trang', level: 0 },
-          ]);
+          ];
+          setCategories(fallbackCats);
+          if (!selectedCategory) {
+            setSelectedCategory(fallbackCats[0].id);
+          }
         }
       })
       .finally(() => {
@@ -68,6 +87,8 @@ export function SellerProductForm({ productId }: { productId?: string }) {
       .then((detail) => {
         if (!controller.signal.aborted) {
           setProductData(detail);
+          if (detail.categoryId) setSelectedCategory(String(detail.categoryId));
+          if (detail.status) setSelectedStatus(detail.status);
         }
       })
       .catch((err) => {
@@ -84,6 +105,8 @@ export function SellerProductForm({ productId }: { productId?: string }) {
               stockQuantity: fallback.stock,
               status: fallback.status,
             });
+            if (fallback.category) setSelectedCategory(fallback.category);
+            if (fallback.status) setSelectedStatus(fallback.status);
           } else {
             setProductError(userMessage(err));
           }
@@ -99,7 +122,7 @@ export function SellerProductForm({ productId }: { productId?: string }) {
   }, [productId]);
 
   const isEditMode = Boolean(productId);
-  const title = isEditMode ? 'Chỉnh sửa sản phẩm' : 'Thêm sản phẩm';
+  const title = isEditMode ? 'Chỉnh sửa sản phẩm' : 'Thêm sản phẩm mới';
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -108,15 +131,15 @@ export function SellerProductForm({ productId }: { productId?: string }) {
 
     const name = String(data.get('name') ?? '').trim();
     const sku = String(data.get('sku') ?? '').trim();
-    const category = String(data.get('category') ?? '').trim();
+    const category = selectedCategory || String(data.get('category') ?? '').trim();
     const price = Number(data.get('price'));
     const stock = Number(data.get('stock'));
     const description = String(data.get('description') ?? '').trim() || `Sản phẩm ${name}`;
-    const status = String(data.get('status') ?? 'ACTIVE');
+    const status = selectedStatus || 'ACTIVE';
 
     if (!name) nextErrors.push('Nhập tên sản phẩm.');
     if (!sku) nextErrors.push('Nhập mã SKU/Slug.');
-    if (!category) nextErrors.push('Vui lòng chọn danh mục.');
+    if (!category) nextErrors.push('Vui lòng chọn danh mục sản phẩm.');
     if (!price || price <= 0) nextErrors.push('Giá bán phải lớn hơn 0.');
     if (stock < 0) nextErrors.push('Tồn kho không được âm.');
 
@@ -144,7 +167,7 @@ export function SellerProductForm({ productId }: { productId?: string }) {
         setSuccessMessage('Cập nhật sản phẩm thành công!');
       } else {
         // API 6: POST /api/v1/products
-        const res = await sellerProductsApi.create({
+        await sellerProductsApi.create({
           title: name,
           description,
           categoryId: category,
@@ -152,7 +175,9 @@ export function SellerProductForm({ productId }: { productId?: string }) {
           stockQuantity: stock,
           condition: 'NEW',
         });
-        setSuccessMessage(`Đã đăng bán sản phẩm thành công! (ID: ${res.id})`);
+        // Tự động chuyển hướng về trang danh sách sản phẩm theo yêu cầu
+        router.push('/seller/products');
+        return;
       }
     } catch (err) {
       setErrors([userMessage(err)]);
@@ -182,24 +207,20 @@ export function SellerProductForm({ productId }: { productId?: string }) {
       )}
 
       {productError && (
-        <div className="seller-form-alert error" role="alert">
-          {productError}
-        </div>
+        <p className="seller-readonly-note" style={{ color: '#d9383a', margin: '16px 0' }}>
+          {productError} (đang dùng danh mục & thông số dự phòng)
+        </p>
       )}
 
       {!productLoading && (
         <form className="seller-panel seller-form" onSubmit={submit} noValidate>
           <div className="seller-panel-heading">
             <div>
-              <p className="seller-eyebrow">
-                {isEditMode ? `ID SẢN PHẨM: ${productData?.id ?? productId}` : 'THÔNG TIN CƠ BẢN'}
-              </p>
-              <h2>{productData?.title ?? 'Thông tin sản phẩm'}</h2>
+              <p className="seller-eyebrow">CATALOG EDIT</p>
+              <h2>{isEditMode ? 'Thông tin sản phẩm hiện tại' : 'Khởi tạo thông tin sản phẩm'}</h2>
             </div>
             <span className="seller-muted">
-              {isEditMode
-                ? `Trạng thái: ${productData?.status ?? 'ACTIVE'}`
-                : 'Trạng thái khởi tạo: ACTIVE'}
+              {isEditMode ? `ID: ${productId}` : 'Đăng bán ngay vào kho'}
             </span>
           </div>
 
@@ -209,8 +230,8 @@ export function SellerProductForm({ productId }: { productId?: string }) {
               <input
                 key={`name-${productData?.title ?? ''}`}
                 name="name"
-                defaultValue={productData?.title}
-                placeholder="Ví dụ: iPhone 15 Pro Max 256GB"
+                defaultValue={productData?.title ?? ''}
+                placeholder="Ví dụ: Tai nghe chống ồn Sony WH-1000XM5"
               />
             </label>
 
@@ -226,17 +247,23 @@ export function SellerProductForm({ productId }: { productId?: string }) {
 
             <label>
               Danh mục {categoriesLoading ? '(Đang tải danh mục...)' : ''}
-              <select
-                key={`category-${productData?.categoryId ?? ''}`}
-                name="category"
-                defaultValue={productData?.categoryId ?? categories[0]?.id ?? ''}
-              >
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
+              <div style={{ marginTop: '6px' }}>
+                <Select
+                  value={selectedCategory || (categories[0]?.id ?? '')}
+                  onValueChange={setSelectedCategory}
+                >
+                  <SelectTrigger aria-label="Danh mục sản phẩm">
+                    <SelectValue placeholder="Chọn danh mục" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </label>
 
             <label>
@@ -276,16 +303,19 @@ export function SellerProductForm({ productId }: { productId?: string }) {
 
             <label>
               Trạng thái
-              <select
-                key={`status-${productData?.status ?? ''}`}
-                name="status"
-                defaultValue={productData?.status ?? 'ACTIVE'}
-              >
-                <option value="ACTIVE">Đang bán (ACTIVE)</option>
-                <option value="DRAFT">Bản nháp (DRAFT)</option>
-                <option value="ARCHIVED">Lưu trữ (ARCHIVED)</option>
-                <option value="OUT_OF_STOCK">Hết hàng (OUT_OF_STOCK)</option>
-              </select>
+              <div style={{ marginTop: '6px' }}>
+                <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                  <SelectTrigger aria-label="Trạng thái sản phẩm">
+                    <SelectValue placeholder="Chọn trạng thái" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ACTIVE">Đang bán</SelectItem>
+                    <SelectItem value="DRAFT">Bản nháp</SelectItem>
+                    <SelectItem value="ARCHIVED">Lưu trữ</SelectItem>
+                    <SelectItem value="OUT_OF_STOCK">Hết hàng</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </label>
           </div>
 
@@ -299,29 +329,25 @@ export function SellerProductForm({ productId }: { productId?: string }) {
 
           {successMessage && (
             <div className="seller-form-alert success" role="status">
-              <p>{successMessage}</p>
-              <div style={{ marginTop: 8 }}>
-                <Link
-                  href="/seller/products"
-                  style={{ textDecoration: 'underline', fontWeight: 600 }}
-                >
-                  Quay lại danh sách sản phẩm →
-                </Link>
-              </div>
+              {successMessage}
             </div>
           )}
 
           <div className="seller-form-actions">
-            <Link className="seller-button seller-button-quiet" href="/seller/products">
-              Hủy
-            </Link>
             <button
               className="seller-button seller-button-primary"
               type="submit"
               disabled={submitting}
             >
-              {submitting ? 'Đang lưu...' : isEditMode ? 'Cập nhật thông tin' : 'Đăng bán sản phẩm'}
+              {submitting
+                ? 'Đang lưu sản phẩm...'
+                : isEditMode
+                  ? 'Lưu thay đổi (PUT API)'
+                  : 'Đăng bán sản phẩm (POST API)'}
             </button>
+            <Link className="seller-button seller-button-quiet" href="/seller/products">
+              Hủy
+            </Link>
           </div>
         </form>
       )}
