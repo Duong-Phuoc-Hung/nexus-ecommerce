@@ -90,12 +90,10 @@ export class NotificationController {
       }
 
       const success = await this.emailService.sendWelcomeEmail(email, fullName);
-      res
-        .status(200)
-        .json({
-          success,
-          message: success ? 'Email chào mừng đã được gửi.' : 'Gửi email thất bại.',
-        });
+      res.status(200).json({
+        success,
+        message: success ? 'Email chào mừng đã được gửi.' : 'Gửi email thất bại.',
+      });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message || 'Internal Server Error' });
     }
