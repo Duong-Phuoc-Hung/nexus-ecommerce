@@ -6,7 +6,7 @@ Nhánh: `fix/be-catalog-seller-regression`. Phạm vi: chỉ Backend, không đ�
 
 - Không sửa code của Seller/Staff và code dùng chung. Catalog về đúng bản gốc `3868646`, trừ 2 dòng thêm vào `app.ts`.
 - Giữ nguyên `auth.ts`, gồm cơ chế đọc header `x-user-*` từ API Gateway.
-- Không phụ thuộc User Service.
+- Không phụ thuộc User Service cho phần đọc; chỉ phần Admin tạo sản phẩm cho Seller gọi User Service để xác minh Seller.
 - Giữ chung URL `/api/v1/products`, không đổi Gateway.
 
 ## Cách làm
@@ -34,15 +34,25 @@ File dùng chung bị chạm: `app.ts` (1 import, 1 dòng gắn router).
 
 ## Chưa làm
 
-| Hạng mục (api-status)                                 | Lý do                                                     |
-| ----------------------------------------------------- | --------------------------------------------------------- |
-| P0-3: quyền `PRODUCT.CREATE/UPDATE/DELETE`, ownership | Phải sửa luồng ghi của Seller, cần nhóm 1 đồng ý          |
-| P0-4: Admin tạo sản phẩm cho đúng Seller              | Phải sửa `create` của Seller, cần nhóm 1 quyết định       |
-| P1: chuẩn hóa lỗi và mã 409 cho luồng ghi             | Cùng lý do với P0-3                                       |
-| `/search` không có `q` trả 400                        | Giữ hợp đồng cũ của nhóm 1                                |
-| Cập nhật Swagger                                      | File Gateway dùng chung                                   |
-| Nghiệm thu qua API Gateway (cổng 4000)                | Chưa chạy; mới test Catalog trực tiếp trên DB Docker      |
-| Lọc/phân trang bằng SQL                               | Hiện lọc trong bộ nhớ sau khi đọc tối đa 100.000 sản phẩm |
+| Hạng mục (api-status)                                | Lý do                                                |
+| ---------------------------------------------------- | ---------------------------------------------------- |
+| P1: chuẩn hóa lỗi và mã 409 cho luồng ghi của Seller | Thuộc luồng Seller, cần nhóm 1 đồng ý                |
+| `/search` không có `q` trả 400                       | Giữ hợp đồng cũ của nhóm 1                           |
+| Cập nhật Swagger                                     | File Gateway dùng chung                              |
+| Nghiệm thu qua API Gateway (cổng 4000)               | Chưa chạy; mới test Catalog trực tiếp trên DB Docker |
+| Ghi bằng Admin qua User Service thật                 | Test dùng directory giả; chưa chạy với User Service  |
+
+Đã xong: lọc, sắp xếp, phân trang và đếm tổng của `GET /products` (Buyer/Admin) chạy bằng SQL (`PostgresCatalogQuery`), chỉ đọc đúng 1 trang. Chế độ in-memory/test vẫn dùng `InMemoryCatalogQuery`.
+
+## Phần GHI của Admin (POST/PUT/DELETE `/products`)
+
+Router mới `CatalogAdminWriteRoutes.ts`, đăng ký trước router cũ. Chỉ xử lý khi người gọi là ADMIN; Seller/Buyer/khách được chuyển nguyên trạng sang router cũ (`next('route')`).
+
+- `POST /products`: Admin phải truyền `sellerId`; Seller được xác minh qua `GET /users/:id` của User Service (dùng token của Admin): 404 nếu không có, 422 nếu không phải Seller hoặc không `ACTIVE`, 503 nếu không tra cứu được. Sản phẩm thuộc đúng Seller đó.
+- `PUT/DELETE /products/:id`: Admin sửa/xóa sản phẩm của Seller bất kỳ (tái dùng use case cũ, không sửa).
+- Quyền: kiểm tra `PRODUCT.CREATE/UPDATE/DELETE` trong claim `permissions` của JWT (thiếu thì 403). Nếu không có claim (ví dụ đi qua header Gateway) thì dựa vào role ADMIN như trước.
+- Test: `src/catalog-admin-write.test.ts` (in-memory, directory giả), pass cùng `app.test.ts`.
+- Cần cấu hình `USER_SERVICE_URL` (mặc định `http://localhost:4001`).
 
 ## Lưu ý cho nhóm 1
 

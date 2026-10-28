@@ -1,8 +1,10 @@
 import { NextFunction, Request, Response, Router } from 'express';
 import { ProductStatus } from '../../../domain/entities/Product';
 import { IProductRepository } from '../../../domain/repositories/IProductRepository';
+import { InMemoryCatalogQuery } from '../../../infrastructure/repositories/InMemoryCatalogQuery';
 import {
   CatalogSort,
+  ICatalogQuery,
   ListCatalogProductsQuery,
   ListCatalogProductsUseCase,
 } from '../../../application/use-cases/ListCatalogProductsUseCase';
@@ -85,9 +87,12 @@ function parseQuery(query: Request['query'], scope: 'buyer' | 'admin'): Parsed {
  * Bảo vệ các GET công khai của Catalog cho Buyer/khách và phạm vi Admin.
  * Seller, Staff và các vai trò khác được chuyển tiếp nguyên trạng cho router cũ.
  */
-export function createCatalogAccessRoutes(productRepository: IProductRepository): Router {
+export function createCatalogAccessRoutes(
+  productRepository: IProductRepository,
+  catalogQuery: ICatalogQuery = new InMemoryCatalogQuery(productRepository),
+): Router {
   const router = Router();
-  const listUseCase = new ListCatalogProductsUseCase(productRepository);
+  const listUseCase = new ListCatalogProductsUseCase(catalogQuery);
 
   const adminScopeGuard = (req: Request, res: Response): boolean => {
     const user = (req as AuthenticatedRequest).user;
