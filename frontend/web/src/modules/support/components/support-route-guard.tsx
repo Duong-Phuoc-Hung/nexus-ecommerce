@@ -41,7 +41,7 @@ export function SupportRouteGuard({ children }: { children: React.ReactNode }) {
   if (user?.role !== 'SUPPORT_STAFF' && user?.role !== 'ADMIN') {
     const handleSwitchAccount = async () => {
       await logout();
-      router.push('/login');
+      window.location.replace('/login');
     };
 
     return (

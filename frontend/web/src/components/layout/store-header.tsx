@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { NexusLogo } from './nexus-logo';
 import { AccountControls } from '@/modules/user/components/account-controls';
+import { BuyerStoreActions } from '@/modules/commerce/components/buyer-store-actions';
 export function StoreHeader() {
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-white/95 backdrop-blur-xl">
@@ -28,7 +29,14 @@ export function StoreHeader() {
           >
             Phiên đấu giá
           </Link>
+          <Link
+            href="/account/orders"
+            className="inline-flex min-h-11 items-center text-muted hover:text-brand-dark"
+          >
+            Đơn mua
+          </Link>
         </nav>
+        <BuyerStoreActions />
         <AccountControls />
       </div>
     </header>

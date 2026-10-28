@@ -524,6 +524,7 @@ export function MarketplaceDirectory({
                     key={p.id}
                     product={p}
                     elapsed={elapsed}
+                    canFavorite={false}
                     favorite={false}
                     onFavorite={() => setPrompt(p)}
                     onOpen={() => setPrompt(p)}

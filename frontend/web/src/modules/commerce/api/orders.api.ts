@@ -1,5 +1,5 @@
 import { requestApi } from '@/lib/axios/api-client';
-import { unwrap, type RequestApi } from '@/lib/axios/http';
+import { ApiError, unwrap, type RequestApi } from '@/lib/axios/http';
 
 export type OrderListItem = {
   id: string;
@@ -109,6 +109,27 @@ export function createOrdersApi(request: RequestApi) {
           body: { reason },
         }),
       );
+    },
+    async checkout(input: {
+      items: { productId: string; quantity: number }[];
+      shippingAddress: Record<string, string>;
+    }) {
+      const raw = unwrap<Record<string, unknown>>(
+        await request('/orders/checkout', { method: 'POST', body: input }),
+      );
+      if (
+        String(raw.clientSecret ?? '').includes('skeleton') ||
+        String(raw.message ?? '')
+          .toLowerCase()
+          .includes('skeleton')
+      ) {
+        throw new ApiError(
+          'Checkout phía máy chủ hiện vẫn ở chế độ khung thử nghiệm; chưa thể tạo đơn hoặc thanh toán thật.',
+          501,
+          'CHECKOUT_NOT_READY',
+        );
+      }
+      return raw;
     },
   };
 }

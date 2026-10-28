@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import { SellerRouteGuard } from './seller-route-guard';
@@ -18,12 +18,11 @@ const navigation = [
 
 export function SellerShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
   const { user, logout: logoutSession } = useSession();
 
   async function logout() {
     await logoutSession();
-    router.replace('/login');
+    window.location.replace('/login');
   }
 
   const displayName = user?.fullName || user?.email || 'Người bán';

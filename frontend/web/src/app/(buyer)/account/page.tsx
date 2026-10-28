@@ -1,9 +1,13 @@
 'use client';
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import { StoreHeader } from '@/components/layout/store-header';
+import { readContactPhone } from '@/modules/user/utils/address-book';
 export default function AccountPage() {
   const { user, phase, error, retry } = useSession();
+  const [phone, setPhone] = useState('');
+  useEffect(() => setPhone(user ? readContactPhone(user.id) : ''), [user?.id]);
   return (
     <>
       <StoreHeader />
@@ -44,6 +48,9 @@ export default function AccountPage() {
                 {[
                   ['Họ và tên', user.fullName],
                   ['Email', user.email],
+                  ...(user.role === 'BUYER'
+                    ? [['Điện thoại liên hệ', phone || 'Chưa bổ sung']]
+                    : []),
                   [
                     'Vai trò',
                     user.role === 'BUYER'
@@ -66,6 +73,22 @@ export default function AccountPage() {
                 Thông tin được xác minh từ phiên hiện tại. Chức năng chỉnh sửa hồ sơ sẽ được mở sau
                 khi hệ thống hỗ trợ.
               </p>
+              <div className="mt-5 flex flex-wrap gap-3">
+                {user.role === 'BUYER' && (
+                  <Link
+                    href="/account/addresses"
+                    className="inline-flex min-h-11 items-center rounded-xl bg-brand-dark px-5 text-sm font-semibold text-white"
+                  >
+                    Địa chỉ nhận hàng
+                  </Link>
+                )}
+                <Link
+                  href="/account/orders"
+                  className="inline-flex min-h-11 items-center rounded-xl border border-line px-5 text-sm font-semibold"
+                >
+                  Xem đơn hàng của tôi
+                </Link>
+              </div>
             </>
           )}
         </section>
