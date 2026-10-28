@@ -30,7 +30,7 @@ export function SupportShell({ children }: { children: ReactNode }) {
 
   async function logout() {
     await logoutSession();
-    router.push('/');
+    router.replace('/login');
   }
 
   return (

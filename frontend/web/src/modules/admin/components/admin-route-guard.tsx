@@ -1,20 +1,19 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { useSession } from '@/modules/auth/hooks/use-session';
 
 export function AdminRouteGuard({ children }: { children: React.ReactNode }) {
   const { user, phase, error, retry } = useSession();
   const router = useRouter();
-  const pathname = usePathname() || '/admin';
 
   useEffect(() => {
     if (phase === 'ready' && !user) {
-      router.replace('/login?next=' + encodeURIComponent(pathname));
+      router.replace('/login');
     }
-  }, [phase, user, pathname, router]);
+  }, [phase, user, router]);
 
   if (phase === 'loading' || (phase === 'ready' && !user)) {
     return (

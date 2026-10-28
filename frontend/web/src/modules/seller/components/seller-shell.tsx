@@ -23,7 +23,7 @@ export function SellerShell({ children }: { children: ReactNode }) {
 
   async function logout() {
     await logoutSession();
-    router.push('/');
+    router.replace('/login');
   }
 
   const displayName = user?.fullName || user?.email || 'Người bán';

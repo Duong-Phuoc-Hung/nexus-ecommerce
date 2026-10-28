@@ -304,7 +304,7 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
                             field('password', '123456');
                             setNotice('');
                             setErrors({});
-                            if (acc.email !== 'admin@gmail.com' && next.startsWith('/admin')) {
+                            if (params?.get('next')) {
                               history.replaceState(null, '', `/${mode}`);
                             }
                           }}
