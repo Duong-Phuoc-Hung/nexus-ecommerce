@@ -161,6 +161,8 @@ export function createApplication(): Application {
   app.use('/api/v1/categories', createProxy('Catalog Service', SERVICE_ENDPOINTS.catalog));
   app.use('/api/v1/auctions', createProxy('Auction Service', SERVICE_ENDPOINTS.auction));
   app.use('/api/v1/orders', createProxy('Commerce Service', SERVICE_ENDPOINTS.commerce));
+  app.use('/api/v1/checkout', createProxy('Commerce Service', SERVICE_ENDPOINTS.commerce));
+  app.use('/api/v1/payments', createProxy('Commerce Service', SERVICE_ENDPOINTS.commerce));
   app.use(
     '/api/v1/fulfillments',
     createProxy('Fulfillment Service', SERVICE_ENDPOINTS.fulfillment),
