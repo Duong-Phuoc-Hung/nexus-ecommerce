@@ -488,6 +488,7 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
                         name: product.name,
                         image: product.image,
                         price: product.price,
+                        saleType: product.mode === 'auction' ? 'AUCTION' : 'FIXED_PRICE',
                         href:
                           product.mode === 'auction'
                             ? '/auctions/' + encodeURIComponent(product.auctionId ?? product.id)
