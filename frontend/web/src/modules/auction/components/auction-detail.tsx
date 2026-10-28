@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Clock3, Gavel, ShieldCheck, ArrowUpRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { StoreHeader } from '@/components/layout/store-header';
 import { useSession } from '@/modules/auth/hooks/use-session';
+import { appConfig } from '@/configs/app.config';
 import {
   auctionApi,
   auctionStatusLabel,
@@ -33,6 +34,8 @@ function remaining(ms: number) {
     .padStart(2, '0')} : ${(s % 60).toString().padStart(2, '0')}`;
 }
 export function AuctionDetail({ id }: { id: string }) {
+  const requestVersion = useRef(0);
+  const [imageOpen, setImageOpen] = useState(false);
   const { user, phase } = useSession();
   const [auction, setAuction] = useState<Auction | null>(null),
     [error, setError] = useState('');
@@ -48,20 +51,26 @@ export function AuctionDetail({ id }: { id: string }) {
     key: string;
   } | null>(null);
   const refresh = useCallback(async () => {
+    const request = ++requestVersion.current;
     try {
       const snapshot = await auctionApi.detail(id);
+      if (request !== requestVersion.current) return;
       setAuction(snapshot.auction);
       setOffset(snapshot.serverTime - Date.now());
       setError('');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Không tải được phiên đấu.');
+      if (request === requestVersion.current)
+        setError(e instanceof Error ? e.message : 'Không tải được phiên đấu.');
     }
   }, [id]);
   useEffect(() => {
     void refresh();
     const off = auctionApi.subscribe(() => void refresh());
-    const timer = setInterval(() => void refresh(), 3000);
+    const timer = setInterval(() => {
+      if (!document.hidden) void refresh();
+    }, 3000);
     return () => {
+      requestVersion.current++;
       off();
       clearInterval(timer);
     };
@@ -73,20 +82,25 @@ export function AuctionDetail({ id }: { id: string }) {
   }, [offset]);
   const allowed =
     process.env.NODE_ENV === 'development' &&
+    appConfig.auctionSource === 'mock' &&
     phase === 'ready' &&
-    (!user || (user.role === 'BUYER' && user.status === 'ACTIVE'));
+    !!user &&
+    user.role === 'BUYER' &&
+    user.status === 'ACTIVE' &&
+    (!user.permissions || user.permissions.includes('AUCTION.BID'));
   async function confirmBid() {
-    if (!confirmation || !auction || busy) return;
+    if (!confirmation || !auction || busy || !user || !allowed) return;
     setBusy(true);
     setNotice('');
     try {
       const result = await auctionApi.bid(
         id,
         confirmation.amount,
-        user ?? { id: 'Bạn trên thiết bị này', role: 'BUYER', status: 'ACTIVE' },
+        user,
         confirmation.version,
         confirmation.key,
       );
+      requestVersion.current++;
       setAuction(result);
       setAmount('');
       setPage(1);
@@ -133,6 +147,9 @@ export function AuctionDetail({ id }: { id: string }) {
           <>
             <div className="grid items-start gap-8 lg:grid-cols-[1.1fr_1fr] lg:gap-12">
               <section aria-label="Thông tin món đồ" className="min-w-0">
+                <Button variant="outline" className="mb-3" onClick={() => setImageOpen(true)}>
+                  Xem ảnh lớn
+                </Button>
                 <div className="relative overflow-hidden rounded-3xl bg-stone-100">
                   <img
                     src={auction.image}
@@ -180,7 +197,11 @@ export function AuctionDetail({ id }: { id: string }) {
                     </div>
                     <div>
                       <p className="text-muted">Lượt trả giá</p>
-                      <strong>{history.length} lượt</strong>
+                      <strong>
+                        {auction.bidCount === null
+                          ? 'Đang cập nhật'
+                          : `${auction.bidCount ?? history.length} lượt`}
+                      </strong>
                     </div>
                   </div>
                   {['ACTIVE', 'SCHEDULED'].includes(auction.status) && (
@@ -258,9 +279,11 @@ export function AuctionDetail({ id }: { id: string }) {
                       </Button>
                       {!allowed && (
                         <p className="mt-3 text-sm text-muted">
-                          {user && user.role !== 'BUYER'
-                            ? 'Tài khoản này không có quyền đặt giá.'
-                            : 'Chức năng đặt giá hiện chưa khả dụng.'}
+                          {appConfig.auctionSource === 'api'
+                            ? 'Backend chưa hoàn thiện xử lý đặt giá trực tuyến.'
+                            : user && user.role !== 'BUYER'
+                              ? 'Tài khoản này không có quyền đặt giá.'
+                              : 'Chức năng đặt giá hiện chưa khả dụng.'}
                         </p>
                       )}
                       {!user && (
@@ -278,9 +301,11 @@ export function AuctionDetail({ id }: { id: string }) {
                         ? `Phiên đã hủy. ${auction.cancelReason ?? ''}`
                         : auction.status === 'SCHEDULED'
                           ? 'Phiên chưa bắt đầu. Hãy quay lại đúng thời gian để tham gia.'
-                          : history.length
-                            ? 'Phiên đã kết thúc. Kết quả trên thiết bị chưa xác nhận quyền mua hàng.'
-                            : 'Phiên kết thúc mà chưa có lượt trả giá.'}
+                          : auction.bidHistoryAvailable === false
+                            ? 'Phiên đã kết thúc; backend chưa cung cấp lịch sử trả giá.'
+                            : history.length
+                              ? 'Phiên đã kết thúc. Đang chờ xác nhận kết quả; chưa phát sinh đơn hàng.'
+                              : 'Phiên kết thúc mà chưa có lượt trả giá.'}
                     </div>
                   )}
                   {notice && (
@@ -291,6 +316,23 @@ export function AuctionDetail({ id }: { id: string }) {
                 </div>
               </section>
             </div>
+            {active && user?.role === 'BUYER' && history.some((b) => b.bidder === user.id) && (
+              <div
+                role="status"
+                className="mt-6 rounded-2xl border border-line bg-slate-50 p-5 text-sm"
+              >
+                <strong>
+                  {history[0]?.bidder === user.id
+                    ? 'Bạn đang dẫn đầu phiên đấu'
+                    : 'Mức giá của bạn đã được vượt qua'}
+                </strong>
+                <p className="mt-2 text-muted">
+                  {history[0]?.bidder === user.id
+                    ? 'Theo dõi phiên đến khi kết thúc để nhận kết quả xác nhận.'
+                    : 'Xem mức giá mới nhất trước khi quyết định trả giá tiếp.'}
+                </p>
+              </div>
+            )}
             <div className="mt-10 grid gap-8 lg:grid-cols-[1.1fr_1fr]">
               <section className="rounded-3xl border border-line p-6 sm:p-8">
                 <h2 className="text-xl font-bold">Câu chuyện món đồ</h2>
@@ -316,7 +358,11 @@ export function AuctionDetail({ id }: { id: string }) {
                   <span className="text-xs text-muted">Mới nhất trước</span>
                 </div>
                 {!history.length ? (
-                  <p className="py-10 text-center text-muted">Chưa có lượt trả giá nào.</p>
+                  <p className="py-10 text-center text-muted">
+                    {auction.bidHistoryAvailable === false
+                      ? 'Backend chưa cung cấp lịch sử trả giá cho phiên này.'
+                      : 'Chưa có lượt trả giá nào.'}
+                  </p>
                 ) : (
                   <ol className="mt-4 divide-y divide-line">
                     {history.slice((visiblePage - 1) * 5, visiblePage * 5).map((bid, i) => (
@@ -370,6 +416,24 @@ export function AuctionDetail({ id }: { id: string }) {
           </>
         )}
       </main>
+      <Dialog open={imageOpen} onOpenChange={setImageOpen}>
+        <DialogContent className="max-w-3xl p-5">
+          <DialogTitle>Hình ảnh sản phẩm</DialogTitle>
+          <DialogDescription>{auction?.title}</DialogDescription>
+          {auction && (
+            <img
+              src={auction.image}
+              alt={auction.title}
+              className="mt-4 max-h-[65vh] w-full rounded-2xl object-contain"
+            />
+          )}
+          <DialogClose asChild>
+            <Button variant="outline" className="mt-4 w-full">
+              Đóng ảnh
+            </Button>
+          </DialogClose>
+        </DialogContent>
+      </Dialog>
       <Dialog
         open={!!confirmation}
         onOpenChange={(open) => {

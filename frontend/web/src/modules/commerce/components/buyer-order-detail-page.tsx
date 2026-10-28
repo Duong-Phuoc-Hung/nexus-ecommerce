@@ -2,8 +2,8 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { StoreHeader } from '@/components/layout/store-header';
-import { ordersApi } from '@/modules/commerce/api/orders.api';
-import type { OrderDetail } from '@/modules/commerce/api/orders.api';
+import { commerceApi } from '../api/commerce.api';
+import type { OrderDetail } from '../types/order.types';
 import { userMessage } from '@/lib/axios/http';
 import { useSession } from '@/modules/auth/hooks/use-session';
 export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
@@ -13,8 +13,8 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
   useEffect(() => {
     if (phase === 'loading' || !user || user.role !== 'BUYER') return;
     const c = new AbortController();
-    ordersApi
-      .getById(orderId, c.signal)
+    commerceApi
+      .getOrder(orderId, c.signal)
       .then(setOrder)
       .catch((e) => {
         if (!c.signal.aborted) setError(userMessage(e));
