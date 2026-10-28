@@ -13,6 +13,7 @@ import { defaultQuery } from '@/modules/catalog/api/catalog.factory';
 import { appConfig } from '@/configs/app.config';
 import { userMessage } from '@/lib/axios/http';
 import { AccountControls } from '@/modules/user/components/account-controls';
+import { BuyerStoreActions } from '@/modules/commerce/components/buyer-store-actions';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import type { CategoryId, MarketplaceFeed, MarketplaceProduct } from '../types/marketplace.types';
 import { MarketplaceIcon } from './marketplace-icon';
@@ -269,13 +270,16 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
               <span className="hidden sm:inline">Tìm kiếm</span>
             </Button>
           </form>
-          <a
-            href="/account"
-            className="ml-auto inline-flex min-h-11 items-center gap-2 text-sm font-medium text-ink"
-          >
-            <MarketplaceIcon name="users" className="size-5" />
-            <span className="hidden sm:block">Tài khoản</span>
-          </a>
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
+            <BuyerStoreActions />
+            <Link
+              href="/account"
+              className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-ink"
+            >
+              <MarketplaceIcon name="users" className="size-5" />
+              <span className="hidden sm:block">Tài khoản</span>
+            </Link>
+          </div>
         </div>
         <div className="nexus-container relative flex min-h-12 items-center justify-between gap-4 border-t border-line/60 text-xs font-medium">
           <nav aria-label="Điều hướng chính" className="flex items-center gap-4 sm:gap-7">
