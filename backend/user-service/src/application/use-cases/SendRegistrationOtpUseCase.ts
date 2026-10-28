@@ -37,7 +37,16 @@ export class SendRegistrationOtpUseCase {
     await this.otpStore.saveOtp(normalizedEmail, otpCode, 300);
 
     // 4. Bắn email qua Notification Service (Gmail SMTP)
-    await this.notificationClient.sendOtpEmail(normalizedEmail, otpCode, fullName);
+    const emailSent = await this.notificationClient.sendOtpEmail(
+      normalizedEmail,
+      otpCode,
+      fullName,
+    );
+    if (!emailSent && process.env.NODE_ENV !== 'test') {
+      throw new Error(
+        'Không thể gửi email OTP do Notification Service (cổng 4006) chưa được khởi động. Vui lòng chạy lệnh: pnpm --filter @nexus/notification-service dev',
+      );
+    }
 
     const response: { success: boolean; message: string; devOtp?: string } = {
       success: true,
@@ -46,7 +55,7 @@ export class SendRegistrationOtpUseCase {
     };
 
     // Trong môi trường dev/test, trả kèm mã để dễ dàng kiểm thử tự động
-    if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {
+    if (process.env.NODE_ENV !== 'production') {
       response.devOtp = otpCode;
     }
 
