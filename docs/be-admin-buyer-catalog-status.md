@@ -34,13 +34,12 @@ File dùng chung bị chạm: `app.ts` (1 import, 1 dòng gắn router).
 
 ## Chưa làm
 
-| Hạng mục (api-status)                                | Lý do                                                |
-| ---------------------------------------------------- | ---------------------------------------------------- |
-| P1: chuẩn hóa lỗi và mã 409 cho luồng ghi của Seller | Thuộc luồng Seller, cần nhóm 1 đồng ý                |
-| `/search` không có `q` trả 400                       | Giữ hợp đồng cũ của nhóm 1                           |
-| Cập nhật Swagger                                     | File Gateway dùng chung                              |
-| Nghiệm thu qua API Gateway (cổng 4000)               | Chưa chạy; mới test Catalog trực tiếp trên DB Docker |
-| Ghi bằng Admin qua User Service thật                 | Test dùng directory giả; chưa chạy với User Service  |
+| Hạng mục (api-status)                                 | Lý do                                               |
+| ----------------------------------------------------- | --------------------------------------------------- |
+| P1: chuẩn hóa lỗi và mã 409 cho luồng ghi của Seller  | Thuộc luồng Seller, cần nhóm 1 đồng ý               |
+| `/search` không có `q` trả 400                        | Giữ hợp đồng cũ của nhóm 1                          |
+| Cập nhật Swagger                                      | File Gateway dùng chung                             |
+| Gọi Catalog trực tiếp (4002) và User Service Postgres | Chỉ mới chạy qua Gateway với User Service in-memory |
 
 Đã xong: lọc, sắp xếp, phân trang và đếm tổng của `GET /products` (Buyer/Admin) chạy bằng SQL (`PostgresCatalogQuery`), chỉ đọc đúng 1 trang. Chế độ in-memory/test vẫn dùng `InMemoryCatalogQuery`.
 
@@ -50,8 +49,10 @@ Router mới `CatalogAdminWriteRoutes.ts`, đăng ký trước router cũ. Chỉ
 
 - `POST /products`: Admin phải truyền `sellerId`; Seller được xác minh qua `GET /users/:id` của User Service (dùng token của Admin): 404 nếu không có, 422 nếu không phải Seller hoặc không `ACTIVE`, 503 nếu không tra cứu được. Sản phẩm thuộc đúng Seller đó.
 - `PUT/DELETE /products/:id`: Admin sửa/xóa sản phẩm của Seller bất kỳ (tái dùng use case cũ, không sửa).
-- Quyền: kiểm tra `PRODUCT.CREATE/UPDATE/DELETE` trong claim `permissions` của JWT (thiếu thì 403). Nếu không có claim (ví dụ đi qua header Gateway) thì dựa vào role ADMIN như trước.
+- Quyền: kiểm tra `PRODUCT.CREATE/UPDATE/DELETE` trong claim `permissions` của JWT (thiếu thì 403). Nếu không có claim, hoặc claim rỗng (token User Service hiện cấp `privileges: []`), thì dựa vào role ADMIN.
 - Test: `src/catalog-admin-write.test.ts` (in-memory, directory giả), pass cùng `app.test.ts`.
+- Đã kiểm chứng chạy thật: Admin → Gateway (4000) → User Service (4001, in-memory) → Catalog (4002, Postgres Docker). Admin tạo sản phẩm cho Seller (201, đúng `sellerId`), sửa, xóa; `sellerId` thiếu 400, không tồn tại 404, là Buyer 422; Buyer 403, không token 401; Seller vẫn ghi qua router cũ.
+- Lưu ý: Seller gọi `GET /products` mà không gửi token sẽ bị coi là khách (không thấy sản phẩm nháp) — đúng thiết kế, Seller luôn phải gửi Bearer token.
 - Cần cấu hình `USER_SERVICE_URL` (mặc định `http://localhost:4001`).
 
 ## Lưu ý cho nhóm 1

@@ -19,14 +19,16 @@ function fail(res: Response, status: number, code: string, error: string): void 
   res.status(status).json({ success: false, error, code });
 }
 
-/** Quyền lấy từ claim `permissions`/`privileges` của JWT đã được xác thực; không có claim thì dựa vào role ADMIN. */
+/** Quyền lấy từ claim `permissions`/`privileges` của JWT đã được xác thực; không có claim (hoặc rỗng, như token User Service hiện cấp) thì dựa vào role ADMIN. */
 function tokenPermissions(req: Request): string[] | null {
   const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
   if (!token) return null;
   try {
     const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'));
-    const list = payload.permissions ?? payload.privileges;
-    return Array.isArray(list) ? list.map(String) : null;
+    const list = [payload.permissions, payload.privileges].find(
+      (v) => Array.isArray(v) && v.length > 0,
+    );
+    return list ? list.map(String) : null;
   } catch {
     return null;
   }

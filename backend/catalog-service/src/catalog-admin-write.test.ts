@@ -155,6 +155,15 @@ test('Admin write flow: create for a seller, update, delete, with permission and
   });
 });
 
+test('Admin token with an empty permissions claim falls back to the ADMIN role', async () => {
+  await withServer(async (call) => {
+    const admin = token('ADMIN', 'admin-1', []);
+    const created = await call('POST', '/', admin, { ...payload, sellerId: 'seller-1' });
+    assert.equal(created.status, 201);
+    assert.equal((await call('DELETE', `/${created.json.data.id}`, admin)).status, 200);
+  });
+});
+
 test('Seller and anonymous write flow still goes through the original router', async () => {
   await withServer(async (call) => {
     const seller = token('SELLER', 'seller-1');
