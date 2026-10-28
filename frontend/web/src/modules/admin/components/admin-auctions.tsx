@@ -77,9 +77,7 @@ export function AdminAuctions() {
             AUCTION MANAGEMENT
           </p>
           <h1 className="text-3xl font-bold">Quản lý phiên đấu</h1>
-          <p className="mt-3 text-muted">Dữ liệu được tải từ Auction API.</p>
         </div>
-        <span className="text-sm text-muted">Chỉ xem · thao tác quản lý chưa được API hỗ trợ</span>
       </div>
 
       <div className="my-7 grid grid-cols-2 gap-3 lg:grid-cols-4">

@@ -40,9 +40,7 @@ export function AdminProducts() {
         <div>
           <p className="admin-eyebrow">CATALOG</p>
           <h1>Quản lý sản phẩm</h1>
-          <p className="admin-muted">Đối chiếu nội dung, giá và trạng thái hiển thị tại một nơi.</p>
         </div>
-        <span className="admin-muted">Danh sách từ Catalog API</span>
       </div>
 
       <section className="admin-card">
