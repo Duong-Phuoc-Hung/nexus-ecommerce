@@ -467,6 +467,19 @@
   color: #dc2626;
   border: 1px solid #fecaca;
 }
+.seller-status.archived,
+.seller-status.lưu-trữ {
+  background: #fefce8;
+  color: #a16207;
+  border: 1px solid #fef08a;
+}
+.seller-status.out_of_stock,
+.seller-status.out-of-stock,
+.seller-status.hết-hàng {
+  background: #fff1f2;
+  color: #e11d48;
+  border: 1px solid #fecdd3;
+}
 .seller-recover-btn {
   display: inline-flex;
   align-items: center;

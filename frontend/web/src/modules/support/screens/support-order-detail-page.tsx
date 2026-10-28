@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ordersApi, type OrderDetail } from '@/modules/commerce/api/orders.api';
 import { userMessage } from '@/lib/axios/http';
-import { money, slug, Heading, DemoBanner } from '../components/support-shared';
+import { money, slug, supportStatusClass, Heading, DemoBanner } from '../components/support-shared';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { getOrderStatusLabel } from './support-orders-page';
 
@@ -90,7 +90,7 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
                   <p className="support-eyebrow">MÃ ĐƠN HÀNG</p>
                   <h2>{order.id}</h2>
                 </div>
-                <span className={`support-status ${slug(order.status)}`}>
+                <span className={`support-status ${supportStatusClass(order.status)}`}>
                   {getOrderStatusLabel(order.status)}
                 </span>
               </div>

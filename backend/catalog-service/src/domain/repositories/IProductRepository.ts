@@ -27,4 +27,5 @@ export interface IProductRepository {
   save(product: Product): Promise<string>;
   update(product: Product): Promise<void>;
   delete(id: string): Promise<void>;
+  recover?(id: string, sellerId?: string): Promise<void>;
 }

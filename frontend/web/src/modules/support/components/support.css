@@ -349,24 +349,132 @@
   background: #edf3f6;
   color: #627f8e;
 }
-.support-status.chờ-xử-lý {
-  background: #fff4df;
-  color: #9b6b12;
-}
-.support-status.đang-giao,
-.support-status.đang-lấy-hàng {
-  background: #eaf2ff;
-  color: #3766a9;
-}
-.support-status.hoàn-tất,
-.support-status.đã-giao,
-.support-status.hoạt-động {
-  background: #e7f7ef;
-  color: #218254;
-}
-.support-status.đã-hủy {
+.support-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 99px;
   background: #f0f2f5;
-  color: #758094;
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.25;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+/* Đơn hàng & Vận đơn: Chờ xử lý / Chờ lấy hàng - Hổ phách/Vàng cam */
+.support-status.status-pending,
+.support-status.pending,
+.support-status.chờ-xử-lý {
+  background: #fffbeb;
+  color: #b45309;
+  border-color: #fde68a;
+}
+.support-status.status-ready-to-pick,
+.support-status.ready_to_pick,
+.support-status.chờ-lấy-hàng {
+  background: #fefce8;
+  color: #a16207;
+  border-color: #fef08a;
+}
+
+/* Đang xử lý / Đã lấy hàng - Xanh dương hoặc Teal */
+.support-status.status-processing,
+.support-status.processing,
+.support-status.đang-xử-lý {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+.support-status.status-picked,
+.support-status.picked,
+.support-status.đã-lấy-hàng {
+  background: #f0fdfa;
+  color: #0f766e;
+  border-color: #99f6e4;
+}
+
+/* Đang giao hàng / Đang vận chuyển - Xanh da trời & Indigo */
+.support-status.status-shipped,
+.support-status.shipped,
+.support-status.đang-giao,
+.support-status.đang-giao-hàng {
+  background: #e0f2fe;
+  color: #0369a1;
+  border-color: #bae6fd;
+}
+.support-status.status-in-transit,
+.support-status.in_transit,
+.support-status.đang-vận-chuyển {
+  background: #e0e7ff;
+  color: #4338ca;
+  border-color: #c7d2fe;
+}
+.support-status.status-out-for-delivery,
+.support-status.out_for_delivery {
+  background: #f0f9ff;
+  color: #0284c7;
+  border-color: #7dd3fc;
+}
+
+/* Thành công / Đã giao hàng / Hoạt động - Xanh lá */
+.support-status.status-delivered,
+.support-status.delivered,
+.support-status.đã-giao,
+.support-status.đã-giao-hàng,
+.support-status.hoàn-tất,
+.support-status.status-active,
+.support-status.active,
+.support-status.hoạt-động,
+.support-status.đang-hoạt-động {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+/* Đã hủy / Thất bại / Tạm khóa - Đỏ cảnh báo */
+.support-status.status-cancelled,
+.support-status.cancelled,
+.support-status.đã-hủy,
+.support-status.status-failed,
+.support-status.failed,
+.support-status.giao-hàng-thất-bại,
+.support-status.status-locked,
+.support-status.locked,
+.support-status.suspended,
+.support-status.banned,
+.support-status.tạm-khóa {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+/* Đã hoàn tiền - Hồng / Tím */
+.support-status.status-refunded,
+.support-status.refunded,
+.support-status.đã-hoàn-tiền {
+  background: #fdf2f8;
+  color: #be185d;
+  border-color: #fbcfe8;
+}
+
+/* Đã trả hàng - Cam đất */
+.support-status.status-returned,
+.support-status.returned,
+.support-status.đã-trả-hàng {
+  background: #fff7ed;
+  color: #c2410c;
+  border-color: #fed7aa;
+}
+
+/* Ngừng hoạt động - Xám */
+.support-status.status-inactive,
+.support-status.inactive,
+.support-status.ngừng-hoạt-động {
+  background: #f1f5f9;
+  color: #64748b;
+  border-color: #e2e8f0;
 }
 .support-role {
   background: #eef3f7;

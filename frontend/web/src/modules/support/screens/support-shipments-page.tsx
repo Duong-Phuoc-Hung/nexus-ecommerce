@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { supportShipmentsApi, type Shipment } from '@/modules/fulfillment/api/shipments.api';
 import { userMessage } from '@/lib/axios/http';
-import { slug, Heading, DemoBanner } from '../components/support-shared';
+import { slug, supportStatusClass, Heading, DemoBanner } from '../components/support-shared';
 import {
   Select,
   SelectContent,
@@ -206,7 +206,7 @@ export function SupportShipmentsPage() {
                     <td>{shipment.recipient}</td>
                     <td>
                       <span
-                        className={`support-status ${slug(shipment.statusCode || shipment.status)}`}
+                        className={`support-status ${supportStatusClass(shipment.statusCode || shipment.status)}`}
                       >
                         {getShipmentStatusLabel(shipment.statusCode, shipment.status)}
                       </span>
@@ -239,7 +239,9 @@ export function SupportShipmentsPage() {
               <p className="support-eyebrow">CHI TIẾT VẬN ĐƠN · HỆ THỐNG</p>
               <h2>{selected.code}</h2>
             </div>
-            <span className={`support-status ${slug(selected.statusCode || selected.status)}`}>
+            <span
+              className={`support-status ${supportStatusClass(selected.statusCode || selected.status)}`}
+            >
               {getShipmentStatusLabel(selected.statusCode, selected.status)}
             </span>
           </div>
