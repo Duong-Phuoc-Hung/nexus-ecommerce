@@ -64,7 +64,7 @@ export function SellerShell({ children }: { children: ReactNode }) {
           })}
         </nav>
         <div className="seller-sidebar-foot">
-          <span>DEMO WORKSPACE</span>
+          <span>KHO HÀNG ĐỐI TÁC</span>
           <br />
           Nexus Marketplace
         </div>

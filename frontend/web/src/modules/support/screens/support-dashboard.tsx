@@ -56,7 +56,7 @@ export function SupportDashboard() {
       <section className="support-panel">
         <div className="support-panel-heading">
           <div>
-            <p className="support-eyebrow">WORK QUEUE · API</p>
+            <p className="support-eyebrow">HÀNG ĐỢI XỬ LÝ · HỆ THỐNG</p>
             <h2>Yêu cầu đang chờ</h2>
           </div>
           <Link href="/support/orders">Tra cứu đơn hàng →</Link>
@@ -77,7 +77,7 @@ export function SupportDashboard() {
         <Link href="/support/users">
           <span>◎</span>
           <strong>Tra cứu người dùng</strong>
-          <small>Xem hồ sơ Buyer/Seller và thông tin uy tín</small>
+          <small>Xem hồ sơ Khách hàng / Đối tác và thông tin uy tín</small>
           <b>→</b>
         </Link>
         <Link href="/support/shipments">

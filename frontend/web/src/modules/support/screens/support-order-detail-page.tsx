@@ -5,12 +5,19 @@ import { useEffect, useState } from 'react';
 import { ordersApi, type OrderDetail } from '@/modules/commerce/api/orders.api';
 import { userMessage } from '@/lib/axios/http';
 import { money, slug, Heading, DemoBanner } from '../components/support-shared';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { getOrderStatusLabel } from './support-orders-page';
 
 export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [acting, setActing] = useState(false);
+
+  // Modal dialog state for Cancel / Refund actions
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [actionKind, setActionKind] = useState<'cancel' | 'refund' | null>(null);
+  const [actionReason, setActionReason] = useState('');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -22,26 +29,34 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
     return () => controller.abort();
   }, [orderId]);
 
-  async function action(kind: 'cancel' | 'refund') {
-    const defaultReason =
+  function handleOpenDialog(kind: 'cancel' | 'refund') {
+    setActionKind(kind);
+    setActionReason(
       kind === 'cancel'
-        ? 'Xử lý từ màn hình Support Staff.'
-        : 'Yêu cầu hoàn tiền được Support Staff xử lý.';
-    const reason = window.prompt(
-      `Nhập lý do ${kind === 'cancel' ? 'hủy đơn' : 'hoàn tiền'}:`,
-      defaultReason,
+        ? 'Xử lý hủy đơn từ bộ phận Chăm sóc khách hàng.'
+        : 'Yêu cầu hoàn tiền được bộ phận CSKH phê duyệt.',
     );
-    if (reason === null || !reason.trim()) return;
+    setDialogOpen(true);
+  }
+
+  async function handleConfirmAction(e: React.FormEvent) {
+    e.preventDefault();
+    if (!actionKind || !actionReason.trim()) return;
 
     setActing(true);
     setNotice('');
     try {
       const updated =
-        kind === 'cancel'
-          ? await ordersApi.cancel(orderId, reason.trim())
-          : await ordersApi.refund(orderId, reason.trim());
+        actionKind === 'cancel'
+          ? await ordersApi.cancel(orderId, actionReason.trim())
+          : await ordersApi.refund(orderId, actionReason.trim());
       setOrder(updated);
-      setNotice(kind === 'cancel' ? 'Đơn hàng đã được hủy.' : 'Yêu cầu hoàn tiền đã được xử lý.');
+      setNotice(
+        actionKind === 'cancel'
+          ? 'Đơn hàng đã được hủy thành công.'
+          : 'Yêu cầu hoàn tiền cho đơn hàng đã được xử lý thành công.',
+      );
+      setDialogOpen(false);
     } catch (err) {
       setNotice(userMessage(err));
     } finally {
@@ -52,40 +67,42 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
   return (
     <>
       <Heading
-        label="SUPPORT STAFF / ORDER DETAIL"
+        label="BỘ PHẬN HỖ TRỢ / CHI TIẾT ĐƠN HÀNG"
         title="Hồ sơ đơn hàng"
-        description="Thông tin giao dịch, người mua/người bán và diễn biến trạng thái."
+        description="Thông tin giao dịch, khách hàng, người bán và lịch sử cập nhật trạng thái."
         action={
           <Link className="support-secondary-button" href="/support/orders">
             ← Danh sách đơn
           </Link>
         }
       />
-      <DemoBanner message="Chi tiết và thao tác đơn hàng sử dụng Commerce API." />
+      <DemoBanner message="Chi tiết và thao tác đơn hàng được xử lý trực tiếp qua Commerce API." />
       {error ? (
         <div className="support-empty">{error}</div>
       ) : !order ? (
-        <div className="support-empty">Đang tải đơn hàng…</div>
+        <div className="support-empty">Đang tải thông tin đơn hàng…</div>
       ) : (
         <>
           <div className="support-detail-grid">
             <section className="support-panel">
               <div className="support-panel-heading">
                 <div>
-                  <p className="support-eyebrow">ORDER ID</p>
+                  <p className="support-eyebrow">MÃ ĐƠN HÀNG</p>
                   <h2>{order.id}</h2>
                 </div>
-                <span className={`support-status ${slug(order.status)}`}>{order.status}</span>
+                <span className={`support-status ${slug(order.status)}`}>
+                  {getOrderStatusLabel(order.status)}
+                </span>
               </div>
               <div className="support-detail-content">
                 <div className="support-info-grid">
                   <div>
-                    <small>Người mua</small>
+                    <small>Khách hàng (Người mua)</small>
                     <strong>{order.buyer}</strong>
                     <span>{order.email}</span>
                   </div>
                   <div>
-                    <small>Người bán</small>
+                    <small>Đối tác (Người bán)</small>
                     <strong>{order.seller}</strong>
                     <span>{order.sellerId}</span>
                   </div>
@@ -97,17 +114,17 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
                     <span>Số lượng món: {order.items?.length ?? 1}</span>
                   </div>
                   <div>
-                    <small>Tổng thanh toán</small>
+                    <small>Tổng giá trị thanh toán</small>
                     <strong>{money(order.totalAmount)}</strong>
-                    <span>Thanh toán: {order.paymentTransactionId ?? 'Đang cập nhật'}</span>
+                    <span>Mã giao dịch: {order.paymentTransactionId ?? 'Đang cập nhật'}</span>
                   </div>
                   <div>
                     <small>Mã vận đơn</small>
                     <strong>{order.tracking}</strong>
-                    <span>Kênh: Nexus Marketplace</span>
+                    <span>Kênh: Sàn thương mại điện tử Nexus</span>
                   </div>
                   <div>
-                    <small>Ngày đặt</small>
+                    <small>Thời gian đặt hàng</small>
                     <strong>{new Date(order.createdAt).toLocaleDateString('vi-VN')}</strong>
                     <span>Cập nhật: {new Date(order.updatedAt).toLocaleString('vi-VN')}</span>
                   </div>
@@ -117,7 +134,7 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
             <section className="support-panel">
               <div className="support-panel-heading">
                 <div>
-                  <p className="support-eyebrow">ORDER LIFECYCLE</p>
+                  <p className="support-eyebrow">TIẾN TRÌNH ĐƠN HÀNG</p>
                   <h2>Lịch sử trạng thái</h2>
                 </div>
               </div>
@@ -153,7 +170,7 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
                       <th>Tên sản phẩm</th>
                       <th>Số lượng</th>
                       <th>Đơn giá</th>
-                      <th>Tổng</th>
+                      <th>Tổng tiền</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -175,17 +192,17 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
           )}
           <section className="support-panel support-actions-panel">
             <div>
-              <p className="support-eyebrow">SUPPORT ACTIONS · API</p>
-              <h2>Thao tác xử lý</h2>
+              <p className="support-eyebrow">THAO TÁC HỖ TRỢ · HỆ THỐNG</p>
+              <h2>Thao tác can thiệp đơn</h2>
               <p>
-                Thao tác gửi request tới Commerce API và tuân theo quyền của tài khoản hiện tại.
+                Thao tác gửi yêu cầu tới Commerce API và tuân theo phân quyền của bộ phận Hỗ trợ.
               </p>
             </div>
             <div className="support-action-buttons">
-              <button type="button" disabled={acting} onClick={() => action('cancel')}>
-                Hủy đơn
+              <button type="button" disabled={acting} onClick={() => handleOpenDialog('cancel')}>
+                Hủy đơn hàng
               </button>
-              <button type="button" disabled={acting} onClick={() => action('refund')}>
+              <button type="button" disabled={acting} onClick={() => handleOpenDialog('refund')}>
                 Xử lý hoàn tiền
               </button>
             </div>
@@ -197,6 +214,59 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
           </section>
         </>
       )}
+
+      {/* Form Dialog Modal thay thế window.prompt */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="p-6 bg-white rounded-2xl shadow-2xl max-w-md w-full">
+          <DialogTitle className="text-lg font-bold text-slate-800">
+            {actionKind === 'cancel' ? 'Xác nhận hủy đơn hàng' : 'Xác nhận xử lý hoàn tiền'}
+          </DialogTitle>
+          <DialogDescription className="text-xs text-slate-500 mt-1">
+            {actionKind === 'cancel'
+              ? `Bạn đang thực hiện hủy đơn hàng ${order?.id}. Vui lòng nhập lý do can thiệp bên dưới:`
+              : `Bạn đang phê duyệt hoàn tiền cho đơn hàng ${order?.id}. Vui lòng nhập ghi chú lý do hoàn tiền:`}
+          </DialogDescription>
+          <form onSubmit={handleConfirmAction} className="mt-4 space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Lý do thao tác:
+              </label>
+              <textarea
+                value={actionReason}
+                onChange={(e) => setActionReason(e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                placeholder="Nhập lý do chi tiết..."
+                required
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDialogOpen(false)}
+                className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="submit"
+                disabled={acting || !actionReason.trim()}
+                className={`px-4 py-2 text-white rounded-lg text-xs font-semibold disabled:opacity-50 transition ${
+                  actionKind === 'cancel'
+                    ? 'bg-red-600 hover:bg-red-700'
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                {acting
+                  ? 'Đang xử lý…'
+                  : actionKind === 'cancel'
+                    ? 'Xác nhận hủy đơn'
+                    : 'Xác nhận hoàn tiền'}
+              </button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

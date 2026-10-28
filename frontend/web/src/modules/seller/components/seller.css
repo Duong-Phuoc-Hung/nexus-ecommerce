@@ -461,6 +461,35 @@
   background: #eaf2ff;
   color: #3766a9;
 }
+.seller-status.deleted,
+.seller-status.đã-xóa {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+.seller-recover-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.seller-recover-btn:hover {
+  background: #d1fae5;
+  border-color: #6ee7b7;
+  color: #065f46;
+}
+.seller-recover-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .seller-row-link {
   color: #bf1c25;
   font-weight: 650;

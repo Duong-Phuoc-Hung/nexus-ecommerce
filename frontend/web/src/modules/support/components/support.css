@@ -509,22 +509,124 @@
 }
 .support-timeline li > span {
   z-index: 1;
-  width: 11px;
-  height: 11px;
+  width: 13px;
+  height: 13px;
   flex: 0 0 auto;
   margin-top: 2px;
   border: 2px solid #cbd3dc;
   border-radius: 50%;
   background: white;
 }
-.support-timeline li.complete > span {
-  border-color: #4da77a;
-  background: #4da77a;
+.support-timeline li.complete > span,
+.support-timeline li.done > span {
+  border-color: #10b981;
+  background: #10b981;
 }
 .support-timeline li.current > span {
-  border-color: #d69b37;
-  background: #fff4df;
-  box-shadow: 0 0 0 3px #fff4df;
+  border-color: #3b82f6;
+  background: #eff6ff;
+  box-shadow: 0 0 0 4px #dbeafe;
+}
+.support-timeline li.pending > span {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+.support-timeline-desc {
+  margin: 4px 0 0;
+  font-size: 0.68rem;
+  color: #64748b;
+}
+
+/* Delivery Progress Stepper */
+.support-stepper-container {
+  margin: 20px 0 10px;
+  padding: 16px 20px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+.support-section-subtitle {
+  margin: 0 0 16px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #334155;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.support-stepper {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  position: relative;
+  width: 100%;
+}
+.support-step-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  position: relative;
+  text-align: center;
+}
+.support-step-indicator {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  position: relative;
+}
+.support-step-badge {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin: 0 auto;
+  z-index: 2;
+  transition: all 0.2s ease;
+}
+.support-step-item.is-done .support-step-badge {
+  background: #10b981;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.35);
+}
+.support-step-item.is-current .support-step-badge {
+  background: #3b82f6;
+  color: #ffffff;
+  box-shadow: 0 0 0 4px #dbeafe;
+}
+.support-step-item.is-pending .support-step-badge {
+  background: #f1f5f9;
+  border: 2px solid #cbd5e1;
+  color: #94a3b8;
+}
+.support-step-line {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  width: 100%;
+  height: 3px;
+  background: #e2e8f0;
+  z-index: 1;
+  transition: background 0.3s ease;
+}
+.support-step-line.is-active {
+  background: #10b981;
+}
+.support-step-text {
+  margin-top: 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #64748b;
+}
+.support-step-item.is-done .support-step-text {
+  color: #059669;
+}
+.support-step-item.is-current .support-step-text {
+  color: #1d4ed8;
+  font-weight: 700;
 }
 .support-timeline strong,
 .support-timeline small {

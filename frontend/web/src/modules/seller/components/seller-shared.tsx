@@ -59,6 +59,27 @@ export function MetricCard({
   );
 }
 
+export function getSharedOrderStatusLabel(status: string): string {
+  switch (status) {
+    case 'PENDING':
+    case 'Chờ xác nhận':
+      return 'Chờ xử lý';
+    case 'PROCESSING':
+      return 'Đang xử lý';
+    case 'SHIPPED':
+    case 'Đang giao':
+      return 'Đang giao';
+    case 'DELIVERED':
+    case 'Hoàn tất':
+      return 'Hoàn tất';
+    case 'CANCELLED':
+    case 'Đã hủy':
+      return 'Đã hủy';
+    default:
+      return status;
+  }
+}
+
 export function OrdersTable({
   compact = false,
   items,
@@ -101,7 +122,9 @@ export function OrdersTable({
                 <td>{item.date}</td>
                 <td>{currency(item.total)}</td>
                 <td>
-                  <span className={`seller-status ${statusClass(item.status)}`}>{item.status}</span>
+                  <span className={`seller-status ${statusClass(item.status)}`}>
+                    {getSharedOrderStatusLabel(item.status)}
+                  </span>
                 </td>
                 {onViewDetail && (
                   <td>
