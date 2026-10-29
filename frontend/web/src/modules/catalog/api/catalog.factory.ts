@@ -266,6 +266,7 @@ export function validateProduct(input: ProductInput): Record<string, string> {
   return errors;
 }
 export function createCatalogApi(request: RequestApi, source: 'mock' | 'api') {
+  // Nhánh mock bên dưới chỉ còn phục vụ kiểm thử adapter; app.config.ts luôn chọn API.
   const mockProducts = fixtures.products.map(normalizeProduct);
   return {
     source,

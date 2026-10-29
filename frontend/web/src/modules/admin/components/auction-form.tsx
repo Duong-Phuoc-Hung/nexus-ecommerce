@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useSession } from '@/modules/auth/hooks/use-session';
+import { appConfig } from '@/configs/app.config';
 import {
   auctionApi,
   validateAuction,
@@ -202,7 +203,7 @@ export function AuctionForm({ id }: { id?: string }) {
       setBusy(false);
     }
   }
-  if (process.env.NEXT_PUBLIC_AUCTION_SOURCE !== 'mock')
+  if (appConfig.auctionSource !== 'mock')
     return (
       <p>
         Chức năng tạo và sửa phiên đang chờ kết nối.{' '}

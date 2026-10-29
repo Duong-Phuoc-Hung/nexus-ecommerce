@@ -31,7 +31,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
+export function MarketplaceHome() {
   const [auctionRows, setAuctionRows] = useState<Auction[] | null>(null);
   const [catalogProducts, setCatalogProducts] = useState<MarketplaceProduct[]>([]);
   const [apiError, setApiError] = useState('');
@@ -107,7 +107,7 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
   }, []);
   const router = useRouter();
   const { user } = useSession();
-  const [headerCategories, setHeaderCategories] = useState(feed.categories.slice(0, 0));
+  const [headerCategories, setHeaderCategories] = useState<MarketplaceFeed['categories']>([]);
   useEffect(() => {
     const controller = new AbortController();
     catalogApi
@@ -118,7 +118,13 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
             rows.map((row) => ({
               id: row.id,
               name: row.name,
-              icon: feed.categories.find((c) => c.id === row.id)?.icon || 'gem',
+              icon: row.name.toLocaleLowerCase('vi').includes('đồng hồ')
+                ? 'watch'
+                : row.name.toLocaleLowerCase('vi').includes('âm thanh')
+                  ? 'headphones'
+                  : row.name.toLocaleLowerCase('vi').includes('điện tử')
+                    ? 'camera'
+                    : 'gem',
               description: 'Khám phá sản phẩm trong danh mục',
             })),
           );
@@ -127,7 +133,7 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
         if (!controller.signal.aborted) setHeaderCategories([]);
       });
     return () => controller.abort();
-  }, [feed.categories]);
+  }, []);
   const featuredCategories = useMemo(() => {
     const priorityIds = ['1', '2', '3', '18'];
     const selected = priorityIds
@@ -137,7 +143,9 @@ export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
     return selected.length === 4 ? selected : headerCategories.slice(0, 4);
   }, [headerCategories]);
   const [elapsed, setElapsed] = useState(0);
-  const sourceProducts = appConfig.catalogSource === 'api' ? catalogProducts : feed.products;
+  // Dữ liệu sản phẩm mẫu trong feed không còn được đưa lên trang chủ khi Catalog API đã có.
+  // const sourceProducts = appConfig.catalogSource === 'api' ? catalogProducts : feed.products;
+  const sourceProducts = catalogProducts;
   const products = sourceProducts.flatMap((product) => {
     if (product.mode !== 'auction' || !auctionRows) return [product];
     const a = auctionRows.find((row) => row.productId === product.id);

@@ -5,6 +5,7 @@ import { ArrowLeft, Pencil, ExternalLink, Ban, Clock3, Gavel } from 'lucide-reac
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useSession } from '@/modules/auth/hooks/use-session';
+import { appConfig } from '@/configs/app.config';
 import { useAuctions } from '@/modules/auction/hooks/use-auctions';
 import { auctionApi, currentPrice, canManageAuction } from '@/modules/auction/api/auction.api';
 import { AuctionBadge, auctionDate, auctionMoney } from '@/modules/auction/components/auction-ui';
@@ -32,7 +33,7 @@ export function AuctionManagementDetail({ id }: { id: string }) {
       setBusy(false);
     }
   }
-  if (process.env.NEXT_PUBLIC_AUCTION_SOURCE !== 'mock')
+  if (appConfig.auctionSource !== 'mock')
     return (
       <p>
         Chức năng quản lý phiên đang được hoàn thiện.{' '}
