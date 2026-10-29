@@ -354,7 +354,7 @@ export class PostgresProductRepository implements IProductRepository {
     const pid = parseInt(id, 10);
     let query =
       "UPDATE catalog_products SET deleted_at = NULL, status = 'ACTIVE', updated_at = NOW() WHERE id = $1";
-    const params = [pid];
+    const params: any[] = [pid];
     if (sellerId && sellerId !== '1') {
       params.push(sellerId);
       query += " AND (seller_id = $2 OR seller_id = '1')";
