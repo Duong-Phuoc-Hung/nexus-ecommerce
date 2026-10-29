@@ -29,6 +29,7 @@ import { InvalidTokenException } from '../../../domain/exceptions/InvalidTokenEx
 import { UserInactiveException } from '../../../domain/exceptions/UserInactiveException';
 import { UserNotFoundException } from '../../../domain/exceptions/UserNotFoundException';
 import { UserAlreadyExistsException } from '../../../domain/exceptions/UserAlreadyExistsException';
+import { OtpRateLimitException } from '../../../domain/exceptions/OtpRateLimitException';
 import { ROLE_PERMISSIONS } from '../../../infrastructure/security/authorization';
 
 export class UserController {
@@ -160,6 +161,11 @@ export class UserController {
       const result = await this.sendRegistrationOtpUseCase.execute(email, fullName);
       res.status(200).json(result);
     } catch (error) {
+      if (error instanceof OtpRateLimitException) {
+        res.setHeader('Retry-After', String(error.retryAfterSeconds));
+        res.status(429).json({ success: false, error: error.message });
+        return;
+      }
       const message = error instanceof Error ? error.message : 'Không thể gửi mã OTP.';
       const status =
         error instanceof UserAlreadyExistsException ||

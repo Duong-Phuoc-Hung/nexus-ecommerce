@@ -45,6 +45,32 @@ test('POST /api/v1/auth/send-otp: Validates input email', async () => {
   });
 });
 
+test('POST /api/v1/auth/send-otp: Enforces 60s cooldown and security rate limits (429)', async () => {
+  await withUserServer(async (baseUrl) => {
+    const rateLimitEmail = 'ratelimit.test@nexus.vn';
+
+    // 1. First send: Must succeed (200 OK)
+    const firstRes = await fetch(`${baseUrl}/api/v1/auth/send-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: rateLimitEmail }),
+    });
+    assert.equal(firstRes.status, 200);
+
+    // 2. Immediate second send: Must trigger 60s Cooldown (429 Too Many Requests)
+    const secondRes = await fetch(`${baseUrl}/api/v1/auth/send-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: rateLimitEmail }),
+    });
+    assert.equal(secondRes.status, 429, 'Phải trả về 429 khi spam gửi OTP liên tiếp');
+    const secondJson = (await secondRes.json()) as any;
+    assert.equal(secondJson.success, false);
+    assert.match(secondJson.error, /Vui lòng đợi \d+ giây/);
+    assert.ok(secondRes.headers.get('retry-after'), 'Phải có header Retry-After');
+  });
+});
+
 test('POST /api/v1/auth/send-otp and register: Full OTP lifecycle and security checks', async () => {
   await withUserServer(async (baseUrl) => {
     const testEmail = 'nguyen.test.otp@nexus.vn';

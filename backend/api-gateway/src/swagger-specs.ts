@@ -87,7 +87,7 @@ export const userSpec = {
       post: {
         tags: ['Authentication'],
         summary: 'Gửi mã OTP xác thực đăng ký đến Gmail',
-        description: `${PUBLIC} Method: POST. Header: Content-Type: application/json. Gửi mã OTP 6 số ngẫu nhiên qua Gmail SMTP (thời hạn 5 phút). Kiểm tra trùng lặp email trước khi gửi. Trong môi trường test/dev, response trả kèm trường devOtp để kiểm thử tự động.`,
+        description: `${PUBLIC} Method: POST. Header: Content-Type: application/json. Gửi mã OTP 6 số ngẫu nhiên qua Gmail SMTP (thời hạn 5 phút). Kiểm tra trùng lặp email trước khi gửi. Áp dụng Cooldown 60s giữa các lần gửi và giới hạn tối đa 5 lần/giờ cho mỗi email. Trường devOtp chỉ được xuất trong môi trường test nội bộ.`,
         requestBody: {
           required: true,
           content: {
@@ -108,10 +108,13 @@ export const userSpec = {
             success: true,
             message:
               'Mã xác thực OTP đã được gửi đến hòm thư Gmail của bạn. Vui lòng kiểm tra hộp thư (kể cả mục Spam).',
-            devOtp: '123456',
           }),
           400: errorResponse('Dữ liệu không hợp lệ', 'Định dạng email không hợp lệ.'),
           409: errorResponse('Email đã tồn tại', 'Email này đã được đăng ký trong hệ thống.'),
+          429: errorResponse(
+            'Quá nhiều yêu cầu OTP (Rate Limit / Cooldown)',
+            'Vui lòng đợi 60 giây trước khi yêu cầu gửi lại mã OTP mới.',
+          ),
         },
       },
     },

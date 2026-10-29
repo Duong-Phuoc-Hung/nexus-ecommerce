@@ -1,5 +1,6 @@
 import { IUserRepository } from '../../domain/repositories/IUserRepository';
 import { UserAlreadyExistsException } from '../../domain/exceptions/UserAlreadyExistsException';
+import { OtpRateLimitException } from '../../domain/exceptions/OtpRateLimitException';
 import { RedisOtpStore } from '../../infrastructure/cache/RedisOtpStore';
 import { NotificationClient } from '../../infrastructure/notifications/NotificationClient';
 
@@ -30,13 +31,34 @@ export class SendRegistrationOtpUseCase {
       throw new UserAlreadyExistsException('Email này đã được đăng ký trong hệ thống.');
     }
 
-    // 2. Sinh mã OTP 6 số ngẫu nhiên
+    // 2. Kiểm tra Cooldown (mỗi email chỉ được yêu cầu lại sau 60 giây)
+    const cooldown = await this.otpStore.checkCooldown(normalizedEmail);
+    if (!cooldown.allowed) {
+      throw new OtpRateLimitException(
+        `Vui lòng đợi ${cooldown.remainingSeconds} giây trước khi yêu cầu gửi lại mã OTP mới.`,
+        cooldown.remainingSeconds,
+      );
+    }
+
+    // 3. Kiểm tra Rate Limiting (tối đa 5 lần gửi OTP / 1 giờ cho mỗi email)
+    const rateLimit = await this.otpStore.checkAndIncrementRateLimit(normalizedEmail, 5, 3600);
+    if (!rateLimit.allowed) {
+      throw new OtpRateLimitException(
+        `Bạn đã yêu cầu gửi OTP quá 5 lần trong vòng 1 giờ. Vui lòng thử lại sau ${rateLimit.remainingMinutes} phút.`,
+        rateLimit.remainingMinutes * 60,
+      );
+    }
+
+    // 4. Sinh mã OTP 6 số ngẫu nhiên
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // 3. Lưu OTP vào Redis với thời hạn 5 phút (300 giây)
+    // 5. Lưu OTP vào Redis với thời hạn 5 phút (300 giây)
     await this.otpStore.saveOtp(normalizedEmail, otpCode, 300);
 
-    // 4. Bắn email qua Notification Service (Gmail SMTP)
+    // 6. Kích hoạt Cooldown 60 giây cho email này
+    await this.otpStore.setCooldown(normalizedEmail, 60);
+
+    // 7. Bắn email qua Notification Service (Gmail SMTP)
     const emailSent = await this.notificationClient.sendOtpEmail(
       normalizedEmail,
       otpCode,
@@ -54,8 +76,9 @@ export class SendRegistrationOtpUseCase {
         'Mã xác thực OTP đã được gửi đến hòm thư Gmail của bạn. Vui lòng kiểm tra hộp thư (kể cả mục Spam).',
     };
 
-    // Trong môi trường dev/test, trả kèm mã để dễ dàng kiểm thử tự động
-    if (process.env.NODE_ENV !== 'production') {
+    // TUYỆT ĐỐI BẢO MẬT: Chỉ xuất devOtp khi đang chạy tự động trong test suite (NODE_ENV === 'test')
+    // hoặc khi lập trình viên chủ động bật cờ EXPOSE_DEV_OTP === 'true' trên môi trường dev local
+    if (process.env.NODE_ENV === 'test' || process.env.EXPOSE_DEV_OTP === 'true') {
       response.devOtp = otpCode;
     }
 

@@ -71,7 +71,7 @@ export const swaggerDocument = {
         tags: ['Authentication'],
         summary: 'Gửi mã OTP xác thực đăng ký đến Gmail',
         description:
-          'Gửi mã OTP 6 số ngẫu nhiên qua Gmail SMTP (thời hạn 5 phút). Kiểm tra trùng lặp email trước khi gửi. Trong môi trường test/dev trả kèm devOtp.',
+          'Gửi mã OTP 6 số ngẫu nhiên qua Gmail SMTP (thời hạn 5 phút). Kiểm tra trùng lặp email trước khi gửi. Áp dụng Cooldown 60s giữa các lần gửi và giới hạn tối đa 5 lần/giờ.',
         requestBody: {
           required: true,
           content: {
@@ -102,6 +102,9 @@ export const swaggerDocument = {
           },
           409: {
             description: 'Email đã được đăng ký',
+          },
+          429: {
+            description: 'Quá nhiều yêu cầu OTP (Cooldown 60s hoặc vượt giới hạn 5 lần/giờ)',
           },
         },
       },

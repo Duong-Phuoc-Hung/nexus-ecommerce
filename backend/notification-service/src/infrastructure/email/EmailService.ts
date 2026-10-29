@@ -1,4 +1,13 @@
 import nodemailer, { Transporter } from 'nodemailer';
+import dotenv from 'dotenv';
+import path from 'path';
+
+// Đảm bảo nạp biến môi trường từ .env
+dotenv.config();
+try {
+  dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+  dotenv.config({ path: path.resolve(__dirname, '../../../../.env') });
+} catch {}
 
 export interface SendEmailOptions {
   to: string;
@@ -14,25 +23,35 @@ export class EmailService {
   private isConfigured: boolean = false;
 
   constructor() {
-    const user = process.env.SMTP_USER || process.env.GMAIL_USER || 'kieunguyen1016@gmail.com';
-    const pass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || 'ltconxawrqwpnjdy';
-    this.fromEmail = process.env.SMTP_FROM_EMAIL || user;
+    const user = process.env.SMTP_USER || process.env.GMAIL_USER;
+    const pass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
+    const host = process.env.SMTP_HOST;
+    const port = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : undefined;
+
+    this.fromEmail = process.env.SMTP_FROM_EMAIL || user || 'no-reply@nexus.vn';
     this.fromName = process.env.SMTP_FROM_NAME || 'Nexus E-Commerce & Auction';
 
     if (user && pass) {
-      this.transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-          user,
-          pass,
-        },
-      });
+      if (host) {
+        this.transporter = nodemailer.createTransport({
+          host,
+          port: port || 587,
+          secure: port === 465,
+          auth: { user, pass },
+        });
+      } else {
+        this.transporter = nodemailer.createTransport({
+          service: 'gmail',
+          auth: { user, pass },
+        });
+      }
       this.isConfigured = true;
     } else {
       // Fallback in-memory json transport for tests or unconfigured environments
       this.transporter = nodemailer.createTransport({
         jsonTransport: true,
       });
+      this.isConfigured = false;
     }
   }
 
@@ -50,6 +69,13 @@ export class EmailService {
       if (isMockDomain) {
         console.log(`[EmailService] 🧪 Bỏ qua gửi SMTP thật tới domain thử nghiệm (${recipient}).`);
         return { success: true, messageId: `<mock-${Date.now()}@nexus.local>` };
+      }
+
+      if (!this.isConfigured) {
+        console.error(
+          '[EmailService] ❌ Thông tin xác thực SMTP (SMTP_USER / SMTP_PASS) chưa được cấu hình qua biến môi trường.',
+        );
+        return { success: false };
       }
 
       const fromHeader = `"${this.fromName}" <${this.fromEmail}>`;
