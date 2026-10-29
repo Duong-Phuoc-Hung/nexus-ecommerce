@@ -1,20 +1,48 @@
 'use client';
+
 import { useEffect, useState } from 'react';
-import { useDebouncedValue } from '@/hooks/use-debounced-value';
+import { useSession } from '@/modules/auth/hooks/use-session';
 import { ordersApi, type OrderListItem, type OrderDetail } from '@/modules/commerce/api/orders.api';
 import { userMessage } from '@/lib/axios/http';
-import { useSession } from '@/modules/auth/hooks/use-session';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import {
+  currency,
+  statusClass,
   PageHeading,
   DemoNote,
   OrdersTable,
-  currency,
-  statusClass,
 } from '../components/seller-shared';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+
+export function getSellerOrderStatusLabel(status: string): string {
+  switch (status) {
+    case 'PENDING':
+      return 'Chờ xử lý';
+    case 'PROCESSING':
+      return 'Đang xử lý';
+    case 'SHIPPED':
+      return 'Đang giao hàng';
+    case 'DELIVERED':
+      return 'Đã giao hàng';
+    case 'CANCELLED':
+      return 'Đã hủy';
+    default:
+      return status;
+  }
+}
 
 export function SellerOrdersPage() {
   const { user } = useSession();
   const [items, setItems] = useState<OrderListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('ALL');
   const search = useDebouncedValue(query, 500);
@@ -25,22 +53,19 @@ export function SellerOrdersPage() {
   const [actionNotice, setActionNotice] = useState('');
   const [actionError, setActionError] = useState('');
 
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
+  // Dialog state for order cancellation modal
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelTargetId, setCancelTargetId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('Người bán hết hàng hoặc thay đổi thỏa thuận');
 
   useEffect(() => {
     const controller = new AbortController();
-    if (!user?.id) {
-      setLoading(false);
-      setError('Vui lòng đăng nhập tài khoản Seller để xem đơn hàng.');
-      return () => controller.abort();
-    }
     setLoading(true);
     setError('');
     ordersApi
       .list(
         {
-          sellerId: user.id,
+          sellerId: user?.id,
           q: search.trim() || undefined,
           status: status !== 'ALL' ? status : undefined,
           limit: 50,
@@ -67,23 +92,27 @@ export function SellerOrdersPage() {
     }
   }
 
-  async function handleCancelOrder(orderId: string) {
-    const reason = window.prompt(
-      'Nhập lý do hủy đơn hàng:',
-      'Người bán hết hàng hoặc thay đổi thỏa thuận',
-    );
-    if (reason === null || !reason.trim()) return;
+  function handleOpenCancelModal(orderId: string) {
+    setCancelTargetId(orderId);
+    setCancelReason('Người bán hết hàng hoặc thỏa thuận với người mua.');
+    setCancelDialogOpen(true);
+  }
+
+  async function handleConfirmCancel(e: React.FormEvent) {
+    e.preventDefault();
+    if (!cancelTargetId || !cancelReason.trim()) return;
 
     setCancelActing(true);
     setActionNotice('');
     setActionError('');
     try {
-      const updated = await ordersApi.cancel(orderId, reason.trim());
+      const updated = await ordersApi.cancel(cancelTargetId, cancelReason.trim());
       setSelectedOrder(updated);
       setItems((prev) =>
         prev.map((item) => (item.id === updated.id ? { ...item, status: updated.status } : item)),
       );
       setActionNotice('Đơn hàng đã được hủy thành công.');
+      setCancelDialogOpen(false);
     } catch (err) {
       setActionError(userMessage(err));
     } finally {
@@ -94,8 +123,8 @@ export function SellerOrdersPage() {
   return (
     <>
       <PageHeading
-        eyebrow="SELLER CENTER / ORDERS"
-        title="Đơn hàng"
+        eyebrow="KHÔNG GIAN NGƯỜI BÁN / ĐƠN HÀNG"
+        title="Quản lý đơn hàng"
         description="Quản lý và tra cứu đơn hàng của gian hàng từ Commerce API."
       />
       <DemoNote message="Dữ liệu đơn hàng và chi tiết kết nối trực tiếp với Commerce Service." />
@@ -104,7 +133,7 @@ export function SellerOrdersPage() {
         <div className="seller-panel-heading">
           <div>
             <p className="seller-eyebrow">ĐƠN HÀNG CỦA SHOP</p>
-            <h2>Danh sách đơn</h2>
+            <h2>Danh sách đơn hàng</h2>
           </div>
           <span className="seller-muted">{loading ? 'Đang tải…' : `${items.length} đơn hàng`}</span>
         </div>
@@ -120,17 +149,32 @@ export function SellerOrdersPage() {
             />
           </label>
 
-          <label className="seller-filter">
-            Trạng thái
-            <select value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="ALL">Tất cả</option>
-              <option value="PENDING">Chờ xử lý (PENDING)</option>
-              <option value="PROCESSING">Đang xử lý (PROCESSING)</option>
-              <option value="SHIPPED">Đang giao (SHIPPED)</option>
-              <option value="DELIVERED">Đã giao (DELIVERED)</option>
-              <option value="CANCELLED">Đã hủy (CANCELLED)</option>
-            </select>
-          </label>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: '0.75rem',
+              color: '#687386',
+            }}
+          >
+            <span>Trạng thái:</span>
+            <div style={{ minWidth: 175 }}>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger aria-label="Lọc theo trạng thái đơn hàng">
+                  <SelectValue placeholder="Chọn trạng thái" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Tất cả trạng thái</SelectItem>
+                  <SelectItem value="PENDING">Chờ xử lý</SelectItem>
+                  <SelectItem value="PROCESSING">Đang xử lý</SelectItem>
+                  <SelectItem value="SHIPPED">Đang giao hàng</SelectItem>
+                  <SelectItem value="DELIVERED">Đã giao hàng</SelectItem>
+                  <SelectItem value="CANCELLED">Đã hủy</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
 
           <span className="seller-result-count">
             {loading ? 'Đang lọc…' : `${items.length} kết quả`}
@@ -163,12 +207,12 @@ export function SellerOrdersPage() {
             style={{ margin: '-20px -20px 20px', borderBottom: '1px solid #edf0f3' }}
           >
             <div>
-              <p className="seller-eyebrow">ORDER DETAIL · COMMERCE API</p>
+              <p className="seller-eyebrow">CHI TIẾT ĐƠN HÀNG · HỆ THỐNG</p>
               <h2>Mã đơn: {selectedOrder.id}</h2>
             </div>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <span className={`seller-status ${statusClass(selectedOrder.status)}`}>
-                {selectedOrder.status}
+                {getSellerOrderStatusLabel(selectedOrder.status)}
               </span>
               <button
                 type="button"
@@ -183,58 +227,42 @@ export function SellerOrdersPage() {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-              gap: '16px',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: '15px',
               marginBottom: '20px',
+              fontSize: '0.75rem',
             }}
           >
             <div>
-              <small style={{ color: '#8d97a5', display: 'block', fontSize: '0.7rem' }}>
-                Người mua
-              </small>
-              <strong style={{ color: '#263247' }}>{selectedOrder.buyer}</strong>
-              <span style={{ display: 'block', color: '#687386', fontSize: '0.72rem' }}>
-                {selectedOrder.email}
-              </span>
+              <p style={{ color: '#7e8a9c', margin: '0 0 4px' }}>Khách hàng (Người mua):</p>
+              <strong>{selectedOrder.buyer}</strong>
+              <div style={{ color: '#556477' }}>{selectedOrder.email}</div>
             </div>
             <div>
-              <small style={{ color: '#8d97a5', display: 'block', fontSize: '0.7rem' }}>
-                Mã vận đơn
-              </small>
-              <strong style={{ color: '#263247' }}>
-                {selectedOrder.tracking || 'Chưa phát hành'}
-              </strong>
-            </div>
-            <div>
-              <small style={{ color: '#8d97a5', display: 'block', fontSize: '0.7rem' }}>
-                Tổng tiền đơn hàng
-              </small>
-              <strong style={{ color: '#c51c25', fontSize: '1rem' }}>
+              <p style={{ color: '#7e8a9c', margin: '0 0 4px' }}>Tổng thanh toán:</p>
+              <strong style={{ color: '#0f8a55', fontSize: '0.9rem' }}>
                 {currency(selectedOrder.totalAmount)}
               </strong>
             </div>
             <div>
-              <small style={{ color: '#8d97a5', display: 'block', fontSize: '0.7rem' }}>
-                Ngày đặt
-              </small>
-              <strong style={{ color: '#263247' }}>
-                {new Date(selectedOrder.createdAt).toLocaleString('vi-VN')}
-              </strong>
+              <p style={{ color: '#7e8a9c', margin: '0 0 4px' }}>Mã vận đơn liên kết:</p>
+              <code>{selectedOrder.tracking}</code>
+            </div>
+            <div>
+              <p style={{ color: '#7e8a9c', margin: '0 0 4px' }}>Ngày tạo đơn:</p>
+              <span>{new Date(selectedOrder.createdAt).toLocaleDateString('vi-VN')}</span>
             </div>
           </div>
 
-          <h3 style={{ fontSize: '0.85rem', marginBottom: '10px', color: '#263247' }}>
-            Sản phẩm trong đơn:
-          </h3>
           <div className="seller-table-wrap" style={{ marginBottom: '20px' }}>
             <table className="seller-table">
               <thead>
                 <tr>
                   <th>Sản phẩm</th>
-                  <th>Mã SP</th>
+                  <th>Mã SKU</th>
                   <th>Số lượng</th>
                   <th>Đơn giá</th>
-                  <th>Thành tiền</th>
+                  <th>Tổng</th>
                 </tr>
               </thead>
               <tbody>
@@ -294,9 +322,9 @@ export function SellerOrdersPage() {
                 className="seller-button"
                 style={{ background: '#fff0f0', color: '#b32029', borderColor: '#f1bdc0' }}
                 disabled={cancelActing}
-                onClick={() => handleCancelOrder(selectedOrder.id)}
+                onClick={() => handleOpenCancelModal(selectedOrder.id)}
               >
-                {cancelActing ? 'Đang hủy…' : 'Hủy đơn hàng'}
+                {cancelActing ? 'Đang xử lý…' : 'Hủy đơn hàng'}
               </button>
             )}
             {actionNotice && (
@@ -312,6 +340,50 @@ export function SellerOrdersPage() {
           </div>
         </section>
       )}
+
+      {/* Form Dialog Modal xác nhận hủy đơn hàng thay thế window.prompt */}
+      <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <DialogContent className="p-6 bg-white rounded-2xl shadow-2xl max-w-md w-full">
+          <DialogTitle className="text-lg font-bold text-slate-800">
+            Xác nhận hủy đơn hàng
+          </DialogTitle>
+          <DialogDescription className="text-xs text-slate-500 mt-1">
+            Bạn đang yêu cầu hủy đơn hàng <strong>{cancelTargetId}</strong>. Vui lòng cung cấp lý do
+            hủy để thông báo cho khách hàng:
+          </DialogDescription>
+          <form onSubmit={handleConfirmCancel} className="mt-4 space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Lý do hủy đơn hàng:
+              </label>
+              <textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
+                placeholder="Nhập lý do hủy..."
+                required
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setCancelDialogOpen(false)}
+                className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="submit"
+                disabled={cancelActing || !cancelReason.trim()}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 disabled:opacity-50 transition"
+              >
+                {cancelActing ? 'Đang hủy…' : 'Xác nhận hủy đơn'}
+              </button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

@@ -5,6 +5,10 @@ import { InMemoryProductRepository } from './infrastructure/repositories/InMemor
 import { GetProductDetailUseCase } from './application/use-cases/GetProductDetailUseCase';
 import { ProductController } from './interfaces/http/controllers/ProductController';
 import { createProductRoutes } from './interfaces/http/routes/ProductRoutes';
+import { createCatalogAccessRoutes } from './interfaces/http/routes/CatalogAccessRoutes';
+import { PostgresCatalogQuery } from './infrastructure/repositories/PostgresCatalogQuery';
+import { createCatalogAdminWriteRoutes } from './interfaces/http/routes/CatalogAdminWriteRoutes';
+import { HttpSellerDirectory } from './infrastructure/clients/HttpSellerDirectory';
 import { SearchProductsUseCase } from './application/use-cases/SearchProductsUseCase';
 import { CreateProductUseCase } from './application/use-cases/CreateProductUseCase';
 import { UpdateProductUseCase } from './application/use-cases/UpdateProductUseCase';
@@ -65,6 +69,19 @@ export function createApplication(): Application {
     getSellerProductsUseCase,
   );
 
+  app.use(
+    '/api/v1/products',
+    createCatalogAdminWriteRoutes({
+      createProduct: createProductUseCase,
+      updateProduct: updateProductUseCase,
+      deleteProduct: deleteProductUseCase,
+      sellerDirectory: new HttpSellerDirectory(),
+    }),
+  );
+  app.use(
+    '/api/v1/products',
+    createCatalogAccessRoutes(productRepository, isTest ? undefined : new PostgresCatalogQuery()),
+  );
   app.use('/api/v1/products', createProductRoutes(productController));
 
   return app;

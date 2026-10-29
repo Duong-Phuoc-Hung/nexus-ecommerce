@@ -11,6 +11,14 @@ import { RequestPasswordResetUseCase } from './application/use-cases/RequestPass
 import { ResetPasswordUseCase } from './application/use-cases/ResetPasswordUseCase';
 import { AssignUserRoleUseCase } from './application/use-cases/AssignUserRoleUseCase';
 import { SearchUsersUseCase } from './application/use-cases/SearchUsersUseCase';
+import { UpdateUserProfileUseCase } from './application/use-cases/UpdateUserProfileUseCase';
+import { GetUserAddressesUseCase } from './application/use-cases/GetUserAddressesUseCase';
+import { CreateAddressUseCase } from './application/use-cases/CreateAddressUseCase';
+import { UpdateAddressUseCase } from './application/use-cases/UpdateAddressUseCase';
+import { DeleteAddressUseCase } from './application/use-cases/DeleteAddressUseCase';
+import { SetDefaultAddressUseCase } from './application/use-cases/SetDefaultAddressUseCase';
+import { InMemoryAddressRepository } from './infrastructure/repositories/InMemoryAddressRepository';
+import { PostgresAddressRepository } from './infrastructure/repositories/PostgresAddressRepository';
 import { UserController } from './interfaces/http/controllers/UserController';
 import { createAuthRoutes, createUserRoutes } from './interfaces/http/routes/UserRoutes';
 import { authTokenStore } from './infrastructure/security/AuthTokenStore';
@@ -68,6 +76,19 @@ export function createApplication(): Application {
     authTokenStore.revokeUserTokens(userId),
   );
   const searchUsersUseCase = new SearchUsersUseCase(userRepository);
+
+  const addressRepository =
+    process.env.USE_IN_MEMORY_DB === 'true'
+      ? new InMemoryAddressRepository()
+      : new PostgresAddressRepository();
+
+  const updateUserProfileUseCase = new UpdateUserProfileUseCase(userRepository);
+  const getUserAddressesUseCase = new GetUserAddressesUseCase(addressRepository);
+  const createAddressUseCase = new CreateAddressUseCase(addressRepository);
+  const updateAddressUseCase = new UpdateAddressUseCase(addressRepository);
+  const deleteAddressUseCase = new DeleteAddressUseCase(addressRepository);
+  const setDefaultAddressUseCase = new SetDefaultAddressUseCase(addressRepository);
+
   const userController = new UserController(
     getUserProfileUseCase,
     loginUseCase,
@@ -77,6 +98,12 @@ export function createApplication(): Application {
     resetPasswordUseCase,
     assignUserRoleUseCase,
     searchUsersUseCase,
+    updateUserProfileUseCase,
+    getUserAddressesUseCase,
+    createAddressUseCase,
+    updateAddressUseCase,
+    deleteAddressUseCase,
+    setDefaultAddressUseCase,
   );
 
   app.use('/api/v1/auth', createAuthRoutes(userController));

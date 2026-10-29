@@ -13,7 +13,7 @@ export function SellerAuctionsPage() {
   return (
     <>
       <PageHeading
-        eyebrow="SELLER CENTER / AUCTIONS"
+        eyebrow="KHÔNG GIAN NGƯỜI BÁN / ĐẤU GIÁ"
         title="Phiên đấu giá"
         description="Theo dõi các phiên do cửa hàng tổ chức và lịch bắt đầu/kết thúc."
         action={

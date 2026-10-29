@@ -7,6 +7,7 @@ import { CancelOrderUseCase } from './application/use-cases/CancelOrderUseCase';
 import { RefundOrderUseCase } from './application/use-cases/RefundOrderUseCase';
 import { OrderController } from './interfaces/http/controllers/OrderController';
 import { createOrderRoutes } from './interfaces/http/routes/OrderRoutes';
+import { createCheckoutRoutes } from './interfaces/http/routes/CheckoutRoutes';
 
 export function createApplication(): Application {
   const app = express();
@@ -37,6 +38,7 @@ export function createApplication(): Application {
     refundOrderUseCase,
   );
 
+  app.use('/api/v1', createCheckoutRoutes());
   app.use('/api/v1/orders', createOrderRoutes(orderController));
 
   return app;

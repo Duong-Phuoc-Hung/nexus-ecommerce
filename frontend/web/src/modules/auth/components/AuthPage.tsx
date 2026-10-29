@@ -6,7 +6,12 @@ import { useSearchParams } from 'next/navigation';
 import { NexusLogo } from '@/components/layout/nexus-logo';
 import { authApi } from '@/modules/auth/api/auth.api';
 import { ApiError, userMessage } from '../../../lib/axios/http';
-import { canRoleVisitPath, roleHomePath, safeNextPath } from '../../../lib/utils/navigation';
+import {
+  canRoleVisitPath,
+  roleHomePath,
+  safeNextPath,
+  resolveAuthDestination,
+} from '../../../lib/utils/navigation';
 import { saveContactPhone } from '@/modules/user/utils/address-book';
 import './auth.css';
 type Mode = 'login' | 'register' | 'forgot-password' | 'reset-password';
@@ -155,8 +160,7 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
           window.location.assign('/account/addresses?setup=1&next=' + encodeURIComponent(next));
           return;
         }
-        const destination =
-          next !== '/' && canRoleVisitPath(profile.role, next) ? next : roleHomePath(profile.role);
+        const destination = resolveAuthDestination(profile.role, next);
         window.location.assign(destination);
       }
     } catch (error) {
@@ -314,6 +318,9 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
                             field('password', '123456');
                             setNotice('');
                             setErrors({});
+                            if (params?.get('next')) {
+                              history.replaceState(null, '', `/${mode}`);
+                            }
                           }}
                           disabled={busy}
                           title={`Điền thông tin ${acc.email} / 123456`}

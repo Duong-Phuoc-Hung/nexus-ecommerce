@@ -53,7 +53,7 @@ export function SellerDashboard() {
   return (
     <>
       <PageHeading
-        eyebrow="SELLER CENTER / OVERVIEW"
+        eyebrow="KHÔNG GIAN NGƯỜI BÁN / TỔNG QUAN"
         title="Chào mừng trở lại"
         description="Theo dõi cửa hàng và các hoạt động bán hàng gần đây."
       />

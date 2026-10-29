@@ -6,6 +6,32 @@ import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { ordersApi, type OrderListItem } from '@/modules/commerce/api/orders.api';
 import { userMessage } from '@/lib/axios/http';
 import { money, slug, Heading, DemoBanner } from '../components/support-shared';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
+export function getOrderStatusLabel(status: string): string {
+  switch (status) {
+    case 'PENDING':
+      return 'Chờ xử lý';
+    case 'PROCESSING':
+      return 'Đang xử lý';
+    case 'SHIPPED':
+      return 'Đang giao hàng';
+    case 'DELIVERED':
+      return 'Đã giao hàng';
+    case 'CANCELLED':
+      return 'Đã hủy';
+    case 'REFUNDED':
+      return 'Đã hoàn tiền';
+    default:
+      return status;
+  }
+}
 
 export function SupportOrdersPage() {
   const [query, setQuery] = useState('');
@@ -37,11 +63,11 @@ export function SupportOrdersPage() {
   return (
     <>
       <Heading
-        label="SUPPORT STAFF / ORDERS"
+        label="BỘ PHẬN HỖ TRỢ / ĐƠN HÀNG"
         title="Tra cứu đơn hàng"
-        description="Tìm theo mã đơn, tên/email Buyer hoặc tên gian hàng."
+        description="Tìm theo mã đơn, thông tin khách hàng (Người mua) hoặc gian hàng đối tác."
       />
-      <DemoBanner message="Danh sách đơn hàng được tải từ Commerce API." />
+      <DemoBanner message="Danh sách đơn hàng được tải trực tiếp qua Commerce API." />
       <section className="support-panel">
         <div className="support-toolbar">
           <label className="support-search">
@@ -53,36 +79,32 @@ export function SupportOrdersPage() {
               aria-label="Tìm đơn hàng"
             />
           </label>
-          <label
+          <div
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              fontSize: '0.7rem',
+              fontSize: '0.75rem',
               color: '#687386',
             }}
           >
-            Trạng thái:
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              style={{
-                padding: '6px 10px',
-                border: '1px solid #e1e5ea',
-                borderRadius: '6px',
-                background: 'white',
-                fontSize: '0.7rem',
-                color: '#334055',
-              }}
-            >
-              <option value="ALL">Tất cả trạng thái</option>
-              <option value="PENDING">Chờ xử lý (PENDING)</option>
-              <option value="PROCESSING">Đang xử lý (PROCESSING)</option>
-              <option value="SHIPPED">Đang giao (SHIPPED)</option>
-              <option value="DELIVERED">Đã giao (DELIVERED)</option>
-              <option value="CANCELLED">Đã hủy (CANCELLED)</option>
-            </select>
-          </label>
+            <span>Trạng thái:</span>
+            <div style={{ minWidth: 180 }}>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger aria-label="Lọc theo trạng thái">
+                  <SelectValue placeholder="Chọn trạng thái" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Tất cả trạng thái</SelectItem>
+                  <SelectItem value="PENDING">Chờ xử lý</SelectItem>
+                  <SelectItem value="PROCESSING">Đang xử lý</SelectItem>
+                  <SelectItem value="SHIPPED">Đang giao hàng</SelectItem>
+                  <SelectItem value="DELIVERED">Đã giao hàng</SelectItem>
+                  <SelectItem value="CANCELLED">Đã hủy</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
           <span style={{ marginLeft: 'auto' }}>
             {loading ? 'Đang tải…' : `${orders.length} kết quả`}
           </span>
@@ -95,7 +117,7 @@ export function SupportOrdersPage() {
               <thead>
                 <tr>
                   <th>Mã đơn</th>
-                  <th>Buyer</th>
+                  <th>Khách hàng</th>
                   <th>Gian hàng</th>
                   <th>Sản phẩm</th>
                   <th>Ngày đặt</th>
@@ -119,11 +141,13 @@ export function SupportOrdersPage() {
                     <td>{order.date}</td>
                     <td>{money(order.total)}</td>
                     <td>
-                      <span className={`support-status ${slug(order.status)}`}>{order.status}</span>
+                      <span className={`support-status ${slug(order.status)}`}>
+                        {getOrderStatusLabel(order.status)}
+                      </span>
                     </td>
                     <td>
                       <Link className="support-row-link" href={`/support/orders/${order.id}`}>
-                        Chi tiết
+                        Xem chi tiết
                       </Link>
                     </td>
                   </tr>

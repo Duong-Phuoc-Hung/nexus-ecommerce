@@ -61,7 +61,7 @@ export function SellerInventoryPage() {
   return (
     <>
       <PageHeading
-        eyebrow="SELLER CENTER / INVENTORY"
+        eyebrow="KHÔNG GIAN NGƯỜI BÁN / TỒN KHO"
         title="Tồn kho"
         description="Tra cứu số lượng theo SKU và vị trí kho."
       />
@@ -70,7 +70,7 @@ export function SellerInventoryPage() {
       <section className="seller-panel">
         <div className="seller-panel-heading">
           <div>
-            <p className="seller-eyebrow">SKU INVENTORY · PRODUCT API</p>
+            <p className="seller-eyebrow">TỒN KHO THEO SKU · HỆ THỐNG</p>
             <h2>Số lượng khả dụng</h2>
           </div>
           <span className="seller-muted">

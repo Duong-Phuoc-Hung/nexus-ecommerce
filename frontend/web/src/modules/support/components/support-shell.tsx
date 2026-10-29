@@ -20,9 +20,9 @@ export function SupportShell({ children }: { children: ReactNode }) {
   const displayName = user?.fullName || user?.email || 'Nhân viên hỗ trợ';
   const roleLabel =
     user?.role === 'SUPPORT_STAFF'
-      ? 'Support Staff · Demo'
+      ? 'Nhân viên hỗ trợ · Ca trực'
       : user?.role === 'ADMIN'
-        ? 'Admin · Quản trị'
+        ? 'Quản trị viên'
         : user?.role
           ? `Vai trò: ${user.role}`
           : 'Chưa đăng nhập';
@@ -38,10 +38,10 @@ export function SupportShell({ children }: { children: ReactNode }) {
         <Link className="support-brand" href="/support">
           <span className="support-brand-mark">N</span>
           <span>
-            NEXUS <small>SUPPORT</small>
+            NEXUS <small>HỖ TRỢ</small>
           </span>
         </Link>
-        <p className="support-nav-caption">CUSTOMER OPERATIONS</p>
+        <p className="support-nav-caption">VẬN HÀNH & HỖ TRỢ</p>
         <nav aria-label="Support navigation">
           {items.map((item) => {
             const active =
@@ -61,7 +61,7 @@ export function SupportShell({ children }: { children: ReactNode }) {
           })}
         </nav>
         <div className="support-sidebar-foot">
-          <span>SUPPORT WORKSPACE</span>
+          <span>CỔNG HỖ TRỢ KHÁCH HÀNG</span>
           <br />
           Nexus Operations
         </div>
@@ -69,7 +69,7 @@ export function SupportShell({ children }: { children: ReactNode }) {
       <div className="support-main">
         <header className="support-topbar">
           <div>
-            <span>Support workspace</span>
+            <span>Cổng hỗ trợ vận hành</span>
             <small>
               {' '}
               /{' '}

@@ -56,3 +56,6 @@ data/
 !frontend/web/src/modules/user/data/
 *.dump
 *.sql.gz
+
+# Local Knowledge Graph
+graphify-out/

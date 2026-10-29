@@ -5,9 +5,28 @@ import { requireAuth, requirePermission } from '../../../infrastructure/security
 export function createUserRoutes(controller: UserController): Router {
   const router = Router();
 
+  // 1. Hồ sơ cá nhân của chính mình (TĨNH - phải đặt TRƯỚC /:id để tránh xung đột)
   router.get('/profile', requireAuth, requirePermission('PROFILE.VIEW'), (req, res) =>
     controller.getProfile(req, res),
   );
+  router.patch('/profile', requireAuth, requirePermission('PROFILE.UPDATE'), (req, res) =>
+    controller.updateProfile(req, res),
+  );
+
+  // 2. Sổ địa chỉ của Buyer (/me/addresses) (TĨNH - phải đặt TRƯỚC /:id để tránh Express coi 'me' là :id)
+  router.get('/me/addresses', requireAuth, (req, res) => controller.listAddresses(req, res));
+  router.post('/me/addresses', requireAuth, (req, res) => controller.createAddress(req, res));
+  router.put('/me/addresses/:addressId/default', requireAuth, (req, res) =>
+    controller.setDefaultAddress(req, res),
+  );
+  router.patch('/me/addresses/:addressId', requireAuth, (req, res) =>
+    controller.updateAddress(req, res),
+  );
+  router.delete('/me/addresses/:addressId', requireAuth, (req, res) =>
+    controller.deleteAddress(req, res),
+  );
+
+  // 3. Quản lý danh sách & phân quyền người dùng (ADMIN / STAFF) (ĐỘNG - đặt SAU CÙNG)
   router.get('/', requireAuth, requirePermission('USER.VIEW'), (req, res) =>
     controller.listUsers(req, res),
   );
