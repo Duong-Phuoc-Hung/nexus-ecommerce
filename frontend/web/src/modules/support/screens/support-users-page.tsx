@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { userApi, type SupportUser } from '@/modules/user/api/user.api';
 import { userMessage } from '@/lib/axios/http';
-import { Heading, DemoBanner, slug } from '../components/support-shared';
+import { Heading, DemoBanner, slug, supportStatusClass } from '../components/support-shared';
 import {
   Select,
   SelectContent,
@@ -161,7 +161,9 @@ export function SupportUsersPage() {
                       <span className="support-role">{getRoleLabel(user.role)}</span>
                     </td>
                     <td>
-                      <span className={`support-status ${slug(user.status || 'ACTIVE')}`}>
+                      <span
+                        className={`support-status ${supportStatusClass(user.status || 'ACTIVE')}`}
+                      >
                         {getUserStatusLabel(user.status)}
                       </span>
                     </td>
@@ -218,7 +220,13 @@ export function SupportUsersPage() {
               </div>
               <div>
                 <small>Trạng thái hoạt động</small>
-                <strong>{getUserStatusLabel(selectedUser.status)}</strong>
+                <div style={{ marginTop: '3px' }}>
+                  <span
+                    className={`support-status ${supportStatusClass(selectedUser.status || 'ACTIVE')}`}
+                  >
+                    {getUserStatusLabel(selectedUser.status)}
+                  </span>
+                </div>
               </div>
               <div>
                 <small>Điểm uy tín sàn</small>
