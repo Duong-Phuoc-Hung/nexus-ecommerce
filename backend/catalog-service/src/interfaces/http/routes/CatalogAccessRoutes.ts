@@ -151,7 +151,8 @@ export function createCatalogAccessRoutes(
         })),
         meta: result.meta,
       });
-    } catch {
+    } catch (err) {
+      console.error('[CatalogAccessRoutes] handleList error:', err);
       res.status(500).json({ success: false, error: 'Internal Server Error' });
     }
   };
@@ -193,7 +194,8 @@ export function createCatalogAccessRoutes(
         error: `Không tìm thấy sản phẩm với ID '${req.params.id}'.`,
         code: 'NOT_FOUND',
       });
-    } catch {
+    } catch (err) {
+      console.error('[CatalogAccessRoutes] handleList error:', err);
       res.status(500).json({ success: false, error: 'Internal Server Error' });
     }
   });
