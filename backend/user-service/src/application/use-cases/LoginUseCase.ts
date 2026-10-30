@@ -76,6 +76,8 @@ export class LoginUseCase {
           roles: user.roles,
         });
 
+        authTokenStore.track(tokenPair.accessToken, user.id);
+
         return {
           accessToken: tokenPair.accessToken,
           token: tokenPair.accessToken,
