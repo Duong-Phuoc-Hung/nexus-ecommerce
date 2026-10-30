@@ -208,7 +208,11 @@ export function SellerProductForm({ productId }: { productId?: string }) {
 
       {productError && (
         <p className="seller-readonly-note" style={{ color: '#d9383a', margin: '16px 0' }}>
-          {productError} (đang dùng danh mục & thông số dự phòng)
+          {productError.includes('không tìm thấy') ||
+          productError.includes('not found') ||
+          productError.includes('404')
+            ? `Sản phẩm #${productId} không tìm thấy hoặc đang ở trạng thái Đã xóa. Vui lòng quay lại danh sách sản phẩm để khôi phục trước khi sửa.`
+            : `${productError} (đang dùng thông số dự phòng)`}
         </p>
       )}
 

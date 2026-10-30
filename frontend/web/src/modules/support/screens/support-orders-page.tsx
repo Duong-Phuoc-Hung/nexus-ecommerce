@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { ordersApi, type OrderListItem } from '@/modules/commerce/api/orders.api';
 import { userMessage } from '@/lib/axios/http';
-import { money, slug, Heading, DemoBanner } from '../components/support-shared';
+import { money, slug, supportStatusClass, Heading, DemoBanner } from '../components/support-shared';
 import {
   Select,
   SelectContent,
@@ -141,7 +141,7 @@ export function SupportOrdersPage() {
                     <td>{order.date}</td>
                     <td>{money(order.total)}</td>
                     <td>
-                      <span className={`support-status ${slug(order.status)}`}>
+                      <span className={`support-status ${supportStatusClass(order.status)}`}>
                         {getOrderStatusLabel(order.status)}
                       </span>
                     </td>

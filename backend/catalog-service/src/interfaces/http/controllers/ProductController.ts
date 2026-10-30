@@ -317,4 +317,26 @@ export class ProductController {
       res.status(400).json({ success: false, error: error?.message || 'Yêu cầu không hợp lệ.' });
     }
   }
+  //RECOVER
+  public async recover(req: Request, res: Response): Promise<void> {
+    try {
+      const authUser = (req as AuthenticatedRequest).user;
+      const sellerId = authUser?.id || (req.body?.sellerId ? String(req.body.sellerId) : '1');
+      const productId = req.params.id as string;
+
+      if (!this.productRepository || typeof this.productRepository.recover !== 'function') {
+        res.status(500).json({ success: false, error: 'Chức năng khôi phục chưa được cấu hình.' });
+        return;
+      }
+
+      await this.productRepository.recover(productId, sellerId);
+
+      res.status(200).json({
+        success: true,
+        message: `Đã khôi phục thành công sản phẩm với mã ID '${productId}'.`,
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error?.message || 'Yêu cầu không hợp lệ.' });
+    }
+  }
 }

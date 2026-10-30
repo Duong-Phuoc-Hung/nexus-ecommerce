@@ -75,6 +75,13 @@ export class InMemoryProductRepository implements IProductRepository {
     this.products.set(product.id, product);
   }
 
+  public async recover(id: string): Promise<void> {
+    const product = this.products.get(id);
+    if (product) {
+      product.updateDetails({ status: ProductStatus.ACTIVE });
+    }
+  }
+
   public async delete(id: string): Promise<void> {
     this.products.delete(id);
   }

@@ -10,6 +10,72 @@ export { cases, orders, users, shipments } from '../fixtures/support';
 export const money = (amount: number) => `${new Intl.NumberFormat('vi-VN').format(amount)} ₫`;
 export const slug = (value: string) => value.toLowerCase().replaceAll(' ', '-');
 
+export function supportStatusClass(status?: string): string {
+  if (!status) return 'status-default';
+  const s = status.toUpperCase().trim().replace(/[\s-]/g, '_');
+  switch (s) {
+    // Orders
+    case 'PENDING':
+    case 'CHỜ_XỬ_LÝ':
+      return 'status-pending';
+    case 'PROCESSING':
+    case 'ĐANG_XỬ_LÝ':
+      return 'status-processing';
+    case 'SHIPPED':
+    case 'ĐANG_GIAO_HÀNG':
+    case 'ĐANG_GIAO':
+      return 'status-shipped';
+    case 'DELIVERED':
+    case 'ĐÃ_GIAO_HÀNG':
+    case 'ĐÃ_GIAO':
+    case 'HOÀN_TẤT':
+      return 'status-delivered';
+    case 'CANCELLED':
+    case 'ĐÃ_HỦY':
+      return 'status-cancelled';
+    case 'REFUNDED':
+    case 'ĐÃ_HOÀN_TIỀN':
+      return 'status-refunded';
+
+    // Shipments
+    case 'READY_TO_PICK':
+    case 'CHỜ_LẤY_HÀNG':
+      return 'status-ready-to-pick';
+    case 'PICKED':
+    case 'ĐÃ_LẤY_HÀNG':
+      return 'status-picked';
+    case 'IN_TRANSIT':
+    case 'ĐANG_VẬN_CHUYỂN':
+      return 'status-in-transit';
+    case 'OUT_FOR_DELIVERY':
+    case 'ĐANG_GIAO_HÀNG':
+      return 'status-out-for-delivery';
+    case 'FAILED':
+    case 'GIAO_HÀNG_THẤT_BẠI':
+      return 'status-failed';
+    case 'RETURNED':
+    case 'ĐÃ_TRẢ_HÀNG':
+      return 'status-returned';
+
+    // Users
+    case 'ACTIVE':
+    case 'ĐANG_HOẠT_ĐỘNG':
+    case 'HOẠT_ĐỘNG':
+      return 'status-active';
+    case 'INACTIVE':
+    case 'NGỪNG_HOẠT_ĐỘNG':
+      return 'status-inactive';
+    case 'LOCKED':
+    case 'SUSPENDED':
+    case 'BANNED':
+    case 'TẠM_KHÓA':
+      return 'status-locked';
+
+    default:
+      return slug(status);
+  }
+}
+
 export function Heading({
   label,
   title,

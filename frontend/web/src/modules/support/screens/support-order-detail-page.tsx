@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ordersApi, type OrderDetail } from '@/modules/commerce/api/orders.api';
 import { userMessage } from '@/lib/axios/http';
-import { money, slug, Heading, DemoBanner } from '../components/support-shared';
+import { money, slug, supportStatusClass, Heading, DemoBanner } from '../components/support-shared';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { getOrderStatusLabel } from './support-orders-page';
 
@@ -29,7 +29,21 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
     return () => controller.abort();
   }, [orderId]);
 
+  const isCancelled = order?.status === 'CANCELLED' || order?.status === 'ĐÃ_HỦY';
+  const isRefunded = order?.status === 'REFUNDED' || order?.status === 'ĐÃ_HOÀN_TIỀN';
+  const isDelivered =
+    order?.status === 'DELIVERED' ||
+    order?.status === 'ĐÃ_GIAO_HÀNG' ||
+    order?.status === 'ĐÃ_GIAO';
+
+  // Hủy đơn hàng chỉ được thực hiện 1 lần, không cho phép hủy khi đã hủy, đã hoàn tiền hoặc đã giao
+  const canCancel = !acting && !isCancelled && !isRefunded && !isDelivered;
+  const canRefund = !acting && !isRefunded;
+
   function handleOpenDialog(kind: 'cancel' | 'refund') {
+    if (kind === 'cancel' && !canCancel) return;
+    if (kind === 'refund' && !canRefund) return;
+
     setActionKind(kind);
     setActionReason(
       kind === 'cancel'
@@ -42,6 +56,8 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
   async function handleConfirmAction(e: React.FormEvent) {
     e.preventDefault();
     if (!actionKind || !actionReason.trim()) return;
+    if (actionKind === 'cancel' && !canCancel) return;
+    if (actionKind === 'refund' && !canRefund) return;
 
     setActing(true);
     setNotice('');
@@ -90,7 +106,7 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
                   <p className="support-eyebrow">MÃ ĐƠN HÀNG</p>
                   <h2>{order.id}</h2>
                 </div>
-                <span className={`support-status ${slug(order.status)}`}>
+                <span className={`support-status ${supportStatusClass(order.status)}`}>
                   {getOrderStatusLabel(order.status)}
                 </span>
               </div>
@@ -199,11 +215,29 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
               </p>
             </div>
             <div className="support-action-buttons">
-              <button type="button" disabled={acting} onClick={() => handleOpenDialog('cancel')}>
-                Hủy đơn hàng
+              <button
+                type="button"
+                disabled={!canCancel}
+                onClick={() => handleOpenDialog('cancel')}
+                title={
+                  isCancelled
+                    ? 'Đơn hàng này đã được hủy'
+                    : isDelivered
+                      ? 'Không thể hủy đơn hàng đã giao thành công'
+                      : isRefunded
+                        ? 'Đơn hàng này đã được hoàn tiền'
+                        : undefined
+                }
+              >
+                {isCancelled ? 'Đã hủy đơn hàng' : 'Hủy đơn hàng'}
               </button>
-              <button type="button" disabled={acting} onClick={() => handleOpenDialog('refund')}>
-                Xử lý hoàn tiền
+              <button
+                type="button"
+                disabled={!canRefund}
+                onClick={() => handleOpenDialog('refund')}
+                title={isRefunded ? 'Đơn hàng này đã được xử lý hoàn tiền' : undefined}
+              >
+                {isRefunded ? 'Đã hoàn tiền' : 'Xử lý hoàn tiền'}
               </button>
             </div>
             {notice && (

@@ -3,6 +3,7 @@ export enum ProductStatus {
   ACTIVE = 'ACTIVE',
   ARCHIVED = 'ARCHIVED',
   OUT_OF_STOCK = 'OUT_OF_STOCK',
+  DELETED = 'DELETED',
 }
 
 export interface ProductProps {
