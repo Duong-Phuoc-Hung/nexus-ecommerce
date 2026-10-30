@@ -47,20 +47,16 @@ export class RegisterUseCase {
       throw new UserAlreadyExistsException('Tài khoản với email này đã tồn tại trong hệ thống');
     }
 
-    // 3. Xác thực mã OTP từ Gmail
+    // 3. Xác thực mã OTP từ Gmail (Bắt buộc 100% để chống bypass OTP)
     if (this.otpStore) {
-      const activeOtp = await this.otpStore.getOtp(normalizedEmail);
-      // Nếu email này đã yêu cầu gửi OTP hoặc request có gửi trường otp -> Bắt buộc xác thực hợp lệ
-      if (activeOtp || dto.otp) {
-        if (!dto.otp || !dto.otp.trim()) {
-          throw new Error('Vui lòng nhập mã xác thực OTP đã gửi qua hòm thư Gmail của bạn.');
-        }
-        const isValidOtp = await this.otpStore.verifyAndConsumeOtp(normalizedEmail, dto.otp);
-        if (!isValidOtp) {
-          throw new Error(
-            'Mã xác thực OTP không chính xác hoặc đã hết hạn. Vui lòng nhận lại mã mới.',
-          );
-        }
+      if (!dto.otp || !dto.otp.trim()) {
+        throw new Error('Vui lòng nhập mã xác thực OTP đã gửi qua hòm thư Gmail của bạn.');
+      }
+      const isValidOtp = await this.otpStore.verifyAndConsumeOtp(normalizedEmail, dto.otp);
+      if (!isValidOtp) {
+        throw new Error(
+          'Mã xác thực OTP không chính xác hoặc đã hết hạn (hoặc đã bị khóa do nhập sai quá nhiều lần). Vui lòng nhận lại mã mới.',
+        );
       }
     }
 

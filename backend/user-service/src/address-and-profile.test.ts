@@ -2,6 +2,20 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createApplication } from './app';
 
+async function getTestOtp(
+  baseUrl: string,
+  email: string,
+  fullName = 'Test Buyer',
+): Promise<string> {
+  const res = await fetch(`${baseUrl}/api/v1/auth/send-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, fullName }),
+  });
+  const json = (await res.json()) as any;
+  return json.devOtp;
+}
+
 async function withUserServer<T>(run: (baseUrl: string) => Promise<T>): Promise<T> {
   process.env.NODE_ENV = 'test';
   process.env.USE_IN_MEMORY_DB = 'true';
@@ -30,7 +44,8 @@ test('POST /api/v1/auth/register saves real phone, rejects fake roles, and enfor
         fullName: 'Real Phone Buyer',
         password: 'Password123!',
         phone: '0987654321',
-        role: 'ADMIN', // Thử nâng quyền
+        role: 'ADMIN',
+        otp: await getTestOtp(baseUrl, 'realphone.buyer@nexus.vn'),
       }),
     });
 
@@ -48,7 +63,8 @@ test('POST /api/v1/auth/register saves real phone, rejects fake roles, and enfor
         email: 'other.buyer@nexus.vn',
         fullName: 'Other Buyer',
         password: 'Password123!',
-        phone: '0987654321', // Trùng phone
+        phone: '0987654321',
+        otp: await getTestOtp(baseUrl, 'other.buyer@nexus.vn'),
       }),
     });
     assert.equal(dupPhoneRes.status, 409);
@@ -63,7 +79,8 @@ test('POST /api/v1/auth/register saves real phone, rejects fake roles, and enfor
         email: 'invalidphone@nexus.vn',
         fullName: 'Invalid Phone',
         password: 'Password123!',
-        phone: '12345678', // Sai định dạng
+        phone: '12345678',
+        otp: await getTestOtp(baseUrl, 'invalidphone@nexus.vn'),
       }),
     });
     assert.equal(invalidPhoneRes.status, 400);
@@ -81,6 +98,7 @@ test('Profile & Address Book flow: CRUD addresses, 5 address limit, default prom
         fullName: 'Buyer A',
         password: 'Password123!',
         phone: '0911223344',
+        otp: await getTestOtp(baseUrl, 'buyer.a@nexus.vn'),
       }),
     });
     assert.equal(regRes.status, 201);
@@ -233,6 +251,7 @@ test('Profile & Address Book flow: CRUD addresses, 5 address limit, default prom
         fullName: 'Buyer B',
         password: 'Password123!',
         phone: '0977889900',
+        otp: await getTestOtp(baseUrl, 'buyer.b@nexus.vn'),
       }),
     });
     assert.equal(regB.status, 201);

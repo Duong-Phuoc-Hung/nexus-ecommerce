@@ -5,6 +5,7 @@ export class RedisOtpStore {
   private memoryFallback: Map<string, { otp: string; expiresAt: number }> = new Map();
   private cooldownMemory: Map<string, number> = new Map();
   private rateLimitMemory: Map<string, { count: number; resetAt: number }> = new Map();
+  private attemptsMemory: Map<string, number> = new Map();
   private isRedisConnected: boolean = false;
   private isInitialized: boolean = false;
 
@@ -62,6 +63,10 @@ export class RedisOtpStore {
 
   private getRateLimitKey(email: string): string {
     return `otp:ratelimit:${email.trim().toLowerCase()}`;
+  }
+
+  private getAttemptsKey(email: string): string {
+    return `otp:attempts:${email.trim().toLowerCase()}`;
   }
 
   /**
@@ -160,14 +165,17 @@ export class RedisOtpStore {
   public async saveOtp(email: string, otp: string, ttlSeconds: number = 300): Promise<void> {
     this.initRedis();
     const key = this.getKey(email);
+    const attemptsKey = this.getAttemptsKey(email);
     this.memoryFallback.set(key, {
       otp: otp.trim(),
       expiresAt: Date.now() + ttlSeconds * 1000,
     });
+    this.attemptsMemory.delete(attemptsKey);
 
     if (this.isRedisConnected && this.redisClient) {
       try {
         await this.redisClient.set(key, otp.trim(), 'EX', ttlSeconds);
+        await this.redisClient.del(attemptsKey);
       } catch (err) {
         console.warn('[RedisOtpStore] Ghi Redis thất bại, đã lưu vào RAM fallback:', err);
       }
@@ -175,11 +183,16 @@ export class RedisOtpStore {
   }
 
   /**
-   * Xác thực và tiêu thụ mã OTP (dùng một lần)
+   * Xác thực và tiêu thụ mã OTP (dùng một lần, bảo vệ chống brute-force tối đa 5 lần thử sai)
    */
-  public async verifyAndConsumeOtp(email: string, inputOtp: string): Promise<boolean> {
+  public async verifyAndConsumeOtp(
+    email: string,
+    inputOtp: string,
+    maxFailedAttempts: number = 5,
+  ): Promise<boolean> {
     this.initRedis();
     const key = this.getKey(email);
+    const attemptsKey = this.getAttemptsKey(email);
     const trimmedInput = String(inputOtp || '').trim();
 
     if (!trimmedInput) return false;
@@ -187,11 +200,38 @@ export class RedisOtpStore {
     if (this.isRedisConnected && this.redisClient) {
       try {
         const storedOtp = await this.redisClient.get(key);
-        if (storedOtp && storedOtp.trim() === trimmedInput) {
+        if (!storedOtp) return false;
+
+        const currentAttemptsStr = await this.redisClient.get(attemptsKey);
+        const currentAttempts = currentAttemptsStr ? parseInt(currentAttemptsStr, 10) : 0;
+
+        if (currentAttempts >= maxFailedAttempts) {
           await this.redisClient.del(key);
+          await this.redisClient.del(attemptsKey);
           this.memoryFallback.delete(key);
+          this.attemptsMemory.delete(attemptsKey);
+          return false;
+        }
+
+        if (storedOtp.trim() === trimmedInput) {
+          await this.redisClient.del(key);
+          await this.redisClient.del(attemptsKey);
+          this.memoryFallback.delete(key);
+          this.attemptsMemory.delete(attemptsKey);
           return true;
         }
+
+        const newAttempts = await this.redisClient.incr(attemptsKey);
+        if (newAttempts === 1) {
+          await this.redisClient.expire(attemptsKey, 300);
+        }
+        if (newAttempts >= maxFailedAttempts) {
+          await this.redisClient.del(key);
+          await this.redisClient.del(attemptsKey);
+          this.memoryFallback.delete(key);
+          this.attemptsMemory.delete(attemptsKey);
+        }
+        return false;
       } catch (err) {
         console.warn('[RedisOtpStore] Đọc Redis lỗi, chuyển sang kiểm tra RAM:', err);
       }
@@ -202,12 +242,28 @@ export class RedisOtpStore {
 
     if (Date.now() > memoryRecord.expiresAt) {
       this.memoryFallback.delete(key);
+      this.attemptsMemory.delete(attemptsKey);
+      return false;
+    }
+
+    const currentAttempts = this.attemptsMemory.get(attemptsKey) || 0;
+    if (currentAttempts >= maxFailedAttempts) {
+      this.memoryFallback.delete(key);
+      this.attemptsMemory.delete(attemptsKey);
       return false;
     }
 
     if (memoryRecord.otp === trimmedInput) {
       this.memoryFallback.delete(key);
+      this.attemptsMemory.delete(attemptsKey);
       return true;
+    }
+
+    const newAttempts = currentAttempts + 1;
+    this.attemptsMemory.set(attemptsKey, newAttempts);
+    if (newAttempts >= maxFailedAttempts) {
+      this.memoryFallback.delete(key);
+      this.attemptsMemory.delete(attemptsKey);
     }
 
     return false;

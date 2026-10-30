@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { IUserRepository } from '../../domain/repositories/IUserRepository';
 import { UserAlreadyExistsException } from '../../domain/exceptions/UserAlreadyExistsException';
 import { OtpRateLimitException } from '../../domain/exceptions/OtpRateLimitException';
@@ -50,7 +51,7 @@ export class SendRegistrationOtpUseCase {
     }
 
     // 4. Sinh mã OTP 6 số ngẫu nhiên
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpCode = crypto.randomInt(100000, 1000000).toString();
 
     // 5. Lưu OTP vào Redis với thời hạn 5 phút (300 giây)
     await this.otpStore.saveOtp(normalizedEmail, otpCode, 300);

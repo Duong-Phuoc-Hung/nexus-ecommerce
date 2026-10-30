@@ -180,7 +180,7 @@ test('POST /api/v1/auth/send-otp and register: Full OTP lifecycle and security c
     assert.equal(consumedOtpJson.success, false);
     assert.match(consumedOtpJson.error, /Mã xác thực OTP không chính xác hoặc đã hết hạn/);
 
-    // 8. Backward compatibility: Registering directly without OTP when no OTP was requested -> 201
+    // 8. Bắt buộc OTP 100%: Đăng ký trực tiếp không truyền OTP phải bị chặn (400 Bad Request)
     const directRes = await fetch(`${baseUrl}/api/v1/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -190,9 +190,62 @@ test('POST /api/v1/auth/send-otp and register: Full OTP lifecycle and security c
         password: testPassword,
       }),
     });
-    assert.equal(directRes.status, 201);
+    assert.equal(directRes.status, 400, 'Bắt buộc phải có OTP khi đăng ký');
     const directJson = (await directRes.json()) as any;
-    assert.equal(directJson.success, true);
-    assert.equal(directJson.data.email, 'direct.buyer@nexus.vn');
+    assert.equal(directJson.success, false);
+    assert.match(directJson.error, /Vui lòng nhập mã xác thực OTP/);
+  });
+});
+
+test('POST /api/v1/auth/register: Brute-force OTP protection locks and destroys OTP after 5 failed attempts', async () => {
+  await withUserServer(async (baseUrl) => {
+    const testEmail = 'bruteforce.test@nexus.vn';
+    const testPassword = 'Password123!';
+
+    // 1. Gửi OTP
+    const otpRes = await fetch(`${baseUrl}/api/v1/auth/send-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: testEmail, fullName: 'Brute Force Tester' }),
+    });
+    assert.equal(otpRes.status, 200);
+    const validOtp = ((await otpRes.json()) as any).devOtp;
+
+    // 2. Thử sai liên tục 5 lần
+    for (let i = 1; i <= 5; i++) {
+      const wrongRes = await fetch(`${baseUrl}/api/v1/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: testEmail,
+          fullName: 'Brute Force Tester',
+          password: testPassword,
+          otp: `99999${i}`,
+        }),
+      });
+      assert.equal(wrongRes.status, 400);
+      const wrongJson = (await wrongRes.json()) as any;
+      assert.match(wrongJson.error, /Mã xác thực OTP không chính xác/);
+    }
+
+    // 3. Lần thứ 6: Dù nhập ĐÚNG mã validOtp ban đầu, hệ thống vẫn từ chối vì OTP đã bị hủy
+    const attemptWithRealOtpRes = await fetch(`${baseUrl}/api/v1/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: testEmail,
+        fullName: 'Brute Force Tester',
+        password: testPassword,
+        otp: validOtp,
+      }),
+    });
+    assert.equal(
+      attemptWithRealOtpRes.status,
+      400,
+      'Phải từ chối vì mã OTP đã bị hủy do brute-force',
+    );
+    const lockedJson = (await attemptWithRealOtpRes.json()) as any;
+    assert.equal(lockedJson.success, false);
+    assert.match(lockedJson.error, /Mã xác thực OTP không chính xác/);
   });
 });
