@@ -1,6 +1,7 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
-import { InMemoryOrderRepository } from './infrastructure/repositories/InMemoryOrderRepository';
+import { Pool } from 'pg';
+import { PostgresOrderRepository } from './infrastructure/repositories/PostgresOrderRepository';
 import { GetOrderDetailUseCase } from './application/use-cases/GetOrderDetailUseCase';
 import { SearchOrdersUseCase } from './application/use-cases/SearchOrdersUseCase';
 import { CancelOrderUseCase } from './application/use-cases/CancelOrderUseCase';
@@ -26,7 +27,16 @@ export function createApplication(): Application {
     });
   });
 
-  const orderRepository = new InMemoryOrderRepository();
+  // Khởi tạo PostgreSQL connection pool cho Commerce Bounded Context (Port 5434)
+  const pool = new Pool({
+    host: process.env.COMMERCE_DB_HOST || '127.0.0.1',
+    port: Number(process.env.COMMERCE_DB_PORT) || 5434,
+    user: process.env.COMMERCE_DB_USER || 'nexus_commerce',
+    password: process.env.COMMERCE_DB_PASSWORD || 'nexus_password',
+    database: process.env.COMMERCE_DB_NAME || 'nexus_commerce_db',
+  });
+
+  const orderRepository = new PostgresOrderRepository(pool);
   const getOrderDetailUseCase = new GetOrderDetailUseCase(orderRepository);
   const searchOrdersUseCase = new SearchOrdersUseCase(orderRepository);
   const cancelOrderUseCase = new CancelOrderUseCase(orderRepository, getOrderDetailUseCase);
