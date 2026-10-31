@@ -158,6 +158,11 @@ export class User {
     this._updatedAt = new Date();
   }
 
+  public setStatus(status: UserStatus): void {
+    this._status = status;
+    this._updatedAt = new Date();
+  }
+
   public setRole(role: UserRole): void {
     this._role = role;
     this._updatedAt = new Date();

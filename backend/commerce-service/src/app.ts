@@ -5,6 +5,7 @@ import { GetOrderDetailUseCase } from './application/use-cases/GetOrderDetailUse
 import { SearchOrdersUseCase } from './application/use-cases/SearchOrdersUseCase';
 import { CancelOrderUseCase } from './application/use-cases/CancelOrderUseCase';
 import { RefundOrderUseCase } from './application/use-cases/RefundOrderUseCase';
+import { RejectRefundUseCase } from './application/use-cases/RejectRefundUseCase';
 import { OrderController } from './interfaces/http/controllers/OrderController';
 import { createOrderRoutes } from './interfaces/http/routes/OrderRoutes';
 import { createCheckoutRoutes } from './interfaces/http/routes/CheckoutRoutes';
@@ -30,12 +31,14 @@ export function createApplication(): Application {
   const searchOrdersUseCase = new SearchOrdersUseCase(orderRepository);
   const cancelOrderUseCase = new CancelOrderUseCase(orderRepository, getOrderDetailUseCase);
   const refundOrderUseCase = new RefundOrderUseCase(orderRepository, getOrderDetailUseCase);
+  const rejectRefundUseCase = new RejectRefundUseCase(orderRepository, getOrderDetailUseCase);
 
   const orderController = new OrderController(
     getOrderDetailUseCase,
     searchOrdersUseCase,
     cancelOrderUseCase,
     refundOrderUseCase,
+    rejectRefundUseCase,
   );
 
   app.use('/api/v1', createCheckoutRoutes());

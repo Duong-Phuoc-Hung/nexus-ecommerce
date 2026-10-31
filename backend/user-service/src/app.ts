@@ -12,6 +12,7 @@ import { ResetPasswordUseCase } from './application/use-cases/ResetPasswordUseCa
 import { AssignUserRoleUseCase } from './application/use-cases/AssignUserRoleUseCase';
 import { SearchUsersUseCase } from './application/use-cases/SearchUsersUseCase';
 import { UpdateUserProfileUseCase } from './application/use-cases/UpdateUserProfileUseCase';
+import { UpdateUserStatusUseCase } from './application/use-cases/UpdateUserStatusUseCase';
 import { GetUserAddressesUseCase } from './application/use-cases/GetUserAddressesUseCase';
 import { CreateAddressUseCase } from './application/use-cases/CreateAddressUseCase';
 import { UpdateAddressUseCase } from './application/use-cases/UpdateAddressUseCase';
@@ -88,6 +89,7 @@ export function createApplication(): Application {
   const updateAddressUseCase = new UpdateAddressUseCase(addressRepository);
   const deleteAddressUseCase = new DeleteAddressUseCase(addressRepository);
   const setDefaultAddressUseCase = new SetDefaultAddressUseCase(addressRepository);
+  const updateUserStatusUseCase = new UpdateUserStatusUseCase(userRepository);
 
   const userController = new UserController(
     getUserProfileUseCase,
@@ -104,6 +106,7 @@ export function createApplication(): Application {
     updateAddressUseCase,
     deleteAddressUseCase,
     setDefaultAddressUseCase,
+    updateUserStatusUseCase,
   );
 
   app.use('/api/v1/auth', createAuthRoutes(userController));

@@ -17,6 +17,12 @@ export function createOrderRoutes(controller: OrderController): Router {
   router.post('/:id/refund', requireAuth, requireOrderPermission('REFUND'), (req, res) =>
     controller.refund(req, res),
   );
+  router.post('/:id/refund/cancel', requireAuth, requireOrderPermission('REFUND'), (req, res) =>
+    controller.rejectRefund(req, res),
+  );
+  router.post('/:id/reject-refund', requireAuth, requireOrderPermission('REFUND'), (req, res) =>
+    controller.rejectRefund(req, res),
+  );
   router.post('/checkout', (req, res) => controller.checkout(req, res));
 
   return router;

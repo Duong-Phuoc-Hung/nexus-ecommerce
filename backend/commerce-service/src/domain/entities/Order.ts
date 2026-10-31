@@ -195,4 +195,18 @@ export class Order {
     });
     this._updatedAt = new Date();
   }
+
+  public rejectRefund(reason: string, restoredStatus: OrderStatus = OrderStatus.DELIVERED): void {
+    if (!reason || !reason.trim()) {
+      throw new Error('Lý do từ chối hoàn tiền (reason) là bắt buộc để ghi nhận audit log.');
+    }
+    this._status = restoredStatus;
+    this._timeline.push({
+      status: 'REFUND_REJECTED',
+      title: 'Yêu cầu hoàn tiền đã bị từ chối / hủy bởi nhân viên hỗ trợ',
+      timestamp: new Date(),
+      note: reason.trim(),
+    });
+    this._updatedAt = new Date();
+  }
 }
