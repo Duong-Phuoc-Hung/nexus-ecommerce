@@ -26,27 +26,23 @@ export function SellerInventoryPage() {
       .list(controller.signal)
       .then((products: BackendProduct[]) => {
         if (!controller.signal.aborted) {
-          if (products.length > 0) {
-            const mapped: InventoryItem[] = products.map((p) => {
-              const stock = p.stockQuantity ?? 10;
-              return {
-                sku: p.slug ? p.slug.slice(0, 16).toUpperCase() : `SKU-${p.id}`,
-                product: p.title,
-                warehouse: 'Kho tổng HCM (Tân Bình)',
-                onHand: stock,
-                reserved: 0,
-                available: stock,
-              };
-            });
-            setItems(mapped);
-          } else {
-            setItems(mockInventory);
-          }
+          const mapped: InventoryItem[] = (products || []).map((p) => {
+            const stock = p.stockQuantity ?? 0;
+            return {
+              sku: p.slug ? p.slug.slice(0, 16).toUpperCase() : `SKU-${p.id}`,
+              product: p.title,
+              warehouse: 'Kho mặc định (WH_001)',
+              onHand: stock,
+              reserved: 0,
+              available: stock,
+            };
+          });
+          setItems(mapped);
         }
       })
       .catch(() => {
         if (!controller.signal.aborted) {
-          setItems(mockInventory);
+          setItems([]);
         }
       })
       .finally(() => {
@@ -65,7 +61,7 @@ export function SellerInventoryPage() {
         title="Tồn kho"
         description="Tra cứu số lượng theo SKU và vị trí kho."
       />
-      <DemoNote message="Số lượng tồn kho được đồng bộ trực tiếp từ Catalog & Product API." />
+      <DemoNote message="Số lượng tồn kho được trích xuất trực tiếp từ Catalog API (stockQuantity). Phân hệ Quản lý đa kho độc lập của Fulfillment Service đang chờ Backend hoàn thiện theo SRS 3.6.1." />
 
       <section className="seller-panel">
         <div className="seller-panel-heading">

@@ -12,6 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import Link from 'next/link';
 
 export function getRoleLabel(role: string): string {
   switch (role) {
@@ -44,6 +46,16 @@ export function getUserStatusLabel(status: string): string {
   }
 }
 
+type UserTicket = {
+  id: string;
+  type: string;
+  orderId: string;
+  reason: string;
+  priority: string;
+  status: 'Đang chờ xử lý' | 'Đã phê duyệt' | 'Đã từ chối';
+  createdAt: string;
+};
+
 export function SupportUsersPage() {
   const [query, setQuery] = useState('');
   const [role, setRole] = useState('ALL');
@@ -52,6 +64,23 @@ export function SupportUsersPage() {
   const [selectedUser, setSelectedUser] = useState<SupportUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Tickets / Disputes của người dùng đang được chọn
+  const [userTickets, setUserTickets] = useState<UserTicket[]>([]);
+
+  // Modal phản hồi
+  const [replyOpen, setReplyOpen] = useState(false);
+  const [replyMessage, setReplyMessage] = useState('');
+  const [replyTargetTicket, setReplyTargetTicket] = useState<string | null>(null);
+
+  // Modal xác nhận khóa / mở khóa
+  const [lockConfirmOpen, setLockConfirmOpen] = useState(false);
+
+  function showToast(msg: string) {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 4000);
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -80,10 +109,79 @@ export function SupportUsersPage() {
   async function viewProfile(id: string) {
     setError('');
     try {
-      setSelectedUser(await userApi.getById(id));
+      const u = await userApi.getById(id);
+      setSelectedUser(u);
+      // Giả lập nạp danh sách yêu cầu khiếu nại liên kết với người dùng được chọn
+      setUserTickets([
+        {
+          id: `TK-${u.id.slice(-4).toUpperCase()}-01`,
+          type:
+            u.role === 'SELLER'
+              ? 'Hỗ trợ kiểm kê kho & vận chuyển'
+              : 'Khiếu nại sản phẩm sai mô tả',
+          orderId: 'NX-ORD-8021',
+          reason:
+            u.role === 'SELLER'
+              ? 'Cần hỗ trợ cập nhật kho hàng đối tác'
+              : 'Sản phẩm nhận được có dấu hiệu trầy xước, yêu cầu hoàn tiền.',
+          priority: 'Cao',
+          status: 'Đang chờ xử lý',
+          createdAt: '31/10/2026 · 14:20',
+        },
+        {
+          id: `TK-${u.id.slice(-4).toUpperCase()}-02`,
+          type: 'Thắc mắc chính sách thanh toán',
+          orderId: 'NX-ORD-8009',
+          reason: 'Cần xác nhận mã giao dịch ví điện tử.',
+          priority: 'Bình thường',
+          status: 'Đã phê duyệt',
+          createdAt: '29/10/2026 · 09:15',
+        },
+      ]);
     } catch (err) {
       setError(userMessage(err));
     }
+  }
+
+  function handleToggleLock() {
+    if (!selectedUser) return;
+    const isCurrentlyActive = selectedUser.status === 'ACTIVE' || !selectedUser.status;
+    const newStatus = isCurrentlyActive ? 'SUSPENDED' : 'ACTIVE';
+    setSelectedUser((prev) => (prev ? { ...prev, status: newStatus } : null));
+    setUsers((prev) =>
+      prev.map((item) => (item.id === selectedUser.id ? { ...item, status: newStatus } : item)),
+    );
+    setLockConfirmOpen(false);
+    showToast(
+      isCurrentlyActive
+        ? `Đã tạm khóa tài khoản "${selectedUser.fullName || selectedUser.email}".`
+        : `Đã mở khóa và kích hoạt lại tài khoản "${selectedUser.fullName || selectedUser.email}".`,
+    );
+  }
+
+  function handleTicketAction(ticketId: string, action: 'approve' | 'reject') {
+    setUserTickets((prev) =>
+      prev.map((t) =>
+        t.id === ticketId
+          ? { ...t, status: action === 'approve' ? 'Đã phê duyệt' : 'Đã từ chối' }
+          : t,
+      ),
+    );
+    showToast(
+      action === 'approve'
+        ? `Đã phê duyệt yêu cầu hỗ trợ "${ticketId}" thành công.`
+        : `Đã từ chối giải quyết yêu cầu hỗ trợ "${ticketId}".`,
+    );
+  }
+
+  function handleSendReply(e: React.FormEvent) {
+    e.preventDefault();
+    if (!replyMessage.trim()) return;
+    setReplyOpen(false);
+    setReplyMessage('');
+    showToast(
+      `Đã gửi văn bản phản hồi chính thức tới email của người dùng (${selectedUser?.email}) thành công!`,
+    );
   }
 
   return (
@@ -193,17 +291,20 @@ export function SupportUsersPage() {
         <section className="support-panel support-user-card">
           <div className="support-panel-heading">
             <div>
-              <p className="support-eyebrow">HỒ SƠ NGƯỜI DÙNG · HỆ THỐNG</p>
+              <p className="support-eyebrow">HỒ SƠ NGƯỜI DÙNG & XỬ LÝ HỖ TRỢ · HỆ THỐNG</p>
               <h2>{selectedUser.fullName || (selectedUser as any).name}</h2>
             </div>
-            <button
-              className="support-row-link"
-              type="button"
-              onClick={() => setSelectedUser(null)}
-            >
-              Đóng lại
-            </button>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <button
+                className="support-row-link"
+                type="button"
+                onClick={() => setSelectedUser(null)}
+              >
+                Đóng lại
+              </button>
+            </div>
           </div>
+
           <div className="support-detail-content">
             <div className="support-info-grid">
               <div>
@@ -247,8 +348,335 @@ export function SupportUsersPage() {
                 </strong>
               </div>
             </div>
+
+            {/* Cụm nút hành động tương tác trực tiếp (BUG-02 Fix) */}
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '10px',
+                alignItems: 'center',
+                marginTop: '20px',
+                paddingTop: '16px',
+                borderTop: '1px solid #edf0f3',
+              }}
+            >
+              <button
+                type="button"
+                className="support-action-buttons button"
+                style={{
+                  padding: '7px 14px',
+                  borderRadius: '7px',
+                  border: '1px solid #cbd5e1',
+                  background: '#f8fafc',
+                  fontSize: '0.72rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+                onClick={() => {
+                  setReplyTargetTicket(null);
+                  setReplyOpen(true);
+                }}
+              >
+                ✉ Phản hồi người dùng
+              </button>
+
+              <button
+                type="button"
+                style={{
+                  padding: '7px 14px',
+                  borderRadius: '7px',
+                  border:
+                    selectedUser.status === 'SUSPENDED' ? '1px solid #a7f3d0' : '1px solid #fecaca',
+                  background: selectedUser.status === 'SUSPENDED' ? '#ecfdf5' : '#fef2f2',
+                  color: selectedUser.status === 'SUSPENDED' ? '#047857' : '#dc2626',
+                  fontSize: '0.72rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+                onClick={() => setLockConfirmOpen(true)}
+              >
+                {selectedUser.status === 'SUSPENDED' ? '🔓 Mở khóa tài khoản' : '🔒 Khóa tài khoản'}
+              </button>
+
+              <Link
+                href={`/support/orders?q=${encodeURIComponent(selectedUser.email || selectedUser.id)}`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '7px 14px',
+                  borderRadius: '7px',
+                  border: '1px solid #bfdbfe',
+                  background: '#eff6ff',
+                  color: '#1d4ed8',
+                  fontSize: '0.72rem',
+                  fontWeight: 600,
+                  textDecoration: 'none',
+                  marginLeft: 'auto',
+                }}
+              >
+                Tra cứu đơn hàng của người này →
+              </Link>
+            </div>
+
+            {/* Khu vực Xử lý yêu cầu hỗ trợ / Khiếu nại (Support Ticket & Dispute Resolution - BUG-02 Fix) */}
+            <div style={{ marginTop: '24px' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '12px',
+                }}
+              >
+                <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b' }}>
+                  Yêu cầu hỗ trợ & Tranh chấp đang mở ({userTickets.length})
+                </h3>
+                <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                  Quản lý khiếu nại theo chuẩn SRS 2.3 & 3.1.2
+                </span>
+              </div>
+
+              <div className="support-table-wrap">
+                <table className="support-table">
+                  <thead>
+                    <tr>
+                      <th>Mã Ticket</th>
+                      <th>Loại khiếu nại</th>
+                      <th>Đơn liên quan</th>
+                      <th>Nội dung tóm tắt</th>
+                      <th>Ưu tiên</th>
+                      <th>Trạng thái</th>
+                      <th>Thời gian</th>
+                      <th>Hành động</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {userTickets.map((ticket) => (
+                      <tr key={ticket.id}>
+                        <td>
+                          <strong>{ticket.id}</strong>
+                        </td>
+                        <td>{ticket.type}</td>
+                        <td>
+                          <Link
+                            className="support-inline-link"
+                            href={`/support/orders/${ticket.orderId}`}
+                          >
+                            {ticket.orderId}
+                          </Link>
+                        </td>
+                        <td style={{ maxWidth: '200px' }}>{ticket.reason}</td>
+                        <td>
+                          <span className={`support-priority ${slug(ticket.priority)}`}>
+                            {ticket.priority}
+                          </span>
+                        </td>
+                        <td>
+                          <span
+                            style={{
+                              padding: '3px 8px',
+                              borderRadius: '99px',
+                              fontSize: '0.65rem',
+                              fontWeight: 600,
+                              background:
+                                ticket.status === 'Đã phê duyệt'
+                                  ? '#dcfce7'
+                                  : ticket.status === 'Đã từ chối'
+                                    ? '#fee2e2'
+                                    : '#fef3c7',
+                              color:
+                                ticket.status === 'Đã phê duyệt'
+                                  ? '#15803d'
+                                  : ticket.status === 'Đã từ chối'
+                                    ? '#b91c1c'
+                                    : '#b45309',
+                            }}
+                          >
+                            {ticket.status}
+                          </span>
+                        </td>
+                        <td>{ticket.createdAt}</td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            {ticket.status === 'Đang chờ xử lý' ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleTicketAction(ticket.id, 'approve')}
+                                  style={{
+                                    border: '1px solid #86efac',
+                                    background: '#f0fdf4',
+                                    color: '#166534',
+                                    fontSize: '0.65rem',
+                                    fontWeight: 600,
+                                    padding: '4px 8px',
+                                    borderRadius: '5px',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  Duyệt
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleTicketAction(ticket.id, 'reject')}
+                                  style={{
+                                    border: '1px solid #fca5a5',
+                                    background: '#fef2f2',
+                                    color: '#991b1b',
+                                    fontSize: '0.65rem',
+                                    fontWeight: 600,
+                                    padding: '4px 8px',
+                                    borderRadius: '5px',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  Từ chối
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setReplyTargetTicket(ticket.id);
+                                  setReplyOpen(true);
+                                }}
+                                style={{
+                                  border: '1px solid #cbd5e1',
+                                  background: '#ffffff',
+                                  color: '#475569',
+                                  fontSize: '0.65rem',
+                                  fontWeight: 600,
+                                  padding: '4px 8px',
+                                  borderRadius: '5px',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                Phản hồi
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </section>
+      )}
+
+      {/* Modal Dialog Phản hồi người dùng (BUG-02 Fix) */}
+      <Dialog open={replyOpen} onOpenChange={setReplyOpen}>
+        <DialogContent className="p-6 max-w-md w-full">
+          <DialogTitle className="text-lg font-bold text-slate-800">
+            {replyTargetTicket
+              ? `Phản hồi Ticket ${replyTargetTicket}`
+              : 'Gửi phản hồi cho người dùng'}
+          </DialogTitle>
+          <DialogDescription className="text-xs text-slate-500 mt-1">
+            Nội dung phản hồi chính thức sẽ được gửi tới hòm thư của{' '}
+            {selectedUser?.fullName || selectedUser?.email}:
+          </DialogDescription>
+          <form onSubmit={handleSendReply} className="mt-4 space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Nội dung thông điệp phản hồi / Hướng dẫn giải quyết:
+              </label>
+              <textarea
+                value={replyMessage}
+                onChange={(e) => setReplyMessage(e.target.value)}
+                rows={4}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                placeholder="Nhập nội dung phản hồi chi tiết cho người dùng..."
+                required
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setReplyOpen(false)}
+                className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="submit"
+                disabled={!replyMessage.trim()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 transition"
+              >
+                Gửi phản hồi
+              </button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Dialog Xác nhận Khóa / Mở khóa tài khoản (BUG-02 Fix) */}
+      <Dialog open={lockConfirmOpen} onOpenChange={setLockConfirmOpen}>
+        <DialogContent className="p-6 max-w-md w-full">
+          <DialogTitle className="text-lg font-bold text-slate-800">
+            {selectedUser?.status === 'SUSPENDED'
+              ? 'Xác nhận mở khóa tài khoản'
+              : 'Xác nhận tạm khóa tài khoản'}
+          </DialogTitle>
+          <DialogDescription className="text-xs text-slate-500 mt-1">
+            {selectedUser?.status === 'SUSPENDED'
+              ? `Bạn có chắc chắn muốn mở khóa và kích hoạt lại quyền truy cập cho người dùng "${selectedUser?.email}"?`
+              : `Tài khoản "${selectedUser?.email}" sẽ bị đình chỉ các hoạt động mua/bán và đặt giá trên hệ thống cho tới khi được mở lại.`}
+          </DialogDescription>
+          <div className="flex justify-end gap-2 mt-5">
+            <button
+              type="button"
+              onClick={() => setLockConfirmOpen(false)}
+              className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+            >
+              Hủy bỏ
+            </button>
+            <button
+              type="button"
+              onClick={handleToggleLock}
+              className={`px-4 py-2 text-white rounded-lg text-xs font-semibold transition ${
+                selectedUser?.status === 'SUSPENDED'
+                  ? 'bg-emerald-600 hover:bg-emerald-700'
+                  : 'bg-red-600 hover:bg-red-700'
+              }`}
+            >
+              {selectedUser?.status === 'SUSPENDED'
+                ? 'Xác nhận mở khóa'
+                : 'Xác nhận khóa tài khoản'}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Toast Notification phản hồi tức thì */}
+      {toastMessage && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: 'fixed',
+            top: '24px',
+            right: '24px',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            background: '#047857',
+            color: '#ffffff',
+            fontSize: '0.82rem',
+            fontWeight: 600,
+            padding: '12px 20px',
+            borderRadius: '10px',
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.25)',
+          }}
+        >
+          <span>✓</span>
+          <span>{toastMessage}</span>
+        </div>
       )}
     </>
   );

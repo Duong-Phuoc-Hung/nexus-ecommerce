@@ -319,8 +319,7 @@ export function SellerOrdersPage() {
             {selectedOrder.status !== 'CANCELLED' && selectedOrder.status !== 'DELIVERED' && (
               <button
                 type="button"
-                className="seller-button"
-                style={{ background: '#fff0f0', color: '#b32029', borderColor: '#f1bdc0' }}
+                className="seller-button-danger"
                 disabled={cancelActing}
                 onClick={() => handleOpenCancelModal(selectedOrder.id)}
               >
@@ -343,7 +342,7 @@ export function SellerOrdersPage() {
 
       {/* Form Dialog Modal xác nhận hủy đơn hàng thay thế window.prompt */}
       <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
-        <DialogContent className="p-6 bg-white rounded-2xl shadow-2xl max-w-md w-full">
+        <DialogContent className="p-6 max-w-md w-full">
           <DialogTitle className="text-lg font-bold text-slate-800">
             Xác nhận hủy đơn hàng
           </DialogTitle>

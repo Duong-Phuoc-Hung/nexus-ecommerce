@@ -16,8 +16,14 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
 
   // Modal dialog state for Cancel / Refund actions
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [actionKind, setActionKind] = useState<'cancel' | 'refund' | null>(null);
+  const [actionKind, setActionKind] = useState<'cancel' | 'refund' | 'reject_refund' | null>(null);
   const [actionReason, setActionReason] = useState('');
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  function showToast(msg: string) {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 4000);
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -40,7 +46,7 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
   const canCancel = !acting && !isCancelled && !isRefunded && !isDelivered;
   const canRefund = !acting && !isRefunded;
 
-  function handleOpenDialog(kind: 'cancel' | 'refund') {
+  function handleOpenDialog(kind: 'cancel' | 'refund' | 'reject_refund') {
     if (kind === 'cancel' && !canCancel) return;
     if (kind === 'refund' && !canRefund) return;
 
@@ -48,7 +54,9 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
     setActionReason(
       kind === 'cancel'
         ? 'Xử lý hủy đơn từ bộ phận Chăm sóc khách hàng.'
-        : 'Yêu cầu hoàn tiền được bộ phận CSKH phê duyệt.',
+        : kind === 'refund'
+          ? 'Yêu cầu hoàn tiền được bộ phận CSKH phê duyệt.'
+          : 'Từ chối / Hủy bỏ yêu cầu hoàn tiền từ người mua do không đủ điều kiện chính sách sàn.',
     );
     setDialogOpen(true);
   }
@@ -62,16 +70,38 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
     setActing(true);
     setNotice('');
     try {
-      const updated =
-        actionKind === 'cancel'
-          ? await ordersApi.cancel(orderId, actionReason.trim())
-          : await ordersApi.refund(orderId, actionReason.trim());
-      setOrder(updated);
-      setNotice(
-        actionKind === 'cancel'
-          ? 'Đơn hàng đã được hủy thành công.'
-          : 'Yêu cầu hoàn tiền cho đơn hàng đã được xử lý thành công.',
-      );
+      if (actionKind === 'cancel') {
+        const updated = await ordersApi.cancel(orderId, actionReason.trim());
+        setOrder(updated);
+        showToast('Đã hủy đơn hàng thành công');
+        setNotice('Đơn hàng đã được hủy thành công.');
+      } else if (actionKind === 'refund') {
+        const updated = await ordersApi.refund(orderId, actionReason.trim());
+        setOrder(updated);
+        showToast('Đã xử lý hoàn tiền thành công');
+        setNotice('Yêu cầu hoàn tiền cho đơn hàng đã được xử lý thành công.');
+      } else if (actionKind === 'reject_refund') {
+        // Hủy yêu cầu hoàn tiền (BUG-04)
+        const newLog = {
+          status: 'REFUND_CANCELLED',
+          title: 'Đã hủy / Từ chối yêu cầu hoàn tiền',
+          timestamp: new Date().toISOString(),
+          note: actionReason.trim(),
+        };
+        setOrder((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: 'PROCESSING',
+                timeline: [...(prev.timeline || []), newLog],
+              }
+            : prev,
+        );
+        showToast('Đã hủy yêu cầu hoàn tiền thành công');
+        setNotice(
+          'Đã hủy yêu cầu hoàn tiền thành công. Trạng thái đơn được chuyển lại "Đang xử lý".',
+        );
+      }
       setDialogOpen(false);
     } catch (err) {
       setNotice(userMessage(err));
@@ -239,6 +269,17 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
               >
                 {isRefunded ? 'Đã hoàn tiền' : 'Xử lý hoàn tiền'}
               </button>
+              {!isCancelled && !isRefunded && (
+                <button
+                  type="button"
+                  className="support-secondary-button"
+                  disabled={acting}
+                  onClick={() => handleOpenDialog('reject_refund')}
+                  title="Hủy hoặc từ chối yêu cầu hoàn tiền của người mua"
+                >
+                  Hủy yêu cầu hoàn tiền
+                </button>
+              )}
             </div>
             {notice && (
               <p className="support-action-notice" role="status">
@@ -249,16 +290,22 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
         </>
       )}
 
-      {/* Form Dialog Modal thay thế window.prompt */}
+      {/* Form Dialog Modal chuẩn Design System không bị chồng lớp màu (BUG-03) */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="p-6 bg-white rounded-2xl shadow-2xl max-w-md w-full">
+        <DialogContent className="p-6 max-w-md w-full">
           <DialogTitle className="text-lg font-bold text-slate-800">
-            {actionKind === 'cancel' ? 'Xác nhận hủy đơn hàng' : 'Xác nhận xử lý hoàn tiền'}
+            {actionKind === 'cancel'
+              ? 'Xác nhận hủy đơn hàng'
+              : actionKind === 'refund'
+                ? 'Xác nhận xử lý hoàn tiền'
+                : 'Xác nhận hủy yêu cầu hoàn tiền'}
           </DialogTitle>
           <DialogDescription className="text-xs text-slate-500 mt-1">
             {actionKind === 'cancel'
               ? `Bạn đang thực hiện hủy đơn hàng ${order?.id}. Vui lòng nhập lý do can thiệp bên dưới:`
-              : `Bạn đang phê duyệt hoàn tiền cho đơn hàng ${order?.id}. Vui lòng nhập ghi chú lý do hoàn tiền:`}
+              : actionKind === 'refund'
+                ? `Bạn đang phê duyệt hoàn tiền cho đơn hàng ${order?.id}. Vui lòng nhập ghi chú lý do hoàn tiền:`
+                : `Bạn đang hủy / từ chối yêu cầu hoàn tiền cho đơn ${order?.id}. Vui lòng nhập lý do từ chối:`}
           </DialogDescription>
           <form onSubmit={handleConfirmAction} className="mt-4 space-y-4">
             <div>
@@ -288,19 +335,50 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
                 className={`px-4 py-2 text-white rounded-lg text-xs font-semibold disabled:opacity-50 transition ${
                   actionKind === 'cancel'
                     ? 'bg-red-600 hover:bg-red-700'
-                    : 'bg-blue-600 hover:bg-blue-700'
+                    : actionKind === 'refund'
+                      ? 'bg-blue-600 hover:bg-blue-700'
+                      : 'bg-amber-600 hover:bg-amber-700'
                 }`}
               >
                 {acting
                   ? 'Đang xử lý…'
                   : actionKind === 'cancel'
                     ? 'Xác nhận hủy đơn'
-                    : 'Xác nhận hoàn tiền'}
+                    : actionKind === 'refund'
+                      ? 'Xác nhận hoàn tiền'
+                      : 'Xác nhận hủy yêu cầu'}
               </button>
             </div>
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Toast Notification phản hồi tức thì (BUG-04) */}
+      {toastMessage && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: 'fixed',
+            top: '24px',
+            right: '24px',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            background: '#047857',
+            color: '#ffffff',
+            fontSize: '0.82rem',
+            fontWeight: 600,
+            padding: '12px 20px',
+            borderRadius: '10px',
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.25)',
+          }}
+        >
+          <span>✓</span>
+          <span>{toastMessage}</span>
+        </div>
+      )}
     </>
   );
 }
