@@ -48,6 +48,7 @@ export function createApplication(): Application {
         { name: 'Catalog', prefix: '/api/v1/products', target: SERVICE_ENDPOINTS.catalog },
         { name: 'Categories', prefix: '/api/v1/categories', target: SERVICE_ENDPOINTS.catalog },
         { name: 'Commerce & Orders', prefix: '/api/v1/orders', target: SERVICE_ENDPOINTS.commerce },
+        { name: 'Cart', prefix: '/api/v1/cart', target: SERVICE_ENDPOINTS.commerce },
         {
           name: 'Auction & Bidding',
           prefix: '/api/v1/auctions',
@@ -163,6 +164,7 @@ export function createApplication(): Application {
   app.use('/api/v1/orders', createProxy('Commerce Service', SERVICE_ENDPOINTS.commerce));
   app.use('/api/v1/checkout', createProxy('Commerce Service', SERVICE_ENDPOINTS.commerce));
   app.use('/api/v1/payments', createProxy('Commerce Service', SERVICE_ENDPOINTS.commerce));
+  app.use('/api/v1/cart', createProxy('Commerce Service', SERVICE_ENDPOINTS.commerce));
   app.use(
     '/api/v1/fulfillments',
     createProxy('Fulfillment Service', SERVICE_ENDPOINTS.fulfillment),
