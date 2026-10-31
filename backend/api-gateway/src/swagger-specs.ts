@@ -39,6 +39,211 @@ export const userSpec = {
   servers: [{ url: '/', description: 'API Gateway (Same Origin)' }],
   components: commonComponents,
   paths: {
+    '/api/v1/cart': {
+      get: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Xem giỏ hàng của tài khoản đang đăng nhập',
+        description: `${PRIVATE} Yêu cầu token BUYER. Lấy giỏ hàng đồng bộ trên PostgreSQL, kèm thông tin chi tiết từng món hàng và tổng tiền.`,
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: jsonResponse('Thông tin giỏ hàng', {
+            success: true,
+            data: {
+              id: '1',
+              userId: 'usr_buyer_01',
+              expiresAt: '2026-11-07T12:00:00.000Z',
+              totalItems: 2,
+              subtotal: 1290000,
+              currency: 'VND',
+              items: [
+                {
+                  id: '1',
+                  productId: '1',
+                  title: 'Tai nghe không dây Nexus Air',
+                  sellerId: 'usr_seller_01',
+                  price: 1290000,
+                  stockQuantity: 50,
+                  status: 'ACTIVE',
+                  quantity: 1,
+                  subtotal: 1290000,
+                },
+              ],
+            },
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+      delete: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Xóa sạch tất cả món hàng trong giỏ',
+        description: `${PRIVATE} Yêu cầu token BUYER.`,
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: jsonResponse('Đã xóa sạch giỏ hàng', {
+            success: true,
+            message: 'Đã xóa sạch giỏ hàng.',
+            data: { id: '1', totalItems: 0, subtotal: 0, items: [] },
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+    },
+    '/api/v1/cart/items': {
+      post: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Thêm sản phẩm vào giỏ hàng',
+        description: `${PRIVATE} Yêu cầu token BUYER. Tự động kiểm tra sản phẩm active và đủ tồn kho.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['productId'],
+                properties: {
+                  productId: { type: 'string', example: '1' },
+                  quantity: { type: 'number', example: 1 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Thêm vào giỏ thành công', {
+            success: true,
+            message: 'Đã thêm sản phẩm vào giỏ hàng thành công.',
+            data: { id: '1', totalItems: 1, subtotal: 1290000, items: [] },
+          }),
+          400: errorResponse('Dữ liệu không hợp lệ', 'Sản phẩm này hiện không còn bán.'),
+          401: unauthorized,
+          404: errorResponse('Không tìm thấy sản phẩm', 'Không tìm thấy sản phẩm #1.'),
+        },
+      },
+    },
+    '/api/v1/cart/items/{id}': {
+      put: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Cập nhật số lượng món hàng trong giỏ',
+        description: `${PRIVATE} Yêu cầu token BUYER. Truyền { quantity: 0 } hoặc số âm để xóa món hàng.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'ID của item trong giỏ (hoặc productId)',
+            schema: { type: 'string', example: '1' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['quantity'],
+                properties: {
+                  quantity: { type: 'number', example: 2 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Cập nhật số lượng thành công', {
+            success: true,
+            message: 'Đã cập nhật số lượng món hàng.',
+            data: { id: '1', totalItems: 2, subtotal: 2580000, items: [] },
+          }),
+          401: unauthorized,
+          404: errorResponse('Không tìm thấy', 'Món hàng không tồn tại trong giỏ.'),
+        },
+      },
+      delete: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Xóa một món hàng khỏi giỏ',
+        description: `${PRIVATE} Yêu cầu token BUYER.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'ID của item trong giỏ (hoặc productId)',
+            schema: { type: 'string', example: '1' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Xóa món hàng thành công', {
+            success: true,
+            message: 'Đã xóa món hàng khỏi giỏ hàng.',
+            data: { id: '1', totalItems: 0, subtotal: 0, items: [] },
+          }),
+          401: unauthorized,
+          404: errorResponse('Không tìm thấy', 'Món hàng không tồn tại trong giỏ.'),
+        },
+      },
+    },
+    '/api/v1/checkout/quote': {
+      post: {
+        tags: ['Buyer / Checkout & Đặt hàng'],
+        summary: 'Tính trước tổng tiền & phí ship cho đơn hàng (Quote)',
+        description: `${PRIVATE} Yêu cầu token BUYER. Tính giá và kiểm tra tồn kho trước khi đặt hàng.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  items: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        productId: { type: 'string', example: '1' },
+                        quantity: { type: 'number', example: 1 },
+                      },
+                    },
+                  },
+                  shippingAddress: {
+                    type: 'object',
+                    properties: {
+                      fullName: { type: 'string', example: 'Nguyễn Văn Buyer' },
+                      phone: { type: 'string', example: '0901234567' },
+                      province: { type: 'string', example: 'Hồ Chí Minh' },
+                      district: { type: 'string', example: 'Quận 1' },
+                      ward: { type: 'string', example: 'Bến Nghé' },
+                      addressLine: { type: 'string', example: '123 Lê Lợi' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Báo giá đơn hàng', {
+            success: true,
+            data: {
+              quoteId: 'quot_01hqz555abc',
+              expiresAt: '2026-10-31T17:15:00.000Z',
+              currency: 'VND',
+              sellerId: 'usr_seller_01',
+              subtotal: 1290000,
+              shippingFee: 30000,
+              totalAmount: 1320000,
+            },
+          }),
+          400: errorResponse('Lỗi dữ liệu', 'Địa chỉ giao hàng không hợp lệ.'),
+          401: unauthorized,
+        },
+      },
+    },
     '/api/v1/auth/login': {
       post: {
         tags: ['Authentication'],
@@ -675,6 +880,211 @@ export const catalogSpec = {
   servers: [{ url: '/', description: 'API Gateway (Same Origin)' }],
   components: commonComponents,
   paths: {
+    '/api/v1/cart': {
+      get: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Xem giỏ hàng của tài khoản đang đăng nhập',
+        description: `${PRIVATE} Yêu cầu token BUYER. Lấy giỏ hàng đồng bộ trên PostgreSQL, kèm thông tin chi tiết từng món hàng và tổng tiền.`,
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: jsonResponse('Thông tin giỏ hàng', {
+            success: true,
+            data: {
+              id: '1',
+              userId: 'usr_buyer_01',
+              expiresAt: '2026-11-07T12:00:00.000Z',
+              totalItems: 2,
+              subtotal: 1290000,
+              currency: 'VND',
+              items: [
+                {
+                  id: '1',
+                  productId: '1',
+                  title: 'Tai nghe không dây Nexus Air',
+                  sellerId: 'usr_seller_01',
+                  price: 1290000,
+                  stockQuantity: 50,
+                  status: 'ACTIVE',
+                  quantity: 1,
+                  subtotal: 1290000,
+                },
+              ],
+            },
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+      delete: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Xóa sạch tất cả món hàng trong giỏ',
+        description: `${PRIVATE} Yêu cầu token BUYER.`,
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: jsonResponse('Đã xóa sạch giỏ hàng', {
+            success: true,
+            message: 'Đã xóa sạch giỏ hàng.',
+            data: { id: '1', totalItems: 0, subtotal: 0, items: [] },
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+    },
+    '/api/v1/cart/items': {
+      post: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Thêm sản phẩm vào giỏ hàng',
+        description: `${PRIVATE} Yêu cầu token BUYER. Tự động kiểm tra sản phẩm active và đủ tồn kho.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['productId'],
+                properties: {
+                  productId: { type: 'string', example: '1' },
+                  quantity: { type: 'number', example: 1 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Thêm vào giỏ thành công', {
+            success: true,
+            message: 'Đã thêm sản phẩm vào giỏ hàng thành công.',
+            data: { id: '1', totalItems: 1, subtotal: 1290000, items: [] },
+          }),
+          400: errorResponse('Dữ liệu không hợp lệ', 'Sản phẩm này hiện không còn bán.'),
+          401: unauthorized,
+          404: errorResponse('Không tìm thấy sản phẩm', 'Không tìm thấy sản phẩm #1.'),
+        },
+      },
+    },
+    '/api/v1/cart/items/{id}': {
+      put: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Cập nhật số lượng món hàng trong giỏ',
+        description: `${PRIVATE} Yêu cầu token BUYER. Truyền { quantity: 0 } hoặc số âm để xóa món hàng.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'ID của item trong giỏ (hoặc productId)',
+            schema: { type: 'string', example: '1' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['quantity'],
+                properties: {
+                  quantity: { type: 'number', example: 2 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Cập nhật số lượng thành công', {
+            success: true,
+            message: 'Đã cập nhật số lượng món hàng.',
+            data: { id: '1', totalItems: 2, subtotal: 2580000, items: [] },
+          }),
+          401: unauthorized,
+          404: errorResponse('Không tìm thấy', 'Món hàng không tồn tại trong giỏ.'),
+        },
+      },
+      delete: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Xóa một món hàng khỏi giỏ',
+        description: `${PRIVATE} Yêu cầu token BUYER.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'ID của item trong giỏ (hoặc productId)',
+            schema: { type: 'string', example: '1' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Xóa món hàng thành công', {
+            success: true,
+            message: 'Đã xóa món hàng khỏi giỏ hàng.',
+            data: { id: '1', totalItems: 0, subtotal: 0, items: [] },
+          }),
+          401: unauthorized,
+          404: errorResponse('Không tìm thấy', 'Món hàng không tồn tại trong giỏ.'),
+        },
+      },
+    },
+    '/api/v1/checkout/quote': {
+      post: {
+        tags: ['Buyer / Checkout & Đặt hàng'],
+        summary: 'Tính trước tổng tiền & phí ship cho đơn hàng (Quote)',
+        description: `${PRIVATE} Yêu cầu token BUYER. Tính giá và kiểm tra tồn kho trước khi đặt hàng.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  items: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        productId: { type: 'string', example: '1' },
+                        quantity: { type: 'number', example: 1 },
+                      },
+                    },
+                  },
+                  shippingAddress: {
+                    type: 'object',
+                    properties: {
+                      fullName: { type: 'string', example: 'Nguyễn Văn Buyer' },
+                      phone: { type: 'string', example: '0901234567' },
+                      province: { type: 'string', example: 'Hồ Chí Minh' },
+                      district: { type: 'string', example: 'Quận 1' },
+                      ward: { type: 'string', example: 'Bến Nghé' },
+                      addressLine: { type: 'string', example: '123 Lê Lợi' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Báo giá đơn hàng', {
+            success: true,
+            data: {
+              quoteId: 'quot_01hqz555abc',
+              expiresAt: '2026-10-31T17:15:00.000Z',
+              currency: 'VND',
+              sellerId: 'usr_seller_01',
+              subtotal: 1290000,
+              shippingFee: 30000,
+              totalAmount: 1320000,
+            },
+          }),
+          400: errorResponse('Lỗi dữ liệu', 'Địa chỉ giao hàng không hợp lệ.'),
+          401: unauthorized,
+        },
+      },
+    },
     '/api/v1/categories': {
       get: {
         tags: ['Categories'],
@@ -1088,6 +1498,211 @@ export const auctionSpec = {
   servers: [{ url: '/', description: 'API Gateway (Same Origin)' }],
   components: commonComponents,
   paths: {
+    '/api/v1/cart': {
+      get: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Xem giỏ hàng của tài khoản đang đăng nhập',
+        description: `${PRIVATE} Yêu cầu token BUYER. Lấy giỏ hàng đồng bộ trên PostgreSQL, kèm thông tin chi tiết từng món hàng và tổng tiền.`,
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: jsonResponse('Thông tin giỏ hàng', {
+            success: true,
+            data: {
+              id: '1',
+              userId: 'usr_buyer_01',
+              expiresAt: '2026-11-07T12:00:00.000Z',
+              totalItems: 2,
+              subtotal: 1290000,
+              currency: 'VND',
+              items: [
+                {
+                  id: '1',
+                  productId: '1',
+                  title: 'Tai nghe không dây Nexus Air',
+                  sellerId: 'usr_seller_01',
+                  price: 1290000,
+                  stockQuantity: 50,
+                  status: 'ACTIVE',
+                  quantity: 1,
+                  subtotal: 1290000,
+                },
+              ],
+            },
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+      delete: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Xóa sạch tất cả món hàng trong giỏ',
+        description: `${PRIVATE} Yêu cầu token BUYER.`,
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: jsonResponse('Đã xóa sạch giỏ hàng', {
+            success: true,
+            message: 'Đã xóa sạch giỏ hàng.',
+            data: { id: '1', totalItems: 0, subtotal: 0, items: [] },
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+    },
+    '/api/v1/cart/items': {
+      post: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Thêm sản phẩm vào giỏ hàng',
+        description: `${PRIVATE} Yêu cầu token BUYER. Tự động kiểm tra sản phẩm active và đủ tồn kho.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['productId'],
+                properties: {
+                  productId: { type: 'string', example: '1' },
+                  quantity: { type: 'number', example: 1 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Thêm vào giỏ thành công', {
+            success: true,
+            message: 'Đã thêm sản phẩm vào giỏ hàng thành công.',
+            data: { id: '1', totalItems: 1, subtotal: 1290000, items: [] },
+          }),
+          400: errorResponse('Dữ liệu không hợp lệ', 'Sản phẩm này hiện không còn bán.'),
+          401: unauthorized,
+          404: errorResponse('Không tìm thấy sản phẩm', 'Không tìm thấy sản phẩm #1.'),
+        },
+      },
+    },
+    '/api/v1/cart/items/{id}': {
+      put: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Cập nhật số lượng món hàng trong giỏ',
+        description: `${PRIVATE} Yêu cầu token BUYER. Truyền { quantity: 0 } hoặc số âm để xóa món hàng.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'ID của item trong giỏ (hoặc productId)',
+            schema: { type: 'string', example: '1' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['quantity'],
+                properties: {
+                  quantity: { type: 'number', example: 2 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Cập nhật số lượng thành công', {
+            success: true,
+            message: 'Đã cập nhật số lượng món hàng.',
+            data: { id: '1', totalItems: 2, subtotal: 2580000, items: [] },
+          }),
+          401: unauthorized,
+          404: errorResponse('Không tìm thấy', 'Món hàng không tồn tại trong giỏ.'),
+        },
+      },
+      delete: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Xóa một món hàng khỏi giỏ',
+        description: `${PRIVATE} Yêu cầu token BUYER.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'ID của item trong giỏ (hoặc productId)',
+            schema: { type: 'string', example: '1' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Xóa món hàng thành công', {
+            success: true,
+            message: 'Đã xóa món hàng khỏi giỏ hàng.',
+            data: { id: '1', totalItems: 0, subtotal: 0, items: [] },
+          }),
+          401: unauthorized,
+          404: errorResponse('Không tìm thấy', 'Món hàng không tồn tại trong giỏ.'),
+        },
+      },
+    },
+    '/api/v1/checkout/quote': {
+      post: {
+        tags: ['Buyer / Checkout & Đặt hàng'],
+        summary: 'Tính trước tổng tiền & phí ship cho đơn hàng (Quote)',
+        description: `${PRIVATE} Yêu cầu token BUYER. Tính giá và kiểm tra tồn kho trước khi đặt hàng.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  items: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        productId: { type: 'string', example: '1' },
+                        quantity: { type: 'number', example: 1 },
+                      },
+                    },
+                  },
+                  shippingAddress: {
+                    type: 'object',
+                    properties: {
+                      fullName: { type: 'string', example: 'Nguyễn Văn Buyer' },
+                      phone: { type: 'string', example: '0901234567' },
+                      province: { type: 'string', example: 'Hồ Chí Minh' },
+                      district: { type: 'string', example: 'Quận 1' },
+                      ward: { type: 'string', example: 'Bến Nghé' },
+                      addressLine: { type: 'string', example: '123 Lê Lợi' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Báo giá đơn hàng', {
+            success: true,
+            data: {
+              quoteId: 'quot_01hqz555abc',
+              expiresAt: '2026-10-31T17:15:00.000Z',
+              currency: 'VND',
+              sellerId: 'usr_seller_01',
+              subtotal: 1290000,
+              shippingFee: 30000,
+              totalAmount: 1320000,
+            },
+          }),
+          400: errorResponse('Lỗi dữ liệu', 'Địa chỉ giao hàng không hợp lệ.'),
+          401: unauthorized,
+        },
+      },
+    },
     '/api/v1/auctions': {
       get: {
         tags: ['Auctions'],
@@ -1187,16 +1802,432 @@ export const commerceSpec = {
     title: 'Nexus - Commerce Service (Đơn hàng & Support)',
     version: '1.0.0',
     description:
-      'Dịch vụ quản lý Giỏ hàng, Đặt hàng (Checkout), Hóa đơn & Xử lý khiếu nại (Support Staff).',
+      'Dịch vụ quản lý Giỏ hàng (Cart), Đặt hàng (Checkout PayOS & COD), Đơn mua (Buyer Orders) & Hỗ trợ CSKH.',
   },
   servers: [{ url: '/', description: 'API Gateway (Same Origin)' }],
   components: commonComponents,
   paths: {
+    '/api/v1/cart': {
+      get: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Xem giỏ hàng của tài khoản đang đăng nhập',
+        description: `${PRIVATE} Yêu cầu token BUYER. Lấy giỏ hàng đồng bộ trên PostgreSQL, kèm thông tin chi tiết từng món hàng và tổng tiền.`,
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: jsonResponse('Thông tin giỏ hàng', {
+            success: true,
+            data: {
+              id: '1',
+              userId: 'usr_buyer_01',
+              expiresAt: '2026-11-07T12:00:00.000Z',
+              totalItems: 2,
+              subtotal: 1290000,
+              currency: 'VND',
+              items: [
+                {
+                  id: '1',
+                  productId: '1',
+                  title: 'Tai nghe không dây Nexus Air',
+                  sellerId: 'usr_seller_01',
+                  price: 1290000,
+                  stockQuantity: 50,
+                  status: 'ACTIVE',
+                  quantity: 1,
+                  subtotal: 1290000,
+                },
+              ],
+            },
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+      delete: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Xóa sạch tất cả món hàng trong giỏ',
+        description: `${PRIVATE} Yêu cầu token BUYER.`,
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: jsonResponse('Đã xóa sạch giỏ hàng', {
+            success: true,
+            message: 'Đã xóa sạch giỏ hàng.',
+            data: { id: '1', totalItems: 0, subtotal: 0, items: [] },
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+    },
+    '/api/v1/cart/items': {
+      post: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Thêm sản phẩm vào giỏ hàng',
+        description: `${PRIVATE} Yêu cầu token BUYER. Tự động kiểm tra sản phẩm active và đủ tồn kho.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['productId'],
+                properties: {
+                  productId: { type: 'string', example: '1' },
+                  quantity: { type: 'number', example: 1 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Thêm vào giỏ thành công', {
+            success: true,
+            message: 'Đã thêm sản phẩm vào giỏ hàng thành công.',
+            data: { id: '1', totalItems: 1, subtotal: 1290000, items: [] },
+          }),
+          400: errorResponse('Dữ liệu không hợp lệ', 'Sản phẩm này hiện không còn bán.'),
+          401: unauthorized,
+          404: errorResponse('Không tìm thấy sản phẩm', 'Không tìm thấy sản phẩm #1.'),
+        },
+      },
+    },
+    '/api/v1/cart/items/{id}': {
+      put: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Cập nhật số lượng món hàng trong giỏ',
+        description: `${PRIVATE} Yêu cầu token BUYER. Truyền { quantity: 0 } hoặc số âm để xóa món hàng.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'ID của item trong giỏ (hoặc productId)',
+            schema: { type: 'string', example: '1' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['quantity'],
+                properties: {
+                  quantity: { type: 'number', example: 2 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Cập nhật số lượng thành công', {
+            success: true,
+            message: 'Đã cập nhật số lượng món hàng.',
+            data: { id: '1', totalItems: 2, subtotal: 2580000, items: [] },
+          }),
+          401: unauthorized,
+          404: errorResponse('Không tìm thấy', 'Món hàng không tồn tại trong giỏ.'),
+        },
+      },
+      delete: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Xóa một món hàng khỏi giỏ',
+        description: `${PRIVATE} Yêu cầu token BUYER.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'ID của item trong giỏ (hoặc productId)',
+            schema: { type: 'string', example: '1' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Xóa món hàng thành công', {
+            success: true,
+            message: 'Đã xóa món hàng khỏi giỏ hàng.',
+            data: { id: '1', totalItems: 0, subtotal: 0, items: [] },
+          }),
+          401: unauthorized,
+          404: errorResponse('Không tìm thấy', 'Món hàng không tồn tại trong giỏ.'),
+        },
+      },
+    },
+    '/api/v1/checkout/quote': {
+      post: {
+        tags: ['Buyer / Checkout & Đặt hàng'],
+        summary: 'Tính trước tổng tiền & phí ship cho đơn hàng (Quote)',
+        description: `${PRIVATE} Yêu cầu token BUYER. Tính giá và kiểm tra tồn kho trước khi đặt hàng.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  paymentMethod: {
+                    type: 'string',
+                    enum: ['PAYOS', 'COD'],
+                    example: 'COD',
+                    description: 'Phương thức thanh toán (mặc định: PAYOS)',
+                  },
+                  items: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        productId: { type: 'string', example: '1' },
+                        quantity: { type: 'number', example: 1 },
+                      },
+                    },
+                  },
+                  shippingAddress: {
+                    type: 'object',
+                    properties: {
+                      fullName: { type: 'string', example: 'Nguyễn Văn Buyer' },
+                      phone: { type: 'string', example: '0901234567' },
+                      province: { type: 'string', example: 'Hồ Chí Minh' },
+                      district: { type: 'string', example: 'Quận 1' },
+                      ward: { type: 'string', example: 'Bến Nghé' },
+                      addressLine: { type: 'string', example: '123 Lê Lợi' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Báo giá đơn hàng', {
+            success: true,
+            data: {
+              quoteId: 'quot_01hqz555abc',
+              expiresAt: '2026-10-31T17:15:00.000Z',
+              currency: 'VND',
+              sellerId: 'usr_seller_01',
+              subtotal: 1290000,
+              shippingFee: 30000,
+              totalAmount: 1320000,
+            },
+          }),
+          400: errorResponse('Lỗi dữ liệu', 'Địa chỉ giao hàng không hợp lệ.'),
+          401: unauthorized,
+        },
+      },
+    },
+    '/api/v1/cart': {
+      get: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Xem giỏ hàng của tài khoản đang đăng nhập',
+        description: `${PRIVATE} Yêu cầu token BUYER. Lấy giỏ hàng đồng bộ trên PostgreSQL, kèm thông tin chi tiết từng món hàng và tổng tiền.`,
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: jsonResponse('Thông tin giỏ hàng', {
+            success: true,
+            data: {
+              id: '1',
+              userId: 'usr_buyer_01',
+              expiresAt: '2026-11-07T12:00:00.000Z',
+              totalItems: 2,
+              subtotal: 1290000,
+              currency: 'VND',
+              items: [
+                {
+                  id: '1',
+                  productId: '1',
+                  title: 'Tai nghe không dây Nexus Air',
+                  sellerId: 'usr_seller_01',
+                  price: 1290000,
+                  stockQuantity: 50,
+                  status: 'ACTIVE',
+                  quantity: 1,
+                  subtotal: 1290000,
+                },
+              ],
+            },
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+      delete: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Xóa sạch tất cả món hàng trong giỏ',
+        description: `${PRIVATE} Yêu cầu token BUYER.`,
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: jsonResponse('Đã xóa sạch giỏ hàng', {
+            success: true,
+            message: 'Đã xóa sạch giỏ hàng.',
+            data: { id: '1', totalItems: 0, subtotal: 0, items: [] },
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+    },
+    '/api/v1/cart/items': {
+      post: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Thêm sản phẩm vào giỏ hàng',
+        description: `${PRIVATE} Yêu cầu token BUYER. Tự động kiểm tra sản phẩm active và đủ tồn kho.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['productId'],
+                properties: {
+                  productId: { type: 'string', example: '1' },
+                  quantity: { type: 'number', example: 1 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Thêm vào giỏ thành công', {
+            success: true,
+            message: 'Đã thêm sản phẩm vào giỏ hàng thành công.',
+            data: { id: '1', totalItems: 1, subtotal: 1290000, items: [] },
+          }),
+          400: errorResponse('Dữ liệu không hợp lệ', 'Sản phẩm này hiện không còn bán.'),
+          401: unauthorized,
+          404: errorResponse('Không tìm thấy sản phẩm', 'Không tìm thấy sản phẩm #1.'),
+        },
+      },
+    },
+    '/api/v1/cart/items/{id}': {
+      put: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Cập nhật số lượng món hàng trong giỏ',
+        description: `${PRIVATE} Yêu cầu token BUYER. Truyền { quantity: 0 } hoặc số âm để xóa món hàng.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'ID của item trong giỏ (hoặc productId)',
+            schema: { type: 'string', example: '1' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['quantity'],
+                properties: {
+                  quantity: { type: 'number', example: 2 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Cập nhật số lượng thành công', {
+            success: true,
+            message: 'Đã cập nhật số lượng món hàng.',
+            data: { id: '1', totalItems: 2, subtotal: 2580000, items: [] },
+          }),
+          401: unauthorized,
+          404: errorResponse('Không tìm thấy', 'Món hàng không tồn tại trong giỏ.'),
+        },
+      },
+      delete: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Xóa một món hàng khỏi giỏ',
+        description: `${PRIVATE} Yêu cầu token BUYER.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'ID của item trong giỏ (hoặc productId)',
+            schema: { type: 'string', example: '1' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Xóa món hàng thành công', {
+            success: true,
+            message: 'Đã xóa món hàng khỏi giỏ hàng.',
+            data: { id: '1', totalItems: 0, subtotal: 0, items: [] },
+          }),
+          401: unauthorized,
+          404: errorResponse('Không tìm thấy', 'Món hàng không tồn tại trong giỏ.'),
+        },
+      },
+    },
+    '/api/v1/checkout/quote': {
+      post: {
+        tags: ['Buyer / Checkout & Đặt hàng'],
+        summary: 'Tính trước tổng tiền & phí ship cho đơn hàng (Quote)',
+        description: `${PRIVATE} Yêu cầu token BUYER. Tính giá và kiểm tra tồn kho trước khi đặt hàng.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  items: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        productId: { type: 'string', example: '1' },
+                        quantity: { type: 'number', example: 1 },
+                      },
+                    },
+                  },
+                  shippingAddress: {
+                    type: 'object',
+                    properties: {
+                      fullName: { type: 'string', example: 'Nguyễn Văn Buyer' },
+                      phone: { type: 'string', example: '0901234567' },
+                      province: { type: 'string', example: 'Hồ Chí Minh' },
+                      district: { type: 'string', example: 'Quận 1' },
+                      ward: { type: 'string', example: 'Bến Nghé' },
+                      addressLine: { type: 'string', example: '123 Lê Lợi' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Báo giá đơn hàng', {
+            success: true,
+            data: {
+              quoteId: 'quot_01hqz555abc',
+              expiresAt: '2026-10-31T17:15:00.000Z',
+              currency: 'VND',
+              sellerId: 'usr_seller_01',
+              subtotal: 1290000,
+              shippingFee: 30000,
+              totalAmount: 1320000,
+            },
+          }),
+          400: errorResponse('Lỗi dữ liệu', 'Địa chỉ giao hàng không hợp lệ.'),
+          401: unauthorized,
+        },
+      },
+    },
     '/api/v1/orders': {
       get: {
         tags: ['Support Staff / Tra cứu đơn hàng'],
         summary: 'Tra cứu danh sách đơn hàng (Search, Filter & Pagination)',
-        description: `${PRIVATE} Yêu cầu quyền ORDER.LIST (SUPPORT_STAFF hoặc ADMIN). Hỗ trợ tìm kiếm theo từ khóa mã đơn, email, người mua, người bán.`,
+        description: `${PRIVATE} Dành cho cả BUYER (tự động lọc đơn của chính mình) và SUPPORT_STAFF / ADMIN (tra cứu toàn sàn). Hỗ trợ tìm kiếm theo từ khóa mã đơn, email, người mua, người bán.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1256,7 +2287,7 @@ export const commerceSpec = {
     '/api/v1/orders/checkout': {
       post: {
         tags: ['Orders & Checkout'],
-        summary: 'Tạo đơn hàng & Thanh toán (Checkout)',
+        summary: 'Tạo đơn hàng & Thanh toán (Hỗ trợ PayOS & COD)',
         description: `Header: Content-Type: application/json. LƯU Ý: hiện tại Commerce Service hỗ trợ đặt hàng.`,
         requestBody: {
           required: true,
@@ -1362,7 +2393,7 @@ export const commerceSpec = {
       post: {
         tags: ['Support Staff / Thao tác xử lý'],
         summary: 'Hủy đơn hàng trong trường hợp khiếu nại hoặc tranh chấp',
-        description: `${PRIVATE} Yêu cầu quyền ORDER.CANCEL (SUPPORT_STAFF hoặc ADMIN).`,
+        description: `${PRIVATE} Hỗ trợ cả BUYER tự hủy đơn (khi đơn chưa đóng gói/giao) và SUPPORT_STAFF / ADMIN hủy khi có khiếu nại.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1518,6 +2549,211 @@ export const fulfillmentSpec = {
     },
   },
   paths: {
+    '/api/v1/cart': {
+      get: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Xem giỏ hàng của tài khoản đang đăng nhập',
+        description: `${PRIVATE} Yêu cầu token BUYER. Lấy giỏ hàng đồng bộ trên PostgreSQL, kèm thông tin chi tiết từng món hàng và tổng tiền.`,
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: jsonResponse('Thông tin giỏ hàng', {
+            success: true,
+            data: {
+              id: '1',
+              userId: 'usr_buyer_01',
+              expiresAt: '2026-11-07T12:00:00.000Z',
+              totalItems: 2,
+              subtotal: 1290000,
+              currency: 'VND',
+              items: [
+                {
+                  id: '1',
+                  productId: '1',
+                  title: 'Tai nghe không dây Nexus Air',
+                  sellerId: 'usr_seller_01',
+                  price: 1290000,
+                  stockQuantity: 50,
+                  status: 'ACTIVE',
+                  quantity: 1,
+                  subtotal: 1290000,
+                },
+              ],
+            },
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+      delete: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Xóa sạch tất cả món hàng trong giỏ',
+        description: `${PRIVATE} Yêu cầu token BUYER.`,
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: jsonResponse('Đã xóa sạch giỏ hàng', {
+            success: true,
+            message: 'Đã xóa sạch giỏ hàng.',
+            data: { id: '1', totalItems: 0, subtotal: 0, items: [] },
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+    },
+    '/api/v1/cart/items': {
+      post: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Thêm sản phẩm vào giỏ hàng',
+        description: `${PRIVATE} Yêu cầu token BUYER. Tự động kiểm tra sản phẩm active và đủ tồn kho.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['productId'],
+                properties: {
+                  productId: { type: 'string', example: '1' },
+                  quantity: { type: 'number', example: 1 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Thêm vào giỏ thành công', {
+            success: true,
+            message: 'Đã thêm sản phẩm vào giỏ hàng thành công.',
+            data: { id: '1', totalItems: 1, subtotal: 1290000, items: [] },
+          }),
+          400: errorResponse('Dữ liệu không hợp lệ', 'Sản phẩm này hiện không còn bán.'),
+          401: unauthorized,
+          404: errorResponse('Không tìm thấy sản phẩm', 'Không tìm thấy sản phẩm #1.'),
+        },
+      },
+    },
+    '/api/v1/cart/items/{id}': {
+      put: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Cập nhật số lượng món hàng trong giỏ',
+        description: `${PRIVATE} Yêu cầu token BUYER. Truyền { quantity: 0 } hoặc số âm để xóa món hàng.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'ID của item trong giỏ (hoặc productId)',
+            schema: { type: 'string', example: '1' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['quantity'],
+                properties: {
+                  quantity: { type: 'number', example: 2 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Cập nhật số lượng thành công', {
+            success: true,
+            message: 'Đã cập nhật số lượng món hàng.',
+            data: { id: '1', totalItems: 2, subtotal: 2580000, items: [] },
+          }),
+          401: unauthorized,
+          404: errorResponse('Không tìm thấy', 'Món hàng không tồn tại trong giỏ.'),
+        },
+      },
+      delete: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Xóa một món hàng khỏi giỏ',
+        description: `${PRIVATE} Yêu cầu token BUYER.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'ID của item trong giỏ (hoặc productId)',
+            schema: { type: 'string', example: '1' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Xóa món hàng thành công', {
+            success: true,
+            message: 'Đã xóa món hàng khỏi giỏ hàng.',
+            data: { id: '1', totalItems: 0, subtotal: 0, items: [] },
+          }),
+          401: unauthorized,
+          404: errorResponse('Không tìm thấy', 'Món hàng không tồn tại trong giỏ.'),
+        },
+      },
+    },
+    '/api/v1/checkout/quote': {
+      post: {
+        tags: ['Buyer / Checkout & Đặt hàng'],
+        summary: 'Tính trước tổng tiền & phí ship cho đơn hàng (Quote)',
+        description: `${PRIVATE} Yêu cầu token BUYER. Tính giá và kiểm tra tồn kho trước khi đặt hàng.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  items: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        productId: { type: 'string', example: '1' },
+                        quantity: { type: 'number', example: 1 },
+                      },
+                    },
+                  },
+                  shippingAddress: {
+                    type: 'object',
+                    properties: {
+                      fullName: { type: 'string', example: 'Nguyễn Văn Buyer' },
+                      phone: { type: 'string', example: '0901234567' },
+                      province: { type: 'string', example: 'Hồ Chí Minh' },
+                      district: { type: 'string', example: 'Quận 1' },
+                      ward: { type: 'string', example: 'Bến Nghé' },
+                      addressLine: { type: 'string', example: '123 Lê Lợi' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Báo giá đơn hàng', {
+            success: true,
+            data: {
+              quoteId: 'quot_01hqz555abc',
+              expiresAt: '2026-10-31T17:15:00.000Z',
+              currency: 'VND',
+              sellerId: 'usr_seller_01',
+              subtotal: 1290000,
+              shippingFee: 30000,
+              totalAmount: 1320000,
+            },
+          }),
+          400: errorResponse('Lỗi dữ liệu', 'Địa chỉ giao hàng không hợp lệ.'),
+          401: unauthorized,
+        },
+      },
+    },
     '/api/v1/fulfillments/shipments': {
       get: {
         tags: ['Support Staff / Tra cứu vận đơn'],

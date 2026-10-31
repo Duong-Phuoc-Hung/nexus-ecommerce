@@ -1,42 +1,40 @@
-# Commerce Checkout & PayOS (Admin/Buyer — Hùng)
+# Commerce Checkout, Orders & Cart (Admin/Buyer — Hùng)
 
-Nhánh: `feat/be-commerce-checkout-payos`. Chỉ thêm file mới, không sửa code Seller/Staff/Auction.
+Nhánh: `feat/be-commerce-checkout-order`.
 
 ## Đã làm
 
-| #   | Endpoint                                | Ghi chú                                                                                                                                                      |
-| --- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 8   | `POST /api/v1/checkout/quote`           | Buyer JWT; tính hàng + ship; `quoteId`, `expiresAt` (15'), `VND`; 422 `SHIPPING_NOT_SUPPORTED`, `MIXED_SELLERS_NOT_SUPPORTED`                                |
-| 9   | `POST /api/v1/orders/checkout`          | Buyer JWT bắt buộc; giá tính lại ở server; giữ hàng 30'; snapshot địa chỉ; `Idempotency-Key`; trả `orderId`, `checkoutUrl`. 503 nếu chưa cấu hình PayOS      |
-| 10  | `POST /api/v1/orders/:id/payment-link`  | Tái dùng link đang mở; `{ "renew": true }` tạo link mới; tối đa 3 lần/đơn; đơn đã trả/hết hạn bị từ chối                                                     |
-| 11  | `POST /api/v1/payments/payos/webhook`   | Xác thực chữ ký HMAC-SHA256 (sai → 401); khớp `orderCode` + số tiền; idempotent (`PAID`/`DUPLICATE`/`AMOUNT_MISMATCH`/`UNKNOWN_ORDER_CODE`/`PAYMENT_FAILED`) |
-| 12  | `GET /api/v1/orders/:id/payment-status` | Đọc từ DB, chỉ Buyer sở hữu đơn (người khác → 404)                                                                                                           |
+| #   | Endpoint                                | Ghi chú                                                                                                                                                       |
+| --- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `GET /api/v1/orders`                    | Nối PostgreSQL `commerce_orders`; tự động gán `buyerId` nếu là Buyer; phân trang, lọc status, search `q`, sort.                                               |
+| 2   | `GET /api/v1/orders/:id`                | Nối PostgreSQL, kiểm tra quyền sở hữu (Buyer chỉ xem đơn của mình, Staff/Admin xem toàn sàn).                                                                 |
+| 3   | `POST /api/v1/orders/:id/cancel`        | Hỗ trợ Buyer tự hủy đơn khi đơn chưa giao (PENDING/PROCESSING), giải phóng tồn kho giữ trong DB. Staff/Admin vẫn giữ nguyên quyền hủy.                        |
+| 4   | `POST /api/v1/checkout/quote`           | Buyer JWT; tính hàng + ship; `quoteId`, `expiresAt` (15'), `VND`; 422 `SHIPPING_NOT_SUPPORTED`, `MIXED_SELLERS_NOT_SUPPORTED`.                                |
+| 5   | `POST /api/v1/orders/checkout`          | Hỗ trợ `paymentMethod: 'PAYOS' \| 'COD'`. COD tạo đơn `PROCESSING` ngay không cần QR; PayOS giữ nguyên link thanh toán.                                       |
+| 6   | `POST /api/v1/orders/:id/payment-link`  | Tái dùng link đang mở; `{ "renew": true }` tạo link mới; tối đa 3 lần/đơn; đơn đã trả/hết hạn bị từ chối.                                                     |
+| 7   | `POST /api/v1/payments/payos/webhook`   | Xác thực chữ ký HMAC-SHA256 (sai → 401); khớp `orderCode` + số tiền; idempotent (`PAID`/`DUPLICATE`/`AMOUNT_MISMATCH`/`UNKNOWN_ORDER_CODE`/`PAYMENT_FAILED`). |
+| 8   | `GET /api/v1/orders/:id/payment-status` | Đọc từ DB, chỉ Buyer sở hữu đơn (người khác → 404).                                                                                                           |
+| 9   | `GET/POST/PUT/DELETE /api/v1/cart`      | Bộ API Giỏ hàng đồng bộ PostgreSQL (`commerce_carts` & `commerce_cart_items`), tra cứu giá/tồn kho Catalog thời gian thực.                                    |
 
-File mới: `application/checkout/*`, `infrastructure/clients/{HttpCatalogClient,PayOsGateway,FlatRateShippingQuote}.ts`, `infrastructure/repositories/PostgresCheckoutRepository.ts`, `interfaces/http/{controllers/CheckoutController,routes/CheckoutRoutes}.ts`, `prisma/V2__checkout_quotes_payos.sql`, `src/checkout.db.test.ts`.
+File mới:
 
-Chỉnh file dùng chung (đã được duyệt): thêm 1 import + 1 dòng `app.use` trong `commerce-service/src/app.ts`; thêm 2 dòng proxy `/api/v1/checkout`, `/api/v1/payments` trong `api-gateway/src/app.ts`; thêm `pg`, `@types/pg`.
+- `backend/commerce-service/src/infrastructure/repositories/PostgresOrderRepository.ts`
+- `backend/commerce-service/src/infrastructure/repositories/PostgresCartRepository.ts`
+- `backend/commerce-service/src/application/cart/CartService.ts`
+- `backend/commerce-service/src/interfaces/http/controllers/CartController.ts`
+- `backend/commerce-service/src/interfaces/http/routes/CartRoutes.ts`
+- `docs/be-commerce-shared-changes-note.md` (Tài liệu chi tiết gửi Nhóm 1)
+- `frontend/docs/api-handoff-buyer-orders.md` (Tài liệu bàn giao FE)
 
-## Chưa làm / hạn chế
+## Thông báo thay đổi cho Nhóm 1 (Seller & Support Staff)
 
-- `POST /orders/:id/checkout` (đơn thắng đấu giá): phụ thuộc `auction.won`, chưa làm.
-- Đơn tạo bởi checkout nằm trong Postgres; API đơn của Staff đọc repo in-memory nên chưa thấy các đơn này.
-- Phí ship và giữ hàng đang dùng adapter tạm (`FlatRateShippingQuote`: `SHIPPING_FLAT_FEE`, mặc định 30000; `SHIPPING_UNSUPPORTED_PROVINCES`). Cần Fulfillment cung cấp API GHN/reservation thật.
-- Chưa có job dọn đơn/reservation hết hạn (reservation tự hết hiệu lực theo `expires_at`); chưa trừ tồn kho Catalog sau khi thanh toán.
-- Chưa test với PayOS sandbox thật (test dùng gateway giả + chữ ký thật).
+Chi tiết xem tại file: [`docs/be-commerce-shared-changes-note.md`](./be-commerce-shared-changes-note.md).
 
-## Biến môi trường (không commit giá trị thật)
+- Đã chuyển `orderRepository` trong `app.ts` từ `InMemoryOrderRepository` sang `PostgresOrderRepository` để đồng bộ đơn hàng thật của Buyer.
+- Support Staff và Admin vẫn có toàn quyền tra cứu, xem chi tiết, hủy và hoàn tiền toàn bộ đơn hàng trên hệ thống.
+- Cập nhật `requireOrderPermission` trong `auth.ts` cấp thêm quyền `LIST` và `CANCEL` cho Buyer (không ảnh hưởng quyền cũ của Staff/Seller/Admin).
 
-`PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY`, `PAYOS_RETURN_URL`, `PAYOS_CANCEL_URL`, `CATALOG_SERVICE_URL`, `COMMERCE_DB_HOST/PORT/USER/PASSWORD/NAME`. Webhook thật cần URL public.
+## Chưa làm / Tạm hoãn theo chỉ đạo
 
-## Gợi ý cho nhóm 1
-
-- `GET /orders/:id` (code cũ) chưa kiểm tra quyền sở hữu của Buyer.
-- `POST /orders/checkout` skeleton cũ nay bị route mới che (không bị xóa).
-
-## Chạy test
-
-```
-$env:COMMERCE_DB_TEST='true'; npx --no-install tsx --test src/checkout.db.test.ts
-```
-
-(Docker `nexus-postgres-commerce`, đã áp dụng V1 + V2.)
+- `POST /orders/:id/checkout` (đơn thắng đấu giá): thuộc Auction Service, không đụng vào.
+- Trừ tồn kho Catalog sau khi thanh toán: dính tới Catalog Service của Thành, tạm hoãn để phối hợp chốt contract.

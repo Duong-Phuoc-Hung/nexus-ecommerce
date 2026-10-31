@@ -109,6 +109,7 @@ export interface OrderRecord {
 export interface PaymentRecord {
   id: string;
   orderId: string;
+  paymentMethod?: string;
   payosOrderCode: number;
   status: string;
   amount: number;
@@ -128,6 +129,7 @@ export interface CreateOrderParams {
   subtotal: number;
   shippingFee: number;
   totalAmount: number;
+  paymentMethod?: 'PAYOS' | 'COD';
   idempotencyKey?: string;
   requestHash: string;
   orderExpiresAt: Date;
