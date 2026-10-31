@@ -5,6 +5,7 @@
   "description": "Project Nexus - Email, Push & In-App Notification Bounded Context (SRS 3.2)",
   "main": "dist/index.js",
   "scripts": {
+    "predev": "node ../../scripts/free-port.js 4006",
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts"
