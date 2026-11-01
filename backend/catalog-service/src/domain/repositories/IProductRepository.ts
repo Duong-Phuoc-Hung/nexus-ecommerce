@@ -1,4 +1,8 @@
 import { Product } from '../entities/Product';
+import {
+  ListCatalogProductsQuery,
+  ListCatalogProductsResult,
+} from '../../application/use-cases/ListCatalogProductsUseCase';
 
 export interface ProductSearchCriteria {
   q: string;
@@ -24,6 +28,7 @@ export interface IProductRepository {
   findByCategory(categoryId: string): Promise<Product[]>;
   findBySellerId(sellerId: string, status?: string): Promise<Product[]>;
   search(criteria: ProductSearchCriteria): Promise<ProductSearchPage>;
+  list?(query: ListCatalogProductsQuery): Promise<ListCatalogProductsResult>;
   save(product: Product): Promise<string>;
   update(product: Product): Promise<void>;
   delete(id: string): Promise<void>;

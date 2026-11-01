@@ -15,7 +15,6 @@ const forbidden = errorResponse(
   'Forbidden: missing permission "ROLE.VIEW".',
 );
 const PUBLIC = 'Route PUBLIC: không cần token.';
-const PRIVATE = 'Route PRIVATE: bắt buộc header `Authorization: Bearer <JWT>`.';
 
 const commonComponents = {
   securitySchemes: {
@@ -185,7 +184,7 @@ export const userSpec = {
       post: {
         tags: ['Authentication'],
         summary: 'Đăng xuất tài khoản',
-        description: `${PRIVATE} Method: POST. Token bị thu hồi, dùng lại sẽ nhận 401.`,
+        description: `Method: POST. Token bị thu hồi, dùng lại sẽ nhận 401.`,
         security: [{ BearerAuth: [] }],
         responses: {
           200: jsonResponse('Đăng xuất thành công', {
@@ -200,7 +199,7 @@ export const userSpec = {
       get: {
         tags: ['Authentication'],
         summary: 'Danh sách các quyền (Permissions) theo vai trò',
-        description: `${PRIVATE} Cần quyền ROLE.VIEW (ADMIN).`,
+        description: `Cần quyền ROLE.VIEW (ADMIN).`,
         security: [{ BearerAuth: [] }],
         responses: {
           200: jsonResponse('Thành công', {
@@ -216,7 +215,7 @@ export const userSpec = {
       get: {
         tags: ['Users & Profile'],
         summary: 'Xem hồ sơ của chính mình (Từ JWT token)',
-        description: `${PRIVATE} Cần quyền PROFILE.VIEW.`,
+        description: `Cần quyền PROFILE.VIEW.`,
         security: [{ BearerAuth: [] }],
         responses: {
           200: jsonResponse('Thông tin cá nhân', {
@@ -238,7 +237,7 @@ export const userSpec = {
       patch: {
         tags: ['Users & Profile'],
         summary: 'Cập nhật họ tên và số điện thoại của chính mình (P0 #2)',
-        description: `${PRIVATE} Cần quyền PROFILE.UPDATE. Cho phép cập nhật fullName và phone thật. Số điện thoại được đối chiếu chống trùng lặp.`,
+        description: `Cần quyền PROFILE.UPDATE. Cho phép cập nhật fullName và phone thật. Số điện thoại được đối chiếu chống trùng lặp.`,
         security: [{ BearerAuth: [] }],
         requestBody: {
           required: true,
@@ -283,7 +282,7 @@ export const userSpec = {
       get: {
         tags: ['Buyer Address Book'],
         summary: 'Lấy sổ địa chỉ nhận hàng của Buyer (P0 #3)',
-        description: `${PRIVATE} Lấy danh sách địa chỉ đã lưu của chính Buyer (tối đa 5 địa chỉ). Luôn có tối đa 1 địa chỉ mặc định được ưu tiên lên đầu.`,
+        description: `Lấy danh sách địa chỉ đã lưu của chính Buyer (tối đa 5 địa chỉ). Luôn có tối đa 1 địa chỉ mặc định được ưu tiên lên đầu.`,
         security: [{ BearerAuth: [] }],
         responses: {
           200: jsonResponse('Danh sách địa chỉ', {
@@ -312,7 +311,7 @@ export const userSpec = {
       post: {
         tags: ['Buyer Address Book'],
         summary: 'Tạo địa chỉ nhận hàng mới (P0 #4)',
-        description: `${PRIVATE} Thêm địa chỉ mới theo chuẩn 2 cấp (Tỉnh/Thành -> Phường/Xã). Giới hạn tối đa 5 địa chỉ active. Địa chỉ đầu tiên tự động đặt làm mặc định.`,
+        description: `Thêm địa chỉ mới theo chuẩn 2 cấp (Tỉnh/Thành -> Phường/Xã). Giới hạn tối đa 5 địa chỉ active. Địa chỉ đầu tiên tự động đặt làm mặc định.`,
         security: [{ BearerAuth: [] }],
         requestBody: {
           required: true,
@@ -366,7 +365,7 @@ export const userSpec = {
       patch: {
         tags: ['Buyer Address Book'],
         summary: 'Cập nhật địa chỉ nhận hàng (P0 #5)',
-        description: `${PRIVATE} Sửa địa chỉ thuộc sở hữu của Buyer. Không làm thay đổi snapshot trong các đơn hàng cũ đã đặt.`,
+        description: `Sửa địa chỉ thuộc sở hữu của Buyer. Không làm thay đổi snapshot trong các đơn hàng cũ đã đặt.`,
         security: [{ BearerAuth: [] }],
         parameters: [{ name: 'addressId', in: 'path', required: true, schema: { type: 'string' } }],
         requestBody: {
@@ -396,7 +395,7 @@ export const userSpec = {
       delete: {
         tags: ['Buyer Address Book'],
         summary: 'Xóa địa chỉ nhận hàng (P0 #6)',
-        description: `${PRIVATE} Xóa địa chỉ. Nếu xóa đúng địa chỉ mặc định, tự động chuyển mặc định cho địa chỉ còn lại tạo sớm nhất.`,
+        description: `Xóa địa chỉ. Nếu xóa đúng địa chỉ mặc định, tự động chuyển mặc định cho địa chỉ còn lại tạo sớm nhất.`,
         security: [{ BearerAuth: [] }],
         parameters: [{ name: 'addressId', in: 'path', required: true, schema: { type: 'string' } }],
         responses: {
@@ -414,7 +413,7 @@ export const userSpec = {
       put: {
         tags: ['Buyer Address Book'],
         summary: 'Đặt địa chỉ làm mặc định (P0 #7)',
-        description: `${PRIVATE} Chuyển địa chỉ chỉ định thành mặc định duy nhất trong 1 giao dịch cơ sở dữ liệu.`,
+        description: `Chuyển địa chỉ chỉ định thành mặc định duy nhất trong 1 giao dịch cơ sở dữ liệu.`,
         security: [{ BearerAuth: [] }],
         parameters: [{ name: 'addressId', in: 'path', required: true, schema: { type: 'string' } }],
         responses: {
@@ -429,7 +428,7 @@ export const userSpec = {
       get: {
         tags: ['Users & Profile'],
         summary: 'Tra cứu & tìm kiếm danh sách người dùng (Support Staff & Admin)',
-        description: `${PRIVATE} Cần quyền USER.VIEW (Role: SUPPORT_STAFF hoặc ADMIN). Hỗ trợ tìm kiếm từ khóa q, lọc theo email, vai trò (role), trạng thái (status), sắp xếp và phân trang.`,
+        description: `Cần quyền USER.VIEW (Role: SUPPORT_STAFF hoặc ADMIN). Hỗ trợ tìm kiếm từ khóa q, lọc theo email, vai trò (role), trạng thái (status), sắp xếp và phân trang.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -528,7 +527,7 @@ export const userSpec = {
       get: {
         tags: ['Users & Profile'],
         summary: 'Xem thông tin người dùng theo UUID hoặc Email',
-        description: `${PRIVATE} Cần quyền USER.VIEW.`,
+        description: `Cần quyền USER.VIEW.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -558,7 +557,7 @@ export const userSpec = {
       put: {
         tags: ['Users & Profile'],
         summary: 'Cập nhật vai trò (Role) cho tài khoản',
-        description: `${PRIVATE} Cần quyền ROLE.UPDATE (ADMIN). Header: Content-Type: application/json. Sau khi đổi role, token cũ của user đó bị thu hồi.`,
+        description: `Cần quyền ROLE.UPDATE (ADMIN). Header: Content-Type: application/json. Sau khi đổi role, token cũ của user đó bị thu hồi.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -603,7 +602,7 @@ export const userSpec = {
       patch: {
         tags: ['Users & Profile'],
         summary: 'Khóa hoặc mở khóa tài khoản người dùng',
-        description: `${PRIVATE} Cần quyền USER.UPDATE (SUPPORT_STAFF, ADMIN). Khóa tài khoản khi có dấu hiệu gian lận hoặc vi phạm quy định sàn (SRS 2.3, 2.7, 3.1.2). Khi bị SUSPENDED, toàn bộ phiên đăng nhập của người dùng sẽ bị thu hồi ngay lập tức.`,
+        description: `Cần quyền USER.UPDATE (SUPPORT_STAFF, ADMIN). Khóa tài khoản khi có dấu hiệu gian lận hoặc vi phạm quy định sàn (SRS 2.3, 2.7, 3.1.2). Khi bị SUSPENDED, toàn bộ phiên đăng nhập của người dùng sẽ bị thu hồi ngay lập tức.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -733,8 +732,8 @@ export const catalogSpec = {
     '/api/v1/products/mine': {
       get: {
         tags: ['Products'],
-        summary: 'Xem kho hàng (Seller)',
-        description: `${PRIVATE} Method: GET. Bắt buộc đăng nhập tài khoản Seller. Trả về toàn bộ danh sách sản phẩm thuộc về chính người bán đó (bao gồm cả ACTIVE, DRAFT, ARCHIVED để quản lý kho).`,
+        summary: 'Xem kho hàng (Seller / Admin)',
+        description: `Method: GET. Bắt buộc đăng nhập tài khoản Seller. Trả về toàn bộ danh sách sản phẩm thuộc về chính người bán đó (bao gồm cả ACTIVE, DRAFT, ARCHIVED để quản lý kho).`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -777,8 +776,92 @@ export const catalogSpec = {
     '/api/v1/products': {
       get: {
         tags: ['Products'],
-        summary: 'Danh sách tất cả sản phẩm (khách hàng)',
-        description: `${PUBLIC} Method: GET. Truy xuất toàn bộ sản phẩm đang được bày bán công khai ngoài trang chủ (không cần đăng nhập).`,
+        summary: 'Danh sách sản phẩm (Khách hàng & Quản trị)',
+        description: `${PUBLIC} Method: GET. Lấy danh sách sản phẩm có hỗ trợ phân trang và bộ lọc nâng cao. Khách hàng xem danh sách công khai (mặc định scope=buyer). Quản trị viên (ADMIN) có thể truyền query \`scope=admin\` (kèm header Authorization: Bearer <JWT>) để xem toàn bộ sản phẩm gồm cả DRAFT, ARCHIVED, OUT_OF_STOCK.`,
+        parameters: [
+          {
+            name: 'scope',
+            in: 'query',
+            required: false,
+            description:
+              'Phạm vi truy vấn: "buyer" (công khai) hoặc "admin" (dành riêng cho Admin)',
+            schema: { type: 'string', enum: ['buyer', 'admin'], default: 'buyer' },
+          },
+          {
+            name: 'page',
+            in: 'query',
+            required: false,
+            description: 'Số trang (bắt đầu từ 1, mặc định 1)',
+            schema: { type: 'integer', default: 1, example: 1 },
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            required: false,
+            description: 'Số lượng sản phẩm trên mỗi trang (1-100, mặc định 20)',
+            schema: { type: 'integer', default: 20, example: 20 },
+          },
+          {
+            name: 'sort',
+            in: 'query',
+            required: false,
+            description: 'Tiêu chí sắp xếp',
+            schema: {
+              type: 'string',
+              enum: ['newest', 'oldest', 'price_asc', 'price_desc'],
+              default: 'newest',
+            },
+          },
+          {
+            name: 'categoryId',
+            in: 'query',
+            required: false,
+            description: 'Lọc theo ID danh mục',
+            schema: { type: 'string', example: '100' },
+          },
+          {
+            name: 'condition',
+            in: 'query',
+            required: false,
+            description: 'Tình trạng sản phẩm',
+            schema: { type: 'string', enum: ['NEW', 'LIKE_NEW', 'USED', 'REFURBISHED'] },
+          },
+          {
+            name: 'status',
+            in: 'query',
+            required: false,
+            description: 'Trạng thái sản phẩm (chỉ hỗ trợ khi scope=admin)',
+            schema: { type: 'string', enum: ['ACTIVE', 'DRAFT', 'ARCHIVED', 'OUT_OF_STOCK'] },
+          },
+          {
+            name: 'saleType',
+            in: 'query',
+            required: false,
+            description: 'Hình thức bán hàng',
+            schema: { type: 'string', enum: ['DIRECT_SALE', 'AUCTION'] },
+          },
+          {
+            name: 'minPrice',
+            in: 'query',
+            required: false,
+            description: 'Giá tối thiểu (VND)',
+            schema: { type: 'number', example: 1000000 },
+          },
+          {
+            name: 'maxPrice',
+            in: 'query',
+            required: false,
+            description: 'Giá tối đa (VND)',
+            schema: { type: 'number', example: 50000000 },
+          },
+          {
+            name: 'q',
+            in: 'query',
+            required: false,
+            description: 'Từ khóa tìm kiếm tiêu đề/mô tả sản phẩm',
+            schema: { type: 'string', example: 'iphone' },
+          },
+        ],
         responses: {
           200: jsonResponse('Danh sách sản phẩm', {
             success: true,
@@ -805,7 +888,8 @@ export const catalogSpec = {
       },
       post: {
         tags: ['Products'],
-        summary: 'Tạo sản phẩm mới (Seller)',
+        summary: 'Tạo sản phẩm mới (Seller / Admin)',
+        description: `Tạo sản phẩm mới. Seller tạo cho chính mình; Admin có thể truyền thêm \`sellerId\` để tạo thay mặt cho Seller khác.`,
         security: [{ BearerAuth: [] }],
         requestBody: {
           required: true,
@@ -815,6 +899,11 @@ export const catalogSpec = {
                 type: 'object',
                 required: ['title', 'description', 'categoryId', 'price'],
                 properties: {
+                  sellerId: {
+                    type: 'string',
+                    description: 'Tùy chọn: Dành riêng cho ADMIN để tạo sản phẩm thay mặt Seller',
+                    example: 'a0000000-0000-0000-0000-000000000002',
+                  },
                   title: { type: 'string', example: 'iPhone 15 Pro Max 512GB Blue Titanium' },
                   description: {
                     type: 'string',
@@ -974,7 +1063,7 @@ export const catalogSpec = {
       },
       put: {
         tags: ['Products'],
-        summary: 'Cập nhật sản phẩm (Seller)',
+        summary: 'Cập nhật sản phẩm (Seller / Admin)',
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1053,7 +1142,7 @@ export const catalogSpec = {
       },
       delete: {
         tags: ['Products'],
-        summary: 'Xóa sản phẩm (Seller)',
+        summary: 'Xóa sản phẩm (Seller / Admin)',
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1072,6 +1161,32 @@ export const catalogSpec = {
           401: errorResponse('Chưa xác thực', 'Vui lòng đăng nhập để thực hiện thao tác này.'),
           403: errorResponse('Từ chối truy cập', 'Bạn không có quyền xóa sản phẩm của người khác.'),
           404: errorResponse('Không tìm thấy', 'Product with ID "999" was not found.'),
+        },
+      },
+    },
+    '/api/v1/products/{id}/recover': {
+      post: {
+        tags: ['Products'],
+        summary: 'Khôi phục sản phẩm đã xóa mềm (Seller / Admin)',
+        description: `Khôi phục sản phẩm đã bị xóa hoặc lưu trữ về trạng thái ACTIVE. Yêu cầu quyền SELLER (chính chủ sản phẩm) hoặc ADMIN.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã ID của sản phẩm cần khôi phục',
+            schema: { type: 'string', example: '15' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Khôi phục sản phẩm thành công', {
+            success: true,
+            message: "Đã khôi phục thành công sản phẩm với mã ID '15'.",
+          }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy sản phẩm', 'Product with ID "15" was not found.'),
         },
       },
     },
@@ -1137,7 +1252,7 @@ export const auctionSpec = {
       post: {
         tags: ['Auctions'],
         summary: 'Trả giá / Đặt giá thầu (Place Bid)',
-        description: `Route PRIVATE (theo thiết kế): cần header \`Authorization: Bearer <JWT>\` và Content-Type: application/json. LƯU Ý: hiện tại Auction Service chưa kiểm tra token và chưa validate body (chế độ Skeleton), nên request không token hoặc body sai vẫn trả 200. Gửi lượt trả giá mới vào phiên đấu giá.`,
+        description: `LƯU Ý: Hiện tại Auction Service chưa kiểm tra token và chưa validate body (chế độ Skeleton), nên request không token hoặc body sai vẫn trả 200. Gửi lượt trả giá mới vào phiên đấu giá.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1196,7 +1311,7 @@ export const commerceSpec = {
       get: {
         tags: ['Support Staff / Tra cứu đơn hàng'],
         summary: 'Tra cứu danh sách đơn hàng (Search, Filter & Pagination)',
-        description: `${PRIVATE} Yêu cầu quyền ORDER.LIST (SUPPORT_STAFF hoặc ADMIN). Hỗ trợ tìm kiếm theo từ khóa mã đơn, email, người mua, người bán.`,
+        description: `Yêu cầu quyền ORDER.LIST (SUPPORT_STAFF hoặc ADMIN). Hỗ trợ tìm kiếm theo từ khóa mã đơn, email, người mua, người bán.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1299,7 +1414,7 @@ export const commerceSpec = {
       get: {
         tags: ['Support Staff / Tra cứu đơn hàng'],
         summary: 'Chi tiết hồ sơ đơn hàng & diễn biến lịch sử (Timeline)',
-        description: `${PRIVATE} Yêu cầu token hợp lệ (SUPPORT_STAFF, ADMIN, hoặc chủ sở hữu đơn hàng).`,
+        description: `Yêu cầu token hợp lệ (SUPPORT_STAFF, ADMIN, hoặc chủ sở hữu đơn hàng).`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1362,7 +1477,7 @@ export const commerceSpec = {
       post: {
         tags: ['Support Staff / Thao tác xử lý'],
         summary: 'Hủy đơn hàng trong trường hợp khiếu nại hoặc tranh chấp',
-        description: `${PRIVATE} Yêu cầu quyền ORDER.CANCEL (SUPPORT_STAFF hoặc ADMIN).`,
+        description: `Yêu cầu quyền ORDER.CANCEL (SUPPORT_STAFF hoặc ADMIN).`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1405,7 +1520,7 @@ export const commerceSpec = {
       post: {
         tags: ['Support Staff / Thao tác xử lý'],
         summary: 'Hoàn tiền cho khách hàng khi tranh chấp được duyệt',
-        description: `${PRIVATE} Yêu cầu quyền ORDER.REFUND (SUPPORT_STAFF hoặc ADMIN).`,
+        description: `Yêu cầu quyền ORDER.REFUND (SUPPORT_STAFF hoặc ADMIN).`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1448,7 +1563,7 @@ export const commerceSpec = {
       post: {
         tags: ['Support Staff / Thao tác xử lý'],
         summary: 'Từ chối / Hủy yêu cầu hoàn tiền cho đơn hàng',
-        description: `${PRIVATE} Yêu cầu quyền ORDER.REFUND (SUPPORT_STAFF hoặc ADMIN). Chuyển trạng thái khiếu nại về REFUND_REJECTED / REFUND_CANCELLED, khôi phục đơn hàng về trạng thái trước đó và ghi nhận lý do vào audit timeline (SRS 2.3, 3.1.2).`,
+        description: `Yêu cầu quyền ORDER.REFUND (SUPPORT_STAFF hoặc ADMIN). Chuyển trạng thái khiếu nại về REFUND_REJECTED / REFUND_CANCELLED, khôi phục đơn hàng về trạng thái trước đó và ghi nhận lý do vào audit timeline (SRS 2.3, 3.1.2).`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1522,7 +1637,7 @@ export const fulfillmentSpec = {
       get: {
         tags: ['Support Staff / Tra cứu vận đơn'],
         summary: 'Tra cứu danh sách vận đơn (Search & Filter theo Hãng, Mã, Người nhận)',
-        description: `${PRIVATE} Yêu cầu quyền SHIPPING.VIEW_SHIPMENT (SUPPORT_STAFF hoặc ADMIN).`,
+        description: `Yêu cầu quyền SHIPPING.VIEW_SHIPMENT (SUPPORT_STAFF hoặc ADMIN).`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1573,7 +1688,7 @@ export const fulfillmentSpec = {
       get: {
         tags: ['Support Staff / Tra cứu vận đơn'],
         summary: 'Chi tiết vận đơn theo ID hoặc Mã vận đơn (Tracking Code)',
-        description: `${PRIVATE} Hỗ trợ tra cứu nhanh bằng cả id hệ thống hoặc mã vận đơn (VD: GHN8829103VN).`,
+        description: `Hỗ trợ tra cứu nhanh bằng cả id hệ thống hoặc mã vận đơn (VD: GHN8829103VN).`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1615,7 +1730,7 @@ export const fulfillmentSpec = {
       patch: {
         tags: ['Support Staff / Thao tác xử lý'],
         summary: 'Cập nhật trạng thái và vị trí hành trình vận đơn',
-        description: `${PRIVATE} Yêu cầu quyền SHIPPING.UPDATE_STATUS (SUPPORT_STAFF, ADMIN, hoặc CARRIER_AGENT).`,
+        description: `Yêu cầu quyền SHIPPING.UPDATE_STATUS (SUPPORT_STAFF, ADMIN, hoặc CARRIER_AGENT).`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1663,7 +1778,7 @@ export const fulfillmentSpec = {
       patch: {
         tags: ['Support Staff / Thao tác xử lý'],
         summary: 'Can thiệp thủ công (Manual Override) thông tin hãng, mã vận đơn, địa chỉ giao',
-        description: `${PRIVATE} Yêu cầu quyền SHIPPING.MANUAL_OVERRIDE (SUPPORT_STAFF hoặc ADMIN).`,
+        description: `Yêu cầu quyền SHIPPING.MANUAL_OVERRIDE (SUPPORT_STAFF hoặc ADMIN).`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1718,7 +1833,7 @@ export const fulfillmentSpec = {
       get: {
         tags: ['Support Staff / Dashboard Tổng quan'],
         summary: 'Thống kê tổng quan ca trực Support Staff (Dashboard Summary)',
-        description: `${PRIVATE} Trả về số liệu ca trực: Đang chờ xử lý, Đang xử lý, Đã giải quyết hôm nay, Vận đơn cần theo dõi và Work Queue các ca trực gần nhất.`,
+        description: `Trả về số liệu ca trực: Đang chờ xử lý, Đang xử lý, Đã giải quyết hôm nay, Vận đơn cần theo dõi và Work Queue các ca trực gần nhất.`,
         security: [{ BearerAuth: [] }],
         responses: {
           200: jsonResponse('Số liệu tổng quan ca trực', {
@@ -1756,7 +1871,7 @@ export const fulfillmentSpec = {
       get: {
         tags: ['Inventory / Quản lý tồn kho'],
         summary: 'Tra cứu tồn kho chuẩn SKU',
-        description: `${PRIVATE} Dành cho SELLER và SUPPORT_STAFF (SRS 2.6, 3.6.1). Trả về dữ liệu chuẩn: { sku, productName, warehouseId, warehouseName, onHand, reserved, available } với available = onHand - reserved.`,
+        description: `Dành cho SELLER và SUPPORT_STAFF (SRS 2.6, 3.6.1). Trả về dữ liệu chuẩn: { sku, productName, warehouseId, warehouseName, onHand, reserved, available } với available = onHand - reserved.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1813,7 +1928,7 @@ export const fulfillmentSpec = {
       post: {
         tags: ['Inventory / Quản lý tồn kho'],
         summary: 'Điều chỉnh số lượng tồn kho (STOCK_IN, STOCK_OUT, DAMAGE)',
-        description: `${PRIVATE} Dành cho SELLER và ADMIN (SRS 3.6.1). Phục vụ kiểm kê thực tế tại kho, cập nhật số lượng onHand, lưu sổ cái bất biến (Inventory Ledger) và chống bán âm (ALLOW_OVERSELL: false).`,
+        description: `Dành cho SELLER và ADMIN (SRS 3.6.1). Phục vụ kiểm kê thực tế tại kho, cập nhật số lượng onHand, lưu sổ cái bất biến (Inventory Ledger) và chống bán âm (ALLOW_OVERSELL: false).`,
         security: [{ BearerAuth: [] }],
         requestBody: {
           required: true,
@@ -1868,7 +1983,7 @@ export const fulfillmentSpec = {
       get: {
         tags: ['Support Staff / Quản lý khiếu nại'],
         summary: 'Tra cứu danh sách Ticket / Khiếu nại thực tế',
-        description: `${PRIVATE} Dành cho SUPPORT_STAFF và ADMIN (SRS 2.3, 3.1.2). Thay thế toàn bộ dữ liệu mock tạm thời ở giao diện Support Dashboard.`,
+        description: `Dành cho SUPPORT_STAFF và ADMIN (SRS 2.3, 3.1.2). Thay thế toàn bộ dữ liệu mock tạm thời ở giao diện Support Dashboard.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1933,7 +2048,7 @@ export const fulfillmentSpec = {
       post: {
         tags: ['Support Staff / Quản lý khiếu nại'],
         summary: 'Cập nhật kết quả giải quyết khiếu nại (Resolve Case)',
-        description: `${PRIVATE} Dành cho SUPPORT_STAFF và ADMIN (SRS 2.3, 3.1.2). Duyệt (APPROVED), từ chối (REJECTED) hoặc chuyển cấp (ESCALATED) tranh chấp giữa Buyer và Seller.`,
+        description: `Dành cho SUPPORT_STAFF và ADMIN (SRS 2.3, 3.1.2). Duyệt (APPROVED), từ chối (REJECTED) hoặc chuyển cấp (ESCALATED) tranh chấp giữa Buyer và Seller.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {

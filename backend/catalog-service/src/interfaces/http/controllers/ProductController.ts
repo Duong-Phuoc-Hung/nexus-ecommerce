@@ -9,6 +9,10 @@ import { CreateProductUseCase } from '../../../application/use-cases/CreateProdu
 import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
 import { DeleteProductUseCase } from '../../../application/use-cases/DeleteProductUseCase';
 import { GetSellerProductsUseCase } from '../../../application/use-cases/GetSellerProductsUseCase';
+import { RecoverProductUseCase } from '../../../application/use-cases/RecoverProductUseCase';
+import { ISellerDirectory } from '../../../infrastructure/clients/HttpSellerDirectory';
+import { ListCatalogProductsUseCase } from '../../../application/use-cases/ListCatalogProductsUseCase';
+import { ProductStatus } from '../../../domain/entities/Product';
 
 export class ProductController {
   constructor(
@@ -19,6 +23,9 @@ export class ProductController {
     private readonly updateProductUseCase?: UpdateProductUseCase,
     private readonly deleteProductUseCase?: DeleteProductUseCase,
     private readonly getSellerProductsUseCase?: GetSellerProductsUseCase,
+    private readonly recoverProductUseCase?: RecoverProductUseCase,
+    private readonly sellerDirectory?: ISellerDirectory,
+    private readonly listCatalogProductsUseCase?: ListCatalogProductsUseCase,
   ) {}
 
   public async search(req: Request, res: Response): Promise<void> {
@@ -51,9 +58,85 @@ export class ProductController {
     }
   }
 
-  // 1. API DÀNH CHO KHÁCH: Xem tất cả sản phẩm công khai ngoài sàn
-  public async getAll(_req: Request, res: Response): Promise<void> {
+  // GET /api/v1/products - Danh sach san pham (Buyer & Admin)
+  public async getAll(req: Request, res: Response): Promise<void> {
     try {
+      const authUser = (req as AuthenticatedRequest).user;
+      const adminScope = req.query.scope === 'admin';
+
+      // 1. Kiem tra quyen neu la Admin (?scope=admin)
+      if (adminScope) {
+        if (!authUser) {
+          res
+            .status(401)
+            .json({ success: false, code: 'UNAUTHORIZED', error: 'Vui lòng đăng nhập.' });
+          return;
+        }
+        if (authUser.role !== 'ADMIN') {
+          res
+            .status(403)
+            .json({ success: false, code: 'FORBIDDEN', error: 'Chỉ Admin được dùng scope=admin.' });
+          return;
+        }
+      }
+
+      // 2. Xu ly phan trang va bo loc SQL
+      if (this.listCatalogProductsUseCase) {
+        const page = Math.max(1, Number(req.query.page) || 1);
+        const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
+        const sort = String(req.query.sort || 'newest') as any;
+        const minPrice = req.query.minPrice !== undefined ? Number(req.query.minPrice) : undefined;
+        const maxPrice = req.query.maxPrice !== undefined ? Number(req.query.maxPrice) : undefined;
+        const categoryId = req.query.categoryId ? String(req.query.categoryId) : undefined;
+        const condition = req.query.condition ? String(req.query.condition) : undefined;
+        const status =
+          adminScope && req.query.status ? (String(req.query.status) as ProductStatus) : undefined;
+        const saleType = req.query.saleType ? (String(req.query.saleType) as any) : undefined;
+        const q = req.query.q ? String(req.query.q) : undefined;
+
+        // Buyer: chi lay ACTIVE con ton kho. Admin: lay tat ca trang thai.
+        const result = await this.listCatalogProductsUseCase.execute({
+          scope: adminScope ? 'admin' : 'buyer',
+          q,
+          categoryId,
+          minPrice,
+          maxPrice,
+          condition,
+          status,
+          saleType,
+          sort,
+          page,
+          limit,
+        });
+
+        // Tra ve ket qua kem metadata phan trang cho Frontend
+        res.status(200).json({
+          success: true,
+          data: result.products.map((p) => ({
+            id: p.id,
+            sellerId: p.sellerId,
+            sellerName: p.sellerName || 'Nexus Official Store',
+            saleType: p.saleType,
+            categoryId: p.categoryId,
+            title: p.title,
+            description: p.description,
+            price: p.price,
+            currency: 'VND',
+            stockQuantity: p.stockQuantity,
+            status: p.status,
+            images: p.images,
+            primaryImage: p.primaryImage,
+            condition: p.condition,
+            slug: p.slug,
+            allowAuction: p.allowAuction,
+            attributes: p.attributes,
+          })),
+          meta: result.meta,
+        });
+        return;
+      }
+
+      // 3. Fallback danh sach in-memory cu
       const products = await this.productRepository.findAll();
       res.status(200).json({
         success: true,
@@ -131,10 +214,30 @@ export class ProductController {
     }
   }
 
+  // GET /api/v1/products/:id - Chi tiet san pham
   public async getById(req: Request, res: Response): Promise<void> {
     try {
       const productId = req.params.id as string;
+      const authUser = (req as AuthenticatedRequest).user;
+      const adminScope = req.query.scope === 'admin';
+
       const product = await this.getProductDetailUseCase.execute(productId);
+
+      // Chan khach va Buyer xem san pham khong phai ACTIVE hoac da het ton kho
+      const isPrivileged =
+        (authUser && (authUser.role === 'ADMIN' || authUser.id === product.sellerId)) || adminScope;
+      if (
+        !isPrivileged &&
+        (product.status !== ProductStatus.ACTIVE || product.stockQuantity <= 0)
+      ) {
+        res.status(404).json({
+          success: false,
+          code: 'NOT_FOUND',
+          error: `Không tìm thấy sản phẩm với ID '${productId}'.`,
+        });
+        return;
+      }
+
       res.status(200).json({
         success: true,
         data: product,
@@ -143,6 +246,7 @@ export class ProductController {
       if (error instanceof ProductNotFoundException) {
         res.status(404).json({
           success: false,
+          code: 'NOT_FOUND',
           error: error.message,
         });
         return;
@@ -154,7 +258,7 @@ export class ProductController {
     }
   }
 
-  //Create
+  // CREATE
   public async create(req: Request, res: Response): Promise<void> {
     try {
       if (!this.createProductUseCase) {
@@ -162,10 +266,66 @@ export class ProductController {
         return;
       }
 
-      // Lấy danh tính người bán từ Token đã xác thực
       const authUser = (req as AuthenticatedRequest).user;
-      const sellerId = authUser?.id || (req.body.sellerId ? String(req.body.sellerId) : '1');
-      const sellerName = authUser?.fullName || req.body.sellerName || 'Nexus Seller';
+      let sellerId = authUser?.id || '';
+      let sellerName = authUser?.fullName || 'Nexus Seller';
+
+      // 🛡️ NẾU LÀ ADMIN TẠO GIÙM CHO SELLER:
+      if (authUser?.role === 'ADMIN') {
+        const targetSellerId = req.body.sellerId ? String(req.body.sellerId).trim() : '';
+        if (!targetSellerId) {
+          res.status(400).json({
+            success: false,
+            code: 'VALIDATION_ERROR',
+            error: 'Admin cần truyền sellerId của Seller sở hữu sản phẩm.',
+          });
+          return;
+        }
+
+        // Gọi User Service xác minh Seller có tồn tại và đang ACTIVE không
+        if (this.sellerDirectory) {
+          const authorization = req.headers.authorization || '';
+          try {
+            const seller = await this.sellerDirectory.findUser(targetSellerId, authorization);
+            if (!seller) {
+              res.status(404).json({
+                success: false,
+                code: 'SELLER_NOT_FOUND',
+                error: 'Không tìm thấy Seller.',
+              });
+              return;
+            }
+            if (seller.role !== 'SELLER') {
+              res.status(422).json({
+                success: false,
+                code: 'NOT_A_SELLER',
+                error: 'Người dùng được chọn không phải Seller.',
+              });
+              return;
+            }
+            if (seller.status && seller.status !== 'ACTIVE') {
+              res.status(422).json({
+                success: false,
+                code: 'SELLER_NOT_ACTIVE',
+                error: 'Tài khoản Seller không ở trạng thái hoạt động.',
+              });
+              return;
+            }
+            sellerId = seller.id;
+            sellerName = seller.fullName;
+          } catch {
+            res.status(503).json({
+              success: false,
+              code: 'SELLER_VERIFY_UNAVAILABLE',
+              error: 'Không xác minh được Seller qua User Service.',
+            });
+            return;
+          }
+        } else {
+          sellerId = targetSellerId;
+          sellerName = req.body.sellerName || 'Nexus Seller';
+        }
+      }
 
       const {
         title,
@@ -182,6 +342,7 @@ export class ProductController {
       if (!title || !description || !categoryId || price === undefined) {
         res.status(400).json({
           success: false,
+          code: 'VALIDATION_ERROR',
           error:
             'Vui lòng điền đầy đủ các thông tin bắt buộc: title, description, categoryId, price.',
         });
@@ -204,12 +365,19 @@ export class ProductController {
 
       res.status(201).json({
         success: true,
-        message: 'Tạo sản phẩm mới thành công!',
-        data: result,
+        message:
+          authUser?.role === 'ADMIN'
+            ? 'Admin đã tạo sản phẩm cho Seller thành công!'
+            : 'Tạo sản phẩm mới thành công!',
+        data: {
+          ...result,
+          sellerId,
+        },
       });
-    } catch (error) {
+    } catch (error: any) {
       res.status(400).json({
         success: false,
+        code: 'BAD_REQUEST',
         error: error instanceof Error ? error.message : 'Không thể tạo sản phẩm.',
       });
     }
@@ -317,25 +485,42 @@ export class ProductController {
       res.status(400).json({ success: false, error: error?.message || 'Yêu cầu không hợp lệ.' });
     }
   }
-  //RECOVER
+
+  // RECOVER: Khôi phục sản phẩm đã xóa mềm
   public async recover(req: Request, res: Response): Promise<void> {
     try {
-      const authUser = (req as AuthenticatedRequest).user;
-      const sellerId = authUser?.id || (req.body?.sellerId ? String(req.body.sellerId) : '1');
-      const productId = req.params.id as string;
-
-      if (!this.productRepository || typeof this.productRepository.recover !== 'function') {
-        res.status(500).json({ success: false, error: 'Chức năng khôi phục chưa được cấu hình.' });
+      if (!this.recoverProductUseCase) {
+        res
+          .status(500)
+          .json({ success: false, error: 'RecoverProductUseCase chưa được cấu hình.' });
         return;
       }
 
-      await this.productRepository.recover(productId, sellerId);
+      const authUser = (req as AuthenticatedRequest).user;
+      const sellerId = authUser?.id || (req.body?.sellerId ? String(req.body.sellerId) : '1');
+      const userRole = authUser?.role;
+      const productId = req.params.id as string;
+
+      // Gọi qua Use Case chuẩn Clean Architecture
+      await this.recoverProductUseCase.execute({
+        productId,
+        sellerId,
+        userRole,
+      });
 
       res.status(200).json({
         success: true,
         message: `Đã khôi phục thành công sản phẩm với mã ID '${productId}'.`,
       });
     } catch (error: any) {
+      if (error instanceof ProductNotFoundException) {
+        res.status(404).json({ success: false, error: error.message });
+        return;
+      }
+      if (error?.message?.startsWith('FORBIDDEN')) {
+        res.status(403).json({ success: false, error: error.message.replace('FORBIDDEN: ', '') });
+        return;
+      }
       res.status(400).json({ success: false, error: error?.message || 'Yêu cầu không hợp lệ.' });
     }
   }
