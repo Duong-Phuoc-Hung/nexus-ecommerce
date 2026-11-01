@@ -23,16 +23,20 @@ export class OrderController {
         return;
       }
 
-      const authenticatedUser = (req as AuthenticatedRequest).user;
+      const user = (req as AuthenticatedRequest).user;
       const q = typeof req.query.q === 'string' ? req.query.q : undefined;
-      const buyerId = typeof req.query.buyerId === 'string' ? req.query.buyerId : undefined;
+      let buyerId = typeof req.query.buyerId === 'string' ? req.query.buyerId : undefined;
       let sellerId = typeof req.query.sellerId === 'string' ? req.query.sellerId : undefined;
 
-      // BẢO MẬT PHÂN QUYỀN (CHỐNG LỖ HỔNG IDOR):
-      // Khi người gọi có vai trò là SELLER, bắt buộc trích xuất sellerId trực tiếp từ JWT Payload đã qua xác thực (req.user.sub),
-      // ngăn chặn hoàn toàn việc người bán này tự ý truyền sellerId của shop khác để xem trộm đơn hàng.
-      if (authenticatedUser?.role === 'SELLER') {
-        sellerId = authenticatedUser.sub;
+      // BẢO MẬT PHÂN QUYỀN (CHỐNG LỖ HỔNG IDOR - SRS 3.1 & 3.6):
+      // - BUYER chỉ được xem đơn hàng của chính mình (buộc buyerId = user.sub, chặn xem trộm đơn khách khác).
+      // - SELLER chỉ được xem đơn hàng của shop mình (buộc sellerId = user.sub, chặn xem trộm đơn shop khác).
+      // - ADMIN và SUPPORT_STAFF giữ nguyên 100% quyền xem/lọc toàn bộ đơn hàng trên sàn.
+      if (user && user.role === 'BUYER') {
+        buyerId = user.sub;
+      }
+      if (user && user.role === 'SELLER') {
+        sellerId = user.sub;
       }
       const status = typeof req.query.status === 'string' ? req.query.status : undefined;
       const page = req.query.page ? Number(req.query.page) : undefined;
