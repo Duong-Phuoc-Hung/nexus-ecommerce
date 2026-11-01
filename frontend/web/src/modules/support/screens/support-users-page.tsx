@@ -75,8 +75,14 @@ export function SupportUsersPage() {
   const [replyMessage, setReplyMessage] = useState('');
   const [replyTargetTicket, setReplyTargetTicket] = useState<string | null>(null);
 
-  // Modal xác nhận khóa / mở khóa
+  // Modal xác nhận khóa / mở khóa & kiểm soát lỗi
   const [lockConfirmOpen, setLockConfirmOpen] = useState(false);
+  const [lockReason, setLockReason] = useState('');
+  const [isLocking, setIsLocking] = useState(false);
+  const [lockError, setLockError] = useState<string | null>(null);
+
+  // Trạng thái xử lý khiếu nại
+  const [resolvingTicketId, setResolvingTicketId] = useState<string | null>(null);
 
   function showToast(msg: string) {
     setToastMessage(msg);
@@ -143,33 +149,60 @@ export function SupportUsersPage() {
     }
   }
 
-  async function handleToggleLock() {
+  function openLockConfirmModal() {
     if (!selectedUser) return;
     const isCurrentlyActive = selectedUser.status === 'ACTIVE' || !selectedUser.status;
+    setLockReason(
+      isCurrentlyActive
+        ? 'Tạm khóa tài khoản do nghi vấn vi phạm chính sách giao dịch và quy chuẩn cộng đồng'
+        : 'Mở khóa và phục hồi trạng thái hoạt động bình thường cho tài khoản',
+    );
+    setLockError(null);
+    setLockConfirmOpen(true);
+  }
+
+  async function handleToggleLock() {
+    if (!selectedUser || isLocking) return;
+    const isCurrentlyActive = selectedUser.status === 'ACTIVE' || !selectedUser.status;
     const newStatus = isCurrentlyActive ? 'SUSPENDED' : 'ACTIVE';
+    setIsLocking(true);
+    setLockError(null);
+
     try {
+      // 1. Gọi API cập nhật trạng thái xuống backend
       await userApi.updateStatus(selectedUser.id, {
         status: newStatus,
-        reason: isCurrentlyActive
-          ? 'Nhân viên hỗ trợ tạm khóa tài khoản do nghi vấn vi phạm chính sách giao dịch'
-          : 'Mở khóa và phục hồi trạng thái hoạt động cho tài khoản',
+        reason:
+          lockReason.trim() ||
+          (isCurrentlyActive ? 'Nhân viên hỗ trợ tạm khóa tài khoản' : 'Mở khóa tài khoản'),
       });
-    } catch {
-      // Local fallback in case of connection glitch
+
+      // 2. CHỈ CẬP NHẬT GIAO DIỆN KHI API THÀNH CÔNG:
+      setSelectedUser((prev) => (prev ? { ...prev, status: newStatus } : null));
+      setUsers((prev) =>
+        prev.map((item) => (item.id === selectedUser.id ? { ...item, status: newStatus } : item)),
+      );
+      setLockConfirmOpen(false);
+      showToast(
+        isCurrentlyActive
+          ? `Đã tạm khóa tài khoản "${selectedUser.fullName || selectedUser.email}".`
+          : `Đã mở khóa và kích hoạt lại tài khoản "${selectedUser.fullName || selectedUser.email}".`,
+      );
+    } catch (err: any) {
+      // 3. XỬ LÝ KHI GẶP LỖI:
+      // Giữ nguyên trạng thái cũ của tài khoản, hiển thị thông báo lỗi rõ ràng
+      const message =
+        userMessage(err) || 'Không thể cập nhật trạng thái người dùng. Vui lòng thử lại!';
+      setLockError(message);
+      showToast(`❌ Lỗi: ${message}`);
+    } finally {
+      setIsLocking(false);
     }
-    setSelectedUser((prev) => (prev ? { ...prev, status: newStatus } : null));
-    setUsers((prev) =>
-      prev.map((item) => (item.id === selectedUser.id ? { ...item, status: newStatus } : item)),
-    );
-    setLockConfirmOpen(false);
-    showToast(
-      isCurrentlyActive
-        ? `Đã tạm khóa tài khoản "${selectedUser.fullName || selectedUser.email}".`
-        : `Đã mở khóa và kích hoạt lại tài khoản "${selectedUser.fullName || selectedUser.email}".`,
-    );
   }
 
   async function handleTicketAction(ticketId: string, action: 'approve' | 'reject') {
+    if (resolvingTicketId) return;
+    setResolvingTicketId(ticketId);
     try {
       await supportApi.resolveCase(ticketId, {
         resolution: action === 'approve' ? 'APPROVED' : 'REJECTED',
@@ -178,21 +211,25 @@ export function SupportUsersPage() {
             ? 'Đã xác thực và phê duyệt khiếu nại'
             : 'Từ chối giải quyết khiếu nại do không đủ căn cứ chứng minh',
       });
-    } catch {
-      // Local fallback
+      // CHỈ CẬP NHẬT KHI THÀNH CÔNG:
+      setUserTickets((prev) =>
+        prev.map((t) =>
+          t.id === ticketId
+            ? { ...t, status: action === 'approve' ? 'Đã phê duyệt' : 'Đã từ chối' }
+            : t,
+        ),
+      );
+      showToast(
+        action === 'approve'
+          ? `Đã phê duyệt yêu cầu hỗ trợ "${ticketId}" thành công.`
+          : `Đã từ chối giải quyết yêu cầu hỗ trợ "${ticketId}".`,
+      );
+    } catch (err: any) {
+      const msg = userMessage(err) || 'Không thể cập nhật kết quả khiếu nại.';
+      showToast(`❌ Lỗi: ${msg}`);
+    } finally {
+      setResolvingTicketId(null);
     }
-    setUserTickets((prev) =>
-      prev.map((t) =>
-        t.id === ticketId
-          ? { ...t, status: action === 'approve' ? 'Đã phê duyệt' : 'Đã từ chối' }
-          : t,
-      ),
-    );
-    showToast(
-      action === 'approve'
-        ? `Đã phê duyệt yêu cầu hỗ trợ "${ticketId}" thành công.`
-        : `Đã từ chối giải quyết yêu cầu hỗ trợ "${ticketId}".`,
-    );
   }
 
   function handleSendReply(e: React.FormEvent) {
@@ -415,7 +452,7 @@ export function SupportUsersPage() {
                   fontWeight: 600,
                   cursor: 'pointer',
                 }}
-                onClick={() => setLockConfirmOpen(true)}
+                onClick={openLockConfirmModal}
               >
                 {selectedUser.status === 'SUSPENDED' ? '🔓 Mở khóa tài khoản' : '🔒 Khóa tài khoản'}
               </button>
@@ -525,6 +562,7 @@ export function SupportUsersPage() {
                               <>
                                 <button
                                   type="button"
+                                  disabled={resolvingTicketId === ticket.id}
                                   onClick={() => handleTicketAction(ticket.id, 'approve')}
                                   style={{
                                     border: '1px solid #86efac',
@@ -534,13 +572,16 @@ export function SupportUsersPage() {
                                     fontWeight: 600,
                                     padding: '4px 8px',
                                     borderRadius: '5px',
-                                    cursor: 'pointer',
+                                    cursor:
+                                      resolvingTicketId === ticket.id ? 'not-allowed' : 'pointer',
+                                    opacity: resolvingTicketId === ticket.id ? 0.6 : 1,
                                   }}
                                 >
-                                  Duyệt
+                                  {resolvingTicketId === ticket.id ? 'Đang duyệt...' : 'Duyệt'}
                                 </button>
                                 <button
                                   type="button"
+                                  disabled={resolvingTicketId === ticket.id}
                                   onClick={() => handleTicketAction(ticket.id, 'reject')}
                                   style={{
                                     border: '1px solid #fca5a5',
@@ -550,10 +591,12 @@ export function SupportUsersPage() {
                                     fontWeight: 600,
                                     padding: '4px 8px',
                                     borderRadius: '5px',
-                                    cursor: 'pointer',
+                                    cursor:
+                                      resolvingTicketId === ticket.id ? 'not-allowed' : 'pointer',
+                                    opacity: resolvingTicketId === ticket.id ? 0.6 : 1,
                                   }}
                                 >
-                                  Từ chối
+                                  {resolvingTicketId === ticket.id ? 'Đang xử lý...' : 'Từ chối'}
                                 </button>
                               </>
                             ) : (
@@ -610,7 +653,7 @@ export function SupportUsersPage() {
                 value={replyMessage}
                 onChange={(e) => setReplyMessage(e.target.value)}
                 rows={4}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 outline-none focus:outline-none focus:border-sky-400 focus:ring-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:border-sky-400 transition-colors resize-none"
                 placeholder="Nhập nội dung phản hồi chi tiết cho người dùng..."
                 required
               />
@@ -635,8 +678,11 @@ export function SupportUsersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Dialog Xác nhận Khóa / Mở khóa tài khoản (BUG-02 Fix) */}
-      <Dialog open={lockConfirmOpen} onOpenChange={setLockConfirmOpen}>
+      {/* Modal Dialog Xác nhận Khóa / Mở khóa tài khoản (BUG-02 Fix & Error Handling) */}
+      <Dialog
+        open={lockConfirmOpen}
+        onOpenChange={(open) => !isLocking && setLockConfirmOpen(open)}
+      >
         <DialogContent className="p-6 max-w-md w-full">
           <DialogTitle className="text-lg font-bold text-slate-800">
             {selectedUser?.status === 'SUSPENDED'
@@ -646,28 +692,78 @@ export function SupportUsersPage() {
           <DialogDescription className="text-xs text-slate-500 mt-1">
             {selectedUser?.status === 'SUSPENDED'
               ? `Bạn có chắc chắn muốn mở khóa và kích hoạt lại quyền truy cập cho người dùng "${selectedUser?.email}"?`
-              : `Tài khoản "${selectedUser?.email}" sẽ bị đình chỉ các hoạt động mua/bán và đặt giá trên hệ thống cho tới khi được mở lại.`}
+              : `Tài khoản "${selectedUser?.email}" sẽ bị đình chỉ phiên đăng nhập và các hoạt động mua/bán trên hệ thống.`}
           </DialogDescription>
+
+          {lockError && (
+            <div
+              style={{
+                marginTop: '12px',
+                padding: '10px 14px',
+                borderRadius: '8px',
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                color: '#b91c1c',
+                fontSize: '0.8rem',
+                fontWeight: 500,
+              }}
+            >
+              ⚠ {lockError}
+            </div>
+          )}
+
+          <div style={{ marginTop: '16px' }}>
+            <label
+              style={{
+                display: 'block',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                color: '#334155',
+                textTransform: 'uppercase',
+                marginBottom: '6px',
+              }}
+            >
+              Lý do kiểm toán / Ghi chú xử lý:
+            </label>
+            <textarea
+              rows={3}
+              className="w-full border border-slate-300 rounded-lg p-2.5 text-xs text-slate-800 outline-none focus:outline-none focus:border-sky-400 focus:ring-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:border-sky-400 transition-colors"
+              placeholder="Nhập lý do thực hiện thao tác..."
+              value={lockReason}
+              onChange={(e) => setLockReason(e.target.value)}
+              disabled={isLocking}
+            />
+          </div>
+
           <div className="flex justify-end gap-2 mt-5">
             <button
               type="button"
+              disabled={isLocking}
               onClick={() => setLockConfirmOpen(false)}
-              className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+              className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
             >
               Hủy bỏ
             </button>
             <button
               type="button"
+              disabled={isLocking}
               onClick={handleToggleLock}
-              className={`px-4 py-2 text-white rounded-lg text-xs font-semibold transition ${
+              className={`px-4 py-2 text-white rounded-lg text-xs font-semibold transition disabled:opacity-50 flex items-center gap-1.5 ${
                 selectedUser?.status === 'SUSPENDED'
                   ? 'bg-emerald-600 hover:bg-emerald-700'
                   : 'bg-red-600 hover:bg-red-700'
               }`}
             >
-              {selectedUser?.status === 'SUSPENDED'
-                ? 'Xác nhận mở khóa'
-                : 'Xác nhận khóa tài khoản'}
+              {isLocking ? (
+                <>
+                  <span className="animate-spin inline-block">⟳</span>
+                  <span>Đang xử lý...</span>
+                </>
+              ) : selectedUser?.status === 'SUSPENDED' ? (
+                'Xác nhận mở khóa'
+              ) : (
+                'Xác nhận khóa tài khoản'
+              )}
             </button>
           </div>
         </DialogContent>
