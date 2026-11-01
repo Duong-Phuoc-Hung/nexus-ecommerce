@@ -5,6 +5,7 @@
   "description": "Project Nexus - Real-Time Auction & Bidding Bounded Context (SRS 3.5)",
   "main": "dist/index.js",
   "scripts": {
+    "predev": "node ../../scripts/free-port.js 4004",
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts"

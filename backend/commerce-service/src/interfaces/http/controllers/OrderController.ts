@@ -3,7 +3,9 @@ import { GetOrderDetailUseCase } from '../../../application/use-cases/GetOrderDe
 import { SearchOrdersUseCase } from '../../../application/use-cases/SearchOrdersUseCase';
 import { CancelOrderUseCase } from '../../../application/use-cases/CancelOrderUseCase';
 import { RefundOrderUseCase } from '../../../application/use-cases/RefundOrderUseCase';
+import { RejectRefundUseCase } from '../../../application/use-cases/RejectRefundUseCase';
 import { OrderNotFoundException } from '../../../domain/exceptions/OrderNotFoundException';
+import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
 
 export class OrderController {
   constructor(
@@ -11,6 +13,7 @@ export class OrderController {
     private readonly searchOrdersUseCase?: SearchOrdersUseCase,
     private readonly cancelOrderUseCase?: CancelOrderUseCase,
     private readonly refundOrderUseCase?: RefundOrderUseCase,
+    private readonly rejectRefundUseCase?: RejectRefundUseCase,
   ) {}
 
   public async listOrders(req: Request, res: Response): Promise<void> {
@@ -20,9 +23,17 @@ export class OrderController {
         return;
       }
 
+      const authenticatedUser = (req as AuthenticatedRequest).user;
       const q = typeof req.query.q === 'string' ? req.query.q : undefined;
       const buyerId = typeof req.query.buyerId === 'string' ? req.query.buyerId : undefined;
-      const sellerId = typeof req.query.sellerId === 'string' ? req.query.sellerId : undefined;
+      let sellerId = typeof req.query.sellerId === 'string' ? req.query.sellerId : undefined;
+
+      // BẢO MẬT PHÂN QUYỀN (CHỐNG LỖ HỔNG IDOR):
+      // Khi người gọi có vai trò là SELLER, bắt buộc trích xuất sellerId trực tiếp từ JWT Payload đã qua xác thực (req.user.sub),
+      // ngăn chặn hoàn toàn việc người bán này tự ý truyền sellerId của shop khác để xem trộm đơn hàng.
+      if (authenticatedUser?.role === 'SELLER') {
+        sellerId = authenticatedUser.sub;
+      }
       const status = typeof req.query.status === 'string' ? req.query.status : undefined;
       const page = req.query.page ? Number(req.query.page) : undefined;
       const limit = req.query.limit ? Number(req.query.limit) : undefined;
@@ -133,6 +144,39 @@ export class OrderController {
       res.status(400).json({
         success: false,
         error: error instanceof Error ? error.message : 'Không thể hoàn tiền đơn hàng.',
+      });
+    }
+  }
+
+  /**
+   * POST /api/v1/orders/:id/refund/cancel (hoặc /api/v1/orders/:id/reject-refund)
+   * Từ chối yêu cầu hoàn tiền cho đơn hàng (SRS 2.3, 3.1.2)
+   * Quyền: SUPPORT_STAFF, ADMIN
+   */
+  public async rejectRefund(req: Request, res: Response): Promise<void> {
+    try {
+      if (!this.rejectRefundUseCase) {
+        res.status(500).json({ success: false, error: 'RejectRefundUseCase not configured.' });
+        return;
+      }
+
+      const orderId = req.params.id as string;
+      const { reason } = req.body || {};
+      const result = await this.rejectRefundUseCase.execute(orderId, reason);
+
+      res.status(200).json({
+        success: true,
+        message: 'Đã từ chối yêu cầu hoàn tiền thành công.',
+        data: result,
+      });
+    } catch (error: any) {
+      if (error instanceof OrderNotFoundException) {
+        res.status(404).json({ success: false, error: error.message });
+        return;
+      }
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Không thể từ chối yêu cầu hoàn tiền.',
       });
     }
   }

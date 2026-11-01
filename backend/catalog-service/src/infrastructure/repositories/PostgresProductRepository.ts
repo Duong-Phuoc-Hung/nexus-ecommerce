@@ -18,11 +18,11 @@ export class PostgresProductRepository implements IProductRepository {
     this.pool =
       pool ||
       new Pool({
-        host: process.env.DB_HOST || process.env.CATALOG_DB_HOST || 'localhost',
-        port: Number(process.env.DB_PORT || process.env.CATALOG_DB_PORT) || 5433,
-        user: process.env.DB_USER || process.env.CATALOG_DB_USER || 'nexus_catalog',
-        password: process.env.DB_PASSWORD || process.env.CATALOG_DB_PASSWORD || 'nexus_password',
-        database: process.env.DB_NAME || process.env.CATALOG_DB_NAME || 'nexus_catalog_db',
+        host: process.env.CATALOG_DB_HOST || process.env.DB_HOST || 'localhost',
+        port: Number(process.env.CATALOG_DB_PORT || process.env.DB_PORT) || 5433,
+        user: process.env.CATALOG_DB_USER || process.env.DB_USER || 'nexus_catalog',
+        password: process.env.CATALOG_DB_PASSWORD || process.env.DB_PASSWORD || 'nexus_password',
+        database: process.env.CATALOG_DB_NAME || process.env.DB_NAME || 'nexus_catalog_db',
         max: 10,
         idleTimeoutMillis: 30000,
       });
@@ -116,15 +116,20 @@ export class PostgresProductRepository implements IProductRepository {
     const params: any[] = [sellerId];
 
     if (status) {
-      params.push(status.toUpperCase());
-      conditions.push(`p.status = $${params.length}`);
+      if (status.toUpperCase() === 'DELETED') {
+        conditions.push("(p.deleted_at IS NOT NULL OR p.status = 'DELETED')");
+      } else {
+        params.push(status.toUpperCase());
+        conditions.push(`p.deleted_at IS NULL AND p.status = ${params.length}`);
+      }
     }
 
     const whereClause = conditions.join(' AND ');
     const query = `
       SELECT 
         p.id, p.seller_id, p.category_id, p.title, p.slug, p.description, 
-        p.status, p.condition, p.base_price, p.allow_auction, p.stock_quantity, p.seller_name, p.created_at, p.updated_at
+        CASE WHEN p.deleted_at IS NOT NULL THEN 'DELETED' ELSE p.status END AS status,
+        p.condition, p.base_price, p.allow_auction, p.stock_quantity, p.seller_name, p.created_at, p.updated_at
       FROM catalog_products p
       WHERE ${whereClause}
       ORDER BY p.id DESC;
@@ -340,9 +345,21 @@ export class PostgresProductRepository implements IProductRepository {
   public async delete(id: string): Promise<void> {
     // Xoá mềm sản phẩm
     await this.pool.query(
-      "UPDATE catalog_products SET deleted_at = NOW(), status = 'ARCHIVED', updated_at = NOW() WHERE id = $1",
+      "UPDATE catalog_products SET deleted_at = NOW(), status = 'DELETED', updated_at = NOW() WHERE id = $1",
       [parseInt(id, 10)],
     );
+  }
+
+  public async recover(id: string, sellerId?: string): Promise<void> {
+    const pid = parseInt(id, 10);
+    let query =
+      "UPDATE catalog_products SET deleted_at = NULL, status = 'ACTIVE', updated_at = NOW() WHERE id = $1";
+    const params: any[] = [pid];
+    if (sellerId && sellerId !== '1') {
+      params.push(sellerId);
+      query += " AND (seller_id = $2 OR seller_id = '1')";
+    }
+    await this.pool.query(query, params);
   }
 
   private async getImagesByProductId(productId: number): Promise<string[]> {
@@ -407,6 +424,7 @@ export class PostgresProductRepository implements IProductRepository {
       DRAFT: ProductStatus.DRAFT,
       ARCHIVED: ProductStatus.ARCHIVED,
       OUT_OF_STOCK: ProductStatus.OUT_OF_STOCK,
+      DELETED: ProductStatus.DELETED,
     };
 
     const stock =

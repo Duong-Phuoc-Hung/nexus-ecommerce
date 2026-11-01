@@ -467,6 +467,19 @@
   color: #dc2626;
   border: 1px solid #fecaca;
 }
+.seller-status.archived,
+.seller-status.lưu-trữ {
+  background: #fefce8;
+  color: #a16207;
+  border: 1px solid #fef08a;
+}
+.seller-status.out_of_stock,
+.seller-status.out-of-stock,
+.seller-status.hết-hàng {
+  background: #fff1f2;
+  color: #e11d48;
+  border: 1px solid #fecdd3;
+}
 .seller-recover-btn {
   display: inline-flex;
   align-items: center;
@@ -494,6 +507,35 @@
   color: #bf1c25;
   font-weight: 650;
 }
+.seller-status.cancelled,
+.seller-status.đã-hủy {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.seller-button-danger {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #fecaca;
+  border-radius: 9px;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 0 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.seller-button-danger:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
 .seller-empty {
   padding: 46px 20px;
   text-align: center;

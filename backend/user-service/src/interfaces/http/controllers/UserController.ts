@@ -9,6 +9,7 @@ import { RequestPasswordResetUseCase } from '../../../application/use-cases/Requ
 import { ResetPasswordUseCase } from '../../../application/use-cases/ResetPasswordUseCase';
 import { AssignUserRoleUseCase } from '../../../application/use-cases/AssignUserRoleUseCase';
 import { UpdateUserProfileUseCase } from '../../../application/use-cases/UpdateUserProfileUseCase';
+import { UpdateUserStatusUseCase } from '../../../application/use-cases/UpdateUserStatusUseCase';
 import { GetUserAddressesUseCase } from '../../../application/use-cases/GetUserAddressesUseCase';
 import {
   CreateAddressUseCase,
@@ -46,6 +47,7 @@ export class UserController {
     private readonly updateAddressUseCase?: UpdateAddressUseCase,
     private readonly deleteAddressUseCase?: DeleteAddressUseCase,
     private readonly setDefaultAddressUseCase?: SetDefaultAddressUseCase,
+    private readonly updateUserStatusUseCase?: UpdateUserStatusUseCase,
   ) {}
 
   public async listUsers(req: Request, res: Response): Promise<void> {
@@ -477,6 +479,53 @@ export class UserController {
       res.status(400).json({
         success: false,
         error: error.message || 'Không thể đổi địa chỉ mặc định.',
+      });
+    }
+  }
+
+  /**
+   * PATCH /api/v1/users/:id/status
+   * Khóa hoặc mở khóa tài khoản người dùng kèm theo lý do vi phạm (SRS 2.3, 2.7, 3.1.2)
+   * Quyền yêu cầu: USER.UPDATE (SUPPORT_STAFF, ADMIN)
+   */
+  public async updateStatus(req: Request, res: Response): Promise<void> {
+    try {
+      if (!this.updateUserStatusUseCase) {
+        res.status(500).json({
+          success: false,
+          error: 'UpdateUserStatusUseCase chưa được cấu hình.',
+        });
+        return;
+      }
+
+      const userId = Array.isArray(req.params.id) ? req.params.id[0] : String(req.params.id);
+      const { status, reason } = req.body || {};
+      const operatorId = this.getAuthenticatedUserId(req);
+
+      const result = await this.updateUserStatusUseCase.execute({
+        userId,
+        status,
+        reason,
+        operatorId,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: `Đã cập nhật trạng thái người dùng thành '${result.status}'.`,
+        data: result,
+      });
+    } catch (error: any) {
+      if (error instanceof UserNotFoundException) {
+        res.status(404).json({
+          success: false,
+          error: error.message,
+        });
+        return;
+      }
+
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Không thể cập nhật trạng thái người dùng.',
       });
     }
   }

@@ -5,6 +5,7 @@
   "description": "Project Nexus - Cart, Orders & Payments Bounded Context (SRS 3.4)",
   "main": "dist/index.js",
   "scripts": {
+    "predev": "node ../../scripts/free-port.js 4003",
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts"

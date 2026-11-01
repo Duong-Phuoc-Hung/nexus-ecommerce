@@ -192,6 +192,21 @@ export const sellerProductsApi = {
    * API 8 (MỚI): DELETE /api/v1/products/:id
    * Xóa sản phẩm khỏi kho của Seller
    */
+  /**
+   * API 9 (MỚI): POST /api/v1/products/:id/recover
+   * Khôi phục sản phẩm đã xóa về trạng thái Đang bán
+   */
+  async recover(id: string, signal?: AbortSignal): Promise<{ success: boolean; message: string }> {
+    const raw = await requestApi<{ success: boolean; message: string }>(
+      `/products/${encodeURIComponent(id)}/recover`,
+      {
+        method: 'POST',
+        signal,
+      },
+    );
+    return raw;
+  },
+
   async delete(id: string, signal?: AbortSignal): Promise<{ success: boolean; message: string }> {
     const raw = await requestApi<{ success: boolean; message: string }>(
       `/products/${encodeURIComponent(id)}`,

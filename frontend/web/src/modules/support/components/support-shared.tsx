@@ -10,6 +10,72 @@ export { cases, orders, users, shipments } from '../fixtures/support';
 export const money = (amount: number) => `${new Intl.NumberFormat('vi-VN').format(amount)} ₫`;
 export const slug = (value: string) => value.toLowerCase().replaceAll(' ', '-');
 
+export function supportStatusClass(status?: string): string {
+  if (!status) return 'status-default';
+  const s = status.toUpperCase().trim().replace(/[\s-]/g, '_');
+  switch (s) {
+    // Orders
+    case 'PENDING':
+    case 'CHỜ_XỬ_LÝ':
+      return 'status-pending';
+    case 'PROCESSING':
+    case 'ĐANG_XỬ_LÝ':
+      return 'status-processing';
+    case 'SHIPPED':
+    case 'ĐANG_GIAO_HÀNG':
+    case 'ĐANG_GIAO':
+      return 'status-shipped';
+    case 'DELIVERED':
+    case 'ĐÃ_GIAO_HÀNG':
+    case 'ĐÃ_GIAO':
+    case 'HOÀN_TẤT':
+      return 'status-delivered';
+    case 'CANCELLED':
+    case 'ĐÃ_HỦY':
+      return 'status-cancelled';
+    case 'REFUNDED':
+    case 'ĐÃ_HOÀN_TIỀN':
+      return 'status-refunded';
+
+    // Shipments
+    case 'READY_TO_PICK':
+    case 'CHỜ_LẤY_HÀNG':
+      return 'status-ready-to-pick';
+    case 'PICKED':
+    case 'ĐÃ_LẤY_HÀNG':
+      return 'status-picked';
+    case 'IN_TRANSIT':
+    case 'ĐANG_VẬN_CHUYỂN':
+      return 'status-in-transit';
+    case 'OUT_FOR_DELIVERY':
+    case 'ĐANG_GIAO_HÀNG':
+      return 'status-out-for-delivery';
+    case 'FAILED':
+    case 'GIAO_HÀNG_THẤT_BẠI':
+      return 'status-failed';
+    case 'RETURNED':
+    case 'ĐÃ_TRẢ_HÀNG':
+      return 'status-returned';
+
+    // Users
+    case 'ACTIVE':
+    case 'ĐANG_HOẠT_ĐỘNG':
+    case 'HOẠT_ĐỘNG':
+      return 'status-active';
+    case 'INACTIVE':
+    case 'NGỪNG_HOẠT_ĐỘNG':
+      return 'status-inactive';
+    case 'LOCKED':
+    case 'SUSPENDED':
+    case 'BANNED':
+    case 'TẠM_KHÓA':
+      return 'status-locked';
+
+    default:
+      return slug(status);
+  }
+}
+
 export function Heading({
   label,
   title,
@@ -61,20 +127,45 @@ export function CaseTable({ compact = false, items }: { compact?: boolean; items
               </td>
               <td>{item.type}</td>
               <td>
-                <Link className="support-inline-link" href={`/support/orders/${item.order}`}>
+                <Link
+                  className="support-inline-link"
+                  href={`/support/orders/${item.order}`}
+                  title="Xem chi tiết đơn hàng liên quan"
+                >
                   {item.order}
                 </Link>
               </td>
-              <td>{item.customer}</td>
+              <td>
+                <Link
+                  className="support-inline-link"
+                  href={`/support/users?q=${encodeURIComponent(item.customer)}`}
+                  title="Xem thông tin người dùng"
+                >
+                  {item.customer}
+                </Link>
+              </td>
               <td>{item.reason}</td>
               <td>
                 <span className={`support-priority ${slug(item.priority)}`}>{item.priority}</span>
               </td>
               <td>{item.age}</td>
               <td>
-                <Link className="support-row-link" href={`/support/orders/${item.order}`}>
-                  Mở hồ sơ
-                </Link>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <Link
+                    className="support-row-link"
+                    href={`/support/users?q=${encodeURIComponent(item.customer)}`}
+                    title="Mở hồ sơ cá nhân của người gửi yêu cầu (BUG-05 Fix)"
+                  >
+                    Xem hồ sơ
+                  </Link>
+                  <Link
+                    className="support-inline-link"
+                    style={{ fontSize: '0.68rem', color: '#687386' }}
+                    href={`/support/orders/${item.order}`}
+                  >
+                    Đơn hàng
+                  </Link>
+                </div>
               </td>
             </tr>
           ))}

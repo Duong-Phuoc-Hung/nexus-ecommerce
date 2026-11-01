@@ -110,6 +110,14 @@ export function createOrdersApi(request: RequestApi) {
         }),
       );
     },
+    async rejectRefund(id: string, reason: string) {
+      return unwrap<OrderDetail>(
+        await request(`/orders/${encodeURIComponent(id)}/refund/cancel`, {
+          method: 'POST',
+          body: { reason },
+        }),
+      );
+    },
     async checkout(input: {
       items: { productId: string; quantity: number }[];
       shippingAddress: Record<string, string>;

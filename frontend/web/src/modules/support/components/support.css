@@ -349,24 +349,132 @@
   background: #edf3f6;
   color: #627f8e;
 }
-.support-status.chờ-xử-lý {
-  background: #fff4df;
-  color: #9b6b12;
-}
-.support-status.đang-giao,
-.support-status.đang-lấy-hàng {
-  background: #eaf2ff;
-  color: #3766a9;
-}
-.support-status.hoàn-tất,
-.support-status.đã-giao,
-.support-status.hoạt-động {
-  background: #e7f7ef;
-  color: #218254;
-}
-.support-status.đã-hủy {
+.support-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 99px;
   background: #f0f2f5;
-  color: #758094;
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.25;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+/* Đơn hàng & Vận đơn: Chờ xử lý / Chờ lấy hàng - Hổ phách/Vàng cam */
+.support-status.status-pending,
+.support-status.pending,
+.support-status.chờ-xử-lý {
+  background: #fffbeb;
+  color: #b45309;
+  border-color: #fde68a;
+}
+.support-status.status-ready-to-pick,
+.support-status.ready_to_pick,
+.support-status.chờ-lấy-hàng {
+  background: #fefce8;
+  color: #a16207;
+  border-color: #fef08a;
+}
+
+/* Đang xử lý / Đã lấy hàng - Xanh dương hoặc Teal */
+.support-status.status-processing,
+.support-status.processing,
+.support-status.đang-xử-lý {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+.support-status.status-picked,
+.support-status.picked,
+.support-status.đã-lấy-hàng {
+  background: #f0fdfa;
+  color: #0f766e;
+  border-color: #99f6e4;
+}
+
+/* Đang giao hàng / Đang vận chuyển - Xanh da trời & Indigo */
+.support-status.status-shipped,
+.support-status.shipped,
+.support-status.đang-giao,
+.support-status.đang-giao-hàng {
+  background: #e0f2fe;
+  color: #0369a1;
+  border-color: #bae6fd;
+}
+.support-status.status-in-transit,
+.support-status.in_transit,
+.support-status.đang-vận-chuyển {
+  background: #e0e7ff;
+  color: #4338ca;
+  border-color: #c7d2fe;
+}
+.support-status.status-out-for-delivery,
+.support-status.out_for_delivery {
+  background: #f0f9ff;
+  color: #0284c7;
+  border-color: #7dd3fc;
+}
+
+/* Thành công / Đã giao hàng / Hoạt động - Xanh lá */
+.support-status.status-delivered,
+.support-status.delivered,
+.support-status.đã-giao,
+.support-status.đã-giao-hàng,
+.support-status.hoàn-tất,
+.support-status.status-active,
+.support-status.active,
+.support-status.hoạt-động,
+.support-status.đang-hoạt-động {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+/* Đã hủy / Thất bại / Tạm khóa - Đỏ cảnh báo */
+.support-status.status-cancelled,
+.support-status.cancelled,
+.support-status.đã-hủy,
+.support-status.status-failed,
+.support-status.failed,
+.support-status.giao-hàng-thất-bại,
+.support-status.status-locked,
+.support-status.locked,
+.support-status.suspended,
+.support-status.banned,
+.support-status.tạm-khóa {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+/* Đã hoàn tiền - Hồng / Tím */
+.support-status.status-refunded,
+.support-status.refunded,
+.support-status.đã-hoàn-tiền {
+  background: #fdf2f8;
+  color: #be185d;
+  border-color: #fbcfe8;
+}
+
+/* Đã trả hàng - Cam đất */
+.support-status.status-returned,
+.support-status.returned,
+.support-status.đã-trả-hàng {
+  background: #fff7ed;
+  color: #c2410c;
+  border-color: #fed7aa;
+}
+
+/* Ngừng hoạt động - Xám */
+.support-status.status-inactive,
+.support-status.inactive,
+.support-status.ngừng-hoạt-động {
+  background: #f1f5f9;
+  color: #64748b;
+  border-color: #e2e8f0;
 }
 .support-role {
   background: #eef3f7;
@@ -519,17 +627,64 @@
 }
 .support-timeline li.complete > span,
 .support-timeline li.done > span {
-  border-color: #10b981;
-  background: #10b981;
+  border-color: #475569;
+  background: #475569;
+}
+.support-timeline li.complete strong,
+.support-timeline li.done strong {
+  color: #334155;
 }
 .support-timeline li.current > span {
   border-color: #3b82f6;
-  background: #eff6ff;
+  background: #ffffff;
   box-shadow: 0 0 0 4px #dbeafe;
+}
+.support-timeline li.current.timeline-ready-to-pick > span {
+  border-color: #d97706;
+  background: #ffffff;
+  box-shadow: 0 0 0 4px #fef3c7;
+}
+.support-timeline li.current.timeline-ready-to-pick strong {
+  color: #b45309;
+}
+.support-timeline li.current.timeline-picked > span {
+  border-color: #0d9488;
+  background: #ffffff;
+  box-shadow: 0 0 0 4px #ccfbf1;
+}
+.support-timeline li.current.timeline-picked strong {
+  color: #0f766e;
+}
+.support-timeline li.current.timeline-in-transit > span {
+  border-color: #4f46e5;
+  background: #ffffff;
+  box-shadow: 0 0 0 4px #e0e7ff;
+}
+.support-timeline li.current.timeline-in-transit strong {
+  color: #3730a3;
+}
+.support-timeline li.current.timeline-out-for-delivery > span {
+  border-color: #0284c7;
+  background: #ffffff;
+  box-shadow: 0 0 0 4px #e0f2fe;
+}
+.support-timeline li.current.timeline-out-for-delivery strong {
+  color: #0369a1;
+}
+.support-timeline li.current.timeline-delivered > span {
+  border-color: #10b981;
+  background: #ffffff;
+  box-shadow: 0 0 0 4px #d1fae5;
+}
+.support-timeline li.current.timeline-delivered strong {
+  color: #047857;
 }
 .support-timeline li.pending > span {
   border-color: #cbd5e1;
   background: #f8fafc;
+}
+.support-timeline li.pending strong {
+  color: #94a3b8;
 }
 .support-timeline-desc {
   margin: 4px 0 0;
@@ -587,21 +742,168 @@
   z-index: 2;
   transition: all 0.2s ease;
 }
+/* Stepper Done - Clean slate without neon green clutter */
 .support-step-item.is-done .support-step-badge {
-  background: #10b981;
+  background: #334155;
   color: #ffffff;
-  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.35);
+  box-shadow: 0 1px 3px rgba(51, 65, 85, 0.2);
 }
+.support-step-item.is-done .support-step-text {
+  color: #475569;
+  font-weight: 600;
+}
+
+/* Stepper Active - Distinct status colors */
 .support-step-item.is-current .support-step-badge {
   background: #3b82f6;
   color: #ffffff;
   box-shadow: 0 0 0 4px #dbeafe;
 }
+.support-step-item.is-current .support-step-text {
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+/* 1. READY_TO_PICK: Cam hổ phách */
+.support-step-item.is-current.step-ready-to-pick .support-step-badge {
+  background: #d97706;
+  color: #ffffff;
+  box-shadow: 0 0 0 4px #fef3c7, 0 2px 6px rgba(217, 119, 6, 0.25);
+}
+.support-step-item.is-current.step-ready-to-pick .support-step-text {
+  color: #b45309;
+  font-weight: 700;
+}
+
+/* 2. PICKED: Teal ngọc */
+.support-step-item.is-current.step-picked .support-step-badge {
+  background: #0d9488;
+  color: #ffffff;
+  box-shadow: 0 0 0 4px #ccfbf1, 0 2px 6px rgba(13, 148, 136, 0.25);
+}
+.support-step-item.is-current.step-picked .support-step-text {
+  color: #0f766e;
+  font-weight: 700;
+}
+
+/* 3. IN_TRANSIT: Indigo xanh tím */
+.support-step-item.is-current.step-in-transit .support-step-badge {
+  background: #4f46e5;
+  color: #ffffff;
+  box-shadow: 0 0 0 4px #e0e7ff, 0 2px 6px rgba(79, 70, 229, 0.25);
+}
+.support-step-item.is-current.step-in-transit .support-step-text {
+  color: #3730a3;
+  font-weight: 700;
+}
+
+/* 4. OUT_FOR_DELIVERY: Sky Blue xanh dương */
+.support-step-item.is-current.step-out-for-delivery .support-step-badge {
+  background: #0284c7;
+  color: #ffffff;
+  box-shadow: 0 0 0 4px #e0f2fe, 0 2px 6px rgba(2, 132, 199, 0.25);
+}
+.support-step-item.is-current.step-out-for-delivery .support-step-text {
+  color: #0369a1;
+  font-weight: 700;
+}
+
+/* 5. DELIVERED: Emerald Green thành công */
+.support-step-item.is-current.step-delivered .support-step-badge {
+  background: #10b981;
+  color: #ffffff;
+  box-shadow: 0 0 0 4px #d1fae5, 0 2px 6px rgba(16, 185, 129, 0.25);
+}
+.support-step-item.is-current.step-delivered .support-step-text {
+  color: #047857;
+  font-weight: 700;
+}
+
+/* 6. FAILED: Đỏ cảnh báo - Giao thất bại */
+.support-step-item.is-failed .support-step-badge,
+.support-step-item.is-current.step-failed .support-step-badge {
+  background: #dc2626;
+  color: #ffffff;
+  box-shadow: 0 0 0 4px #fee2e2, 0 2px 6px rgba(220, 38, 38, 0.25);
+}
+.support-step-item.is-failed .support-step-text,
+.support-step-item.is-current.step-failed .support-step-text {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+/* 7. RETURNED: Tím chuyển hoàn - Đã trả hàng */
+.support-step-item.is-returned .support-step-badge,
+.support-step-item.is-current.step-returned .support-step-badge {
+  background: #7c3aed;
+  color: #ffffff;
+  box-shadow: 0 0 0 4px #ede9fe, 0 2px 6px rgba(124, 58, 237, 0.25);
+}
+.support-step-item.is-returned .support-step-text,
+.support-step-item.is-current.step-returned .support-step-text {
+  color: #6d28d9;
+  font-weight: 700;
+}
+
+.support-step-line.is-failed {
+  background: #ef4444;
+}
+.support-step-line.is-returned {
+  background: #8b5cf6;
+}
+
+.support-button-danger {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border: 1px solid #fecaca;
+  border-radius: 7px;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 0.69rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.support-button-danger:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.support-button-return {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border: 1px solid #ddd6fe;
+  border-radius: 7px;
+  background: #f5f3ff;
+  color: #6d28d9;
+  font-size: 0.69rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.support-button-return:hover:not(:disabled) {
+  background: #ede9fe;
+  border-color: #c4b5fd;
+  color: #5b21b6;
+}
+
+/* Stepper Pending */
 .support-step-item.is-pending .support-step-badge {
-  background: #f1f5f9;
+  background: #f8fafc;
   border: 2px solid #cbd5e1;
   color: #94a3b8;
 }
+.support-step-item.is-pending .support-step-text {
+  color: #94a3b8;
+}
+
 .support-step-line {
   position: absolute;
   top: 16px;
@@ -613,20 +915,13 @@
   transition: background 0.3s ease;
 }
 .support-step-line.is-active {
-  background: #10b981;
+  background: #64748b;
 }
 .support-step-text {
   margin-top: 8px;
   font-size: 0.72rem;
   font-weight: 600;
   color: #64748b;
-}
-.support-step-item.is-done .support-step-text {
-  color: #059669;
-}
-.support-step-item.is-current .support-step-text {
-  color: #1d4ed8;
-  font-weight: 700;
 }
 .support-timeline strong,
 .support-timeline small {
@@ -679,9 +974,16 @@
   flex-wrap: wrap;
   gap: 8px;
 }
-.support-action-buttons button:hover {
+.support-action-buttons button:hover:not(:disabled) {
   border-color: #9ebed0;
   color: #347899;
+}
+.support-action-buttons button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #94a3b8;
 }
 .support-action-notice {
   width: 100%;

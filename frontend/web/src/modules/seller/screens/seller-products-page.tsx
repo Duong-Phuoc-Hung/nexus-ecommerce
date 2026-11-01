@@ -73,7 +73,7 @@ export function SellerProductsPage() {
     const fetcher = searchKeyword
       ? sellerProductsApi.search(searchKeyword, controller.signal)
       : sellerProductsApi
-          .getMine(status === 'ALL' || status === 'DELETED' ? undefined : status, controller.signal)
+          .getMine(status === 'ALL' ? undefined : status, controller.signal)
           .catch(() => sellerProductsApi.list(controller.signal));
 
     fetcher
@@ -96,7 +96,7 @@ export function SellerProductsPage() {
       })
       .catch((err) => {
         if (!controller.signal.aborted) {
-          setProductsList(mockProducts);
+          setProductsList([]);
           setError(userMessage(err));
         }
       })
@@ -140,12 +140,7 @@ export function SellerProductsPage() {
     setError('');
 
     try {
-      // Phục hồi lại trạng thái ACTIVE cho sản phẩm
-      try {
-        await sellerProductsApi.update(id, { status: 'ACTIVE' });
-      } catch {
-        // Fallback UI update nếu API chưa hỗ trợ khôi phục backend
-      }
+      await sellerProductsApi.recover(id);
       setProductsList((prev) => prev.map((p) => (p.id === id ? { ...p, status: 'ACTIVE' } : p)));
       setActionSuccess(
         `Đã phục hồi sản phẩm "${name}" thành công! Trạng thái hiện tại: "Đang bán".`,
