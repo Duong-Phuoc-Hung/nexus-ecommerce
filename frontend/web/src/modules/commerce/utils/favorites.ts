@@ -4,6 +4,7 @@ export type FavoriteProduct = {
   image: string;
   price: number;
   href: string;
+  saleType?: 'FIXED_PRICE' | 'AUCTION' | 'UNKNOWN';
 };
 
 const key = 'nexus-favorites-v1';
