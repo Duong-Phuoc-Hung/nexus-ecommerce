@@ -777,8 +777,92 @@ export const catalogSpec = {
     '/api/v1/products': {
       get: {
         tags: ['Products'],
-        summary: 'Danh sách tất cả sản phẩm (khách hàng)',
-        description: `${PUBLIC} Method: GET. Truy xuất toàn bộ sản phẩm đang được bày bán công khai ngoài trang chủ (không cần đăng nhập).`,
+        summary: 'Danh sách sản phẩm (Khách hàng & Quản trị)',
+        description: `${PUBLIC} Method: GET. Lấy danh sách sản phẩm có hỗ trợ phân trang và bộ lọc nâng cao. Khách hàng xem danh sách công khai (mặc định scope=buyer). Quản trị viên (ADMIN) có thể truyền query \`scope=admin\` (kèm header Authorization: Bearer <JWT>) để xem toàn bộ sản phẩm gồm cả DRAFT, ARCHIVED, OUT_OF_STOCK.`,
+        parameters: [
+          {
+            name: 'scope',
+            in: 'query',
+            required: false,
+            description:
+              'Phạm vi truy vấn: "buyer" (công khai) hoặc "admin" (dành riêng cho Admin)',
+            schema: { type: 'string', enum: ['buyer', 'admin'], default: 'buyer' },
+          },
+          {
+            name: 'page',
+            in: 'query',
+            required: false,
+            description: 'Số trang (bắt đầu từ 1, mặc định 1)',
+            schema: { type: 'integer', default: 1, example: 1 },
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            required: false,
+            description: 'Số lượng sản phẩm trên mỗi trang (1-100, mặc định 20)',
+            schema: { type: 'integer', default: 20, example: 20 },
+          },
+          {
+            name: 'sort',
+            in: 'query',
+            required: false,
+            description: 'Tiêu chí sắp xếp',
+            schema: {
+              type: 'string',
+              enum: ['newest', 'oldest', 'price_asc', 'price_desc'],
+              default: 'newest',
+            },
+          },
+          {
+            name: 'categoryId',
+            in: 'query',
+            required: false,
+            description: 'Lọc theo ID danh mục',
+            schema: { type: 'string', example: '100' },
+          },
+          {
+            name: 'condition',
+            in: 'query',
+            required: false,
+            description: 'Tình trạng sản phẩm',
+            schema: { type: 'string', enum: ['NEW', 'LIKE_NEW', 'USED', 'REFURBISHED'] },
+          },
+          {
+            name: 'status',
+            in: 'query',
+            required: false,
+            description: 'Trạng thái sản phẩm (chỉ hỗ trợ khi scope=admin)',
+            schema: { type: 'string', enum: ['ACTIVE', 'DRAFT', 'ARCHIVED', 'OUT_OF_STOCK'] },
+          },
+          {
+            name: 'saleType',
+            in: 'query',
+            required: false,
+            description: 'Hình thức bán hàng',
+            schema: { type: 'string', enum: ['DIRECT_SALE', 'AUCTION'] },
+          },
+          {
+            name: 'minPrice',
+            in: 'query',
+            required: false,
+            description: 'Giá tối thiểu (VND)',
+            schema: { type: 'number', example: 1000000 },
+          },
+          {
+            name: 'maxPrice',
+            in: 'query',
+            required: false,
+            description: 'Giá tối đa (VND)',
+            schema: { type: 'number', example: 50000000 },
+          },
+          {
+            name: 'q',
+            in: 'query',
+            required: false,
+            description: 'Từ khóa tìm kiếm tiêu đề/mô tả sản phẩm',
+            schema: { type: 'string', example: 'iphone' },
+          },
+        ],
         responses: {
           200: jsonResponse('Danh sách sản phẩm', {
             success: true,
@@ -805,7 +889,8 @@ export const catalogSpec = {
       },
       post: {
         tags: ['Products'],
-        summary: 'Tạo sản phẩm mới (Seller)',
+        summary: 'Tạo sản phẩm mới (Seller & Admin)',
+        description: `${PRIVATE} Tạo sản phẩm mới. Seller tạo cho chính mình; Admin có thể truyền thêm \`sellerId\` để tạo thay mặt cho Seller khác.`,
         security: [{ BearerAuth: [] }],
         requestBody: {
           required: true,
@@ -815,6 +900,11 @@ export const catalogSpec = {
                 type: 'object',
                 required: ['title', 'description', 'categoryId', 'price'],
                 properties: {
+                  sellerId: {
+                    type: 'string',
+                    description: 'Tùy chọn: Dành riêng cho ADMIN để tạo sản phẩm thay mặt Seller',
+                    example: 'a0000000-0000-0000-0000-000000000002',
+                  },
                   title: { type: 'string', example: 'iPhone 15 Pro Max 512GB Blue Titanium' },
                   description: {
                     type: 'string',
@@ -1072,6 +1162,56 @@ export const catalogSpec = {
           401: errorResponse('Chưa xác thực', 'Vui lòng đăng nhập để thực hiện thao tác này.'),
           403: errorResponse('Từ chối truy cập', 'Bạn không có quyền xóa sản phẩm của người khác.'),
           404: errorResponse('Không tìm thấy', 'Product with ID "999" was not found.'),
+        },
+      },
+    },
+    '/api/v1/products/{id}/recover': {
+      post: {
+        tags: ['Products'],
+        summary: 'Khôi phục sản phẩm đã xóa mềm (Seller / Admin)',
+        description: `${PRIVATE} Khôi phục sản phẩm đã bị xóa hoặc lưu trữ về trạng thái ACTIVE. Yêu cầu quyền SELLER (chính chủ sản phẩm) hoặc ADMIN.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã ID của sản phẩm cần khôi phục',
+            schema: { type: 'string', example: '15' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Khôi phục sản phẩm thành công', {
+            success: true,
+            message: "Đã khôi phục thành công sản phẩm với mã ID '15'.",
+          }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy sản phẩm', 'Product with ID "15" was not found.'),
+        },
+      },
+      put: {
+        tags: ['Products'],
+        summary: 'Khôi phục sản phẩm đã xóa mềm (Alias của POST)',
+        description: `${PRIVATE} Endpoint tương đương POST /api/v1/products/{id}/recover.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã ID của sản phẩm cần khôi phục',
+            schema: { type: 'string', example: '15' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Khôi phục sản phẩm thành công', {
+            success: true,
+            message: "Đã khôi phục thành công sản phẩm với mã ID '15'.",
+          }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy sản phẩm', 'Product with ID "15" was not found.'),
         },
       },
     },
