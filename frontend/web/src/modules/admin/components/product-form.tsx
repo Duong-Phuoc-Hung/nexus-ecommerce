@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { AdminSelect } from './admin-select';
+import { userApi, type SupportUser } from '@/modules/user/api/user.api';
 import { useAdminCatalog } from './admin-catalog-context';
 import { userMessage } from '../../../lib/axios/http';
 import {
@@ -34,6 +35,32 @@ export function ProductForm({ productId }: { productId?: string }) {
   const router = useRouter();
   const [form, setForm] = useState<ProductInput>(emptyForm);
   const [categories, setCategories] = useState<CatalogCategory[]>([]);
+  const [sellers, setSellers] = useState<SupportUser[]>([]);
+  const [sellerSearch, setSellerSearch] = useState('');
+  const [sellerError, setSellerError] = useState('');
+  useEffect(() => {
+    if (productId) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      setSellerError('');
+      userApi
+        .list(
+          { role: 'SELLER', status: 'ACTIVE', q: sellerSearch, page: 1, limit: 30 },
+          controller.signal,
+        )
+        .then((result) => {
+          if (!controller.signal.aborted)
+            setSellers(result.items.filter((s) => s.role === 'SELLER' && s.status === 'ACTIVE'));
+        })
+        .catch((e) => {
+          if (!controller.signal.aborted) setSellerError(userMessage(e));
+        });
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [productId, sellerSearch]);
   const [loading, setLoading] = useState(Boolean(productId));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -41,7 +68,6 @@ export function ProductForm({ productId }: { productId?: string }) {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    if (!productId) return;
     const controller = new AbortController();
     api
       .categories(controller.signal)
@@ -89,8 +115,14 @@ export function ProductForm({ productId }: { productId?: string }) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!productId) return;
+    if (!productId) {
+      setError(
+        'Chưa mở tạo sản phẩm thay Seller. Hệ thống cần xác nhận đúng chủ sở hữu trước khi lưu.',
+      );
+      return;
+    }
     const errors = validateProduct(form);
+    if (!productId && !form.sellerId) errors.sellerId = 'Chọn Seller sở hữu sản phẩm.';
     if (!Number.isInteger(form.stockQuantity) || (form.stockQuantity ?? -1) < 0)
       errors.stockQuantity = 'Số lượng phải là số nguyên không âm.';
     setFieldErrors(errors);
@@ -105,29 +137,13 @@ export function ProductForm({ productId }: { productId?: string }) {
     try {
       const saved = await api.save(form, productId);
       setSuccess(`Đã lưu thay đổi cho “${saved.title}”.`);
+      if (!productId) router.push(productsPath + '/' + encodeURIComponent(saved.id) + '/edit');
       router.refresh();
     } catch (reason) {
       setError(userMessage(reason));
     } finally {
       setSaving(false);
     }
-  }
-
-  if (!productId) {
-    return (
-      <section className="admin-card">
-        <p className="admin-eyebrow">CATALOG API</p>
-        <h1>Tạo sản phẩm</h1>
-        <p className="admin-notice" role="note">
-          BE đã có API tạo sản phẩm, nhưng hiện tự gán người đang đăng nhập làm người bán và chưa có
-          API tra cứu/chọn Seller cho Admin. Chưa thể tạo an toàn từ tài khoản Admin vì sản phẩm sẽ
-          bị gán sai chủ sở hữu.
-        </p>
-        <Button asChild variant="outline" className="mt-5">
-          <Link href={productsPath}>Về danh sách sản phẩm</Link>
-        </Button>
-      </section>
-    );
   }
 
   const conditionOptions = [
@@ -146,9 +162,9 @@ export function ProductForm({ productId }: { productId?: string }) {
     <>
       <div className="admin-page-heading">
         <div>
-          <p className="admin-eyebrow">CATALOG · {productId}</p>
-          <h1>Chỉnh sửa sản phẩm</h1>
-          <p className="admin-muted">Dữ liệu được tải và lưu qua Catalog API.</p>
+          <p className="admin-eyebrow">SẢN PHẨM · {productId || 'TẠO MỚI'}</p>
+          <h1>{productId ? 'Chỉnh sửa sản phẩm' : 'Tạo sản phẩm cho Seller'}</h1>
+          <p className="admin-muted">Kiểm tra nội dung, hình ảnh và tồn kho trước khi lưu.</p>
         </div>
         <Button asChild variant="outline">
           <Link href={productsPath}>Về danh sách</Link>
@@ -161,6 +177,35 @@ export function ProductForm({ productId }: { productId?: string }) {
           </p>
         ) : (
           <form onSubmit={submit} noValidate>
+            {!productId && (
+              <div className="admin-field mb-6 space-y-3">
+                <label htmlFor="seller-search">Seller sở hữu sản phẩm</label>
+                <Input
+                  id="seller-search"
+                  value={sellerSearch}
+                  onChange={(e) => setSellerSearch(e.target.value)}
+                  placeholder="Tìm Seller theo tên hoặc email"
+                />
+                <AdminSelect
+                  id="product-sellerId"
+                  value={form.sellerId || ''}
+                  onValueChange={(v) => update('sellerId', v)}
+                  options={sellers.map((s) => ({
+                    value: s.id,
+                    label: s.fullName + ' · ' + s.email,
+                  }))}
+                />
+                {(sellerError || fieldErrors.sellerId) && (
+                  <p role="alert" className="text-sm text-red-700">
+                    {sellerError || fieldErrors.sellerId}
+                  </p>
+                )}
+                <p className="text-sm text-slate-500">
+                  Chỉ chọn tài khoản Seller đang hoạt động. Chức năng tạo thay Seller chưa được mở;
+                  thông tin chuẩn bị chưa được lưu.
+                </p>
+              </div>
+            )}
             {error && (
               <p className="admin-notice" role="alert">
                 {error}
@@ -300,11 +345,11 @@ export function ProductForm({ productId }: { productId?: string }) {
             </div>
             {!categories.length && (
               <p className="admin-muted mt-3">
-                Đang chờ danh mục từ Catalog API; không dùng danh mục mẫu để tránh lưu sai ID.
+                Chưa tải được danh mục hợp lệ. Vui lòng thử lại trước khi lưu.
               </p>
             )}
             <div className="mt-6 flex flex-wrap gap-3">
-              <Button type="submit" disabled={saving || !categories.length}>
+              <Button type="submit" disabled={saving || !categories.length || !productId}>
                 {saving ? 'Đang lưu…' : 'Lưu thay đổi'}
               </Button>
               <Button asChild variant="outline">

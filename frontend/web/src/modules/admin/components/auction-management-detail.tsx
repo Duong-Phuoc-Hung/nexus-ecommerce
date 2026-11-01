@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { Auction } from '@/modules/auction/api/auction.api';
 import { ArrowLeft, Pencil, ExternalLink, Ban, Clock3, Gavel } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -9,6 +10,112 @@ import { appConfig } from '@/configs/app.config';
 import { useAuctions } from '@/modules/auction/hooks/use-auctions';
 import { auctionApi, currentPrice, canManageAuction } from '@/modules/auction/api/auction.api';
 import { AuctionBadge, auctionDate, auctionMoney } from '@/modules/auction/components/auction-ui';
+function LiveAuctionDetail({ id }: { id: string }) {
+  const [auction, setAuction] = useState<Auction | null>(null);
+  const [error, setError] = useState('');
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    setAuction(null);
+    setError('');
+    auctionApi
+      .detail(id)
+      .then((result) => {
+        if (alive) setAuction(result.auction);
+      })
+      .catch((e) => {
+        if (alive) setError(e instanceof Error ? e.message : 'Chưa tải được phiên đấu.');
+      });
+    return () => {
+      alive = false;
+    };
+  }, [id, revision]);
+  return (
+    <div className="space-y-6">
+      <Button asChild variant="ghost">
+        <Link href="/admin/auctions">
+          <ArrowLeft size={16} />
+          Danh sách phiên đấu
+        </Link>
+      </Button>
+      <header>
+        <p className="admin-kicker">CHI TIẾT PHIÊN ĐẤU</p>
+        <h1 className="mt-2">{auction?.title || 'Thông tin phiên đấu'}</h1>
+        <p className="mt-2 text-sm text-slate-500">{id}</p>
+      </header>
+      {error ? (
+        <div role="alert" className="rounded-2xl border bg-white p-6">
+          <p>{error}</p>
+          <Button className="mt-4" onClick={() => setRevision((v) => v + 1)}>
+            Thử lại
+          </Button>
+        </div>
+      ) : !auction ? (
+        <p role="status">Đang tải phiên đấu…</p>
+      ) : (
+        <>
+          <section className="rounded-2xl border border-line bg-white p-6">
+            <AuctionBadge status={auction.status} />
+            <dl className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {[
+                ['Sản phẩm', auction.productId],
+                ['Giá khởi điểm', auctionMoney(auction.startingPrice)],
+                ['Giá hiện tại', auctionMoney(currentPrice(auction))],
+                ['Bước giá', auctionMoney(auction.increment)],
+                ['Bắt đầu', auctionDate(auction.startAt)],
+                ['Kết thúc', auctionDate(auction.endAt)],
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <dt className="text-sm text-slate-500">{label}</dt>
+                  <dd className="mt-2 break-words font-semibold">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+          <section className="rounded-2xl border border-line bg-white p-6">
+            <h2 className="font-semibold">Lịch sử trả giá</h2>
+            {auction.bidHistoryAvailable ? (
+              <ul className="mt-4 divide-y">
+                {auction.bids.map((bid) => (
+                  <li key={bid.id} className="flex flex-wrap justify-between gap-3 py-3">
+                    <span>{bid.bidder}</span>
+                    <strong>{auctionMoney(bid.amount)}</strong>
+                    <span className="text-sm text-slate-500">{auctionDate(bid.time)}</span>
+                  </li>
+                ))}
+                {!auction.bids.length && (
+                  <li className="py-4 text-sm text-slate-500">Chưa có lượt trả giá.</li>
+                )}
+              </ul>
+            ) : (
+              <p className="mt-3 text-sm text-slate-500">
+                Lịch sử trả giá chưa được cung cấp cho phiên này.
+              </p>
+            )}
+          </section>
+          <section className="rounded-2xl border border-line bg-white p-6">
+            <h2 className="font-semibold">Điều hành phiên</h2>
+            <p className="my-4 text-sm leading-6 text-slate-600">
+              Chức năng thay đổi và hủy phiên chưa được mở. Phiên đã bắt đầu không được sửa giá hoặc
+              lịch; quyết định hủy cần có lý do và đối soát giao dịch liên quan.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <Button disabled>Sửa cấu hình</Button>
+              <Button variant="outline" disabled>
+                Hủy phiên
+              </Button>
+              <Button asChild variant="outline">
+                <Link href={'/products/' + encodeURIComponent(auction.productId)}>
+                  Xem sản phẩm
+                </Link>
+              </Button>
+            </div>
+          </section>
+        </>
+      )}
+    </div>
+  );
+}
 export function AuctionManagementDetail({ id }: { id: string }) {
   const { rows, loading, error, reload } = useAuctions();
   const { user } = useSession();
@@ -33,15 +140,7 @@ export function AuctionManagementDetail({ id }: { id: string }) {
       setBusy(false);
     }
   }
-  if (appConfig.auctionSource !== 'mock')
-    return (
-      <p>
-        Chức năng quản lý phiên đang được hoàn thiện.{' '}
-        <Link href="/admin/auctions" className="underline">
-          Về danh sách
-        </Link>
-      </p>
-    );
+  if (appConfig.auctionSource !== 'mock') return <LiveAuctionDetail id={id} />;
   if (loading) return <p role="status">Đang tải chi tiết phiên…</p>;
   if (error || !a)
     return (

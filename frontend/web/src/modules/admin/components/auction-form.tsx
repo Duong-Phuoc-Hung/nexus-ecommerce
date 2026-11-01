@@ -48,7 +48,9 @@ export function AuctionForm({ id }: { id?: string }) {
   const [blocked, setBlocked] = useState(false);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [pending, setPending] = useState<AuctionInput | null>(null);
-  const canSave = canManageAuction(user, id ? 'AUCTION.UPDATE' : 'AUCTION.CREATE');
+  const canSave =
+    appConfig.auctionSource === 'mock' &&
+    canManageAuction(user, id ? 'AUCTION.UPDATE' : 'AUCTION.CREATE');
   const fingerprint = JSON.stringify([productId, price, increment, start, end]);
   const dirty = !loading && !!baseline && baseline !== fingerprint;
   const reserved = new Set(
@@ -203,17 +205,17 @@ export function AuctionForm({ id }: { id?: string }) {
       setBusy(false);
     }
   }
-  if (appConfig.auctionSource !== 'mock')
-    return (
-      <p>
-        Chức năng tạo và sửa phiên đang chờ kết nối.{' '}
-        <Link className="underline" href="/admin/auctions">
-          Về danh sách
-        </Link>
-      </p>
-    );
   return (
     <div className="space-y-6">
+      {appConfig.auctionSource !== 'mock' && (
+        <p
+          role="status"
+          className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          Chức năng lưu cấu hình phiên chưa được mở. Chỉ phiên chưa bắt đầu mới được thay đổi giá và
+          lịch.
+        </p>
+      )}
       <Button variant="ghost" asChild>
         <Link href={id ? '/admin/auctions/' + id : '/admin/auctions'}>
           <ArrowLeft size={16} />
