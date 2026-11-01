@@ -29,6 +29,8 @@ export interface CartItemDto {
   status: string;
   quantity: number;
   subtotal: number;
+  imageUrl: string | null;
+  availability?: 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN';
 }
 
 export interface CartDto {

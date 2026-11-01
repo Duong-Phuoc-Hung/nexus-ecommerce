@@ -1,4 +1,4 @@
-import { ICatalogClient } from '../checkout/ports';
+import { CatalogProduct, ICatalogClient } from '../checkout/ports';
 import { PostgresCartRepository } from '../../infrastructure/repositories/PostgresCartRepository';
 import { AddToCartInputDto, CartDto, CartItemDto, CartValidationError } from './dtos/AddToCartDto';
 
@@ -19,12 +19,28 @@ export class CartService {
     let totalItems = 0;
 
     for (const item of dbItems) {
-      const product = await this.catalog.findProduct(item.productId).catch(() => null);
+      let product: CatalogProduct | null = null;
+      let isCatalogError = false;
+
+      try {
+        product = await this.catalog.findProduct(item.productId);
+      } catch {
+        isCatalogError = true;
+      }
+
       const title = product?.title || `Sản phẩm #${item.productId}`;
       const sellerId = product?.sellerId || '';
       const price = product ? product.price : item.unitPrice;
-      const stock = product ? product.stockQuantity : 99;
-      const status = product ? product.status : 'ACTIVE';
+      const stock = product ? product.stockQuantity : 0;
+      const status = product ? product.status : isCatalogError ? 'UNKNOWN' : 'UNAVAILABLE';
+      const availability: 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN' = product
+        ? product.status === 'ACTIVE' && product.stockQuantity > 0
+          ? 'AVAILABLE'
+          : 'UNAVAILABLE'
+        : isCatalogError
+          ? 'UNKNOWN'
+          : 'UNAVAILABLE';
+      const imageUrl = product?.imageUrl || null;
       const itemSubtotal = price * item.quantity;
 
       subtotal += itemSubtotal;
@@ -40,6 +56,8 @@ export class CartService {
         status,
         quantity: item.quantity,
         subtotal: itemSubtotal,
+        imageUrl,
+        availability,
       });
     }
 
@@ -57,7 +75,17 @@ export class CartService {
   public async addItem(userId: string, input: AddToCartInputDto): Promise<CartDto> {
     const { productId, quantity } = input;
 
-    const product = await this.catalog.findProduct(productId);
+    let product: CatalogProduct | null = null;
+    try {
+      product = await this.catalog.findProduct(productId);
+    } catch {
+      throw new CartValidationError(
+        503,
+        'CATALOG_UNAVAILABLE',
+        'Không thể kết nối đến Catalog Service để xác minh sản phẩm.',
+      );
+    }
+
     if (!product) {
       throw new CartValidationError(
         404,
@@ -88,7 +116,7 @@ export class CartService {
 
     const cart = await this.repository.getOrCreateCart(userId);
     const existingItems = await this.repository.getCartItems(cart.id);
-    const existingItem = existingItems.find((it) => it.productId === product.id);
+    const existingItem = existingItems.find((it) => it.productId === product!.id);
     const currentQtyInCart = existingItem ? existingItem.quantity : 0;
     const requestedTotalQty = currentQtyInCart + quantity;
 
@@ -122,7 +150,12 @@ export class CartService {
       const items = await this.repository.getCartItems(cart.id);
       const targetItem = items.find((it) => it.id === itemId || it.productId === itemId);
       if (targetItem) {
-        const product = await this.catalog.findProduct(targetItem.productId);
+        let product: CatalogProduct | null = null;
+        try {
+          product = await this.catalog.findProduct(targetItem.productId);
+        } catch {
+          // ignore error
+        }
         if (product) {
           const availableStock =
             typeof product.stockQuantity === 'number' ? product.stockQuantity : 0;
