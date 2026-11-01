@@ -1,4 +1,5 @@
-import { Pool } from 'pg';
+import { PrismaClient } from '@prisma/client';
+import { PrismaClientWrapper } from '../database/PrismaClient';
 import {
   IProductRepository,
   ProductSearchCriteria,
@@ -10,559 +11,294 @@ import {
   ListCatalogProductsResult,
 } from '../../application/use-cases/ListCatalogProductsUseCase';
 
-/**
- * Infrastructure Repository: PostgresProductRepository (SRS 3.3)
- * Kết nối trực tiếp vào cơ sở dữ liệu PostgreSQL thật (nexus_catalog_db - Cổng 5433).
- * Đọc đầy đủ sản phẩm, bộ sưu tập ảnh và thông số kỹ thuật.
- */
 export class PostgresProductRepository implements IProductRepository {
-  private pool: Pool;
+  private prisma: PrismaClient;
 
-  constructor(pool?: Pool) {
-    this.pool =
-      pool ||
-      new Pool({
-        host: process.env.CATALOG_DB_HOST || process.env.DB_HOST || 'localhost',
-        port: Number(process.env.CATALOG_DB_PORT || process.env.DB_PORT) || 5433,
-        user: process.env.CATALOG_DB_USER || process.env.DB_USER || 'nexus_catalog',
-        password: process.env.CATALOG_DB_PASSWORD || process.env.DB_PASSWORD || 'nexus_password',
-        database: process.env.CATALOG_DB_NAME || process.env.DB_NAME || 'nexus_catalog_db',
-        max: 10,
-        idleTimeoutMillis: 30000,
-      });
+  constructor(prisma?: PrismaClient) {
+    this.prisma = prisma || PrismaClientWrapper.getInstance();
   }
 
+  // 1. Xem chi tiết sản phẩm theo ID hoặc Slug
   public async findById(id: string): Promise<Product | null> {
-    // Tìm 1 sản phẩm khi người dùng bấm vào xem chi tiết.
     const isNumeric = /^\d+$/.test(id);
-    const query = `
-      SELECT 
-        p.id, p.seller_id, p.category_id, p.title, p.slug, p.description, 
-        p.status, p.condition, p.base_price, p.allow_auction, p.stock_quantity, p.seller_name, p.created_at, p.updated_at
-      FROM catalog_products p
-      WHERE ${isNumeric ? '(p.id = $1 OR p.slug = $2)' : 'p.slug = $1'}
-        AND p.deleted_at IS NULL
-      LIMIT 1;
-    `;
+    const row = isNumeric
+      ? await this.prisma.product.findFirst({
+          where: { id: BigInt(id), deletedAt: null },
+          include: { images: { orderBy: { displayOrder: 'asc' } }, attributes: true },
+        })
+      : await this.prisma.product.findFirst({
+          where: { slug: id, deletedAt: null },
+          include: { images: { orderBy: { displayOrder: 'asc' } }, attributes: true },
+        });
 
-    const params = isNumeric ? [parseInt(id, 10), id] : [id];
-    const result = await this.pool.query(query, params);
-    if (result.rows.length === 0) {
-      return null;
-    }
-
-    const row = result.rows[0];
-    const [images, attributes] = await Promise.all([
-      this.getImagesByProductId(row.id), // lấy danh sách ảnh
-      this.getAttributesByProductId(row.id), // lấy dạng thuộc tính
-    ]);
-
-    return this.mapRowToProduct(row, images, attributes);
+    if (!row) return null;
+    return this.mapRowToProduct(row);
   }
 
-  public async findAll(limit = 50, offset = 0): Promise<Product[]> {
-    // Lấy toàn bộ danh sách sản phẩm để hiển thị lên trang chủ
-    const query = `
-      SELECT 
-        p.id, p.seller_id, p.category_id, p.title, p.slug, p.description, 
-        p.status, p.condition, p.base_price, p.allow_auction, p.stock_quantity, p.seller_name, p.created_at, p.updated_at
-      FROM catalog_products p
-      WHERE p.deleted_at IS NULL
-      ORDER BY p.id ASC
-      LIMIT $1 OFFSET $2;
-    `;
-    const result = await this.pool.query(query, [limit, offset]);
-    if (result.rows.length === 0) {
-      return [];
-    }
-
-    const productIds = result.rows.map((r: any) => Number(r.id));
-    const [imagesMap, attributesMap] = await Promise.all([
-      this.getImagesForProductIds(productIds),
-      this.getAttributesForProductIds(productIds),
-    ]);
-
-    return result.rows.map((row: any) =>
-      this.mapRowToProduct(row, imagesMap[row.id] || [], attributesMap[row.id] || {}),
-    );
+  // 2. Lấy danh sách sản phẩm đang bán ngoài trang chủ
+  public async findAll(limit: number = 20, offset: number = 0): Promise<Product[]> {
+    const rows = await this.prisma.product.findMany({
+      where: { status: 'ACTIVE', deletedAt: null },
+      skip: offset,
+      take: limit,
+      include: { images: { orderBy: { displayOrder: 'asc' } }, attributes: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map((r) => this.mapRowToProduct(r));
   }
 
+  // 3. Lọc sản phẩm theo mã danh mục
   public async findByCategory(categoryId: string): Promise<Product[]> {
-    const isNumeric = /^\d+$/.test(categoryId);
-    const query = `
-      SELECT 
-        p.id, p.seller_id, p.category_id, p.title, p.slug, p.description, 
-        p.status, p.condition, p.base_price, p.allow_auction, p.stock_quantity, p.seller_name, p.created_at, p.updated_at
-      FROM catalog_products p
-      WHERE ${isNumeric ? 'p.category_id = $1' : 'p.category_id = (SELECT id FROM catalog_categories WHERE slug = $1 LIMIT 1)'}
-        AND p.deleted_at IS NULL
-      ORDER BY p.id ASC;
-    `;
-    const params: any[] = isNumeric ? [parseInt(categoryId, 10)] : [categoryId];
-    const result = await this.pool.query(query, params);
-    if (result.rows.length === 0) {
-      return [];
-    }
-
-    const productIds = result.rows.map((r: any) => Number(r.id));
-    const [imagesMap, attributesMap] = await Promise.all([
-      this.getImagesForProductIds(productIds),
-      this.getAttributesForProductIds(productIds),
-    ]);
-
-    return result.rows.map((row: any) =>
-      this.mapRowToProduct(row, imagesMap[row.id] || [], attributesMap[row.id] || {}),
-    );
+    const rows = await this.prisma.product.findMany({
+      where: { categoryId: BigInt(categoryId), status: 'ACTIVE', deletedAt: null },
+      include: { images: { orderBy: { displayOrder: 'asc' } }, attributes: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map((r) => this.mapRowToProduct(r));
   }
 
+  // 4. Xem kho hàng của Seller (kèm lọc trạng thái nếu có)
   public async findBySellerId(sellerId: string, status?: string): Promise<Product[]> {
-    const conditions: string[] = ['p.seller_id = $1'];
-    const params: any[] = [sellerId];
+    const where: any = { sellerId, deletedAt: null };
+    if (status) where.status = status;
 
-    if (status) {
-      if (status.toUpperCase() === 'DELETED') {
-        conditions.push("(p.deleted_at IS NOT NULL OR p.status = 'DELETED')");
-      } else {
-        params.push(status.toUpperCase());
-        conditions.push(`p.deleted_at IS NULL AND p.status = ${params.length}`);
-      }
-    }
-
-    const whereClause = conditions.join(' AND ');
-    const query = `
-      SELECT 
-        p.id, p.seller_id, p.category_id, p.title, p.slug, p.description, 
-        CASE WHEN p.deleted_at IS NOT NULL THEN 'DELETED' ELSE p.status END AS status,
-        p.condition, p.base_price, p.allow_auction, p.stock_quantity, p.seller_name, p.created_at, p.updated_at
-      FROM catalog_products p
-      WHERE ${whereClause}
-      ORDER BY p.id DESC;
-    `;
-    const result = await this.pool.query(query, params);
-    if (result.rows.length === 0) {
-      return [];
-    }
-
-    const productIds = result.rows.map((r: any) => Number(r.id));
-    const [imagesMap, attributesMap] = await Promise.all([
-      this.getImagesForProductIds(productIds),
-      this.getAttributesForProductIds(productIds),
-    ]);
-
-    return result.rows.map((row: any) =>
-      this.mapRowToProduct(row, imagesMap[row.id] || [], attributesMap[row.id] || {}),
-    );
+    const rows = await this.prisma.product.findMany({
+      where,
+      include: { images: { orderBy: { displayOrder: 'asc' } }, attributes: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map((r) => this.mapRowToProduct(r));
   }
 
+  // 5. Tìm kiếm sản phẩm theo từ khóa q và khoảng giá
   public async search(criteria: ProductSearchCriteria): Promise<ProductSearchPage> {
-    const conditions: string[] = ['p.deleted_at IS NULL', "p.status = 'ACTIVE'"];
-    const params: any[] = [];
+    const where: any = {
+      deletedAt: null,
+      status: 'ACTIVE',
+      OR: [
+        { title: { contains: criteria.q, mode: 'insensitive' } },
+        { description: { contains: criteria.q, mode: 'insensitive' } },
+      ],
+    };
 
-    params.push(`%${criteria.q.trim().toLowerCase()}%`);
-    conditions.push(
-      `(LOWER(p.title) LIKE $${params.length} OR LOWER(COALESCE(p.description, '')) LIKE $${params.length})`,
-    );
-
-    if (criteria.categoryId) {
-      const isNumeric = /^\d+$/.test(criteria.categoryId);
-      if (isNumeric) {
-        params.push(parseInt(criteria.categoryId, 10));
-        conditions.push(`p.category_id = $${params.length}`);
-      } else {
-        params.push(criteria.categoryId);
-        conditions.push(
-          `EXISTS (SELECT 1 FROM catalog_categories c WHERE c.id = p.category_id AND c.slug = $${params.length})`,
-        );
-      }
-    }
-
+    if (criteria.categoryId) where.categoryId = BigInt(criteria.categoryId);
     if (criteria.minPrice !== undefined) {
-      params.push(criteria.minPrice);
-      conditions.push(`p.base_price >= $${params.length}`);
+      where.basePrice = { ...where.basePrice, gte: criteria.minPrice };
     }
-
     if (criteria.maxPrice !== undefined) {
-      params.push(criteria.maxPrice);
-      conditions.push(`p.base_price <= $${params.length}`);
+      where.basePrice = { ...where.basePrice, lte: criteria.maxPrice };
     }
 
-    const whereClause = conditions.join(' AND ');
-
-    const countResult = await this.pool.query(
-      `SELECT COUNT(*)::int as total FROM catalog_products p WHERE ${whereClause}`,
-      params,
-    );
-    const total = countResult.rows[0]?.total || 0;
-
-    params.push(criteria.limit);
-    const limitParam = `$${params.length}`;
-    params.push(criteria.offset);
-    const offsetParam = `$${params.length}`;
-
-    const query = `
-      SELECT 
-        p.id, p.seller_id, p.category_id, p.title, p.slug, p.description, 
-        p.status, p.condition, p.base_price, p.allow_auction, p.stock_quantity, p.seller_name, p.created_at, p.updated_at
-      FROM catalog_products p
-      WHERE ${whereClause}
-      ORDER BY p.id ASC
-      LIMIT ${limitParam} OFFSET ${offsetParam};
-    `;
-
-    const result = await this.pool.query(query, params);
-    if (result.rows.length === 0) {
-      return { products: [], total };
-    }
-
-    const productIds = result.rows.map((r: any) => Number(r.id));
-    const [imagesMap, attributesMap] = await Promise.all([
-      this.getImagesForProductIds(productIds),
-      this.getAttributesForProductIds(productIds),
+    const [total, rows] = await Promise.all([
+      this.prisma.product.count({ where }),
+      this.prisma.product.findMany({
+        where,
+        skip: criteria.offset,
+        take: criteria.limit,
+        include: { images: { orderBy: { displayOrder: 'asc' } }, attributes: true },
+        orderBy: { createdAt: 'desc' },
+      }),
     ]);
 
     return {
-      products: result.rows.map((row: any) =>
-        this.mapRowToProduct(row, imagesMap[row.id] || [], attributesMap[row.id] || {}),
-      ),
+      products: rows.map((r) => this.mapRowToProduct(r)),
       total,
     };
   }
 
-  public async save(product: Product): Promise<string> {
-    // Lưu sản phẩm mới
-    const query = `
-      INSERT INTO catalog_products (
-        seller_id, category_id, title, slug, description, status, condition, base_price, allow_auction, stock_quantity, seller_name, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-      RETURNING id;
-    `;
-    const params = [
-      product.sellerId,
-      product.categoryId,
-      product.title,
-      product.slug || this.slugify(product.title),
-      product.description,
-      product.status,
-      product.condition || 'NEW',
-      product.price,
-      product.allowAuction ?? false,
-      product.stockQuantity ?? 1,
-      product.sellerName || 'Nexus Official Store',
-      product.createdAt,
-      product.updatedAt,
-    ];
-    const result = await this.pool.query(query, params);
-    const newProductId = result.rows[0]?.id;
-
-    if (newProductId) {
-      // 1. Tự động lưu mảng ảnh sang bảng catalog_product_images
-      if (product.images && product.images.length > 0) {
-        for (let i = 0; i < product.images.length; i++) {
-          await this.pool.query(
-            `INSERT INTO catalog_product_images (product_id, image_url, display_order, is_primary)
-             VALUES ($1, $2, $3, $4);\n`,
-            [newProductId, product.images[i], i + 1, i === 0],
-          );
-        }
-      }
-
-      // 2. Tự động lưu thuộc tính sang bảng catalog_product_attributes
-      if (product.attributes && typeof product.attributes === 'object') {
-        for (const [key, val] of Object.entries(product.attributes)) {
-          if (val) {
-            await this.pool.query(
-              `INSERT INTO catalog_product_attributes (product_id, attribute_key, attribute_value)
-               VALUES ($1, $2, $3);\n`,
-              [newProductId, key, String(val)],
-            );
-          }
-        }
-      }
-    }
-
-    return String(newProductId || '0');
-  }
-
-  public async update(product: Product): Promise<void> {
-    const productId = parseInt(product.id, 10);
-
-    // 1. Cập nhật thông tin chính trong bảng catalog_products
-    const query = `
-      UPDATE catalog_products
-      SET 
-        category_id = $1,
-        title = $2, 
-        description = $3, 
-        base_price = $4, 
-        status = $5, 
-        stock_quantity = $6, 
-        condition = $7,
-        allow_auction = $8,
-        seller_name = $9, 
-        updated_at = NOW()
-      WHERE id = $10;
-    `;
-    await this.pool.query(query, [
-      parseInt(product.categoryId, 10),
-      product.title,
-      product.description,
-      product.price,
-      product.status,
-      product.stockQuantity,
-      product.condition || 'NEW',
-      product.allowAuction ?? false,
-      product.sellerName || 'Nexus Official Store',
-      productId,
-    ]);
-
-    // 2. Đồng bộ lại danh sách ảnh (nếu có truyền ảnh mới)
-    if (product.images && product.images.length > 0) {
-      await this.pool.query('DELETE FROM catalog_product_images WHERE product_id = $1;', [
-        productId,
-      ]);
-      for (let i = 0; i < product.images.length; i++) {
-        await this.pool.query(
-          `INSERT INTO catalog_product_images (product_id, image_url, display_order, is_primary)
-           VALUES ($1, $2, $3, $4);`,
-          [productId, product.images[i], i + 1, i === 0],
-        );
-      }
-    }
-
-    // 3. Đồng bộ lại thuộc tính chi tiết attributes (nếu có truyền)
-    if (product.attributes && Object.keys(product.attributes).length > 0) {
-      await this.pool.query('DELETE FROM catalog_product_attributes WHERE product_id = $1;', [
-        productId,
-      ]);
-      for (const [key, val] of Object.entries(product.attributes)) {
-        if (val) {
-          await this.pool.query(
-            `INSERT INTO catalog_product_attributes (product_id, attribute_key, attribute_value)
-             VALUES ($1, $2, $3);`,
-            [productId, key, String(val)],
-          );
-        }
-      }
-    }
-  }
-
-  public async delete(id: string): Promise<void> {
-    // Xoá mềm sản phẩm
-    await this.pool.query(
-      "UPDATE catalog_products SET deleted_at = NOW(), status = 'DELETED', updated_at = NOW() WHERE id = $1",
-      [parseInt(id, 10)],
-    );
-  }
-
-  public async recover(id: string, sellerId?: string): Promise<void> {
-    const pid = parseInt(id, 10);
-    let query =
-      "UPDATE catalog_products SET deleted_at = NULL, status = 'ACTIVE', updated_at = NOW() WHERE id = $1";
-    const params: any[] = [pid];
-    if (sellerId && sellerId !== '1') {
-      params.push(sellerId);
-      query += " AND (seller_id = $2 OR seller_id = '1')";
-    }
-    await this.pool.query(query, params);
-  }
-
-  // Truy van danh sach san pham co phan trang, loc va sap xep bang SQL
+  // 6. Danh sách sản phẩm nâng cao (hỗ trợ phân trang, bộ lọc và quyền Admin scope=admin)
   public async list(query: ListCatalogProductsQuery): Promise<ListCatalogProductsResult> {
-    const conditions: string[] = [];
-    const params: any[] = [];
-
-    // Phân quyền: Buyer chi xem ACTIVE con hang; Admin xem duoc moi trang thai
+    const where: any = {};
     if (query.scope === 'buyer') {
-      conditions.push('p.deleted_at IS NULL');
-      conditions.push("p.status = 'ACTIVE'");
-      conditions.push('p.stock_quantity > 0');
+      where.deletedAt = null;
+      where.status = 'ACTIVE';
     } else if (query.status) {
-      params.push(query.status);
-      conditions.push(`p.status = $${params.length}`);
+      where.status = query.status;
     }
 
-    if (query.categoryId) {
-      params.push(parseInt(query.categoryId, 10));
-      conditions.push(`p.category_id = $${params.length}`);
-    }
+    if (query.categoryId) where.categoryId = BigInt(query.categoryId);
+    if (query.condition) where.condition = query.condition;
+    if (query.saleType === 'AUCTION') where.allowAuction = true;
+    else if (query.saleType === 'FIXED_PRICE') where.allowAuction = false;
 
     if (query.minPrice !== undefined) {
-      params.push(query.minPrice);
-      conditions.push(`p.base_price >= $${params.length}`);
+      where.basePrice = { ...where.basePrice, gte: query.minPrice };
     }
-
     if (query.maxPrice !== undefined) {
-      params.push(query.maxPrice);
-      conditions.push(`p.base_price <= $${params.length}`);
-    }
-
-    if (query.condition) {
-      params.push(query.condition);
-      conditions.push(`p.condition = $${params.length}`);
-    }
-
-    if (query.saleType) {
-      if (query.saleType === 'AUCTION') {
-        conditions.push('p.allow_auction = true');
-      } else {
-        conditions.push('p.allow_auction = false');
-      }
+      where.basePrice = { ...where.basePrice, lte: query.maxPrice };
     }
 
     if (query.q) {
-      params.push(`%${query.q.toLowerCase()}%`);
-      const idx = params.length;
-      conditions.push(
-        `(LOWER(p.title) LIKE $${idx} OR LOWER(COALESCE(p.description, '')) LIKE $${idx})`,
-      );
+      where.OR = [
+        { title: { contains: query.q, mode: 'insensitive' } },
+        { description: { contains: query.q, mode: 'insensitive' } },
+      ];
     }
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    let orderBy: any = { createdAt: 'desc' };
+    if (query.sort === 'oldest') orderBy = { createdAt: 'asc' };
+    else if (query.sort === 'price_asc') orderBy = { basePrice: 'asc' };
+    else if (query.sort === 'price_desc') orderBy = { basePrice: 'desc' };
 
-    // Sap xep (sort)
-    let orderBy = 'ORDER BY p.id DESC';
-    if (query.sort === 'oldest') orderBy = 'ORDER BY p.id ASC';
-    else if (query.sort === 'price_asc') orderBy = 'ORDER BY p.base_price ASC, p.id DESC';
-    else if (query.sort === 'price_desc') orderBy = 'ORDER BY p.base_price DESC, p.id DESC';
+    const page = Math.max(1, query.page || 1);
+    const limit = Math.min(100, Math.max(1, query.limit || 20));
 
-    // Dem tong so ban ghi
-    const countQuery = `SELECT COUNT(*)::int AS total FROM catalog_products p ${whereClause};`;
-    const countRes = await this.pool.query(countQuery, params);
-    const total = countRes.rows[0]?.total ?? 0;
+    const [total, rows] = await Promise.all([
+      this.prisma.product.count({ where }),
+      this.prisma.product.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        include: { images: { orderBy: { displayOrder: 'asc' } }, attributes: true },
+        orderBy,
+      }),
+    ]);
 
-    // Phan trang SQL (LIMIT, OFFSET)
-    const page = Math.max(1, query.page);
-    const limit = Math.max(1, query.limit);
-    const offset = (page - 1) * limit;
-
-    const dataParams = [...params, limit, offset];
-    const dataQuery = `
-      SELECT 
-        p.id, p.seller_id, p.category_id, p.title, p.slug, p.description, 
-        CASE WHEN p.deleted_at IS NOT NULL THEN 'DELETED' ELSE p.status END AS status,
-        p.condition, p.base_price, p.allow_auction, p.stock_quantity, p.seller_name, p.created_at, p.updated_at
-      FROM catalog_products p
-      ${whereClause}
-      ${orderBy}
-      LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length};
-    `;
-
-    const dataRes = await this.pool.query(dataQuery, dataParams);
-    const products: Product[] = [];
-    for (const row of dataRes.rows) {
-      const images = await this.getImagesByProductId(row.id);
-      products.push(this.mapRowToProduct(row, images));
-    }
+    const totalPages = Math.ceil(total / limit) || 1;
 
     return {
-      products,
+      products: rows.map((r) => this.mapRowToProduct(r)),
       meta: {
         page,
         limit,
         total,
-        totalPages: Math.ceil(total / limit) || 1,
+        totalPages,
       },
     };
   }
 
-  private async getImagesByProductId(productId: number): Promise<string[]> {
-    const res = await this.pool.query(
-      `SELECT image_url FROM catalog_product_images WHERE product_id = $1 ORDER BY display_order ASC;`,
-      [productId],
-    );
-    return res.rows.map((r: any) => r.image_url);
+  // 7. Tạo sản phẩm mới (kèm bộ sưu tập ảnh và thông số kỹ thuật)
+  public async save(product: Product): Promise<string> {
+    const created = await this.prisma.product.create({
+      data: {
+        sellerId: product.sellerId,
+        categoryId: BigInt(product.categoryId),
+        title: product.title,
+        slug:
+          product.slug ||
+          product.title
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-|-$/g, '') +
+            '-' +
+            Date.now(),
+        description: product.description,
+        status: product.status,
+        condition: product.condition,
+        basePrice: product.price,
+        allowAuction: product.allowAuction,
+        images: {
+          create: product.images.map((url, idx) => ({
+            imageUrl: url,
+            displayOrder: idx + 1,
+            isPrimary: idx === 0,
+          })),
+        },
+        attributes: {
+          create: Object.entries(product.attributes || {}).map(([key, val]) => ({
+            attributeKey: key,
+            attributeValue: String(val),
+          })),
+        },
+      },
+    });
+
+    return String(created.id);
   }
 
-  private async getImagesForProductIds(productIds: number[]): Promise<Record<number, string[]>> {
-    const res = await this.pool.query(
-      `SELECT product_id, image_url FROM catalog_product_images WHERE product_id = ANY($1) ORDER BY display_order ASC;`,
-      [productIds],
-    );
-    const map: Record<number, string[]> = {};
-    for (const r of res.rows) {
-      if (!map[r.product_id]) {
-        map[r.product_id] = [];
+  // 8. Cập nhật sản phẩm (chạy trong transaction để cập nhật đồng bộ cả ảnh và thuộc tính)
+  public async update(product: Product): Promise<void> {
+    const pId = BigInt(product.id);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.product.update({
+        where: { id: pId },
+        data: {
+          title: product.title,
+          description: product.description,
+          categoryId: BigInt(product.categoryId),
+          basePrice: product.price,
+          status: product.status,
+          condition: product.condition,
+          allowAuction: product.allowAuction,
+        },
+      });
+
+      if (product.images && product.images.length > 0) {
+        await tx.productImage.deleteMany({ where: { productId: pId } });
+        await tx.productImage.createMany({
+          data: product.images.map((url, idx) => ({
+            productId: pId,
+            imageUrl: url,
+            displayOrder: idx + 1,
+            isPrimary: idx === 0,
+          })),
+        });
       }
-      map[r.product_id].push(r.image_url);
-    }
-    return map;
-  }
 
-  private async getAttributesByProductId(productId: number): Promise<Record<string, string>> {
-    const res = await this.pool.query(
-      `SELECT attribute_key, attribute_value FROM catalog_product_attributes WHERE product_id = $1;`,
-      [productId],
-    );
-    const attrs: Record<string, string> = {};
-    for (const r of res.rows) {
-      attrs[r.attribute_key] = r.attribute_value;
-    }
-    return attrs;
-  }
-
-  private async getAttributesForProductIds(
-    productIds: number[],
-  ): Promise<Record<number, Record<string, string>>> {
-    const res = await this.pool.query(
-      `SELECT product_id, attribute_key, attribute_value FROM catalog_product_attributes WHERE product_id = ANY($1);`,
-      [productIds],
-    );
-    const map: Record<number, Record<string, string>> = {};
-    for (const r of res.rows) {
-      if (!map[r.product_id]) {
-        map[r.product_id] = {};
+      if (product.attributes && Object.keys(product.attributes).length > 0) {
+        await tx.productAttribute.deleteMany({ where: { productId: pId } });
+        await tx.productAttribute.createMany({
+          data: Object.entries(product.attributes).map(([key, val]) => ({
+            productId: pId,
+            attributeKey: key,
+            attributeValue: String(val),
+          })),
+        });
       }
-      map[r.product_id][r.attribute_key] = r.attribute_value;
-    }
-    return map;
-  }
-
-  private mapRowToProduct(
-    row: any,
-    images: string[] = [],
-    attributes: Record<string, string> = {},
-  ): Product {
-    const statusMap: Record<string, ProductStatus> = {
-      ACTIVE: ProductStatus.ACTIVE,
-      DRAFT: ProductStatus.DRAFT,
-      ARCHIVED: ProductStatus.ARCHIVED,
-      OUT_OF_STOCK: ProductStatus.OUT_OF_STOCK,
-      DELETED: ProductStatus.DELETED,
-    };
-
-    const stock =
-      row.stock_quantity !== undefined && row.stock_quantity !== null
-        ? parseInt(row.stock_quantity, 10)
-        : 1;
-
-    return new Product({
-      id: String(row.id),
-      sellerId: String(row.seller_id),
-      sellerName: row.seller_name || 'Nexus Official Store',
-      categoryId: String(row.category_id),
-      title: row.title,
-      description: row.description,
-      price: parseFloat(row.base_price),
-      stockQuantity: isNaN(stock) ? 1 : stock,
-      status: statusMap[row.status] || ProductStatus.ACTIVE,
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.updated_at),
-      images: images,
-      primaryImage: images.length > 0 ? images[0] : undefined,
-      attributes: attributes,
-      condition: row.condition,
-      slug: row.slug,
-      allowAuction: row.allow_auction,
     });
   }
 
-  private slugify(text: string): string {
-    return text
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/đ/g, 'd')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)+/g, '');
+  // 9. Xóa mềm sản phẩm (chuyển trạng thái sang ARCHIVED và ghi nhận thời điểm xóa)
+  public async delete(id: string): Promise<void> {
+    await this.prisma.product.update({
+      where: { id: BigInt(id) },
+      data: {
+        deletedAt: new Date(),
+        status: 'ARCHIVED',
+      },
+    });
+  }
+
+  // 10. Khôi phục sản phẩm đã xóa mềm (đặt lại deletedAt = null và status = ACTIVE)
+  public async recover(id: string, sellerId?: string): Promise<void> {
+    const where: any = { id: BigInt(id) };
+    if (sellerId) where.sellerId = sellerId;
+
+    await this.prisma.product.updateMany({
+      where,
+      data: {
+        deletedAt: null,
+        status: 'ACTIVE',
+      },
+    });
+  }
+
+  // Hàm chuyển đổi từ dữ liệu thô của Prisma sang đối tượng Domain Product
+  private mapRowToProduct(row: any): Product {
+    const images = (row.images || []).map((img: any) => img.imageUrl);
+    const attributes: Record<string, string> = {};
+    (row.attributes || []).forEach((attr: any) => {
+      attributes[attr.attributeKey] = attr.attributeValue;
+    });
+
+    return new Product({
+      id: String(row.id),
+      sellerId: row.sellerId,
+      sellerName: 'Nexus Official Store',
+      categoryId: String(row.categoryId),
+      title: row.title,
+      slug: row.slug,
+      description: row.description,
+      status: row.status as ProductStatus,
+      condition: row.condition,
+      price: Number(row.basePrice),
+      stockQuantity: 10,
+      allowAuction: Boolean(row.allowAuction),
+      images,
+      attributes,
+      createdAt: new Date(row.createdAt),
+      updatedAt: new Date(row.updatedAt),
+    });
   }
 }
