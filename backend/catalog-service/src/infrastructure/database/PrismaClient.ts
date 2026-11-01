@@ -15,7 +15,7 @@ export class PrismaClientWrapper {
   }
 
   public async connect(): Promise<void> {
-    const port = process.env.CATALOG_DB_PORT || '5438';
+    const port = process.env.CATALOG_DB_PORT || '5433';
     console.log(`[Catalog DB] Connected to PostgreSQL (Port: ${port})`);
   }
 }

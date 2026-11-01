@@ -158,3 +158,65 @@ export function requireShipmentPermission(
     });
   };
 }
+
+export function requireInventoryPermission(action: 'VIEW' | 'ADJUST') {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user) {
+      res.status(401).json({
+        success: false,
+        error: 'Authentication required. Vui lòng đăng nhập.',
+      });
+      return;
+    }
+
+    const normalizedRole = (user.role || '').toUpperCase();
+
+    // 1. ADMIN có toàn quyền tra cứu và điều chỉnh tồn kho
+    if (normalizedRole === 'ADMIN') {
+      return next();
+    }
+
+    // 2. SELLER có quyền tra cứu (VIEW) và điều chỉnh tồn kho hàng hóa (ADJUST)
+    if (normalizedRole === 'SELLER') {
+      return next();
+    }
+
+    // 3. SUPPORT_STAFF có quyền tra cứu tồn kho (VIEW) phục vụ giải quyết khiếu nại khách hàng
+    if (normalizedRole === 'SUPPORT_STAFF') {
+      if (action === 'VIEW') {
+        return next();
+      }
+    }
+
+    res.status(403).json({
+      success: false,
+      error: `Tài khoản với vai trò '${user.role}' không có quyền thực hiện thao tác '${action}' trên phân hệ tồn kho.`,
+    });
+  };
+}
+
+export function requireSupportCasePermission(action: 'VIEW' | 'RESOLVE') {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user) {
+      res.status(401).json({
+        success: false,
+        error: 'Authentication required. Vui lòng đăng nhập.',
+      });
+      return;
+    }
+
+    const normalizedRole = (user.role || '').toUpperCase();
+
+    // SUPPORT_STAFF và ADMIN có toàn quyền xem và giải quyết khiếu nại (SRS 2.3, 3.1.2)
+    if (normalizedRole === 'SUPPORT_STAFF' || normalizedRole === 'ADMIN') {
+      return next();
+    }
+
+    res.status(403).json({
+      success: false,
+      error: `Tài khoản với vai trò '${user.role}' không có quyền thực hiện '${action}' trên hồ sơ khiếu nại hỗ trợ.`,
+    });
+  };
+}

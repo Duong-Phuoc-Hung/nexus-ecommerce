@@ -19,7 +19,7 @@ export class PostgresProductRepository implements IProductRepository {
       pool ||
       new Pool({
         host: process.env.CATALOG_DB_HOST || process.env.DB_HOST || 'localhost',
-        port: Number(process.env.CATALOG_DB_PORT || process.env.DB_PORT) || 5438,
+        port: Number(process.env.CATALOG_DB_PORT || process.env.DB_PORT) || 5433,
         user: process.env.CATALOG_DB_USER || process.env.DB_USER || 'nexus_catalog',
         password: process.env.CATALOG_DB_PASSWORD || process.env.DB_PASSWORD || 'nexus_password',
         database: process.env.CATALOG_DB_NAME || process.env.DB_NAME || 'nexus_catalog_db',
