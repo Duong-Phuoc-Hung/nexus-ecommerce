@@ -19,13 +19,14 @@ type Row = Record<string, any>;
 const ORDER_SELECT = `SELECT id, order_code, buyer_id, seller_id, status, total_amount, shipping_fee,
   shipping_address, checkout_session_expires_at FROM commerce_orders`;
 
-const PAYMENT_SELECT = `SELECT id, order_id, payos_order_code, status, amount, currency, checkout_url,
+const PAYMENT_SELECT = `SELECT id, order_id, payment_method, payos_order_code, status, amount, currency, checkout_url,
   payment_link_id, expires_at, paid_at FROM commerce_payments`;
 
 function toPayment(row: Row): PaymentRecord {
   return {
     id: String(row.id),
     orderId: String(row.order_id),
+    paymentMethod: row.payment_method || 'PAYOS',
     payosOrderCode: Number(row.payos_order_code),
     status: row.status,
     amount: Number(row.amount),
@@ -173,24 +174,27 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
         }
       }
 
+      const initialStatus = params.paymentMethod === 'COD' ? 'PROCESSING' : 'PENDING_PAYMENT';
       const orderResult = await client.query(
         `INSERT INTO commerce_orders
           (order_code, buyer_id, seller_id, total_amount, shipping_fee, status, shipping_address,
            checkout_session_expires_at)
          VALUES ('ORD-' || to_char(NOW(), 'YYYYMMDD') || '-' || lpad(nextval('commerce_order_code_seq')::text, 6, '0'),
-                 $1,$2,$3,$4,'PENDING_PAYMENT',$5,$6)
+                 $1,$2,$3,$4,$5,$6,$7)
          RETURNING id`,
         [
           params.buyerId,
           params.sellerId,
           params.totalAmount,
           params.shippingFee,
+          initialStatus,
           JSON.stringify(params.shippingAddress),
           params.orderExpiresAt,
         ],
       );
       const orderId = String(orderResult.rows[0].id);
 
+      const reservationStatus = params.paymentMethod === 'COD' ? 'COMMITTED' : 'ACTIVE';
       for (const item of params.items) {
         await client.query(
           `INSERT INTO commerce_order_items (order_id, product_id, product_title, unit_price, quantity, subtotal)
@@ -198,13 +202,20 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
           [orderId, item.productId, item.title, item.unitPrice, item.quantity, item.subtotal],
         );
         await client.query(
-          `INSERT INTO commerce_stock_reservations (order_id, product_id, quantity, expires_at)
-           VALUES ($1,$2,$3,$4)`,
-          [orderId, item.productId, item.quantity, params.reservationExpiresAt],
+          `INSERT INTO commerce_stock_reservations (order_id, product_id, quantity, status, expires_at)
+           VALUES ($1,$2,$3,$4,$5)`,
+          [orderId, item.productId, item.quantity, reservationStatus, params.reservationExpiresAt],
         );
       }
 
-      await this.insertPayment(client, orderId, params.totalAmount, params.orderExpiresAt);
+      await this.insertPayment(
+        client,
+        orderId,
+        params.totalAmount,
+        params.orderExpiresAt,
+        params.paymentMethod || 'PAYOS',
+      );
+
       if (params.idempotencyKey) {
         await client.query(
           `UPDATE commerce_checkout_idempotency SET order_id = $3
@@ -246,7 +257,7 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
 
   public async createPaymentAttempt(orderId: string, amount: number, expiresAt: Date) {
     return this.tx(async (client) => {
-      const id = await this.insertPayment(client, orderId, amount, expiresAt);
+      const id = await this.insertPayment(client, orderId, amount, expiresAt, 'PAYOS');
       const { rows } = await client.query(`${PAYMENT_SELECT} WHERE id = $1`, [id]);
       return toPayment(rows[0]);
     });
@@ -321,13 +332,14 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
     orderId: string,
     amount: number,
     expiresAt: Date,
+    paymentMethod: string = 'PAYOS',
   ): Promise<string> {
     const { rows } = await client.query(
       `INSERT INTO commerce_payments
         (order_id, payment_method, idempotency_key, amount, currency, status, payos_order_code, expires_at)
-       VALUES ($1,'PAYOS',$2,$3,'VND','PENDING', nextval('commerce_payos_order_code_seq'), $4)
+       VALUES ($1,$2,$3,$4,'VND','PENDING', nextval('commerce_payos_order_code_seq'), $5)
        RETURNING id`,
-      [orderId, crypto.randomUUID(), amount, expiresAt],
+      [orderId, paymentMethod, crypto.randomUUID(), amount, expiresAt],
     );
     return String(rows[0].id);
   }
