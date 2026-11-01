@@ -733,7 +733,7 @@ export const catalogSpec = {
     '/api/v1/products/mine': {
       get: {
         tags: ['Products'],
-        summary: 'Xem kho hàng (Seller)',
+        summary: 'Xem kho hàng (Seller / Admin)',
         description: `${PRIVATE} Method: GET. Bắt buộc đăng nhập tài khoản Seller. Trả về toàn bộ danh sách sản phẩm thuộc về chính người bán đó (bao gồm cả ACTIVE, DRAFT, ARCHIVED để quản lý kho).`,
         security: [{ BearerAuth: [] }],
         parameters: [
@@ -889,7 +889,7 @@ export const catalogSpec = {
       },
       post: {
         tags: ['Products'],
-        summary: 'Tạo sản phẩm mới (Seller & Admin)',
+        summary: 'Tạo sản phẩm mới (Seller / Admin)',
         description: `${PRIVATE} Tạo sản phẩm mới. Seller tạo cho chính mình; Admin có thể truyền thêm \`sellerId\` để tạo thay mặt cho Seller khác.`,
         security: [{ BearerAuth: [] }],
         requestBody: {
@@ -1064,7 +1064,7 @@ export const catalogSpec = {
       },
       put: {
         tags: ['Products'],
-        summary: 'Cập nhật sản phẩm (Seller)',
+        summary: 'Cập nhật sản phẩm (Seller / Admin)',
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1143,7 +1143,7 @@ export const catalogSpec = {
       },
       delete: {
         tags: ['Products'],
-        summary: 'Xóa sản phẩm (Seller)',
+        summary: 'Xóa sản phẩm (Seller / Admin)',
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1170,30 +1170,6 @@ export const catalogSpec = {
         tags: ['Products'],
         summary: 'Khôi phục sản phẩm đã xóa mềm (Seller / Admin)',
         description: `${PRIVATE} Khôi phục sản phẩm đã bị xóa hoặc lưu trữ về trạng thái ACTIVE. Yêu cầu quyền SELLER (chính chủ sản phẩm) hoặc ADMIN.`,
-        security: [{ BearerAuth: [] }],
-        parameters: [
-          {
-            name: 'id',
-            in: 'path',
-            required: true,
-            description: 'Mã ID của sản phẩm cần khôi phục',
-            schema: { type: 'string', example: '15' },
-          },
-        ],
-        responses: {
-          200: jsonResponse('Khôi phục sản phẩm thành công', {
-            success: true,
-            message: "Đã khôi phục thành công sản phẩm với mã ID '15'.",
-          }),
-          401: unauthorized,
-          403: forbidden,
-          404: errorResponse('Không tìm thấy sản phẩm', 'Product with ID "15" was not found.'),
-        },
-      },
-      put: {
-        tags: ['Products'],
-        summary: 'Khôi phục sản phẩm đã xóa mềm (Alias của POST)',
-        description: `${PRIVATE} Endpoint tương đương POST /api/v1/products/{id}/recover.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
