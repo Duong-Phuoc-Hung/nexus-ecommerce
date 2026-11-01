@@ -5,6 +5,10 @@ import {
   ProductSearchPage,
 } from '../../domain/repositories/IProductRepository';
 import { Product, ProductStatus } from '../../domain/entities/Product';
+import {
+  ListCatalogProductsQuery,
+  ListCatalogProductsResult,
+} from '../../application/use-cases/ListCatalogProductsUseCase';
 
 /**
  * Infrastructure Repository: PostgresProductRepository (SRS 3.3)
@@ -360,6 +364,105 @@ export class PostgresProductRepository implements IProductRepository {
       query += " AND (seller_id = $2 OR seller_id = '1')";
     }
     await this.pool.query(query, params);
+  }
+
+  // Truy van danh sach san pham co phan trang, loc va sap xep bang SQL
+  public async list(query: ListCatalogProductsQuery): Promise<ListCatalogProductsResult> {
+    const conditions: string[] = [];
+    const params: any[] = [];
+
+    // Phân quyền: Buyer chi xem ACTIVE con hang; Admin xem duoc moi trang thai
+    if (query.scope === 'buyer') {
+      conditions.push('p.deleted_at IS NULL');
+      conditions.push("p.status = 'ACTIVE'");
+      conditions.push('p.stock_quantity > 0');
+    } else if (query.status) {
+      params.push(query.status);
+      conditions.push(`p.status = $${params.length}`);
+    }
+
+    if (query.categoryId) {
+      params.push(parseInt(query.categoryId, 10));
+      conditions.push(`p.category_id = $${params.length}`);
+    }
+
+    if (query.minPrice !== undefined) {
+      params.push(query.minPrice);
+      conditions.push(`p.base_price >= $${params.length}`);
+    }
+
+    if (query.maxPrice !== undefined) {
+      params.push(query.maxPrice);
+      conditions.push(`p.base_price <= $${params.length}`);
+    }
+
+    if (query.condition) {
+      params.push(query.condition);
+      conditions.push(`p.condition = $${params.length}`);
+    }
+
+    if (query.saleType) {
+      if (query.saleType === 'AUCTION') {
+        conditions.push('p.allow_auction = true');
+      } else {
+        conditions.push('p.allow_auction = false');
+      }
+    }
+
+    if (query.q) {
+      params.push(`%${query.q.toLowerCase()}%`);
+      const idx = params.length;
+      conditions.push(
+        `(LOWER(p.title) LIKE $${idx} OR LOWER(COALESCE(p.description, '')) LIKE $${idx})`,
+      );
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    // Sap xep (sort)
+    let orderBy = 'ORDER BY p.id DESC';
+    if (query.sort === 'oldest') orderBy = 'ORDER BY p.id ASC';
+    else if (query.sort === 'price_asc') orderBy = 'ORDER BY p.base_price ASC, p.id DESC';
+    else if (query.sort === 'price_desc') orderBy = 'ORDER BY p.base_price DESC, p.id DESC';
+
+    // Dem tong so ban ghi
+    const countQuery = `SELECT COUNT(*)::int AS total FROM catalog_products p ${whereClause};`;
+    const countRes = await this.pool.query(countQuery, params);
+    const total = countRes.rows[0]?.total ?? 0;
+
+    // Phan trang SQL (LIMIT, OFFSET)
+    const page = Math.max(1, query.page);
+    const limit = Math.max(1, query.limit);
+    const offset = (page - 1) * limit;
+
+    const dataParams = [...params, limit, offset];
+    const dataQuery = `
+      SELECT 
+        p.id, p.seller_id, p.category_id, p.title, p.slug, p.description, 
+        CASE WHEN p.deleted_at IS NOT NULL THEN 'DELETED' ELSE p.status END AS status,
+        p.condition, p.base_price, p.allow_auction, p.stock_quantity, p.seller_name, p.created_at, p.updated_at
+      FROM catalog_products p
+      ${whereClause}
+      ${orderBy}
+      LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length};
+    `;
+
+    const dataRes = await this.pool.query(dataQuery, dataParams);
+    const products: Product[] = [];
+    for (const row of dataRes.rows) {
+      const images = await this.getImagesByProductId(row.id);
+      products.push(this.mapRowToProduct(row, images));
+    }
+
+    return {
+      products,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    };
   }
 
   private async getImagesByProductId(productId: number): Promise<string[]> {

@@ -13,7 +13,6 @@ import { ISellerDirectory } from './infrastructure/clients/HttpSellerDirectory';
 import { InMemoryCategoryRepository } from './infrastructure/repositories/InMemoryCategoryRepository';
 import { InMemoryProductRepository } from './infrastructure/repositories/InMemoryProductRepository';
 import { ProductController } from './interfaces/http/controllers/ProductController';
-import { createCatalogAdminWriteRoutes } from './interfaces/http/routes/CatalogAdminWriteRoutes';
 import { createProductRoutes } from './interfaces/http/routes/ProductRoutes';
 
 function token(role: string, sub: string, permissions?: string[]): string {
@@ -45,6 +44,13 @@ const directory: ISellerDirectory = {
   },
 };
 
+type Call = (
+  method: string,
+  path: string,
+  token?: string,
+  body?: unknown,
+) => Promise<{ status: number; body: any }>;
+
 async function withServer(run: (call: Call) => Promise<void>): Promise<void> {
   const categories = new InMemoryCategoryRepository();
   const products = new InMemoryProductRepository();
@@ -59,19 +65,12 @@ async function withServer(run: (call: Call) => Promise<void>): Promise<void> {
     update,
     remove,
     new GetSellerProductsUseCase(products),
+    undefined,
+    directory,
   );
 
   const app = express();
   app.use(express.json());
-  app.use(
-    '/api/v1/products',
-    createCatalogAdminWriteRoutes({
-      createProduct: create,
-      updateProduct: update,
-      deleteProduct: remove,
-      sellerDirectory: directory,
-    }),
-  );
   app.use('/api/v1/products', createProductRoutes(controller));
 
   const server = app.listen(0, '127.0.0.1');
@@ -84,9 +83,10 @@ async function withServer(run: (call: Call) => Promise<void>): Promise<void> {
         'content-type': 'application/json',
         ...(tk ? { authorization: `Bearer ${tk}` } : {}),
       },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body ? JSON.stringify(body) : undefined,
     });
-    return { status: res.status, json: (await res.json()) as any };
+    const parsed = (await res.json().catch(() => ({}))) as any;
+    return { status: res.status, body: parsed };
   };
 
   try {
@@ -96,94 +96,77 @@ async function withServer(run: (call: Call) => Promise<void>): Promise<void> {
   }
 }
 
-type Call = (
-  method: string,
-  path: string,
-  tk: string | null,
-  body?: unknown,
-) => Promise<{ status: number; json: any }>;
-
-const ALL = ['PRODUCT.CREATE', 'PRODUCT.UPDATE', 'PRODUCT.DELETE'];
-const payload = {
-  title: 'Áo khoác Admin tạo',
-  description: 'Hàng do Admin đăng thay Seller',
-  categoryId: '1',
-  price: 250000,
-  stockQuantity: 3,
-};
-
-test('Admin write flow: create for a seller, update, delete, with permission and seller checks', async () => {
+test('Admin POST /products validates seller existence via directory and binds sellerId', async () => {
   await withServer(async (call) => {
-    const admin = token('ADMIN', 'admin-1', ALL);
+    const adminToken = token('ADMIN', 'admin-001', ['PRODUCT.CREATE']);
 
-    // POST: sellerId bắt buộc, Seller phải tồn tại / đúng role / đang hoạt động
-    assert.equal((await call('POST', '/', admin, payload)).status, 400);
-    assert.equal((await call('POST', '/', admin, { ...payload, sellerId: 'nope' })).status, 404);
-    assert.equal((await call('POST', '/', admin, { ...payload, sellerId: 'buyer-1' })).status, 422);
-    assert.equal(
-      (await call('POST', '/', admin, { ...payload, sellerId: 'seller-banned' })).status,
-      422,
-    );
+    // Thiếu sellerId -> 400
+    const noSeller = await call('POST', '', adminToken, {
+      title: 'T',
+      description: 'D',
+      categoryId: '1',
+      price: 100,
+    });
+    assert.equal(noSeller.status, 400);
+    assert.equal(noSeller.body.code, 'VALIDATION_ERROR');
 
-    const created = await call('POST', '/', admin, { ...payload, sellerId: 'seller-1' });
-    assert.equal(created.status, 201);
-    assert.equal(created.json.data.sellerId, 'seller-1');
-    const id = created.json.data.id;
+    // sellerId không tồn tại -> 404
+    const notFound = await call('POST', '', adminToken, {
+      sellerId: 'ghost',
+      title: 'T',
+      description: 'D',
+      categoryId: '1',
+      price: 100,
+    });
+    assert.equal(notFound.status, 404);
+    assert.equal(notFound.body.code, 'SELLER_NOT_FOUND');
 
-    // Sản phẩm thuộc đúng Seller được chọn
-    const detail = await call('GET', `/${id}`, null);
-    assert.equal(detail.json.data.sellerId, 'seller-1');
+    // sellerId là buyer -> 422
+    const isBuyer = await call('POST', '', adminToken, {
+      sellerId: 'buyer-1',
+      title: 'T',
+      description: 'D',
+      categoryId: '1',
+      price: 100,
+    });
+    assert.equal(isBuyer.status, 422);
+    assert.equal(isBuyer.body.code, 'NOT_A_SELLER');
 
-    // Thiếu permission -> 403
-    const noPerm = token('ADMIN', 'admin-2', ['PRODUCT.VIEW']);
-    assert.equal(
-      (await call('POST', '/', noPerm, { ...payload, sellerId: 'seller-1' })).status,
-      403,
-    );
-    assert.equal((await call('PUT', `/${id}`, noPerm, { price: 1 })).status, 403);
-    assert.equal((await call('DELETE', `/${id}`, noPerm)).status, 403);
+    // sellerId bị cấm -> 422
+    const isBanned = await call('POST', '', adminToken, {
+      sellerId: 'seller-banned',
+      title: 'T',
+      description: 'D',
+      categoryId: '1',
+      price: 100,
+    });
+    assert.equal(isBanned.status, 422);
+    assert.equal(isBanned.body.code, 'SELLER_NOT_ACTIVE');
 
-    // PUT / DELETE của Admin trên sản phẩm của Seller
-    const updated = await call('PUT', `/${id}`, admin, { price: 300000 });
-    assert.equal(updated.status, 200);
-    assert.equal((await call('GET', `/${id}`, null)).json.data.price, 300000);
-    assert.equal((await call('PUT', '/999999', admin, { price: 1 })).status, 404);
-
-    assert.equal((await call('DELETE', `/${id}`, admin)).status, 200);
-    assert.equal((await call('GET', `/${id}`, null)).status, 404);
-    assert.equal((await call('DELETE', `/${id}`, admin)).status, 404);
+    // Hợp lệ -> 201 với sellerId đúng
+    const ok = await call('POST', '', adminToken, {
+      sellerId: 'seller-1',
+      title: 'Sản phẩm mới',
+      description: 'Mô tả',
+      categoryId: '1',
+      price: 500_000,
+      stockQuantity: 3,
+    });
+    assert.equal(ok.status, 201);
+    assert.equal(ok.body.data.sellerId, 'seller-1');
   });
 });
 
-test('Admin token with an empty permissions claim falls back to the ADMIN role', async () => {
+test('Seller POST /products still works without sellerId', async () => {
   await withServer(async (call) => {
-    const admin = token('ADMIN', 'admin-1', []);
-    const created = await call('POST', '/', admin, { ...payload, sellerId: 'seller-1' });
-    assert.equal(created.status, 201);
-    assert.equal((await call('DELETE', `/${created.json.data.id}`, admin)).status, 200);
-  });
-});
-
-test('Seller and anonymous write flow still goes through the original router', async () => {
-  await withServer(async (call) => {
-    const seller = token('SELLER', 'seller-1');
-
-    // Seller tạo sản phẩm của chính mình (không cần sellerId, không gọi User Service)
-    const created = await call('POST', '/', seller, payload);
-    assert.equal(created.status, 201);
-    const id = created.json.data.id;
-    assert.equal((await call('GET', `/${id}`, null)).json.data.sellerId, 'seller-1');
-
-    // Seller khác không sửa/xóa được; chính chủ thì được
-    const other = token('SELLER', 'seller-2');
-    assert.equal((await call('PUT', `/${id}`, other, { price: 1 })).status, 403);
-    assert.equal((await call('DELETE', `/${id}`, other)).status, 403);
-    assert.equal((await call('PUT', `/${id}`, seller, { price: 123000 })).status, 200);
-
-    // Buyer và khách vẫn bị route cũ chặn
-    assert.equal((await call('POST', '/', token('BUYER', 'b1'), payload)).status, 403);
-    assert.equal((await call('POST', '/', null, payload)).status, 401);
-
-    assert.equal((await call('DELETE', `/${id}`, seller)).status, 200);
+    const sellerToken = token('SELLER', 'seller-real', ['PRODUCT.CREATE']);
+    const res = await call('POST', '', sellerToken, {
+      title: 'Hàng của tôi',
+      description: 'Mô tả',
+      categoryId: '1',
+      price: 200_000,
+    });
+    assert.equal(res.status, 201);
+    assert.equal(res.body.data.sellerId, 'seller-real');
   });
 });

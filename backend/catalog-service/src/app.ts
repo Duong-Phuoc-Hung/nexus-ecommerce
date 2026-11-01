@@ -5,15 +5,14 @@ import { InMemoryProductRepository } from './infrastructure/repositories/InMemor
 import { GetProductDetailUseCase } from './application/use-cases/GetProductDetailUseCase';
 import { ProductController } from './interfaces/http/controllers/ProductController';
 import { createProductRoutes } from './interfaces/http/routes/ProductRoutes';
-import { createCatalogAccessRoutes } from './interfaces/http/routes/CatalogAccessRoutes';
-import { PostgresCatalogQuery } from './infrastructure/repositories/PostgresCatalogQuery';
-import { createCatalogAdminWriteRoutes } from './interfaces/http/routes/CatalogAdminWriteRoutes';
 import { HttpSellerDirectory } from './infrastructure/clients/HttpSellerDirectory';
 import { SearchProductsUseCase } from './application/use-cases/SearchProductsUseCase';
 import { CreateProductUseCase } from './application/use-cases/CreateProductUseCase';
 import { UpdateProductUseCase } from './application/use-cases/UpdateProductUseCase';
 import { DeleteProductUseCase } from './application/use-cases/DeleteProductUseCase';
 import { GetSellerProductsUseCase } from './application/use-cases/GetSellerProductsUseCase';
+import { RecoverProductUseCase } from './application/use-cases/RecoverProductUseCase';
+import { ListCatalogProductsUseCase } from './application/use-cases/ListCatalogProductsUseCase';
 
 import { PostgresCategoryRepository } from './infrastructure/repositories/PostgresCategoryRepository';
 import { InMemoryCategoryRepository } from './infrastructure/repositories/InMemoryCategoryRepository';
@@ -58,6 +57,9 @@ export function createApplication(): Application {
   const updateProductUseCase = new UpdateProductUseCase(productRepository, categoryRepository);
   const deleteProductUseCase = new DeleteProductUseCase(productRepository);
   const getSellerProductsUseCase = new GetSellerProductsUseCase(productRepository);
+  const recoverProductUseCase = new RecoverProductUseCase(productRepository);
+  const listCatalogProductsUseCase = new ListCatalogProductsUseCase(productRepository);
+  const sellerDirectory = new HttpSellerDirectory();
 
   const productController = new ProductController(
     getProductDetailUseCase,
@@ -67,21 +69,11 @@ export function createApplication(): Application {
     updateProductUseCase,
     deleteProductUseCase,
     getSellerProductsUseCase,
+    recoverProductUseCase,
+    sellerDirectory,
+    listCatalogProductsUseCase,
   );
 
-  app.use(
-    '/api/v1/products',
-    createCatalogAdminWriteRoutes({
-      createProduct: createProductUseCase,
-      updateProduct: updateProductUseCase,
-      deleteProduct: deleteProductUseCase,
-      sellerDirectory: new HttpSellerDirectory(),
-    }),
-  );
-  app.use(
-    '/api/v1/products',
-    createCatalogAccessRoutes(productRepository, isTest ? undefined : new PostgresCatalogQuery()),
-  );
   app.use('/api/v1/products', createProductRoutes(productController));
 
   return app;
