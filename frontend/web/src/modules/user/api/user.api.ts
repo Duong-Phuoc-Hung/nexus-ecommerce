@@ -63,6 +63,19 @@ export function createUserApi(request: RequestApi) {
     async getById(id: string, signal?: AbortSignal): Promise<SupportUser> {
       return unwrap<SupportUser>(await request(`/users/${encodeURIComponent(id)}`, { signal }));
     },
+    async updateStatus(
+      id: string,
+      payload: { status: 'ACTIVE' | 'SUSPENDED'; reason?: string },
+      signal?: AbortSignal,
+    ): Promise<{ id: string; status: string; reason?: string }> {
+      return unwrap<{ id: string; status: string; reason?: string }>(
+        await request(`/users/${encodeURIComponent(id)}/status`, {
+          method: 'PATCH',
+          body: payload,
+          signal,
+        }),
+      );
+    },
   };
 }
 

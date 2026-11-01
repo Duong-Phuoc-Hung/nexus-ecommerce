@@ -28,6 +28,8 @@ export function getOrderStatusLabel(status: string): string {
       return 'Đã hủy';
     case 'REFUNDED':
       return 'Đã hoàn tiền';
+    case 'REFUND_CANCELLED':
+      return 'Đã từ chối hoàn tiền';
     default:
       return status;
   }

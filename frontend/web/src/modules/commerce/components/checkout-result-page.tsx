@@ -28,7 +28,7 @@ export function CheckoutResultPage() {
               ? 'Đang kiểm tra phiên đăng nhập.'
               : user?.role !== 'BUYER'
                 ? 'Đăng nhập tài khoản Buyer để xem đơn hàng của bạn.'
-                : 'Trạng thái trên đường dẫn quay lại chưa xác nhận giao dịch. Hãy kiểm tra đơn hàng sau khi máy chủ nhận kết quả từ PayOS.'}
+                : 'Trạng thái trên đường dẫn quay lại chưa xác nhận giao dịch. Hãy kiểm tra đơn hàng sau khi máy chủ nhận kết quả thanh toán.'}
           </p>
           {user?.role === 'BUYER' && orderId && (
             <p className="mt-4 break-all rounded-xl bg-stone-50 p-3 text-xs text-muted">

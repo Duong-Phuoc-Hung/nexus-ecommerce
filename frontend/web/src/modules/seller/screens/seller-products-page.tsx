@@ -96,7 +96,7 @@ export function SellerProductsPage() {
       })
       .catch((err) => {
         if (!controller.signal.aborted) {
-          setProductsList(mockProducts);
+          setProductsList([]);
           setError(userMessage(err));
         }
       })
