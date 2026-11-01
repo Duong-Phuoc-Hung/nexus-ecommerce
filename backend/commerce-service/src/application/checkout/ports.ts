@@ -32,6 +32,7 @@ export interface CatalogProduct {
   price: number;
   stockQuantity: number;
   status: string;
+  imageUrl?: string | null;
 }
 
 export interface ICatalogClient {
