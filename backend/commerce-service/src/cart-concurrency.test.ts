@@ -173,3 +173,52 @@ test('SCRUM-C01 Subtask 1.2: Stock Quantity Validation in CartService', async ()
 
   console.log('✅ [TEST PASS] CartService: Kiểm tra tồn kho (stockQuantity) thành công mỹ mãn!');
 });
+
+test('SCRUM-C01 Subtask 1.3: ImageUrl & Catalog Fallback without Stock 99', async () => {
+  const mockRepository = {
+    getOrCreateCart: async (userId: string) => ({ id: 'cart-1', userId, expiresAt: new Date() }),
+    getCartItems: async () => [
+      { id: 'item-1', productId: 'p-with-image', quantity: 2, unitPrice: 150000 },
+      { id: 'item-2', productId: 'p-catalog-err', quantity: 1, unitPrice: 200000 },
+    ],
+  } as any;
+
+  const mockCatalog = {
+    findProduct: async (productId: string) => {
+      if (productId === 'p-with-image') {
+        return {
+          id: 'p-with-image',
+          title: 'Áo Polo Nam',
+          price: 150000,
+          sellerId: 'seller-1',
+          status: 'ACTIVE',
+          stockQuantity: 10,
+          imageUrl: 'https://example.com/polo.jpg',
+        };
+      }
+      throw new Error('Catalog service timeout');
+    },
+  };
+
+  const { CartService } = await import('./application/cart/CartService');
+  const service = new CartService(mockRepository, mockCatalog);
+  const cart = await service.getCart('buyer-1');
+
+  assert.equal(cart.items.length, 2);
+
+  // Item 1: Catalog OK
+  assert.equal(cart.items[0].imageUrl, 'https://example.com/polo.jpg');
+  assert.equal(cart.items[0].stockQuantity, 10);
+  assert.equal(cart.items[0].status, 'ACTIVE');
+  assert.equal(cart.items[0].availability, 'AVAILABLE');
+
+  // Item 2: Catalog Error -> tuyệt đối không fake stock = 99
+  assert.equal(cart.items[1].imageUrl, null);
+  assert.equal(cart.items[1].stockQuantity, 0);
+  assert.equal(cart.items[1].status, 'UNKNOWN');
+  assert.equal(cart.items[1].availability, 'UNKNOWN');
+
+  console.log(
+    '✅ [TEST PASS] CartService: ImageUrl & Fallback UNAVAILABLE/UNKNOWN verified successfully!',
+  );
+});

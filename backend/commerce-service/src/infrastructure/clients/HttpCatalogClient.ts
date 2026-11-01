@@ -9,6 +9,9 @@ interface CatalogProductBody {
     price?: number | string;
     stockQuantity?: number | string;
     status?: string;
+    primaryImage?: string | null;
+    images?: string[];
+    imageUrl?: string | null;
   };
 }
 
@@ -30,6 +33,13 @@ export class HttpCatalogClient implements ICatalogClient {
     const data = body.data;
     if (!data || data.id === undefined) return null;
 
+    const imageUrl =
+      (typeof data.imageUrl === 'string' && data.imageUrl) ||
+      (typeof data.primaryImage === 'string' && data.primaryImage) ||
+      (Array.isArray(data.images) && data.images.length > 0 && typeof data.images[0] === 'string'
+        ? data.images[0]
+        : null);
+
     return {
       id: String(data.id),
       sellerId: String(data.sellerId ?? ''),
@@ -37,6 +47,7 @@ export class HttpCatalogClient implements ICatalogClient {
       price: Number(data.price),
       stockQuantity: Number(data.stockQuantity ?? 0),
       status: String(data.status ?? ''),
+      imageUrl: imageUrl || null,
     };
   }
 }
