@@ -218,12 +218,20 @@ _(Nếu `paymentMethod: 'PAYOS'`, BE sẽ trả link `checkoutUrl` để FE mở
         "stockQuantity": 50,
         "status": "ACTIVE",
         "quantity": 2,
-        "subtotal": 2580000
+        "subtotal": 2580000,
+        "imageUrl": "https://example.com/images/air.jpg",
+        "availability": "AVAILABLE"
       }
     ]
   }
 }
 ```
+
+> [!NOTE] Cập nhật Contract Giỏ hàng mới nhất (Commit `5cf7ac2`):
+>
+> - **Ảnh đại diện (`imageUrl`)**: Đã bổ sung trường `imageUrl: string | null` trong mỗi item để FE render trực tiếp giao diện (tự động mapping từ `primaryImage` hoặc `images` của Catalog).
+> - **Trạng thái khả dụng (`availability`)**: Bổ sung `availability: 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN'` để FE hiển thị rõ ràng trên UI và tạm khóa nút thanh toán nếu món hàng chưa xác minh được tồn kho.
+> - **Fallback an toàn**: Khi Catalog gặp sự cố hoặc timeout, BE trả về `stockQuantity: 0`, `status: 'UNKNOWN'`, `availability: 'UNKNOWN'`, `imageUrl: null` (tuyệt đối không giả định `stockQuantity: 99`). Nếu gọi `POST /cart/items` trong lúc Catalog lỗi, BE trả về HTTP `503 CATALOG_UNAVAILABLE` rõ ràng để FE hiển thị thông báo.
 
 #### B. Thêm vào giỏ (`POST /api/v1/cart/items`)
 

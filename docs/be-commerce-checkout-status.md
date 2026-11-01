@@ -14,7 +14,7 @@ Nhánh: `feat/be-commerce-checkout-order`.
 | 6   | `POST /api/v1/orders/:id/payment-link`  | Tái dùng link đang mở; `{ "renew": true }` tạo link mới; tối đa 3 lần/đơn; đơn đã trả/hết hạn bị từ chối.                                                     |
 | 7   | `POST /api/v1/payments/payos/webhook`   | Xác thực chữ ký HMAC-SHA256 (sai → 401); khớp `orderCode` + số tiền; idempotent (`PAID`/`DUPLICATE`/`AMOUNT_MISMATCH`/`UNKNOWN_ORDER_CODE`/`PAYMENT_FAILED`). |
 | 8   | `GET /api/v1/orders/:id/payment-status` | Đọc từ DB, chỉ Buyer sở hữu đơn (người khác → 404).                                                                                                           |
-| 9   | `GET/POST/PUT/DELETE /api/v1/cart`      | Bộ API Giỏ hàng đồng bộ PostgreSQL (`commerce_carts` & `commerce_cart_items`), tra cứu giá/tồn kho Catalog thời gian thực.                                    |
+| 9   | `GET/POST/PUT/DELETE /api/v1/cart`      | Bộ API Giỏ hàng đồng bộ PostgreSQL (`commerce_carts` & `commerce_cart_items`), tra cứu giá/tồn kho Catalog thời gian thực; đã bổ sung `imageUrl: string       | null`, `availability`, và fallback an toàn khi Catalog lỗi (Commit `5cf7ac2`). |
 
 File mới:
 
