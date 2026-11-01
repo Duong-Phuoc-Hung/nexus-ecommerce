@@ -81,14 +81,22 @@ export class OrderController {
       const order = await this.getOrderDetailUseCase.execute(orderId);
 
       // Kiểm tra quyền sở hữu đơn hàng (chống lỗ hổng IDOR)
-      if (authenticatedUser && authenticatedUser.role === 'BUYER' && order.buyerId !== authenticatedUser.sub) {
+      if (
+        authenticatedUser &&
+        authenticatedUser.role === 'BUYER' &&
+        order.buyerId !== authenticatedUser.sub
+      ) {
         res.status(403).json({
           success: false,
           error: 'Bạn không có quyền truy cập đơn hàng này.',
         });
         return;
       }
-      if (authenticatedUser && authenticatedUser.role === 'SELLER' && order.sellerId !== authenticatedUser.sub) {
+      if (
+        authenticatedUser &&
+        authenticatedUser.role === 'SELLER' &&
+        order.sellerId !== authenticatedUser.sub
+      ) {
         res.status(403).json({
           success: false,
           error: 'Bạn không có quyền truy cập đơn hàng này.',
@@ -149,7 +157,8 @@ export class OrderController {
         }
       }
 
-      const reason = req.body?.reason || (authenticatedUser?.role === 'BUYER' ? 'Người mua tự hủy' : undefined);
+      const reason =
+        req.body?.reason || (authenticatedUser?.role === 'BUYER' ? 'Người mua tự hủy' : undefined);
       const result = await this.cancelOrderUseCase.execute(orderId, reason);
 
       res.status(200).json({
