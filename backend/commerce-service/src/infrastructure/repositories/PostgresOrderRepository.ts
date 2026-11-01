@@ -190,20 +190,37 @@ export class PostgresOrderRepository implements IOrderRepository {
     }
 
     // Nếu đơn bị hủy, giải phóng tồn kho tạm giữ và cập nhật payment
+    // Nếu đơn bị hủy, giải phóng tồn kho tạm giữ (cả PayOS 'ACTIVE' và COD 'COMMITTED') và cập nhật payment
     if (order.status === OrderStatus.CANCELLED) {
-      const queryId = isNumeric
-        ? order.id
-        : `(SELECT id FROM commerce_orders WHERE order_code = '${order.id}')`;
-      await this.pool.query(
-        `UPDATE commerce_stock_reservations
-         SET status = 'RELEASED'
-         WHERE order_id = ${queryId} AND status = 'ACTIVE'`,
-      );
-      await this.pool.query(
-        `UPDATE commerce_payments
-         SET status = 'CANCELLED', updated_at = NOW()
-         WHERE order_id = ${queryId} AND status = 'PENDING'`,
-      );
+      if (isNumeric) {
+        await this.pool.query(
+          `UPDATE commerce_stock_reservations
+           SET status = 'RELEASED', updated_at = NOW()
+           WHERE order_id = $1 AND status IN ('ACTIVE', 'COMMITTED')`,
+          [order.id],
+        );
+        await this.pool.query(
+          `UPDATE commerce_payments
+           SET status = 'CANCELLED', updated_at = NOW()
+           WHERE order_id = $1 AND status = 'PENDING'`,
+          [order.id],
+        );
+      } else {
+        await this.pool.query(
+          `UPDATE commerce_stock_reservations
+           SET status = 'RELEASED', updated_at = NOW()
+           WHERE order_id = (SELECT id FROM commerce_orders WHERE order_code = $1)
+             AND status IN ('ACTIVE', 'COMMITTED')`,
+          [order.id],
+        );
+        await this.pool.query(
+          `UPDATE commerce_payments
+           SET status = 'CANCELLED', updated_at = NOW()
+           WHERE order_id = (SELECT id FROM commerce_orders WHERE order_code = $1)
+             AND status = 'PENDING'`,
+          [order.id],
+        );
+      }
     }
   }
 
