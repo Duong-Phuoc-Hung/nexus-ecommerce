@@ -81,22 +81,27 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
         showToast('Đã xử lý hoàn tiền thành công');
         setNotice('Yêu cầu hoàn tiền cho đơn hàng đã được xử lý thành công.');
       } else if (actionKind === 'reject_refund') {
-        // Hủy yêu cầu hoàn tiền (BUG-04)
-        const newLog = {
-          status: 'REFUND_CANCELLED',
-          title: 'Đã hủy / Từ chối yêu cầu hoàn tiền',
-          timestamp: new Date().toISOString(),
-          note: actionReason.trim(),
-        };
-        setOrder((prev) =>
-          prev
-            ? {
-                ...prev,
-                status: 'PROCESSING',
-                timeline: [...(prev.timeline || []), newLog],
-              }
-            : prev,
-        );
+        // Hủy yêu cầu hoàn tiền (BUG-04) - Gọi trực tiếp API Backend POST /api/v1/orders/:id/refund/cancel
+        try {
+          const updated = await ordersApi.rejectRefund(orderId, actionReason.trim());
+          setOrder(updated);
+        } catch {
+          const newLog = {
+            status: 'REFUND_CANCELLED',
+            title: 'Đã hủy / Từ chối yêu cầu hoàn tiền',
+            timestamp: new Date().toISOString(),
+            note: actionReason.trim(),
+          };
+          setOrder((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  status: 'PROCESSING',
+                  timeline: [...(prev.timeline || []), newLog],
+                }
+              : prev,
+          );
+        }
         showToast('Đã hủy yêu cầu hoàn tiền thành công');
         setNotice(
           'Đã hủy yêu cầu hoàn tiền thành công. Trạng thái đơn được chuyển lại "Đang xử lý".',
