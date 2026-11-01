@@ -76,7 +76,33 @@ export class CartService {
       );
     }
 
+    // Kiểm tra số lượng tồn kho (stockQuantity)
+    const availableStock = typeof product.stockQuantity === 'number' ? product.stockQuantity : 0;
+    if (availableStock <= 0) {
+      throw new CartValidationError(
+        409,
+        'OUT_OF_STOCK',
+        `Sản phẩm "${product.title}" hiện đã hết hàng trong kho.`,
+      );
+    }
+
     const cart = await this.repository.getOrCreateCart(userId);
+    const existingItems = await this.repository.getCartItems(cart.id);
+    const existingItem = existingItems.find((it) => it.productId === product.id);
+    const currentQtyInCart = existingItem ? existingItem.quantity : 0;
+    const requestedTotalQty = currentQtyInCart + quantity;
+
+    if (requestedTotalQty > availableStock) {
+      throw new CartValidationError(
+        409,
+        'INSUFFICIENT_STOCK',
+        `Số lượng yêu cầu (${requestedTotalQty}) vượt quá tồn kho thực tế (${availableStock}).`,
+        {
+          quantity: `Kho chỉ còn ${availableStock} sản phẩm. Giỏ hàng của bạn hiện đã có ${currentQtyInCart} món.`,
+        },
+      );
+    }
+
     await this.repository.addItem(cart.id, product.id, quantity, product.price);
 
     return this.getCart(userId);
@@ -93,6 +119,26 @@ export class CartService {
     if (cleanQty <= 0) {
       await this.repository.removeItem(cart.id, itemId);
     } else {
+      const items = await this.repository.getCartItems(cart.id);
+      const targetItem = items.find((it) => it.id === itemId || it.productId === itemId);
+      if (targetItem) {
+        const product = await this.catalog.findProduct(targetItem.productId);
+        if (product) {
+          const availableStock =
+            typeof product.stockQuantity === 'number' ? product.stockQuantity : 0;
+          if (cleanQty > availableStock) {
+            throw new CartValidationError(
+              409,
+              'INSUFFICIENT_STOCK',
+              `Số lượng yêu cầu (${cleanQty}) vượt quá tồn kho thực tế (${availableStock}).`,
+              {
+                quantity: `Kho chỉ còn tối đa ${availableStock} sản phẩm.`,
+              },
+            );
+          }
+        }
+      }
+
       const updated = await this.repository.updateItemQuantity(
         cart.id,
         itemId,

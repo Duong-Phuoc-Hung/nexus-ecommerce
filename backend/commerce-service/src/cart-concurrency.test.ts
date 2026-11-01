@@ -112,3 +112,64 @@ test('SCRUM-C01 Subtask 2: Concurrency Handling - MAX_ACTIVE_CART_PER_USER = 1',
     await pool.end();
   }
 });
+
+test('SCRUM-C01 Subtask 1.2: Stock Quantity Validation in CartService', async () => {
+  const mockRepository = {
+    getOrCreateCart: async (userId: string) => ({ id: 'cart-1', userId, status: 'ACTIVE' }),
+    getCartItems: async () => [],
+    addItem: async () => {},
+  } as any;
+
+  const mockCatalog = {
+    findProduct: async (productId: string) => {
+      if (productId === 'out-of-stock') {
+        return {
+          id: 'out-of-stock',
+          title: 'Hết hàng',
+          price: 100000,
+          sellerId: 'seller-2',
+          status: 'ACTIVE',
+          stockQuantity: 0,
+        };
+      }
+      if (productId === 'low-stock') {
+        return {
+          id: 'low-stock',
+          title: 'Hàng ít',
+          price: 200000,
+          sellerId: 'seller-2',
+          status: 'ACTIVE',
+          stockQuantity: 2,
+        };
+      }
+      return null;
+    },
+  };
+
+  const { CartService } = await import('./application/cart/CartService');
+  const service = new CartService(mockRepository, mockCatalog);
+
+  // 1. Thêm sản phẩm hết hàng (stockQuantity = 0)
+  await assert.rejects(
+    async () => service.addItem('buyer-1', { productId: 'out-of-stock', quantity: 1 }),
+    (err: any) => {
+      assert.ok(err instanceof CartValidationError);
+      assert.equal(err.status, 409);
+      assert.equal(err.code, 'OUT_OF_STOCK');
+      return true;
+    },
+  );
+
+  // 2. Thêm số lượng vượt quá tồn kho (muốn 5 cái nhưng chỉ còn 2 cái)
+  await assert.rejects(
+    async () => service.addItem('buyer-1', { productId: 'low-stock', quantity: 5 }),
+    (err: any) => {
+      assert.ok(err instanceof CartValidationError);
+      assert.equal(err.status, 409);
+      assert.equal(err.code, 'INSUFFICIENT_STOCK');
+      return true;
+    },
+  );
+
+  console.log('✅ [TEST PASS] CartService: Kiểm tra tồn kho (stockQuantity) thành công mỹ mãn!');
+});
