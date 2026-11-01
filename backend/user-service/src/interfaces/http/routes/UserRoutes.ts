@@ -36,6 +36,9 @@ export function createUserRoutes(controller: UserController): Router {
   router.put('/:id/role', requireAuth, requirePermission('ROLE.UPDATE'), (req, res) =>
     controller.assignRole(req, res),
   );
+  router.patch('/:id/status', requireAuth, requirePermission('USER.UPDATE'), (req, res) =>
+    controller.updateStatus(req, res),
+  );
 
   return router;
 }
