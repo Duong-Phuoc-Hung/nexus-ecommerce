@@ -1,11 +1,16 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
+import { IOrderRepository } from './domain/repositories/IOrderRepository';
 import { InMemoryOrderRepository } from './infrastructure/repositories/InMemoryOrderRepository';
+import { PostgresOrderRepository } from './infrastructure/repositories/PostgresOrderRepository';
+import { getCommerceDbPool } from './infrastructure/database/pgPool';
+
 import { GetOrderDetailUseCase } from './application/use-cases/GetOrderDetailUseCase';
 import { SearchOrdersUseCase } from './application/use-cases/SearchOrdersUseCase';
 import { CancelOrderUseCase } from './application/use-cases/CancelOrderUseCase';
 import { RefundOrderUseCase } from './application/use-cases/RefundOrderUseCase';
 import { RejectRefundUseCase } from './application/use-cases/RejectRefundUseCase';
+
 import { OrderController } from './interfaces/http/controllers/OrderController';
 import { createOrderRoutes } from './interfaces/http/routes/OrderRoutes';
 import { createCheckoutRoutes } from './interfaces/http/routes/CheckoutRoutes';
@@ -21,12 +26,27 @@ export function createApplication(): Application {
       status: 'UP',
       service: 'commerce-service',
       boundedContext: 'Cart, Orders & Payments (SRS 3.4)',
+      persistence: process.env.USE_IN_MEMORY_DB === 'true' ? 'in-memory' : 'postgresql',
       port: process.env.PORT || process.env.COMMERCE_SERVICE_PORT || 4003,
       timestamp: new Date().toISOString(),
     });
   });
 
-  const orderRepository = new InMemoryOrderRepository();
+  // Dependency Injection: Chuyển đổi linh hoạt giữa PostgreSQL và InMemory (dành cho test/CI)
+  let orderRepository: IOrderRepository;
+  const pool = getCommerceDbPool();
+
+  if (process.env.USE_IN_MEMORY_DB === 'true') {
+    orderRepository = new InMemoryOrderRepository();
+  } else {
+    const pgOrderRepo = new PostgresOrderRepository(pool);
+    // Kích hoạt nạp dữ liệu mẫu bất đồng bộ vào PostgreSQL nếu DB rỗng
+    pgOrderRepo.ensureSchemaAndSeed().catch((err: Error) => {
+      console.warn('[CommerceService] Async schema & seed failed:', err.message);
+    });
+    orderRepository = pgOrderRepo;
+  }
+
   const getOrderDetailUseCase = new GetOrderDetailUseCase(orderRepository);
   const searchOrdersUseCase = new SearchOrdersUseCase(orderRepository);
   const cancelOrderUseCase = new CancelOrderUseCase(orderRepository, getOrderDetailUseCase);
@@ -41,7 +61,7 @@ export function createApplication(): Application {
     rejectRefundUseCase,
   );
 
-  app.use('/api/v1', createCheckoutRoutes());
+  app.use('/api/v1', createCheckoutRoutes(pool));
   app.use('/api/v1/orders', createOrderRoutes(orderController));
 
   return app;

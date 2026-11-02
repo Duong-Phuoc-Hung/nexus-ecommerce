@@ -1,0 +1,629 @@
+import { Pool, PoolClient } from 'pg';
+import {
+  IOrderRepository,
+  OrderSearchCriteria,
+  OrderSearchPage,
+} from '../../domain/repositories/IOrderRepository';
+import { Order, OrderItem, OrderStatus, OrderTimelineItem } from '../../domain/entities/Order';
+
+interface OrderRow {
+  id: string | number;
+  order_code: string;
+  buyer_id: string;
+  seller_id: string;
+  total_amount: string | number;
+  shipping_fee: string | number;
+  discount_amount: string | number;
+  status: string;
+  shipping_address: any;
+  checkout_session_expires_at?: Date | string | null;
+  created_at: Date | string;
+  updated_at: Date | string;
+  buyer_name?: string | null;
+  buyer_email?: string | null;
+  seller_name?: string | null;
+  tracking_code?: string | null;
+  timeline?: any;
+}
+
+interface OrderItemRow {
+  id: string | number;
+  order_id: string | number;
+  product_id: string | number;
+  product_title: string;
+  unit_price: string | number;
+  quantity: number;
+  subtotal: string | number;
+  created_at: Date | string;
+}
+
+export class PostgresOrderRepository implements IOrderRepository {
+  private isInitialized = false;
+  private isInitializing = false;
+
+  constructor(private readonly pool: Pool) {}
+
+  /**
+   * Đảm bảo schema có đủ cột hỗ trợ và nạp dữ liệu mẫu ban đầu nếu bảng rỗng.
+   */
+  public async ensureSchemaAndSeed(): Promise<void> {
+    if (this.isInitialized || this.isInitializing) return;
+    this.isInitializing = true;
+
+    try {
+      // 1. Đồng bộ cấu trúc bảng tự động (chống lỗi khi chạy môi trường dev/staging chưa migrate)
+      await this.pool.query(`
+        ALTER TABLE commerce_orders 
+          ADD COLUMN IF NOT EXISTS buyer_name VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS buyer_email VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS seller_name VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS tracking_code VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS timeline JSONB DEFAULT '[]'::jsonb;
+        
+        ALTER TABLE commerce_order_items 
+          ALTER COLUMN product_id TYPE VARCHAR(100);
+      `);
+
+      // 2. Kiểm tra nếu chưa có đơn hàng nào thì nạp 5 đơn hàng mẫu (phục vụ Support Portal & Commerce)
+      const countRes = await this.pool.query('SELECT COUNT(*)::int AS count FROM commerce_orders');
+      const orderCount = countRes.rows[0]?.count ?? 0;
+
+      if (orderCount === 0) {
+        await this.seedInitialOrders();
+      }
+
+      this.isInitialized = true;
+    } catch (err) {
+      console.error('[PostgresOrderRepository] Schema init/seed warning:', (err as Error).message);
+    } finally {
+      this.isInitializing = false;
+    }
+  }
+
+  public async findById(id: string): Promise<Order | null> {
+    await this.ensureSchemaAndSeed();
+    const cleanId = id.trim();
+
+    const { rows } = await this.pool.query<OrderRow>(
+      `SELECT * FROM commerce_orders 
+       WHERE order_code = $1 OR id::text = $1 
+       LIMIT 1`,
+      [cleanId],
+    );
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const orderRow = rows[0];
+    const itemsRes = await this.pool.query<OrderItemRow>(
+      `SELECT * FROM commerce_order_items 
+       WHERE order_id = $1 
+       ORDER BY id ASC`,
+      [orderRow.id],
+    );
+
+    return this.mapToDomain(orderRow, itemsRes.rows);
+  }
+
+  public async findByBuyerId(buyerId: string): Promise<Order[]> {
+    await this.ensureSchemaAndSeed();
+    const cleanBuyerId = buyerId.trim();
+
+    const { rows } = await this.pool.query<OrderRow>(
+      `SELECT * FROM commerce_orders 
+       WHERE buyer_id = $1 
+       ORDER BY created_at DESC`,
+      [cleanBuyerId],
+    );
+
+    if (rows.length === 0) {
+      return [];
+    }
+
+    const orderDbIds = rows.map((r) => r.id);
+    const itemsRes = await this.pool.query<OrderItemRow>(
+      `SELECT * FROM commerce_order_items 
+       WHERE order_id = ANY($1::bigint[]) 
+       ORDER BY id ASC`,
+      [orderDbIds],
+    );
+
+    const itemsByOrderId = new Map<string, OrderItemRow[]>();
+    for (const item of itemsRes.rows) {
+      const key = String(item.order_id);
+      const existing = itemsByOrderId.get(key) || [];
+      existing.push(item);
+      itemsByOrderId.set(key, existing);
+    }
+
+    return rows.map((orderRow) =>
+      this.mapToDomain(orderRow, itemsByOrderId.get(String(orderRow.id)) || []),
+    );
+  }
+
+  public async search(criteria: OrderSearchCriteria): Promise<OrderSearchPage> {
+    await this.ensureSchemaAndSeed();
+
+    const conditions: string[] = [];
+    const params: any[] = [];
+    let paramIdx = 1;
+
+    // 1. Lọc từ khóa tìm kiếm toàn diện (Mã đơn, người mua, email, shop, vận đơn, tên sản phẩm)
+    if (criteria.q && criteria.q.trim().length > 0) {
+      const searchTerm = `%${criteria.q.trim()}%`;
+      conditions.push(`(
+        o.order_code ILIKE $${paramIdx} OR
+        COALESCE(o.buyer_name, '') ILIKE $${paramIdx} OR
+        COALESCE(o.buyer_email, '') ILIKE $${paramIdx} OR
+        COALESCE(o.seller_name, '') ILIKE $${paramIdx} OR
+        COALESCE(o.tracking_code, '') ILIKE $${paramIdx} OR
+        EXISTS (
+          SELECT 1 FROM commerce_order_items oi 
+          WHERE oi.order_id = o.id AND oi.product_title ILIKE $${paramIdx}
+        )
+      )`);
+      params.push(searchTerm);
+      paramIdx++;
+    }
+
+    // 2. Lọc theo Buyer ID (IDOR-safe)
+    if (criteria.buyerId && criteria.buyerId.trim().length > 0) {
+      conditions.push(`o.buyer_id = $${paramIdx}`);
+      params.push(criteria.buyerId.trim());
+      paramIdx++;
+    }
+
+    // 3. Lọc theo Seller ID (IDOR-safe)
+    if (criteria.sellerId && criteria.sellerId.trim().length > 0) {
+      conditions.push(`o.seller_id = $${paramIdx}`);
+      params.push(criteria.sellerId.trim());
+      paramIdx++;
+    }
+
+    // 4. Lọc theo Status
+    if (criteria.status && criteria.status.trim().length > 0) {
+      conditions.push(`UPPER(o.status) = UPPER($${paramIdx})`);
+      params.push(criteria.status.trim());
+      paramIdx++;
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    // 5. Sắp xếp với Whitelist chống SQL Injection
+    let sortColumn = 'o.created_at';
+    if (criteria.sortBy === 'totalAmount') {
+      sortColumn = 'o.total_amount';
+    } else if (criteria.sortBy === 'status') {
+      sortColumn = 'o.status';
+    }
+
+    const sortDirection = criteria.sortOrder === 'asc' ? 'ASC' : 'DESC';
+
+    // 6. Phân trang
+    const page = Math.max(1, criteria.page || 1);
+    const limit = Math.max(1, Math.min(100, criteria.limit || 10));
+    const offset = (page - 1) * limit;
+
+    // Đếm tổng số bản ghi
+    const countSql = `SELECT COUNT(*)::int AS total FROM commerce_orders o ${whereClause}`;
+    const countRes = await this.pool.query(countSql, params);
+    const total = countRes.rows[0]?.total ?? 0;
+    const totalPages = Math.ceil(total / limit) || 1;
+
+    // Truy vấn trang dữ liệu
+    const selectSql = `
+      SELECT o.* 
+      FROM commerce_orders o 
+      ${whereClause} 
+      ORDER BY ${sortColumn} ${sortDirection} 
+      LIMIT $${paramIdx} OFFSET $${paramIdx + 1}
+    `;
+    const rowsRes = await this.pool.query<OrderRow>(selectSql, [...params, limit, offset]);
+
+    if (rowsRes.rows.length === 0) {
+      return {
+        orders: [],
+        total,
+        page,
+        limit,
+        totalPages,
+      };
+    }
+
+    // Nạp chi tiết Order Items cho các đơn trên trang này
+    const orderDbIds = rowsRes.rows.map((r) => r.id);
+    const itemsRes = await this.pool.query<OrderItemRow>(
+      `SELECT * FROM commerce_order_items 
+       WHERE order_id = ANY($1::bigint[]) 
+       ORDER BY id ASC`,
+      [orderDbIds],
+    );
+
+    const itemsByOrderId = new Map<string, OrderItemRow[]>();
+    for (const item of itemsRes.rows) {
+      const key = String(item.order_id);
+      const existing = itemsByOrderId.get(key) || [];
+      existing.push(item);
+      itemsByOrderId.set(key, existing);
+    }
+
+    const orders = rowsRes.rows.map((orderRow) =>
+      this.mapToDomain(orderRow, itemsByOrderId.get(String(orderRow.id)) || []),
+    );
+
+    return {
+      orders,
+      total,
+      page,
+      limit,
+      totalPages,
+    };
+  }
+
+  public async save(order: Order): Promise<void> {
+    await this.ensureSchemaAndSeed();
+    const client = await this.pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const upsertOrderSql = `
+        INSERT INTO commerce_orders (
+          order_code, buyer_id, buyer_name, buyer_email, seller_id, seller_name,
+          total_amount, shipping_fee, status, shipping_address, tracking_code,
+          timeline, created_at, updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        ON CONFLICT (order_code) DO UPDATE SET
+          buyer_id = EXCLUDED.buyer_id,
+          buyer_name = EXCLUDED.buyer_name,
+          buyer_email = EXCLUDED.buyer_email,
+          seller_id = EXCLUDED.seller_id,
+          seller_name = EXCLUDED.seller_name,
+          total_amount = EXCLUDED.total_amount,
+          status = EXCLUDED.status,
+          tracking_code = EXCLUDED.tracking_code,
+          timeline = EXCLUDED.timeline,
+          updated_at = EXCLUDED.updated_at
+        RETURNING id
+      `;
+
+      const shippingAddressJson = JSON.stringify({
+        name: order.buyerName,
+        email: order.buyerEmail,
+      });
+
+      const res = await client.query(upsertOrderSql, [
+        order.id,
+        order.buyerId,
+        order.buyerName,
+        order.buyerEmail,
+        order.sellerId,
+        order.sellerName,
+        order.totalAmount,
+        0,
+        order.status,
+        shippingAddressJson,
+        order.trackingCode || null,
+        JSON.stringify(order.timeline),
+        order.createdAt,
+        order.updatedAt,
+      ]);
+
+      const dbOrderId = res.rows[0].id;
+
+      // Xóa và ghi lại danh sách Order Items
+      await client.query('DELETE FROM commerce_order_items WHERE order_id = $1', [dbOrderId]);
+
+      for (const item of order.items) {
+        await client.query(
+          `INSERT INTO commerce_order_items (
+            order_id, product_id, product_title, unit_price, quantity, subtotal
+          ) VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            dbOrderId,
+            String(item.productId),
+            item.productName || 'Sản phẩm Nexus',
+            item.unitPrice,
+            item.quantity,
+            item.totalPrice,
+          ],
+        );
+      }
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  public async update(order: Order): Promise<void> {
+    await this.ensureSchemaAndSeed();
+
+    await this.pool.query(
+      `UPDATE commerce_orders 
+       SET status = $1, tracking_code = $2, timeline = $3, updated_at = $4
+       WHERE order_code = $5 OR id::text = $5`,
+      [
+        order.status,
+        order.trackingCode || null,
+        JSON.stringify(order.timeline),
+        order.updatedAt,
+        order.id,
+      ],
+    );
+  }
+
+  /**
+   * Ánh xạ dòng PostgreSQL sang Domain Entity Order.
+   */
+  private mapToDomain(orderRow: OrderRow, itemRows: OrderItemRow[]): Order {
+    const rawTimeline = orderRow.timeline;
+    let timeline: OrderTimelineItem[] = [];
+
+    if (Array.isArray(rawTimeline)) {
+      timeline = rawTimeline.map((t: any) => ({
+        status: String(t.status || 'STATUS_UPDATE'),
+        title: String(t.title || 'Cập nhật đơn hàng'),
+        timestamp: t.timestamp ? new Date(t.timestamp) : new Date(orderRow.updated_at),
+        note: t.note ? String(t.note) : undefined,
+      }));
+    } else {
+      timeline = [
+        {
+          status: 'CREATED',
+          title: 'Đơn hàng được tạo thành công',
+          timestamp: new Date(orderRow.created_at),
+        },
+      ];
+    }
+
+    const items: OrderItem[] = itemRows.map((i) => ({
+      productId: String(i.product_id),
+      productName: i.product_title || 'Sản phẩm Nexus',
+      quantity: Number(i.quantity),
+      unitPrice: Number(i.unit_price),
+      totalPrice: Number(i.subtotal),
+    }));
+
+    // Trích xuất tên và email người mua từ cột hoặc từ JSON shipping_address
+    const shippingAddress =
+      typeof orderRow.shipping_address === 'string'
+        ? JSON.parse(orderRow.shipping_address)
+        : orderRow.shipping_address || {};
+
+    const buyerName =
+      orderRow.buyer_name || shippingAddress.name || shippingAddress.recipientName || 'Khách hàng';
+
+    const buyerEmail = orderRow.buyer_email || shippingAddress.email || '';
+
+    return new Order({
+      id: orderRow.order_code || String(orderRow.id),
+      buyerId: orderRow.buyer_id,
+      buyerName,
+      buyerEmail,
+      sellerId: orderRow.seller_id,
+      sellerName: orderRow.seller_name || 'Gian hàng đối tác',
+      items,
+      totalAmount: Number(orderRow.total_amount),
+      status: (orderRow.status as OrderStatus) || OrderStatus.PENDING,
+      trackingCode: orderRow.tracking_code || undefined,
+      timeline,
+      createdAt: new Date(orderRow.created_at),
+      updatedAt: new Date(orderRow.updated_at),
+    });
+  }
+
+  /**
+   * Khởi tạo 5 đơn hàng mẫu vào PostgreSQL khi khởi động hệ thống lần đầu.
+   */
+  private async seedInitialOrders(): Promise<void> {
+    const now = new Date();
+
+    const sampleOrders: Order[] = [
+      new Order({
+        id: 'NX-ORD-8021',
+        buyerId: 'usr_01hqz789abc',
+        buyerName: 'Minh Anh',
+        buyerEmail: 'minhanh@example.com',
+        sellerId: 'usr_seller_001',
+        sellerName: 'Nexus Audio',
+        items: [
+          {
+            productId: 'prod_nexus_air',
+            productName: 'Tai nghe không dây Nexus Air',
+            quantity: 1,
+            unitPrice: 1290000,
+            totalPrice: 1290000,
+          },
+        ],
+        totalAmount: 1290000,
+        status: OrderStatus.PROCESSING,
+        paymentTransactionId: 'pi_8021_demo_cod',
+        trackingCode: 'GHN8829103VN',
+        createdAt: new Date(now.getTime() - 86400000 * 5),
+        updatedAt: new Date(now.getTime() - 86400000 * 5),
+        timeline: [
+          {
+            status: 'CREATED',
+            title: 'Đơn hàng được tạo',
+            timestamp: new Date(now.getTime() - 86400000 * 5),
+          },
+          {
+            status: 'PAID',
+            title: 'Đã xác nhận thanh toán',
+            timestamp: new Date(now.getTime() - 86400000 * 5 + 120000),
+          },
+          {
+            status: 'PROCESSING',
+            title: 'Chờ người bán xử lý',
+            timestamp: new Date(now.getTime() - 86400000 * 4),
+          },
+        ],
+      }),
+
+      new Order({
+        id: 'NX-ORD-8017',
+        buyerId: 'usr_01hqz789def',
+        buyerName: 'Quốc Bảo',
+        buyerEmail: 'quocbao@example.com',
+        sellerId: 'usr_seller_002',
+        sellerName: 'Retro Lab',
+        items: [
+          {
+            productId: 'prod_retro_35',
+            productName: 'Máy ảnh film Retro 35',
+            quantity: 1,
+            unitPrice: 2450000,
+            totalPrice: 2450000,
+          },
+        ],
+        totalAmount: 2450000,
+        status: OrderStatus.SHIPPED,
+        paymentTransactionId: 'pi_8017_demo_card',
+        trackingCode: 'GHTK5908112',
+        createdAt: new Date(now.getTime() - 86400000 * 6),
+        updatedAt: new Date(now.getTime() - 86400000 * 5),
+        timeline: [
+          {
+            status: 'CREATED',
+            title: 'Đơn hàng được tạo',
+            timestamp: new Date(now.getTime() - 86400000 * 6),
+          },
+          {
+            status: 'PAID',
+            title: 'Đã xác nhận thanh toán',
+            timestamp: new Date(now.getTime() - 86400000 * 6 + 180000),
+          },
+          {
+            status: 'SHIPPED',
+            title: 'Đã bàn giao vận chuyển cho GHTK',
+            timestamp: new Date(now.getTime() - 86400000 * 5),
+          },
+        ],
+      }),
+
+      new Order({
+        id: 'NX-ORD-8009',
+        buyerId: 'usr_01hqz789ghi',
+        buyerName: 'Thu Hà',
+        buyerEmail: 'thuha@example.com',
+        sellerId: 'usr_seller_003',
+        sellerName: 'Nexus Sport',
+        items: [
+          {
+            productId: 'prod_sport_s2',
+            productName: 'Đồng hồ thể thao S2',
+            quantity: 1,
+            unitPrice: 890000,
+            totalPrice: 890000,
+          },
+        ],
+        totalAmount: 890000,
+        status: OrderStatus.DELIVERED,
+        paymentTransactionId: 'pi_8009_demo_vnpay',
+        trackingCode: 'VTP22100831',
+        createdAt: new Date(now.getTime() - 86400000 * 7),
+        updatedAt: new Date(now.getTime() - 86400000 * 6),
+        timeline: [
+          {
+            status: 'CREATED',
+            title: 'Đơn hàng được tạo',
+            timestamp: new Date(now.getTime() - 86400000 * 7),
+          },
+          {
+            status: 'PAID',
+            title: 'Đã xác nhận thanh toán',
+            timestamp: new Date(now.getTime() - 86400000 * 7 + 60000),
+          },
+          {
+            status: 'DELIVERED',
+            title: 'Giao hàng hoàn tất thành công',
+            timestamp: new Date(now.getTime() - 86400000 * 6),
+          },
+        ],
+      }),
+
+      new Order({
+        id: 'NX-ORD-7998',
+        buyerId: 'usr_01hqz789jkl',
+        buyerName: 'Gia Huy',
+        buyerEmail: 'giahuy@example.com',
+        sellerId: 'usr_seller_004',
+        sellerName: 'Home & Co.',
+        items: [
+          {
+            productId: 'prod_lamp_nordic',
+            productName: 'Đèn bàn tối giản',
+            quantity: 1,
+            unitPrice: 480000,
+            totalPrice: 480000,
+          },
+        ],
+        totalAmount: 480000,
+        status: OrderStatus.CANCELLED,
+        paymentTransactionId: 'pi_7998_cancelled',
+        trackingCode: '—',
+        createdAt: new Date(now.getTime() - 86400000 * 8),
+        updatedAt: new Date(now.getTime() - 86400000 * 7),
+        timeline: [
+          {
+            status: 'CREATED',
+            title: 'Đơn hàng được tạo',
+            timestamp: new Date(now.getTime() - 86400000 * 8),
+          },
+          {
+            status: 'CANCELLED',
+            title: 'Đã hủy đơn hàng theo yêu cầu khách hàng',
+            timestamp: new Date(now.getTime() - 86400000 * 7),
+          },
+        ],
+      }),
+
+      new Order({
+        id: 'ord_01hqz555abc',
+        buyerId: 'usr_01hqz789abc',
+        buyerName: 'Nguyen Van Buyer',
+        buyerEmail: 'buyer.test@nexus-ecommerce.com',
+        sellerId: 'usr_01hqz333sel',
+        sellerName: 'Nexus Official Store',
+        items: [
+          {
+            productId: 'prod_01hqz999xyz',
+            productName: 'Nexus Pro Audio Wireless',
+            quantity: 1,
+            unitPrice: 399.99,
+            totalPrice: 399.99,
+          },
+        ],
+        totalAmount: 399.99,
+        status: OrderStatus.PAID,
+        paymentTransactionId: 'pi_3MtwxAEhyASWD2Re1fA5sample',
+        trackingCode: 'GHN112233VN',
+        createdAt: now,
+        updatedAt: now,
+        timeline: [
+          {
+            status: 'CREATED',
+            title: 'Đơn hàng được tạo',
+            timestamp: now,
+          },
+          {
+            status: 'PAID',
+            title: 'Đã xác nhận thanh toán PayOS',
+            timestamp: now,
+          },
+        ],
+      }),
+    ];
+
+    for (const order of sampleOrders) {
+      await this.save(order);
+    }
+
+    console.log('[PostgresOrderRepository] Đã khởi tạo 5 đơn hàng mẫu vào PostgreSQL thành công.');
+  }
+}

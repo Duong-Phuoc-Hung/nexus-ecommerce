@@ -1,8 +1,13 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
+import { IShipmentRepository } from './domain/repositories/IShipmentRepository';
+import { ISupportCaseRepository } from './domain/repositories/ISupportCaseRepository';
 import { InMemoryShipmentRepository } from './infrastructure/repositories/InMemoryShipmentRepository';
 import { InMemoryInventoryRepository } from './infrastructure/repositories/InMemoryInventoryRepository';
 import { InMemorySupportCaseRepository } from './infrastructure/repositories/InMemorySupportCaseRepository';
+import { PostgresShipmentRepository } from './infrastructure/repositories/PostgresShipmentRepository';
+import { PostgresSupportCaseRepository } from './infrastructure/repositories/PostgresSupportCaseRepository';
+import { getFulfillmentDbPool } from './infrastructure/database/pgPool';
 
 import { GetShipmentDetailUseCase } from './application/use-cases/GetShipmentDetailUseCase';
 import { SearchShipmentsUseCase } from './application/use-cases/SearchShipmentsUseCase';
@@ -34,15 +39,36 @@ export function createApplication(): Application {
       status: 'UP',
       service: 'fulfillment-service',
       boundedContext: 'Shipping, Inventory & Support (SRS 2.3, 2.6, 3.6)',
+      persistence: process.env.USE_IN_MEMORY_DB === 'true' ? 'in-memory' : 'postgresql',
       port: process.env.PORT || process.env.FULFILLMENT_SERVICE_PORT || 4005,
       timestamp: new Date().toISOString(),
     });
   });
 
-  // 1. Repositories
-  const shipmentRepository = new InMemoryShipmentRepository();
+  // 1. Repositories (Hỗ trợ chuyển đổi linh hoạt PostgreSQL / In-Memory cho test & CI)
+  let shipmentRepository: IShipmentRepository;
+  let supportCaseRepository: ISupportCaseRepository;
   const inventoryRepository = new InMemoryInventoryRepository();
-  const supportCaseRepository = new InMemorySupportCaseRepository();
+
+  if (process.env.USE_IN_MEMORY_DB === 'true') {
+    shipmentRepository = new InMemoryShipmentRepository();
+    supportCaseRepository = new InMemorySupportCaseRepository();
+  } else {
+    const pool = getFulfillmentDbPool();
+    const pgShipmentRepo = new PostgresShipmentRepository(pool);
+    const pgSupportCaseRepo = new PostgresSupportCaseRepository(pool);
+
+    // Kích hoạt nạp dữ liệu mẫu ban đầu bất đồng bộ vào PostgreSQL nếu DB rỗng
+    pgShipmentRepo.ensureSchemaAndSeed().catch((err: Error) => {
+      console.warn('[FulfillmentService] Async shipment seed failed:', err.message);
+    });
+    pgSupportCaseRepo.ensureSchemaAndSeed().catch((err: Error) => {
+      console.warn('[FulfillmentService] Async support case seed failed:', err.message);
+    });
+
+    shipmentRepository = pgShipmentRepo;
+    supportCaseRepository = pgSupportCaseRepo;
+  }
 
   // 2. Use Cases - Vận đơn (Shipments)
   const getShipmentDetailUseCase = new GetShipmentDetailUseCase(shipmentRepository);
