@@ -23,6 +23,14 @@ export class NotificationClient {
         console.warn(`[NotificationClient] Gửi OTP thất bại (${response.status}):`, errorText);
         return false;
       }
+      // Notification Service trả 200 kèm success:false khi SMTP lỗi
+      const body = (await response.json().catch(() => ({}))) as { success?: boolean };
+      if (body.success === false) {
+        console.warn(
+          '[NotificationClient] Notification Service không gửi được email OTP (lỗi SMTP).',
+        );
+        return false;
+      }
       return true;
     } catch (err: any) {
       console.warn('[NotificationClient] Không kết nối được Notification Service:', err.message);

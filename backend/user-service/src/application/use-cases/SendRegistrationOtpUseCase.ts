@@ -67,7 +67,7 @@ export class SendRegistrationOtpUseCase {
     );
     if (!emailSent && process.env.NODE_ENV !== 'test') {
       throw new Error(
-        'Không thể gửi email OTP do Notification Service (cổng 4006) chưa được khởi động. Vui lòng chạy lệnh: pnpm --filter @nexus/notification-service dev',
+        'Không thể gửi email OTP. Kiểm tra Notification Service (cổng 4006) đã chạy chưa và log SMTP của nó.',
       );
     }
 
