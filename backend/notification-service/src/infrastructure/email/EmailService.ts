@@ -6,7 +6,8 @@ import path from 'path';
 dotenv.config();
 try {
   dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-  dotenv.config({ path: path.resolve(__dirname, '../../../../.env') });
+  // src/infrastructure/email -> nexus-ecommerce/.env (5 cấp)
+  dotenv.config({ path: path.resolve(__dirname, '../../../../../.env') });
 } catch {}
 
 export interface SendEmailOptions {
