@@ -27,6 +27,7 @@ export const requestApi: RequestApi = async (path, options = {}) => {
     url: path,
     method: options.method || 'GET',
     data: options.body,
+    headers: options.headers,
     signal: options.signal,
   });
   return response.data;

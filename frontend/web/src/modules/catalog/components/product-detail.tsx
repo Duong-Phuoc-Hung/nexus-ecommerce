@@ -8,7 +8,7 @@ import { formatPrice, type CatalogProduct } from '../api/catalog.factory';
 import { ApiError, userMessage } from '../../../lib/axios/http';
 import { StoreHeader } from '@/components/layout/store-header';
 import { useSession } from '@/modules/auth/hooks/use-session';
-import { addCartProduct } from '@/modules/commerce/utils/cart';
+import { addCartProduct, addCartProductAsync } from '@/modules/commerce/utils/cart';
 import { FAVORITES_EVENT, hasFavorite, toggleFavorite } from '@/modules/commerce/utils/favorites';
 const conditions: Record<string, string> = {
   NEW: 'Mới',
@@ -195,6 +195,7 @@ export function ProductDetail({ productId }: { productId: string }) {
                               name: product.title,
                               image: product.images[0] || '/images/nexus-product-placeholder.svg',
                               price: product.price ?? 0,
+                              saleType: product.saleType,
                               href: '/products/' + encodeURIComponent(product.id),
                             }),
                           )
@@ -272,8 +273,8 @@ export function ProductDetail({ productId }: { productId: string }) {
                             type="button"
                             variant="outline"
                             className="min-h-12 rounded-xl border-brand-dark font-semibold text-brand-dark"
-                            onClick={() => {
-                              addCartProduct(product);
+                            onClick={async () => {
+                              await addCartProductAsync(product);
                               setCartNotice('Đã thêm vào giỏ hàng.');
                             }}
                           >

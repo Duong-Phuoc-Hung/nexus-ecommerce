@@ -2,19 +2,50 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { StoreHeader } from '@/components/layout/store-header';
-import { readCart, writeCart, type CartLine } from '../utils/cart';
+import { readCart, syncCartFromServer, writeCart, type CartLine } from '../utils/cart';
+import { cartApi } from '../api/cart.api';
 const cash = (n: number) => `${new Intl.NumberFormat('vi-VN').format(n)} ₫`;
 export default function CartPage() {
   const [lines, setLines] = useState<CartLine[]>([]);
   useEffect(() => {
     setLines(readCart());
+    syncCartFromServer().then((remoteLines) => {
+      if (remoteLines.length) setLines(remoteLines);
+    });
     const sync = () => setLines(readCart());
     window.addEventListener('nexus-cart-change', sync);
     return () => window.removeEventListener('nexus-cart-change', sync);
   }, []);
-  const update = (next: CartLine[]) => {
+  const update = async (next: CartLine[]) => {
     setLines(next);
     writeCart(next);
+  };
+
+  const handleQuantityChange = async (line: CartLine, newQuantity: number) => {
+    const q = Math.max(1, Math.min(newQuantity, line.stock ?? 99));
+    const next = lines.map((x) => (x.productId === line.productId ? { ...x, quantity: q } : x));
+    setLines(next);
+    writeCart(next);
+    if (line.cartItemId) {
+      try {
+        await cartApi.updateItem(line.cartItemId, q);
+      } catch {
+        // Fallback locally
+      }
+    }
+  };
+
+  const handleRemove = async (line: CartLine) => {
+    const next = lines.filter((x) => x.productId !== line.productId);
+    setLines(next);
+    writeCart(next);
+    if (line.cartItemId) {
+      try {
+        await cartApi.removeItem(line.cartItemId);
+      } catch {
+        // Fallback locally
+      }
+    }
   };
   const total = lines.reduce((sum, l) => sum + l.price * l.quantity, 0);
   return (
@@ -66,22 +97,12 @@ export default function CartPage() {
                       min={1}
                       max={line.stock ?? 99}
                       value={line.quantity}
-                      onChange={(e) => {
-                        const q = Math.max(
-                          1,
-                          Math.min(Number(e.target.value) || 1, line.stock ?? 99),
-                        );
-                        update(
-                          lines.map((x) =>
-                            x.productId === line.productId ? { ...x, quantity: q } : x,
-                          ),
-                        );
-                      }}
+                      onChange={(e) => handleQuantityChange(line, Number(e.target.value) || 1)}
                     />
                   </label>
                   <button
                     className="min-h-11 rounded-lg px-3 text-sm text-brand-dark underline"
-                    onClick={() => update(lines.filter((x) => x.productId !== line.productId))}
+                    onClick={() => handleRemove(line)}
                   >
                     Xóa
                   </button>
