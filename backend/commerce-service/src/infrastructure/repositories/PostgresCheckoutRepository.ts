@@ -235,7 +235,7 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
           if (cartRes.rows.length > 0) {
             const cartId = cartRes.rows[0].id;
             await client.query(
-              `DELETE FROM commerce_cart_items WHERE cart_id = $1 AND product_id = ANY($2)`,
+              `DELETE FROM commerce_cart_items WHERE cart_id = $1 AND product_id::text = ANY($2::text[])`,
               [cartId, productIds],
             );
             await client.query(`UPDATE commerce_carts SET updated_at = NOW() WHERE id = $1`, [
@@ -364,7 +364,7 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
           if (cartRes.rows.length > 0) {
             const cartId = cartRes.rows[0].id;
             await client.query(
-              `DELETE FROM commerce_cart_items WHERE cart_id = $1 AND product_id = ANY($2)`,
+              `DELETE FROM commerce_cart_items WHERE cart_id = $1 AND product_id::text = ANY($2::text[])`,
               [cartId, productIds],
             );
             await client.query(`UPDATE commerce_carts SET updated_at = NOW() WHERE id = $1`, [

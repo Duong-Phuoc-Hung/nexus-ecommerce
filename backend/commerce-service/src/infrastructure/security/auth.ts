@@ -139,9 +139,9 @@ export function requireOrderPermission(action: 'VIEW' | 'LIST' | 'CANCEL' | 'REF
       }
     }
 
-    // 3. BUYER có quyền VIEW, LIST và CANCEL đơn hàng của chính mình
+    // 3. BUYER có quyền VIEW đơn hàng của chính mình (BUYER không được phép LIST đơn toàn sàn)
     if (normalizedRole === 'BUYER') {
-      if (action === 'VIEW' || action === 'LIST' || action === 'CANCEL') {
+      if (action === 'VIEW') {
         return next();
       }
     }

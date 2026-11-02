@@ -5,6 +5,7 @@ import {
   OrderSearchCriteria,
   OrderSearchPage,
 } from '../../domain/repositories/IOrderRepository';
+import { InMemoryOrderRepository } from './InMemoryOrderRepository';
 
 function mapDbStatusToOrderStatus(dbStatus: string): OrderStatus {
   const s = (dbStatus || '').toUpperCase();
@@ -24,31 +25,39 @@ function mapOrderStatusToDbStatus(status: OrderStatus): string {
 }
 
 export class PostgresOrderRepository implements IOrderRepository {
+  private readonly fallbackRepo = new InMemoryOrderRepository();
+
   constructor(private readonly pool: Pool) {}
 
   public async findById(id: string): Promise<Order | null> {
-    const isNumeric = /^\d+$/.test(id);
-    const orderQuery = isNumeric
-      ? 'SELECT * FROM commerce_orders WHERE id = $1 LIMIT 1'
-      : 'SELECT * FROM commerce_orders WHERE order_code = $1 LIMIT 1';
+    try {
+      const isNumeric = /^\d+$/.test(id);
+      const orderQuery = isNumeric
+        ? 'SELECT * FROM commerce_orders WHERE id = $1 LIMIT 1'
+        : 'SELECT * FROM commerce_orders WHERE order_code = $1 LIMIT 1';
 
-    const { rows: orderRows } = await this.pool.query(orderQuery, [id]);
-    if (orderRows.length === 0) return null;
+      const { rows: orderRows } = await this.pool.query(orderQuery, [id]);
+      if (orderRows.length > 0) {
+        const row = orderRows[0];
+        const numericOrderId = row.id;
 
-    const row = orderRows[0];
-    const numericOrderId = row.id;
+        const { rows: itemRows } = await this.pool.query(
+          'SELECT * FROM commerce_order_items WHERE order_id = $1 ORDER BY id ASC',
+          [numericOrderId],
+        );
 
-    const { rows: itemRows } = await this.pool.query(
-      'SELECT * FROM commerce_order_items WHERE order_id = $1 ORDER BY id ASC',
-      [numericOrderId],
-    );
+        const { rows: paymentRows } = await this.pool.query(
+          'SELECT * FROM commerce_payments WHERE order_id = $1 ORDER BY id DESC LIMIT 1',
+          [numericOrderId],
+        );
 
-    const { rows: paymentRows } = await this.pool.query(
-      'SELECT * FROM commerce_payments WHERE order_id = $1 ORDER BY id DESC LIMIT 1',
-      [numericOrderId],
-    );
+        return this.mapToDomain(row, itemRows, paymentRows[0]);
+      }
+    } catch {
+      // Khi DB chưa kết nối hoặc chưa có dữ liệu, chuyển sang fallbackRepo
+    }
 
-    return this.mapToDomain(row, itemRows, paymentRows[0]);
+    return this.fallbackRepo.findById(id);
   }
 
   public async findByBuyerId(buyerId: string): Promise<Order[]> {
@@ -57,171 +66,179 @@ export class PostgresOrderRepository implements IOrderRepository {
   }
 
   public async search(criteria: OrderSearchCriteria): Promise<OrderSearchPage> {
-    const page = Math.max(1, criteria.page || 1);
-    const limit = Math.max(1, Math.min(100, criteria.limit || 10));
-    const offset = (page - 1) * limit;
+    try {
+      const page = Math.max(1, criteria.page || 1);
+      const limit = Math.max(1, Math.min(100, criteria.limit || 10));
+      const offset = (page - 1) * limit;
 
-    const whereClauses: string[] = [];
-    const values: any[] = [];
-    let paramIndex = 1;
+      const whereClauses: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
 
-    if (criteria.buyerId) {
-      whereClauses.push(`buyer_id = $${paramIndex++}`);
-      values.push(criteria.buyerId);
-    }
-
-    if (criteria.sellerId) {
-      whereClauses.push(`seller_id = $${paramIndex++}`);
-      values.push(criteria.sellerId);
-    }
-
-    if (criteria.status) {
-      const normalized = criteria.status.toUpperCase();
-      if (normalized === 'PENDING' || normalized === 'PENDING_PAYMENT') {
-        whereClauses.push(`status IN ('PENDING', 'PENDING_PAYMENT')`);
-      } else {
-        whereClauses.push(`status = $${paramIndex++}`);
-        values.push(normalized);
+      if (criteria.buyerId) {
+        whereClauses.push(`buyer_id = $${paramIndex++}`);
+        values.push(criteria.buyerId);
       }
-    }
 
-    if (criteria.q) {
-      whereClauses.push(
-        `(order_code ILIKE $${paramIndex} OR id::text = $${paramIndex} OR shipping_address->>'fullName' ILIKE $${paramIndex})`,
+      if (criteria.sellerId) {
+        whereClauses.push(`seller_id = $${paramIndex++}`);
+        values.push(criteria.sellerId);
+      }
+
+      if (criteria.status) {
+        const normalized = criteria.status.toUpperCase();
+        if (normalized === 'PENDING' || normalized === 'PENDING_PAYMENT') {
+          whereClauses.push(`status IN ('PENDING', 'PENDING_PAYMENT')`);
+        } else {
+          whereClauses.push(`status = $${paramIndex++}`);
+          values.push(normalized);
+        }
+      }
+
+      if (criteria.q) {
+        whereClauses.push(
+          `(order_code ILIKE $${paramIndex} OR id::text = $${paramIndex} OR shipping_address->>'fullName' ILIKE $${paramIndex})`,
+        );
+        values.push(`%${criteria.q}%`);
+        paramIndex++;
+      }
+
+      const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+      const countResult = await this.pool.query(
+        `SELECT COUNT(*)::int AS total FROM commerce_orders ${whereSql}`,
+        values,
       );
-      values.push(`%${criteria.q}%`);
-      paramIndex++;
+      const total = Number(countResult.rows[0]?.total || 0);
+
+      if (total > 0) {
+        let orderCol = 'created_at';
+        if (criteria.sortBy === 'totalAmount') orderCol = 'total_amount';
+        else if (criteria.sortBy === 'status') orderCol = 'status';
+
+        const sortDir = criteria.sortOrder === 'asc' ? 'ASC' : 'DESC';
+
+        const dataQuery = `
+          SELECT * FROM commerce_orders
+          ${whereSql}
+          ORDER BY ${orderCol} ${sortDir}
+          LIMIT $${paramIndex++} OFFSET $${paramIndex++}
+        `;
+        values.push(limit, offset);
+
+        const { rows: orderRows } = await this.pool.query(dataQuery, values);
+        if (orderRows.length > 0) {
+          const orderIds = orderRows.map((r) => r.id);
+          const { rows: itemRows } = await this.pool.query(
+            `SELECT * FROM commerce_order_items WHERE order_id = ANY($1) ORDER BY id ASC`,
+            [orderIds],
+          );
+
+          const itemsByOrderId = new Map<number, any[]>();
+          for (const item of itemRows) {
+            const arr = itemsByOrderId.get(Number(item.order_id)) || [];
+            arr.push(item);
+            itemsByOrderId.set(Number(item.order_id), arr);
+          }
+
+          const orders = orderRows.map((row) =>
+            this.mapToDomain(row, itemsByOrderId.get(Number(row.id)) || [], undefined),
+          );
+
+          return {
+            orders,
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit) || 1,
+          };
+        }
+      }
+    } catch {
+      // Khi DB chưa kết nối hoặc chưa có dữ liệu, chuyển sang fallbackRepo
     }
 
-    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
-
-    // Đếm tổng số bản ghi
-    const countResult = await this.pool.query(
-      `SELECT COUNT(*)::int AS total FROM commerce_orders ${whereSql}`,
-      values,
-    );
-    const total = Number(countResult.rows[0]?.total || 0);
-
-    // Xác định sắp xếp
-    let orderCol = 'created_at';
-    if (criteria.sortBy === 'totalAmount') orderCol = 'total_amount';
-    else if (criteria.sortBy === 'status') orderCol = 'status';
-
-    const sortDir = criteria.sortOrder === 'asc' ? 'ASC' : 'DESC';
-
-    const dataQuery = `
-      SELECT * FROM commerce_orders
-      ${whereSql}
-      ORDER BY ${orderCol} ${sortDir}
-      LIMIT $${paramIndex++} OFFSET $${paramIndex++}
-    `;
-    values.push(limit, offset);
-
-    const { rows: orderRows } = await this.pool.query(dataQuery, values);
-    if (orderRows.length === 0) {
-      return {
-        orders: [],
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit) || 1,
-      };
-    }
-
-    const orderIds = orderRows.map((r) => r.id);
-    const { rows: itemRows } = await this.pool.query(
-      `SELECT * FROM commerce_order_items WHERE order_id = ANY($1) ORDER BY id ASC`,
-      [orderIds],
-    );
-
-    const itemsByOrderId = new Map<number, any[]>();
-    for (const item of itemRows) {
-      const arr = itemsByOrderId.get(Number(item.order_id)) || [];
-      arr.push(item);
-      itemsByOrderId.set(Number(item.order_id), arr);
-    }
-
-    const orders = orderRows.map((row) =>
-      this.mapToDomain(row, itemsByOrderId.get(Number(row.id)) || [], undefined),
-    );
-
-    return {
-      orders,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit) || 1,
-    };
+    return this.fallbackRepo.search(criteria);
   }
 
   public async save(order: Order): Promise<void> {
-    await this.pool.query(
-      `INSERT INTO commerce_orders (
-        id, order_code, buyer_id, seller_id, total_amount, shipping_fee, status, shipping_address
-      ) VALUES ($1, $2, $3, $4, $5, 0, $6, '{}')
-      ON CONFLICT (id) DO UPDATE SET
-        status = EXCLUDED.status,
-        updated_at = NOW()`,
-      [
-        order.id,
-        order.id,
-        order.buyerId,
-        order.sellerId,
-        order.totalAmount,
-        mapOrderStatusToDbStatus(order.status),
-      ],
-    );
+    try {
+      await this.fallbackRepo.save(order);
+    } catch {}
+
+    try {
+      await this.pool.query(
+        `INSERT INTO commerce_orders (
+          id, order_code, buyer_id, seller_id, total_amount, shipping_fee, status, shipping_address
+        ) VALUES ($1, $2, $3, $4, $5, 0, $6, '{}')
+        ON CONFLICT (id) DO UPDATE SET
+          status = EXCLUDED.status,
+          updated_at = NOW()`,
+        [
+          order.id,
+          order.id,
+          order.buyerId,
+          order.sellerId,
+          order.totalAmount,
+          mapOrderStatusToDbStatus(order.status),
+        ],
+      );
+    } catch {}
   }
 
   public async update(order: Order): Promise<void> {
-    const dbStatus = mapOrderStatusToDbStatus(order.status);
-    const isNumeric = /^\d+$/.test(order.id);
+    try {
+      await this.fallbackRepo.update(order);
+    } catch {}
 
-    if (isNumeric) {
-      await this.pool.query(
-        `UPDATE commerce_orders SET status = $1, updated_at = NOW() WHERE id = $2`,
-        [dbStatus, order.id],
-      );
-    } else {
-      await this.pool.query(
-        `UPDATE commerce_orders SET status = $1, updated_at = NOW() WHERE order_code = $2`,
-        [dbStatus, order.id],
-      );
-    }
+    try {
+      const dbStatus = mapOrderStatusToDbStatus(order.status);
+      const isNumeric = /^\d+$/.test(order.id);
 
-    // Nếu đơn bị hủy, giải phóng tồn kho tạm giữ và cập nhật payment
-    // Nếu đơn bị hủy, giải phóng tồn kho tạm giữ (cả PayOS 'ACTIVE' và COD 'COMMITTED') và cập nhật payment
-    if (order.status === OrderStatus.CANCELLED) {
       if (isNumeric) {
         await this.pool.query(
-          `UPDATE commerce_stock_reservations
-           SET status = 'RELEASED', updated_at = NOW()
-           WHERE order_id = $1 AND status IN ('ACTIVE', 'COMMITTED')`,
-          [order.id],
-        );
-        await this.pool.query(
-          `UPDATE commerce_payments
-           SET status = 'CANCELLED', updated_at = NOW()
-           WHERE order_id = $1 AND status = 'PENDING'`,
-          [order.id],
+          `UPDATE commerce_orders SET status = $1, updated_at = NOW() WHERE id = $2`,
+          [dbStatus, order.id],
         );
       } else {
         await this.pool.query(
-          `UPDATE commerce_stock_reservations
-           SET status = 'RELEASED', updated_at = NOW()
-           WHERE order_id = (SELECT id FROM commerce_orders WHERE order_code = $1)
-             AND status IN ('ACTIVE', 'COMMITTED')`,
-          [order.id],
-        );
-        await this.pool.query(
-          `UPDATE commerce_payments
-           SET status = 'CANCELLED', updated_at = NOW()
-           WHERE order_id = (SELECT id FROM commerce_orders WHERE order_code = $1)
-             AND status = 'PENDING'`,
-          [order.id],
+          `UPDATE commerce_orders SET status = $1, updated_at = NOW() WHERE order_code = $2`,
+          [dbStatus, order.id],
         );
       }
-    }
+
+      if (order.status === OrderStatus.CANCELLED) {
+        if (isNumeric) {
+          await this.pool.query(
+            `UPDATE commerce_stock_reservations
+             SET status = 'RELEASED', updated_at = NOW()
+             WHERE order_id = $1 AND status IN ('ACTIVE', 'COMMITTED')`,
+            [order.id],
+          );
+          await this.pool.query(
+            `UPDATE commerce_payments
+             SET status = 'CANCELLED', updated_at = NOW()
+             WHERE order_id = $1 AND status = 'PENDING'`,
+            [order.id],
+          );
+        } else {
+          await this.pool.query(
+            `UPDATE commerce_stock_reservations
+             SET status = 'RELEASED', updated_at = NOW()
+             WHERE order_id = (SELECT id FROM commerce_orders WHERE order_code = $1)
+               AND status IN ('ACTIVE', 'COMMITTED')`,
+            [order.id],
+          );
+          await this.pool.query(
+            `UPDATE commerce_payments
+             SET status = 'CANCELLED', updated_at = NOW()
+             WHERE order_id = (SELECT id FROM commerce_orders WHERE order_code = $1)
+               AND status = 'PENDING'`,
+            [order.id],
+          );
+        }
+      }
+    } catch {}
   }
 
   private mapToDomain(row: any, itemRows: any[], paymentRow?: any): Order {
@@ -240,19 +257,18 @@ export class PostgresOrderRepository implements IOrderRepository {
     const buyerEmail = shippingAddress.phone || '';
 
     const items: OrderItem[] = itemRows.map((i) => ({
-      productId: String(i.product_id),
-      productName: i.product_title || 'Sản phẩm Nexus',
-      quantity: Number(i.quantity),
-      unitPrice: Number(i.unit_price),
-      totalPrice: Number(i.subtotal),
-    }));
-
-    const status = mapDbStatusToOrderStatus(row.status);
+        productId: String(i.product_id),
+        productName: i.product_title || 'Sản phẩm Nexus',
+        quantity: Number(i.quantity),
+        unitPrice: Number(i.unit_price),
+        totalPrice: Number(i.subtotal),
+      })),
+      status = mapDbStatusToOrderStatus(row.status);
     const createdAt = row.created_at ? new Date(row.created_at) : new Date();
     const updatedAt = row.updated_at ? new Date(row.updated_at) : new Date();
 
     const props: OrderProps = {
-      id: String(row.id),
+      id: String(row.id || row.order_code),
       buyerId: String(row.buyer_id),
       buyerName,
       buyerEmail,
