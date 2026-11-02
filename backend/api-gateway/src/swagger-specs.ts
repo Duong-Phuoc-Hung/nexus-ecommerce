@@ -1129,11 +1129,165 @@ export const commerceSpec = {
   servers: [{ url: '/', description: 'API Gateway (Same Origin)' }],
   components: commonComponents,
   paths: {
+    '/api/v1/cart': {
+      get: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Xem giỏ hàng của tài khoản đang đăng nhập',
+        description: `${PRIVATE} Yêu cầu token BUYER. Lấy giỏ hàng đồng bộ trên PostgreSQL, kèm thông tin chi tiết từng món hàng và tổng tiền.`,
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: jsonResponse('Thông tin giỏ hàng', {
+            success: true,
+            data: {
+              id: '1',
+              userId: 'usr_buyer_01',
+              expiresAt: '2026-11-07T12:00:00.000Z',
+              totalItems: 2,
+              subtotal: 1290000,
+              currency: 'VND',
+              items: [
+                {
+                  id: '1',
+                  productId: '1',
+                  productTitle: 'Đồng hồ cơ lộ máy Orient Star',
+                  price: 1200000,
+                  quantity: 1,
+                  sellerId: 'usr_seller_01',
+                  stockQuantity: 10,
+                  status: 'ACTIVE',
+                  imageUrl: 'https://example.com/product1.jpg',
+                  availability: 'AVAILABLE',
+                },
+              ],
+            },
+          }),
+          401: unauthorized,
+        },
+      },
+      delete: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Xóa toàn bộ giỏ hàng của tài khoản đang đăng nhập',
+        description: `${PRIVATE} Yêu cầu token BUYER. Xóa tất cả các item trong giỏ hàng hiện tại.`,
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: jsonResponse('Đã xóa toàn bộ giỏ hàng', {
+            success: true,
+            message: 'Đã xóa toàn bộ giỏ hàng thành công.',
+          }),
+          401: unauthorized,
+        },
+      },
+    },
+    '/api/v1/cart/items': {
+      post: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Thêm sản phẩm vào giỏ hàng',
+        description: `${PRIVATE} Yêu cầu token BUYER. Tự động kiểm tra sản phẩm active và đủ tồn kho.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['productId'],
+                properties: {
+                  productId: { type: 'string', example: '1' },
+                  quantity: { type: 'number', example: 1 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Thêm vào giỏ thành công', {
+            success: true,
+            data: {
+              id: '1',
+              userId: 'usr_buyer_01',
+              totalItems: 1,
+              subtotal: 1200000,
+            },
+          }),
+          400: errorResponse('Dữ liệu không hợp lệ', 'Số lượng phải lớn hơn 0'),
+          401: unauthorized,
+          422: errorResponse(
+            'Hết hàng hoặc số lượng vượt tồn kho',
+            'Số lượng yêu cầu (10) vượt quá tồn kho hiện có (5)',
+          ),
+        },
+      },
+    },
+    '/api/v1/cart/items/{id}': {
+      put: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Cập nhật số lượng món hàng trong giỏ',
+        description: `${PRIVATE} Yêu cầu token BUYER. Truyền { quantity: 0 } hoặc số âm để xóa món hàng.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'ID của item trong giỏ (hoặc productId)',
+            schema: { type: 'string', example: '1' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['quantity'],
+                properties: {
+                  quantity: { type: 'number', example: 2 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Cập nhật giỏ hàng thành công', {
+            success: true,
+            data: { id: '1', totalItems: 2, subtotal: 2400000 },
+          }),
+          400: errorResponse('Dữ liệu không hợp lệ', 'quantity is required'),
+          401: unauthorized,
+          422: errorResponse(
+            'Số lượng vượt tồn kho',
+            'Số lượng yêu cầu (15) vượt quá tồn kho hiện có (10)',
+          ),
+        },
+      },
+      delete: {
+        tags: ['Buyer / Giỏ hàng'],
+        summary: 'Xóa một món hàng khỏi giỏ',
+        description: `${PRIVATE} Yêu cầu token BUYER.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'ID của item trong giỏ (hoặc productId)',
+            schema: { type: 'string', example: '1' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Đã xóa món khỏi giỏ', {
+            success: true,
+            message: 'Đã xóa món khỏi giỏ hàng thành công.',
+          }),
+          401: unauthorized,
+        },
+      },
+    },
     '/api/v1/orders': {
       get: {
         tags: ['Support Staff / Tra cứu đơn hàng'],
         summary: 'Tra cứu danh sách đơn hàng (Search, Filter & Pagination)',
-        description: `${PRIVATE} Yêu cầu quyền ORDER.LIST (SUPPORT_STAFF hoặc ADMIN). Hỗ trợ tìm kiếm theo từ khóa mã đơn, email, người mua, người bán.`,
+        description: `${PRIVATE} Dành cho cả BUYER (tự động lọc đơn của chính mình) và SUPPORT_STAFF / ADMIN (tra cứu toàn sàn). Hỗ trợ tìm kiếm theo từ khóa mã đơn, email, người mua, người bán.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1299,7 +1453,7 @@ export const commerceSpec = {
       post: {
         tags: ['Support Staff / Thao tác xử lý'],
         summary: 'Hủy đơn hàng trong trường hợp khiếu nại hoặc tranh chấp',
-        description: `${PRIVATE} Yêu cầu quyền ORDER.CANCEL (SUPPORT_STAFF hoặc ADMIN).`,
+        description: `${PRIVATE} Hỗ trợ cả BUYER tự hủy đơn (khi đơn chưa đóng gói/giao) và SUPPORT_STAFF / ADMIN hủy khi có khiếu nại.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
