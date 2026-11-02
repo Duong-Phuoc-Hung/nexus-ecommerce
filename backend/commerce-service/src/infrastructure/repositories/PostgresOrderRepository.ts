@@ -5,6 +5,7 @@ import {
   OrderSearchPage,
 } from '../../domain/repositories/IOrderRepository';
 import { Order, OrderItem, OrderStatus, OrderTimelineItem } from '../../domain/entities/Order';
+import { loadSeedOrders } from '../seeds/orderSeedLoader';
 
 interface OrderRow {
   id: string | number;
@@ -392,212 +393,17 @@ export class PostgresOrderRepository implements IOrderRepository {
   }
 
   /**
-   * Khởi tạo 5 đơn hàng mẫu vào PostgreSQL khi khởi động hệ thống lần đầu.
+   * Khởi tạo các đơn hàng mẫu từ file JSON vào PostgreSQL khi khởi động hệ thống lần đầu.
    */
   private async seedInitialOrders(): Promise<void> {
-    const now = new Date();
-
-    const sampleOrders: Order[] = [
-      new Order({
-        id: 'NX-ORD-8021',
-        buyerId: 'usr_01hqz789abc',
-        buyerName: 'Minh Anh',
-        buyerEmail: 'minhanh@example.com',
-        sellerId: 'usr_seller_001',
-        sellerName: 'Nexus Audio',
-        items: [
-          {
-            productId: 'prod_nexus_air',
-            productName: 'Tai nghe không dây Nexus Air',
-            quantity: 1,
-            unitPrice: 1290000,
-            totalPrice: 1290000,
-          },
-        ],
-        totalAmount: 1290000,
-        status: OrderStatus.PROCESSING,
-        paymentTransactionId: 'pi_8021_demo_cod',
-        trackingCode: 'GHN8829103VN',
-        createdAt: new Date(now.getTime() - 86400000 * 5),
-        updatedAt: new Date(now.getTime() - 86400000 * 5),
-        timeline: [
-          {
-            status: 'CREATED',
-            title: 'Đơn hàng được tạo',
-            timestamp: new Date(now.getTime() - 86400000 * 5),
-          },
-          {
-            status: 'PAID',
-            title: 'Đã xác nhận thanh toán',
-            timestamp: new Date(now.getTime() - 86400000 * 5 + 120000),
-          },
-          {
-            status: 'PROCESSING',
-            title: 'Chờ người bán xử lý',
-            timestamp: new Date(now.getTime() - 86400000 * 4),
-          },
-        ],
-      }),
-
-      new Order({
-        id: 'NX-ORD-8017',
-        buyerId: 'usr_01hqz789def',
-        buyerName: 'Quốc Bảo',
-        buyerEmail: 'quocbao@example.com',
-        sellerId: 'usr_seller_002',
-        sellerName: 'Retro Lab',
-        items: [
-          {
-            productId: 'prod_retro_35',
-            productName: 'Máy ảnh film Retro 35',
-            quantity: 1,
-            unitPrice: 2450000,
-            totalPrice: 2450000,
-          },
-        ],
-        totalAmount: 2450000,
-        status: OrderStatus.SHIPPED,
-        paymentTransactionId: 'pi_8017_demo_card',
-        trackingCode: 'GHTK5908112',
-        createdAt: new Date(now.getTime() - 86400000 * 6),
-        updatedAt: new Date(now.getTime() - 86400000 * 5),
-        timeline: [
-          {
-            status: 'CREATED',
-            title: 'Đơn hàng được tạo',
-            timestamp: new Date(now.getTime() - 86400000 * 6),
-          },
-          {
-            status: 'PAID',
-            title: 'Đã xác nhận thanh toán',
-            timestamp: new Date(now.getTime() - 86400000 * 6 + 180000),
-          },
-          {
-            status: 'SHIPPED',
-            title: 'Đã bàn giao vận chuyển cho GHTK',
-            timestamp: new Date(now.getTime() - 86400000 * 5),
-          },
-        ],
-      }),
-
-      new Order({
-        id: 'NX-ORD-8009',
-        buyerId: 'usr_01hqz789ghi',
-        buyerName: 'Thu Hà',
-        buyerEmail: 'thuha@example.com',
-        sellerId: 'usr_seller_003',
-        sellerName: 'Nexus Sport',
-        items: [
-          {
-            productId: 'prod_sport_s2',
-            productName: 'Đồng hồ thể thao S2',
-            quantity: 1,
-            unitPrice: 890000,
-            totalPrice: 890000,
-          },
-        ],
-        totalAmount: 890000,
-        status: OrderStatus.DELIVERED,
-        paymentTransactionId: 'pi_8009_demo_vnpay',
-        trackingCode: 'VTP22100831',
-        createdAt: new Date(now.getTime() - 86400000 * 7),
-        updatedAt: new Date(now.getTime() - 86400000 * 6),
-        timeline: [
-          {
-            status: 'CREATED',
-            title: 'Đơn hàng được tạo',
-            timestamp: new Date(now.getTime() - 86400000 * 7),
-          },
-          {
-            status: 'PAID',
-            title: 'Đã xác nhận thanh toán',
-            timestamp: new Date(now.getTime() - 86400000 * 7 + 60000),
-          },
-          {
-            status: 'DELIVERED',
-            title: 'Giao hàng hoàn tất thành công',
-            timestamp: new Date(now.getTime() - 86400000 * 6),
-          },
-        ],
-      }),
-
-      new Order({
-        id: 'NX-ORD-7998',
-        buyerId: 'usr_01hqz789jkl',
-        buyerName: 'Gia Huy',
-        buyerEmail: 'giahuy@example.com',
-        sellerId: 'usr_seller_004',
-        sellerName: 'Home & Co.',
-        items: [
-          {
-            productId: 'prod_lamp_nordic',
-            productName: 'Đèn bàn tối giản',
-            quantity: 1,
-            unitPrice: 480000,
-            totalPrice: 480000,
-          },
-        ],
-        totalAmount: 480000,
-        status: OrderStatus.CANCELLED,
-        paymentTransactionId: 'pi_7998_cancelled',
-        trackingCode: '—',
-        createdAt: new Date(now.getTime() - 86400000 * 8),
-        updatedAt: new Date(now.getTime() - 86400000 * 7),
-        timeline: [
-          {
-            status: 'CREATED',
-            title: 'Đơn hàng được tạo',
-            timestamp: new Date(now.getTime() - 86400000 * 8),
-          },
-          {
-            status: 'CANCELLED',
-            title: 'Đã hủy đơn hàng theo yêu cầu khách hàng',
-            timestamp: new Date(now.getTime() - 86400000 * 7),
-          },
-        ],
-      }),
-
-      new Order({
-        id: 'ord_01hqz555abc',
-        buyerId: 'usr_01hqz789abc',
-        buyerName: 'Nguyen Van Buyer',
-        buyerEmail: 'buyer.test@nexus-ecommerce.com',
-        sellerId: 'usr_01hqz333sel',
-        sellerName: 'Nexus Official Store',
-        items: [
-          {
-            productId: 'prod_01hqz999xyz',
-            productName: 'Nexus Pro Audio Wireless',
-            quantity: 1,
-            unitPrice: 399.99,
-            totalPrice: 399.99,
-          },
-        ],
-        totalAmount: 399.99,
-        status: OrderStatus.PAID,
-        paymentTransactionId: 'pi_3MtwxAEhyASWD2Re1fA5sample',
-        trackingCode: 'GHN112233VN',
-        createdAt: now,
-        updatedAt: now,
-        timeline: [
-          {
-            status: 'CREATED',
-            title: 'Đơn hàng được tạo',
-            timestamp: now,
-          },
-          {
-            status: 'PAID',
-            title: 'Đã xác nhận thanh toán PayOS',
-            timestamp: now,
-          },
-        ],
-      }),
-    ];
+    const sampleOrders = loadSeedOrders();
 
     for (const order of sampleOrders) {
       await this.save(order);
     }
 
-    console.log('[PostgresOrderRepository] Đã khởi tạo 5 đơn hàng mẫu vào PostgreSQL thành công.');
+    console.log(
+      `[PostgresOrderRepository] Đã khởi tạo ${sampleOrders.length} đơn hàng mẫu từ seed JSON vào PostgreSQL thành công.`,
+    );
   }
 }

@@ -9,6 +9,7 @@ import {
   SupportCaseSearchCriteria,
   SupportCaseSearchPage,
 } from '../../domain/repositories/ISupportCaseRepository';
+import { loadSeedSupportCases } from '../seeds/fulfillmentSeedLoader';
 
 interface SupportCaseRow {
   id: string;
@@ -189,52 +190,14 @@ export class PostgresSupportCaseRepository implements ISupportCaseRepository {
   }
 
   private async seedInitialCases(): Promise<void> {
-    const now = Date.now();
-    const samples = [
-      new SupportCase({
-        id: 'CS-4021',
-        type: 'Yêu cầu hoàn tiền',
-        orderId: 'ord_01hqz555abc',
-        orderCode: 'NX-ORD-8021',
-        userId: 'usr_01hqz789abc',
-        customer: 'Minh Anh',
-        reason: 'Sản phẩm chưa đúng mô tả',
-        priority: 'Cao',
-        status: 'PENDING',
-        createdAt: new Date(now - 12 * 60 * 1000), // 12 phút trước
-      }),
-      new SupportCase({
-        id: 'CS-4018',
-        type: 'Khiếu nại giao hàng',
-        orderId: 'ord_01hqz888def',
-        orderCode: 'NX-ORD-8017',
-        userId: 'usr_buyer_02',
-        customer: 'Quốc Bảo',
-        reason: 'Đơn hàng giao chậm',
-        priority: 'Trung bình',
-        status: 'PENDING',
-        createdAt: new Date(now - 46 * 60 * 1000), // 46 phút trước
-      }),
-      new SupportCase({
-        id: 'CS-4012',
-        type: 'Tranh chấp giao dịch',
-        orderId: 'ord_01hqz999ghi',
-        orderCode: 'NX-ORD-8009',
-        userId: 'usr_buyer_03',
-        customer: 'Thu Hà',
-        reason: 'Cần xác nhận trạng thái đơn',
-        priority: 'Thấp',
-        status: 'PENDING',
-        createdAt: new Date(now - 2 * 60 * 60 * 1000), // 2 giờ trước
-      }),
-    ];
+    const samples = loadSeedSupportCases();
 
     for (const item of samples) {
       await this.save(item);
     }
 
     console.log(
-      '[PostgresSupportCaseRepository] Đã khởi tạo 3 support cases mẫu vào PostgreSQL thành công.',
+      `[PostgresSupportCaseRepository] Đã khởi tạo ${samples.length} support cases mẫu từ seed JSON vào PostgreSQL thành công.`,
     );
   }
 }

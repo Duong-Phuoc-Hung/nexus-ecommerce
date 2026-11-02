@@ -8,6 +8,7 @@ import {
 } from '../../domain/repositories/IShipmentRepository';
 import { CarrierCode, Shipment, ShipmentStatus } from '../../domain/entities/Shipment';
 import { mapShipmentStatusToVietnamese } from '../../application/dtos/ShipmentDetailDto';
+import { loadSeedShipments } from '../seeds/fulfillmentSeedLoader';
 
 interface ShipmentRow {
   id: string;
@@ -368,61 +369,14 @@ export class PostgresShipmentRepository implements IShipmentRepository {
   }
 
   private async seedInitialShipments(): Promise<void> {
-    const s1 = new Shipment({
-      id: 'shp_01hqz222trk',
-      orderId: 'NX-ORD-8021',
-      carrier: CarrierCode.GHN,
-      trackingCode: 'GHN8829103VN',
-      status: ShipmentStatus.PICKED,
-      shippingAddress: '12 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
-      recipientName: 'Minh Anh',
-      recipientPhone: '0901234567',
-      city: 'TP. Hồ Chí Minh',
-      currentLocation: 'TP. Hồ Chí Minh · Trung tâm phân loại Tân Bình',
-      estimatedDeliveryDate: new Date(Date.now() + 86400 * 2 * 1000),
-      createdAt: new Date('2026-10-18T09:12:00.000Z'),
-      updatedAt: new Date('2026-10-18T14:30:00.000Z'),
-    });
+    const samples = loadSeedShipments();
 
-    const s2 = new Shipment({
-      id: 'shp_02ghtk5908112',
-      orderId: 'NX-ORD-8017',
-      carrier: CarrierCode.GHTK,
-      trackingCode: 'GHTK5908112',
-      status: ShipmentStatus.IN_TRANSIT,
-      shippingAddress: '45 Tràng Tiền, Hoàn Kiếm, Hà Nội',
-      recipientName: 'Quốc Bảo',
-      recipientPhone: '0912345678',
-      city: 'Hà Nội',
-      currentLocation: 'Hà Nội · Bưu cục Cầu Giấy',
-      estimatedDeliveryDate: new Date(Date.now() + 86400 * 1000),
-      createdAt: new Date('2026-10-17T10:00:00.000Z'),
-      updatedAt: new Date('2026-10-18T11:05:00.000Z'),
-    });
-
-    const s3 = new Shipment({
-      id: 'shp_03vtp22100831',
-      orderId: 'NX-ORD-8009',
-      carrier: CarrierCode.VIETTEL_POST,
-      trackingCode: 'VTP22100831',
-      status: ShipmentStatus.DELIVERED,
-      shippingAddress: '78 Bạch Đằng, Hải Châu, Đà Nẵng',
-      recipientName: 'Thu Hà',
-      recipientPhone: '0923456789',
-      city: 'Đà Nẵng',
-      currentLocation: 'Đà Nẵng · Đã giao thành công cho khách hàng',
-      estimatedDeliveryDate: new Date('2026-10-17T16:00:00.000Z'),
-      actualDeliveryDate: new Date('2026-10-17T16:40:00.000Z'),
-      createdAt: new Date('2026-10-16T08:30:00.000Z'),
-      updatedAt: new Date('2026-10-17T16:40:00.000Z'),
-    });
-
-    await this.save(s1);
-    await this.save(s2);
-    await this.save(s3);
+    for (const s of samples) {
+      await this.save(s);
+    }
 
     console.log(
-      '[PostgresShipmentRepository] Đã khởi tạo 3 shipments mẫu vào PostgreSQL thành công.',
+      `[PostgresShipmentRepository] Đã khởi tạo ${samples.length} shipments mẫu từ seed JSON vào PostgreSQL thành công.`,
     );
   }
 }
