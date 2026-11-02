@@ -126,7 +126,13 @@ export class CheckoutService {
     body: unknown,
     idempotencyKey: string | undefined,
   ): Promise<{ replay: boolean; data: Record<string, unknown> }> {
-    if (!this.gateway.isConfigured()) {
+    const rawPaymentMethod =
+      isRecord(body) && typeof body.paymentMethod === 'string'
+        ? body.paymentMethod.toUpperCase()
+        : 'PAYOS';
+    const paymentMethod: 'PAYOS' | 'COD' = rawPaymentMethod === 'COD' ? 'COD' : 'PAYOS';
+
+    if (paymentMethod === 'PAYOS' && !this.gateway.isConfigured()) {
       throw new CheckoutError(
         503,
         'PAYMENT_NOT_CONFIGURED',
@@ -163,7 +169,7 @@ export class CheckoutService {
 
     const requestHash = crypto
       .createHash('sha256')
-      .update(JSON.stringify({ lines, address, quoteId: quoteId || null }))
+      .update(JSON.stringify({ lines, address, quoteId: quoteId || null, paymentMethod }))
       .digest('hex');
 
     const created = await this.repository.createOrder({
@@ -175,6 +181,7 @@ export class CheckoutService {
       subtotal: priced.subtotal,
       shippingFee: priced.shippingFee,
       totalAmount: priced.total,
+      paymentMethod,
       idempotencyKey,
       requestHash,
       orderExpiresAt: new Date(Date.now() + ORDER_TTL_MS),
@@ -189,7 +196,11 @@ export class CheckoutService {
       );
     }
 
-    const payment = await this.ensureLink(created.order, created.payment);
+    const payment =
+      paymentMethod === 'COD'
+        ? created.payment
+        : await this.ensureLink(created.order, created.payment);
+
     return { replay: created.replay, data: this.toCheckoutResponse(created.order, payment) };
   }
 
@@ -268,6 +279,7 @@ export class CheckoutService {
       orderId: order.id,
       orderCode: order.orderCode,
       orderStatus: order.status,
+      paymentMethod: payment?.paymentMethod || 'PAYOS',
       paymentStatus: payment ? payment.status : 'NOT_STARTED',
       amount: order.totalAmount,
       currency: CURRENCY,
@@ -317,13 +329,14 @@ export class CheckoutService {
       orderId: order.id,
       orderCode: order.orderCode,
       status: order.status,
+      paymentMethod: payment.paymentMethod || (payment.checkoutUrl ? 'PAYOS' : 'COD'),
       currency: CURRENCY,
       subtotal: order.totalAmount - order.shippingFee,
       shippingFee: order.shippingFee,
       totalAmount: order.totalAmount,
       expiresAt: order.expiresAt.toISOString(),
-      checkoutUrl: payment.checkoutUrl,
-      paymentLinkId: payment.paymentLinkId,
+      checkoutUrl: payment.checkoutUrl || null,
+      paymentLinkId: payment.paymentLinkId || null,
     };
   }
 
