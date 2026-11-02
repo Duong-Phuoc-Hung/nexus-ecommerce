@@ -25,13 +25,17 @@ export class OrderController {
 
       const authenticatedUser = (req as AuthenticatedRequest).user;
       const q = typeof req.query.q === 'string' ? req.query.q : undefined;
-      const buyerId = typeof req.query.buyerId === 'string' ? req.query.buyerId : undefined;
+      let buyerId = typeof req.query.buyerId === 'string' ? req.query.buyerId : undefined;
       let sellerId = typeof req.query.sellerId === 'string' ? req.query.sellerId : undefined;
 
       // BẢO MẬT PHÂN QUYỀN (CHỐNG LỖ HỔNG IDOR):
-      // Khi người gọi có vai trò là SELLER, bắt buộc trích xuất sellerId trực tiếp từ JWT Payload đã qua xác thực (req.user.sub),
-      // ngăn chặn hoàn toàn việc người bán này tự ý truyền sellerId của shop khác để xem trộm đơn hàng.
-      if (authenticatedUser?.role === 'SELLER') {
+      // - Khi người gọi có vai trò là BUYER: Bắt buộc chỉ xem đơn của chính mình (buyerId = authenticatedUser.sub).
+      // - Khi người gọi có vai trò là SELLER: Bắt buộc trích xuất sellerId trực tiếp từ JWT Payload đã qua xác thực (req.user.sub),
+      //   ngăn chặn hoàn toàn việc người bán này tự ý truyền sellerId của shop khác để xem trộm đơn hàng.
+      // - Quyền của ADMIN và SUPPORT_STAFF giữ nguyên 100% (xem toàn bộ sàn).
+      if (authenticatedUser?.role === 'BUYER') {
+        buyerId = authenticatedUser.sub;
+      } else if (authenticatedUser?.role === 'SELLER') {
         sellerId = authenticatedUser.sub;
       }
       const status = typeof req.query.status === 'string' ? req.query.status : undefined;
