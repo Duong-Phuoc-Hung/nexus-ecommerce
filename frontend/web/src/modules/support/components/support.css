@@ -768,7 +768,9 @@
 .support-step-item.is-current.step-ready-to-pick .support-step-badge {
   background: #d97706;
   color: #ffffff;
-  box-shadow: 0 0 0 4px #fef3c7, 0 2px 6px rgba(217, 119, 6, 0.25);
+  box-shadow:
+    0 0 0 4px #fef3c7,
+    0 2px 6px rgba(217, 119, 6, 0.25);
 }
 .support-step-item.is-current.step-ready-to-pick .support-step-text {
   color: #b45309;
@@ -779,7 +781,9 @@
 .support-step-item.is-current.step-picked .support-step-badge {
   background: #0d9488;
   color: #ffffff;
-  box-shadow: 0 0 0 4px #ccfbf1, 0 2px 6px rgba(13, 148, 136, 0.25);
+  box-shadow:
+    0 0 0 4px #ccfbf1,
+    0 2px 6px rgba(13, 148, 136, 0.25);
 }
 .support-step-item.is-current.step-picked .support-step-text {
   color: #0f766e;
@@ -790,7 +794,9 @@
 .support-step-item.is-current.step-in-transit .support-step-badge {
   background: #4f46e5;
   color: #ffffff;
-  box-shadow: 0 0 0 4px #e0e7ff, 0 2px 6px rgba(79, 70, 229, 0.25);
+  box-shadow:
+    0 0 0 4px #e0e7ff,
+    0 2px 6px rgba(79, 70, 229, 0.25);
 }
 .support-step-item.is-current.step-in-transit .support-step-text {
   color: #3730a3;
@@ -801,7 +807,9 @@
 .support-step-item.is-current.step-out-for-delivery .support-step-badge {
   background: #0284c7;
   color: #ffffff;
-  box-shadow: 0 0 0 4px #e0f2fe, 0 2px 6px rgba(2, 132, 199, 0.25);
+  box-shadow:
+    0 0 0 4px #e0f2fe,
+    0 2px 6px rgba(2, 132, 199, 0.25);
 }
 .support-step-item.is-current.step-out-for-delivery .support-step-text {
   color: #0369a1;
@@ -812,11 +820,92 @@
 .support-step-item.is-current.step-delivered .support-step-badge {
   background: #10b981;
   color: #ffffff;
-  box-shadow: 0 0 0 4px #d1fae5, 0 2px 6px rgba(16, 185, 129, 0.25);
+  box-shadow:
+    0 0 0 4px #d1fae5,
+    0 2px 6px rgba(16, 185, 129, 0.25);
 }
 .support-step-item.is-current.step-delivered .support-step-text {
   color: #047857;
   font-weight: 700;
+}
+
+/* 6. FAILED: Đỏ cảnh báo - Giao thất bại */
+.support-step-item.is-failed .support-step-badge,
+.support-step-item.is-current.step-failed .support-step-badge {
+  background: #dc2626;
+  color: #ffffff;
+  box-shadow:
+    0 0 0 4px #fee2e2,
+    0 2px 6px rgba(220, 38, 38, 0.25);
+}
+.support-step-item.is-failed .support-step-text,
+.support-step-item.is-current.step-failed .support-step-text {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+/* 7. RETURNED: Tím chuyển hoàn - Đã trả hàng */
+.support-step-item.is-returned .support-step-badge,
+.support-step-item.is-current.step-returned .support-step-badge {
+  background: #7c3aed;
+  color: #ffffff;
+  box-shadow:
+    0 0 0 4px #ede9fe,
+    0 2px 6px rgba(124, 58, 237, 0.25);
+}
+.support-step-item.is-returned .support-step-text,
+.support-step-item.is-current.step-returned .support-step-text {
+  color: #6d28d9;
+  font-weight: 700;
+}
+
+.support-step-line.is-failed {
+  background: #ef4444;
+}
+.support-step-line.is-returned {
+  background: #8b5cf6;
+}
+
+.support-button-danger {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border: 1px solid #fecaca;
+  border-radius: 7px;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 0.69rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.support-button-danger:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.support-button-return {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border: 1px solid #ddd6fe;
+  border-radius: 7px;
+  background: #f5f3ff;
+  color: #6d28d9;
+  font-size: 0.69rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.support-button-return:hover:not(:disabled) {
+  background: #ede9fe;
+  border-color: #c4b5fd;
+  color: #5b21b6;
 }
 
 /* Stepper Pending */
@@ -1175,4 +1264,49 @@
 .support-guard-btn.secondary:hover {
   border-color: #9ca3af;
   background: #f9fafb;
+}
+
+/* Universal clean focus override for support workspace and dialogs:
+   Eliminates global marketplace red focus-visible rings and establishes a subtle sky-blue border */
+.support-workspace input,
+.support-workspace textarea,
+.support-workspace select,
+[data-radix-portal] input,
+[data-radix-portal] textarea,
+[data-radix-portal] select,
+[role='dialog'] input,
+[role='dialog'] textarea,
+[role='dialog'] select {
+  outline: none !important;
+  outline-offset: 0 !important;
+}
+
+.support-workspace input:focus,
+.support-workspace input:focus-visible,
+.support-workspace textarea:focus,
+.support-workspace textarea:focus-visible,
+.support-workspace select:focus,
+.support-workspace select:focus-visible,
+[data-radix-portal] input:focus,
+[data-radix-portal] input:focus-visible,
+[data-radix-portal] textarea:focus,
+[data-radix-portal] textarea:focus-visible,
+[data-radix-portal] select:focus,
+[data-radix-portal] select:focus-visible,
+[role='dialog'] input:focus,
+[role='dialog'] input:focus-visible,
+[role='dialog'] textarea:focus,
+[role='dialog'] textarea:focus-visible,
+[role='dialog'] select:focus,
+[role='dialog'] select:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 0 1px #38bdf8 !important;
+}
+
+[data-radix-portal] button:focus-visible,
+[role='dialog'] button:focus-visible {
+  outline: 2px solid #38bdf8 !important;
+  outline-offset: 2px !important;
 }

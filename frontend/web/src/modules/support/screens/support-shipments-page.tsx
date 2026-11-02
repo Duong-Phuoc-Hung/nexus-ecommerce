@@ -137,30 +137,143 @@ export function SupportShipmentsPage() {
     }
   }
 
-  // Calculate current lifecycle step index (0: Tạo vận đơn, 1: Lấy hàng, 2: Đang vận chuyển, 3: Đang giao hàng, 4: Đã giao hàng)
-  const currentStepIndex = useMemo(() => {
-    if (!selected) return 0;
-    const code = selected.statusCode || selected.status;
-    switch (code) {
-      case 'DELIVERED':
-        return 4;
-      case 'OUT_FOR_DELIVERY':
-        return 3;
-      case 'IN_TRANSIT':
-        return 2;
-      case 'PICKED':
-        return 1;
-      case 'READY_TO_PICK':
-      default:
-        return 0;
+  // Handler kích hoạt luồng hoàn hàng
+  async function handleTriggerReturn(reason?: string) {
+    if (!selected) return;
+    setActing(true);
+    setNotice('');
+    try {
+      const updated = await supportShipmentsApi.updateStatus(selected.id, {
+        status: 'RETURNED',
+        location: `${selected.city || 'Kho người bán'} · Trung tâm chuyển hoàn`,
+        note: reason || 'Kích hoạt quy trình chuyển hoàn hàng về kho người bán.',
+      });
+      setSelected(updated);
+      setShipments((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+      setNotice(
+        'Đã kích hoạt quy trình chuyển hoàn và cập nhật trạng thái "Đã trả hàng" thành công.',
+      );
+    } catch (err) {
+      setNotice(userMessage(err));
+    } finally {
+      setActing(false);
     }
+  }
+
+  // Handler kích hoạt báo giao thất bại
+  async function handleTriggerFailed() {
+    if (!selected) return;
+    setActing(true);
+    setNotice('');
+    try {
+      const updated = await supportShipmentsApi.updateStatus(selected.id, {
+        status: 'FAILED',
+        location: selected.currentLocation || selected.city,
+        note: 'Giao hàng không thành công: Người nhận từ chối hoặc không liên lạc được.',
+      });
+      setSelected(updated);
+      setShipments((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+      setNotice('Đã cập nhật trạng thái vận đơn sang: Giao hàng thất bại.');
+    } catch (err) {
+      setNotice(userMessage(err));
+    } finally {
+      setActing(false);
+    }
+  }
+
+  // Xây dựng Stepper động tuân thủ State Machine một chiều theo SRS 3.6.2 & 2.8
+  const stepperSteps = useMemo(() => {
+    if (!selected) return [];
+    const code = selected.statusCode || selected.status;
+    const isFailed = code === 'FAILED';
+    const isReturned = code === 'RETURNED';
+
+    if (isFailed || isReturned) {
+      return [
+        {
+          key: 'READY_TO_PICK',
+          label: 'Tạo vận đơn',
+          state: 'done',
+          icon: '✓',
+          classKey: 'step-ready-to-pick',
+        },
+        {
+          key: 'PICKED',
+          label: 'Đã lấy hàng',
+          state: 'done',
+          icon: '✓',
+          classKey: 'step-picked',
+        },
+        {
+          key: 'IN_TRANSIT',
+          label: 'Đang vận chuyển',
+          state: 'done',
+          icon: '✓',
+          classKey: 'step-in-transit',
+        },
+        {
+          key: 'FAILED',
+          label: 'Giao thất bại',
+          state: isReturned ? 'done' : 'failed',
+          icon: isReturned ? '✓' : '✕',
+          classKey: 'step-failed',
+        },
+        {
+          key: 'RETURNED',
+          label: isReturned ? 'Đã hoàn hàng' : 'Đang hoàn hàng',
+          state: isReturned ? 'returned' : 'pending',
+          icon: isReturned ? '✓' : '↻',
+          classKey: 'step-returned',
+        },
+      ];
+    }
+
+    const stepIdx = (() => {
+      switch (code) {
+        case 'DELIVERED':
+          return 4;
+        case 'OUT_FOR_DELIVERY':
+          return 3;
+        case 'IN_TRANSIT':
+          return 2;
+        case 'PICKED':
+          return 1;
+        case 'READY_TO_PICK':
+        default:
+          return 0;
+      }
+    })();
+
+    const baseSteps = [
+      { key: 'READY_TO_PICK', label: 'Tạo vận đơn', classKey: 'step-ready-to-pick' },
+      { key: 'PICKED', label: 'Lấy hàng', classKey: 'step-picked' },
+      { key: 'IN_TRANSIT', label: 'Đang vận chuyển', classKey: 'step-in-transit' },
+      { key: 'OUT_FOR_DELIVERY', label: 'Đang giao hàng', classKey: 'step-out-for-delivery' },
+      { key: 'DELIVERED', label: 'Đã giao hàng', classKey: 'step-delivered' },
+    ];
+
+    return baseSteps.map((step, idx) => {
+      const isDone = stepIdx > idx;
+      const isCurrent = stepIdx === idx;
+      return {
+        key: step.key,
+        label: step.label,
+        state: isDone ? 'done' : isCurrent ? 'current' : 'pending',
+        icon: isDone || (isCurrent && step.key === 'DELIVERED') ? '✓' : String(idx + 1),
+        classKey: step.classKey,
+      };
+    });
   }, [selected]);
 
-  // Synchronize timeline with the 5 lifecycle steps cleanly without duplication
+  // Synchronize timeline with lifecycle steps including failure and returns
   const cleanTimeline = useMemo(() => {
     if (!selected) return [];
     const code = selected.statusCode || selected.status;
+    const isFailed = code === 'FAILED';
+    const isReturned = code === 'RETURNED';
+
     const stepIdx = (() => {
+      if (isFailed || isReturned) return 3;
       switch (code) {
         case 'DELIVERED':
           return 4;
@@ -223,31 +336,58 @@ export function SupportShipmentsPage() {
             ? `Kiện hàng đang trung chuyển qua: ${location}.`
             : 'Kiện hàng sẽ được chuyển tới trung tâm phân loại.',
       },
-      {
-        key: 'OUT_FOR_DELIVERY',
-        title: stepIdx >= 3 ? 'Đang giao hàng' : 'Giao hàng tận nơi',
-        status: stepIdx > 3 ? 'done' : stepIdx === 3 ? 'current' : 'pending',
-        statusClass: stepIdx === 3 ? 'timeline-out-for-delivery' : undefined,
-        timestamp: stepIdx >= 3 ? updatedTime : undefined,
-        location: stepIdx === 3 ? location : undefined,
-        description:
-          stepIdx >= 3
-            ? `Bưu tá đang phát hàng tới ${recipient}.`
-            : 'Bưu cục phát sẽ phân công bưu tá giao hàng tới địa chỉ người nhận.',
-      },
-      {
-        key: 'DELIVERED',
-        title: stepIdx === 4 ? 'Đã giao hàng thành công' : 'Đã giao hàng',
-        status: stepIdx === 4 ? 'current' : 'pending',
-        statusClass: stepIdx === 4 ? 'timeline-delivered' : undefined,
-        timestamp: stepIdx === 4 ? updatedTime : undefined,
-        location: stepIdx === 4 ? location : undefined,
-        description:
-          stepIdx === 4
-            ? `Đã giao kiện hàng thành công tới ${recipient}.`
-            : 'Dự kiến phát hàng trong 24-48 giờ tới.',
-      },
     ];
+
+    if (isFailed || isReturned) {
+      items.push({
+        key: 'FAILED',
+        title: 'Giao hàng thất bại',
+        status: isReturned ? 'done' : 'current',
+        statusClass: 'timeline-failed',
+        timestamp: updatedTime,
+        location,
+        description:
+          'Bưu tá phát hàng không thành công. Kiện hàng đang chờ chuyển hoàn hoặc xử lý lại.',
+      });
+      if (isReturned) {
+        items.push({
+          key: 'RETURNED',
+          title: 'Đã hoàn hàng về kho người bán',
+          status: 'current',
+          statusClass: 'timeline-delivered',
+          timestamp: updatedTime,
+          location: `${selected.city || 'Kho người bán'} · Trung tâm hoàn trả`,
+          description: 'Kiện hàng đã được chuyển hoàn về kho của người bán thành công.',
+        });
+      }
+    } else {
+      items.push(
+        {
+          key: 'OUT_FOR_DELIVERY',
+          title: stepIdx >= 3 ? 'Đang giao hàng' : 'Giao hàng tận nơi',
+          status: stepIdx > 3 ? 'done' : stepIdx === 3 ? 'current' : 'pending',
+          statusClass: stepIdx === 3 ? 'timeline-out-for-delivery' : undefined,
+          timestamp: stepIdx >= 3 ? updatedTime : undefined,
+          location: stepIdx === 3 ? location : undefined,
+          description:
+            stepIdx >= 3
+              ? `Bưu tá đang phát hàng tới ${recipient}.`
+              : 'Bưu cục phát sẽ phân công bưu tá giao hàng tới địa chỉ người nhận.',
+        },
+        {
+          key: 'DELIVERED',
+          title: stepIdx === 4 ? 'Đã giao hàng thành công' : 'Đã giao hàng',
+          status: stepIdx === 4 ? 'current' : 'pending',
+          statusClass: stepIdx === 4 ? 'timeline-delivered' : undefined,
+          timestamp: stepIdx === 4 ? updatedTime : undefined,
+          location: stepIdx === 4 ? location : undefined,
+          description:
+            stepIdx === 4
+              ? `Đã giao kiện hàng thành công tới ${recipient}.`
+              : 'Dự kiến phát hàng trong 24-48 giờ tới.',
+        },
+      );
+    }
 
     return items;
   }, [selected]);
@@ -367,24 +507,57 @@ export function SupportShipmentsPage() {
               </div>
             </div>
 
-            {/* Thanh tiến trình giao hàng 4 bước trực quan có màu sắc */}
+            {/* Thanh tiến trình giao hàng tuân thủ State Machine một chiều */}
             <div className="support-stepper-container">
-              <h3 className="support-section-subtitle">Tiến trình vận chuyển đơn hàng</h3>
+              <div
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+              >
+                <h3 className="support-section-subtitle">Tiến trình vận chuyển đơn hàng</h3>
+                {(selected.statusCode === 'FAILED' || selected.statusCode === 'RETURNED') && (
+                  <span
+                    className="support-role"
+                    style={{ background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca' }}
+                  >
+                    Luồng sự cố / Hoàn hàng
+                  </span>
+                )}
+              </div>
               <div className="support-stepper">
-                {LIFECYCLE_STEPS.map((step, idx) => {
-                  const isDone = currentStepIndex > idx;
-                  const isCurrent = currentStepIndex === idx;
+                {stepperSteps.map((step, idx) => {
+                  const isDone = step.state === 'done';
+                  const isCurrent = step.state === 'current';
+                  const isFailed = step.state === 'failed';
+                  const isReturned = step.state === 'returned';
+
                   return (
                     <div
                       key={step.key}
-                      className={`support-step-item ${isDone ? 'is-done' : isCurrent ? `is-current ${step.classKey}` : 'is-pending'}`}
+                      className={`support-step-item ${
+                        isDone
+                          ? 'is-done'
+                          : isFailed
+                            ? `is-current is-failed ${step.classKey}`
+                            : isReturned
+                              ? `is-current is-returned ${step.classKey}`
+                              : isCurrent
+                                ? `is-current ${step.classKey}`
+                                : 'is-pending'
+                      }`}
                     >
                       <div className="support-step-indicator">
-                        <div className="support-step-badge">
-                          {isDone || (isCurrent && step.key === 'DELIVERED') ? '✓' : idx + 1}
-                        </div>
-                        {idx < LIFECYCLE_STEPS.length - 1 && (
-                          <div className={`support-step-line ${isDone ? 'is-active' : ''}`} />
+                        <div className="support-step-badge">{step.icon}</div>
+                        {idx < stepperSteps.length - 1 && (
+                          <div
+                            className={`support-step-line ${
+                              isDone
+                                ? 'is-active'
+                                : isFailed
+                                  ? 'is-failed'
+                                  : isReturned
+                                    ? 'is-returned'
+                                    : ''
+                            }`}
+                          />
                         )}
                       </div>
                       <span className="support-step-text">{step.label}</span>
@@ -446,6 +619,42 @@ export function SupportShipmentsPage() {
               >
                 Điều chỉnh khu vực
               </button>
+              {selected.statusCode === 'FAILED' && (
+                <button
+                  type="button"
+                  className="support-button-return"
+                  disabled={acting}
+                  onClick={() =>
+                    handleTriggerReturn(
+                      'Kích hoạt chuyển hoàn kiện hàng về kho người bán do giao thất bại.',
+                    )
+                  }
+                >
+                  ↻ Yêu cầu hoàn hàng / Chuyển hoàn
+                </button>
+              )}
+              {selected.statusCode === 'OUT_FOR_DELIVERY' && (
+                <button
+                  type="button"
+                  className="support-button-danger"
+                  disabled={acting}
+                  onClick={handleTriggerFailed}
+                >
+                  ✕ Báo giao hàng thất bại
+                </button>
+              )}
+              {selected.statusCode === 'DELIVERED' && (
+                <button
+                  type="button"
+                  className="support-button-return"
+                  disabled={acting}
+                  onClick={() =>
+                    handleTriggerReturn('Xử lý yêu cầu trả hàng / hoàn tiền sau khi đã nhận hàng.')
+                  }
+                >
+                  ↻ Xử lý yêu cầu trả hàng
+                </button>
+              )}
             </div>
 
             {notice && (
@@ -476,7 +685,7 @@ export function SupportShipmentsPage() {
                 type="text"
                 value={overrideCity}
                 onChange={(e) => setOverrideCity(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 outline-none focus:outline-none focus:border-sky-400 focus:ring-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:border-sky-400 transition-colors"
                 placeholder="Ví dụ: TP. Hồ Chí Minh"
                 required
               />

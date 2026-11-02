@@ -1,3 +1,15 @@
+export type SkuInventoryItem = {
+  id?: string;
+  sku: string;
+  productName: string;
+  warehouseId: string;
+  warehouseName: string;
+  onHand: number;
+  reserved: number;
+  available: number;
+  unavailableQuantity?: number;
+  updatedAt?: string;
+};
 import { requestApi } from '@/lib/axios/api-client';
 import { unwrap, type RequestApi } from '@/lib/axios/http';
 import type { Shipment } from '../types/shipment.types';
@@ -59,6 +71,52 @@ export function createFulfillmentApi(request: RequestApi) {
           body: input,
         }),
       );
+    },
+    async listInventory(
+      query: { sku?: string; warehouseId?: string; page?: number; limit?: number } = {},
+      signal?: AbortSignal,
+    ): Promise<SkuInventoryItem[]> {
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(query)) {
+        if (value !== undefined && value !== '') params.set(key, String(value));
+      }
+      const raw = await request<{ success: boolean; data: SkuInventoryItem[] }>(
+        `/fulfillments/inventory${params.toString() ? `?${params.toString()}` : ''}`,
+        { signal },
+      );
+      return unwrap<SkuInventoryItem[]>(raw);
+    },
+    async adjustInventory(input: {
+      sku: string;
+      warehouseId?: string;
+      adjustmentType: 'STOCK_IN' | 'STOCK_OUT' | 'DAMAGE';
+      quantity: number;
+      reason: string;
+    }): Promise<{
+      sku: string;
+      productName: string;
+      warehouseId: string;
+      warehouseName: string;
+      onHand: number;
+      reserved: number;
+      available: number;
+    }> {
+      const raw = await request<{
+        success: boolean;
+        data: {
+          sku: string;
+          productName: string;
+          warehouseId: string;
+          warehouseName: string;
+          onHand: number;
+          reserved: number;
+          available: number;
+        };
+      }>('/fulfillments/inventory/adjust', {
+        method: 'POST',
+        body: input,
+      });
+      return unwrap(raw);
     },
   };
 }

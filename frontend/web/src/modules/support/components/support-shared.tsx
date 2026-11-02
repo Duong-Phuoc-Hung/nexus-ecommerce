@@ -127,20 +127,45 @@ export function CaseTable({ compact = false, items }: { compact?: boolean; items
               </td>
               <td>{item.type}</td>
               <td>
-                <Link className="support-inline-link" href={`/support/orders/${item.order}`}>
+                <Link
+                  className="support-inline-link"
+                  href={`/support/orders/${item.order}`}
+                  title="Xem chi tiết đơn hàng liên quan"
+                >
                   {item.order}
                 </Link>
               </td>
-              <td>{item.customer}</td>
+              <td>
+                <Link
+                  className="support-inline-link"
+                  href={`/support/users?q=${encodeURIComponent(item.customer)}`}
+                  title="Xem thông tin người dùng"
+                >
+                  {item.customer}
+                </Link>
+              </td>
               <td>{item.reason}</td>
               <td>
                 <span className={`support-priority ${slug(item.priority)}`}>{item.priority}</span>
               </td>
               <td>{item.age}</td>
               <td>
-                <Link className="support-row-link" href={`/support/orders/${item.order}`}>
-                  Mở hồ sơ
-                </Link>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <Link
+                    className="support-row-link"
+                    href={`/support/users?q=${encodeURIComponent(item.customer)}`}
+                    title="Mở hồ sơ cá nhân của người gửi yêu cầu (BUG-05 Fix)"
+                  >
+                    Xem hồ sơ
+                  </Link>
+                  <Link
+                    className="support-inline-link"
+                    style={{ fontSize: '0.68rem', color: '#687386' }}
+                    href={`/support/orders/${item.order}`}
+                  >
+                    Đơn hàng
+                  </Link>
+                </div>
               </td>
             </tr>
           ))}
