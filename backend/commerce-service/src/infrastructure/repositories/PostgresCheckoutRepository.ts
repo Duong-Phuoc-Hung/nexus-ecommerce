@@ -224,6 +224,27 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
         );
       }
 
+      // Xóa các món đã checkout khỏi giỏ hàng nếu là đơn COD (đã chốt đơn thành công)
+      if (params.paymentMethod === 'COD') {
+        const productIds = params.items.map((it) => it.productId);
+        if (productIds.length > 0) {
+          const cartRes = await client.query(
+            `SELECT id FROM commerce_carts WHERE user_id = $1 AND expires_at > NOW() ORDER BY id DESC LIMIT 1`,
+            [params.buyerId],
+          );
+          if (cartRes.rows.length > 0) {
+            const cartId = cartRes.rows[0].id;
+            await client.query(
+              `DELETE FROM commerce_cart_items WHERE cart_id = $1 AND product_id = ANY($2)`,
+              [cartId, productIds],
+            );
+            await client.query(`UPDATE commerce_carts SET updated_at = NOW() WHERE id = $1`, [
+              cartId,
+            ]);
+          }
+        }
+      }
+
       const order = await this.loadOrder(client, orderId);
       const payment = await this.loadLatestPayment(client, orderId);
       return { order: order!, payment: payment!, replay: false, requestHash: params.requestHash };
@@ -323,6 +344,36 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
          WHERE order_id = $1 AND status = 'ACTIVE'`,
         [payment.orderId],
       );
+
+      // Xóa các món đã thanh toán khỏi giỏ hàng của Buyer sau khi PayOS xác nhận PAID
+      const orderRes = await client.query(`SELECT buyer_id FROM commerce_orders WHERE id = $1`, [
+        payment.orderId,
+      ]);
+      if (orderRes.rows.length > 0) {
+        const buyerId = orderRes.rows[0].buyer_id;
+        const itemRows = await client.query(
+          `SELECT product_id FROM commerce_order_items WHERE order_id = $1`,
+          [payment.orderId],
+        );
+        const productIds = itemRows.rows.map((r) => String(r.product_id));
+        if (productIds.length > 0) {
+          const cartRes = await client.query(
+            `SELECT id FROM commerce_carts WHERE user_id = $1 AND expires_at > NOW() ORDER BY id DESC LIMIT 1`,
+            [buyerId],
+          );
+          if (cartRes.rows.length > 0) {
+            const cartId = cartRes.rows[0].id;
+            await client.query(
+              `DELETE FROM commerce_cart_items WHERE cart_id = $1 AND product_id = ANY($2)`,
+              [cartId, productIds],
+            );
+            await client.query(`UPDATE commerce_carts SET updated_at = NOW() WHERE id = $1`, [
+              cartId,
+            ]);
+          }
+        }
+      }
+
       return 'PAID';
     });
   }
