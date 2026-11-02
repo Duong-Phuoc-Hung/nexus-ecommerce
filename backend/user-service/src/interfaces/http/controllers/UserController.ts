@@ -8,6 +8,7 @@ import { RegisterUserUseCase } from '../../../application/use-cases/RegisterUser
 import { RequestPasswordResetUseCase } from '../../../application/use-cases/RequestPasswordResetUseCase';
 import { ResetPasswordUseCase } from '../../../application/use-cases/ResetPasswordUseCase';
 import { AssignUserRoleUseCase } from '../../../application/use-cases/AssignUserRoleUseCase';
+import { SendRegistrationOtpUseCase } from '../../../application/use-cases/SendRegistrationOtpUseCase';
 import { UpdateUserProfileUseCase } from '../../../application/use-cases/UpdateUserProfileUseCase';
 import { GetUserAddressesUseCase } from '../../../application/use-cases/GetUserAddressesUseCase';
 import {
@@ -28,6 +29,7 @@ import { InvalidTokenException } from '../../../domain/exceptions/InvalidTokenEx
 import { UserInactiveException } from '../../../domain/exceptions/UserInactiveException';
 import { UserNotFoundException } from '../../../domain/exceptions/UserNotFoundException';
 import { UserAlreadyExistsException } from '../../../domain/exceptions/UserAlreadyExistsException';
+import { OtpRateLimitException } from '../../../domain/exceptions/OtpRateLimitException';
 import { ROLE_PERMISSIONS } from '../../../infrastructure/security/authorization';
 
 export class UserController {
@@ -46,6 +48,7 @@ export class UserController {
     private readonly updateAddressUseCase?: UpdateAddressUseCase,
     private readonly deleteAddressUseCase?: DeleteAddressUseCase,
     private readonly setDefaultAddressUseCase?: SetDefaultAddressUseCase,
+    private readonly sendRegistrationOtpUseCase?: SendRegistrationOtpUseCase,
   ) {}
 
   public async listUsers(req: Request, res: Response): Promise<void> {
@@ -137,6 +140,38 @@ export class UserController {
         error instanceof UserAlreadyExistsException ||
         message.includes('already exists') ||
         message.includes('đã tồn tại')
+          ? 409
+          : 400;
+      res.status(status).json({ success: false, error: message });
+    }
+  }
+  /**
+   * POST /api/v1/auth/send-otp
+   * Gửi mã OTP xác thực đăng ký đến Gmail
+   */
+  public async sendRegistrationOtp(req: Request, res: Response): Promise<void> {
+    try {
+      if (!this.sendRegistrationOtpUseCase) {
+        res
+          .status(500)
+          .json({ success: false, error: 'SendRegistrationOtpUseCase chưa được cấu hình.' });
+        return;
+      }
+      const { email, fullName } = req.body || {};
+      const result = await this.sendRegistrationOtpUseCase.execute(email, fullName);
+      res.status(200).json(result);
+    } catch (error) {
+      if (error instanceof OtpRateLimitException) {
+        res.setHeader('Retry-After', String(error.retryAfterSeconds));
+        res.status(429).json({ success: false, error: error.message });
+        return;
+      }
+      const message = error instanceof Error ? error.message : 'Không thể gửi mã OTP.';
+      const status =
+        error instanceof UserAlreadyExistsException ||
+        message.includes('already exists') ||
+        message.includes('đã tồn tại') ||
+        message.includes('đã được đăng ký')
           ? 409
           : 400;
       res.status(status).json({ success: false, error: message });
