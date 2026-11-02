@@ -685,7 +685,7 @@ export function SupportShipmentsPage() {
                 type="text"
                 value={overrideCity}
                 onChange={(e) => setOverrideCity(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 outline-none focus:outline-none focus:border-sky-400 focus:ring-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:border-sky-400 transition-colors"
                 placeholder="Ví dụ: TP. Hồ Chí Minh"
                 required
               />

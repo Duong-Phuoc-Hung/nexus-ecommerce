@@ -82,26 +82,8 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
         setNotice('Yêu cầu hoàn tiền cho đơn hàng đã được xử lý thành công.');
       } else if (actionKind === 'reject_refund') {
         // Hủy yêu cầu hoàn tiền (BUG-04) - Gọi trực tiếp API Backend POST /api/v1/orders/:id/refund/cancel
-        try {
-          const updated = await ordersApi.rejectRefund(orderId, actionReason.trim());
-          setOrder(updated);
-        } catch {
-          const newLog = {
-            status: 'REFUND_CANCELLED',
-            title: 'Đã hủy / Từ chối yêu cầu hoàn tiền',
-            timestamp: new Date().toISOString(),
-            note: actionReason.trim(),
-          };
-          setOrder((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  status: 'PROCESSING',
-                  timeline: [...(prev.timeline || []), newLog],
-                }
-              : prev,
-          );
-        }
+        const updated = await ordersApi.rejectRefund(orderId, actionReason.trim());
+        setOrder(updated);
         showToast('Đã hủy yêu cầu hoàn tiền thành công');
         setNotice(
           'Đã hủy yêu cầu hoàn tiền thành công. Trạng thái đơn được chuyển lại "Đang xử lý".',
@@ -321,7 +303,7 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
                 value={actionReason}
                 onChange={(e) => setActionReason(e.target.value)}
                 rows={3}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 outline-none focus:outline-none focus:border-sky-400 focus:ring-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:border-sky-400 transition-colors resize-none"
                 placeholder="Nhập lý do chi tiết..."
                 required
               />
