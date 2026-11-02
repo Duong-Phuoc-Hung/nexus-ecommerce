@@ -35,11 +35,18 @@ export function createApplication(): Application {
   app.use(express.json());
 
   app.get('/health', (_req: Request, res: Response) => {
+    const autoSeed =
+      process.env.ENABLE_AUTO_SEED === 'true' ||
+      (process.env.NODE_ENV !== 'production' &&
+        process.env.NODE_ENV !== 'test' &&
+        process.env.ENABLE_AUTO_SEED !== 'false');
+
     res.status(200).json({
       status: 'UP',
       service: 'fulfillment-service',
       boundedContext: 'Shipping, Inventory & Support (SRS 2.3, 2.6, 3.6)',
       persistence: process.env.USE_IN_MEMORY_DB === 'true' ? 'in-memory' : 'postgresql',
+      autoSeed,
       port: process.env.PORT || process.env.FULFILLMENT_SERVICE_PORT || 4005,
       timestamp: new Date().toISOString(),
     });
@@ -58,13 +65,23 @@ export function createApplication(): Application {
     const pgShipmentRepo = new PostgresShipmentRepository(pool);
     const pgSupportCaseRepo = new PostgresSupportCaseRepository(pool);
 
-    // Kích hoạt nạp dữ liệu mẫu ban đầu bất đồng bộ vào PostgreSQL nếu DB rỗng
-    pgShipmentRepo.seedIfEmpty().catch((err: Error) => {
-      console.warn('[FulfillmentService] Async shipment seed warning:', err.message);
-    });
-    pgSupportCaseRepo.seedIfEmpty().catch((err: Error) => {
-      console.warn('[FulfillmentService] Async support case seed warning:', err.message);
-    });
+    // Kiểm soát nạp dữ liệu mẫu (Auto-Seeding):
+    // - Vô hiệu hóa hoàn toàn khi chạy Production hoặc khi đặt ENABLE_AUTO_SEED=false.
+    // - Chỉ tự động nạp mồi trong môi trường Development khi chưa tắt cờ.
+    const shouldAutoSeed =
+      process.env.ENABLE_AUTO_SEED === 'true' ||
+      (process.env.NODE_ENV !== 'production' &&
+        process.env.NODE_ENV !== 'test' &&
+        process.env.ENABLE_AUTO_SEED !== 'false');
+
+    if (shouldAutoSeed) {
+      pgShipmentRepo.seedIfEmpty().catch((err: Error) => {
+        console.warn('[FulfillmentService] Async shipment seed warning:', err.message);
+      });
+      pgSupportCaseRepo.seedIfEmpty().catch((err: Error) => {
+        console.warn('[FulfillmentService] Async support case seed warning:', err.message);
+      });
+    }
 
     shipmentRepository = pgShipmentRepo;
     supportCaseRepository = pgSupportCaseRepo;

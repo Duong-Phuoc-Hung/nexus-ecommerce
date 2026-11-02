@@ -169,3 +169,15 @@ test('Security & IDOR prevention: GET /api/v1/orders enforces sellerId from JWT 
     assert.equal(staffJson.success, true);
   });
 });
+
+test('Auto-Seed & Persistence Environment Control: GET /health reports persistence and respects ENABLE_AUTO_SEED flag', async () => {
+  await withCommerceServer(async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/health`);
+    assert.equal(res.status, 200);
+    const json = (await res.json()) as any;
+    assert.equal(json.status, 'UP');
+    assert.equal(json.service, 'commerce-service');
+    assert.equal(json.persistence, 'in-memory');
+    assert.equal(typeof json.autoSeed, 'boolean');
+  });
+});

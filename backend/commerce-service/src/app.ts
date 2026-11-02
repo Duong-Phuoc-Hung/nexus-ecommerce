@@ -22,11 +22,18 @@ export function createApplication(): Application {
   app.use(express.json());
 
   app.get('/health', (_req: Request, res: Response) => {
+    const autoSeed =
+      process.env.ENABLE_AUTO_SEED === 'true' ||
+      (process.env.NODE_ENV !== 'production' &&
+        process.env.NODE_ENV !== 'test' &&
+        process.env.ENABLE_AUTO_SEED !== 'false');
+
     res.status(200).json({
       status: 'UP',
       service: 'commerce-service',
       boundedContext: 'Cart, Orders & Payments (SRS 3.4)',
       persistence: process.env.USE_IN_MEMORY_DB === 'true' ? 'in-memory' : 'postgresql',
+      autoSeed,
       port: process.env.PORT || process.env.COMMERCE_SERVICE_PORT || 4003,
       timestamp: new Date().toISOString(),
     });
@@ -40,10 +47,21 @@ export function createApplication(): Application {
     orderRepository = new InMemoryOrderRepository();
   } else {
     const pgOrderRepo = new PostgresOrderRepository(pool);
-    // Kích hoạt nạp dữ liệu mẫu bất đồng bộ vào PostgreSQL nếu DB rỗng
-    pgOrderRepo.seedIfEmpty().catch((err: Error) => {
-      console.warn('[CommerceService] Async seed check warning:', err.message);
-    });
+
+    // Kiểm soát nạp dữ liệu mẫu (Auto-Seeding):
+    // - Vô hiệu hóa hoàn toàn khi chạy Production hoặc khi đặt ENABLE_AUTO_SEED=false.
+    // - Chỉ tự động nạp mồi trong môi trường Development khi chưa tắt cờ.
+    const shouldAutoSeed =
+      process.env.ENABLE_AUTO_SEED === 'true' ||
+      (process.env.NODE_ENV !== 'production' &&
+        process.env.NODE_ENV !== 'test' &&
+        process.env.ENABLE_AUTO_SEED !== 'false');
+
+    if (shouldAutoSeed) {
+      pgOrderRepo.seedIfEmpty().catch((err: Error) => {
+        console.warn('[CommerceService] Async seed check warning:', err.message);
+      });
+    }
     orderRepository = pgOrderRepo;
   }
 

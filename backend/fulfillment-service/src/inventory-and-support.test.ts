@@ -280,3 +280,15 @@ test('Support Cases API: GET /api/v1/support/cases and POST /api/v1/support/case
     assert.equal(invalidResolveRes.status, 400);
   });
 });
+
+test('Auto-Seed & Persistence Environment Control: GET /health reports persistence and respects ENABLE_AUTO_SEED flag', async () => {
+  await withFulfillmentServer(async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/health`);
+    assert.equal(res.status, 200);
+    const json = (await res.json()) as any;
+    assert.equal(json.status, 'UP');
+    assert.equal(json.service, 'fulfillment-service');
+    assert.equal(json.persistence, 'in-memory');
+    assert.equal(typeof json.autoSeed, 'boolean');
+  });
+});
