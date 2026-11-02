@@ -32,31 +32,17 @@ interface ShipmentRow {
 
 export class PostgresShipmentRepository implements IShipmentRepository {
   private isInitialized = false;
-  private isInitializing = false;
 
   constructor(private readonly pool: Pool) {}
 
   /**
-   * Đảm bảo schema có đủ cột và nạp dữ liệu mẫu ban đầu nếu bảng rỗng.
+   * Nạp dữ liệu mẫu ban đầu nếu bảng rỗng.
    */
-  public async ensureSchemaAndSeed(): Promise<void> {
-    if (this.isInitialized || this.isInitializing) return;
-    this.isInitializing = true;
+  public async seedIfEmpty(): Promise<void> {
+    if (this.isInitialized) return;
+    this.isInitialized = true;
 
     try {
-      await this.pool.query(`
-        ALTER TABLE fulfillment_shipments ALTER COLUMN id TYPE VARCHAR(100);
-        ALTER TABLE fulfillment_shipments ALTER COLUMN order_id TYPE VARCHAR(100);
-        ALTER TABLE fulfillment_shipments ALTER COLUMN warehouse_id DROP NOT NULL;
-        ALTER TABLE fulfillment_shipments ALTER COLUMN warehouse_id SET DEFAULT 1;
-        ALTER TABLE fulfillment_shipments ALTER COLUMN shipping_address TYPE TEXT;
-
-        ALTER TABLE fulfillment_shipments ADD COLUMN IF NOT EXISTS city VARCHAR(100);
-        ALTER TABLE fulfillment_shipments ADD COLUMN IF NOT EXISTS current_location VARCHAR(255);
-        ALTER TABLE fulfillment_shipments ADD COLUMN IF NOT EXISTS estimated_delivery_date TIMESTAMPTZ;
-        ALTER TABLE fulfillment_shipments ADD COLUMN IF NOT EXISTS actual_delivery_date TIMESTAMPTZ;
-      `);
-
       const countRes = await this.pool.query(
         'SELECT COUNT(*)::int AS count FROM fulfillment_shipments',
       );
@@ -65,20 +51,12 @@ export class PostgresShipmentRepository implements IShipmentRepository {
       if (count === 0) {
         await this.seedInitialShipments();
       }
-
-      this.isInitialized = true;
     } catch (err) {
-      console.error(
-        '[PostgresShipmentRepository] Schema init/seed warning:',
-        (err as Error).message,
-      );
-    } finally {
-      this.isInitializing = false;
+      console.warn('[PostgresShipmentRepository] Seed check warning:', (err as Error).message);
     }
   }
 
   public async findById(id: string): Promise<Shipment | null> {
-    await this.ensureSchemaAndSeed();
     const cleanId = id.trim();
 
     const { rows } = await this.pool.query<ShipmentRow>(
@@ -96,7 +74,6 @@ export class PostgresShipmentRepository implements IShipmentRepository {
   }
 
   public async findByTrackingCode(trackingCode: string): Promise<Shipment | null> {
-    await this.ensureSchemaAndSeed();
     const cleanCode = trackingCode.trim();
 
     const { rows } = await this.pool.query<ShipmentRow>(
@@ -114,7 +91,6 @@ export class PostgresShipmentRepository implements IShipmentRepository {
   }
 
   public async findByOrderId(orderId: string): Promise<Shipment | null> {
-    await this.ensureSchemaAndSeed();
     const cleanOrderId = orderId.trim();
 
     const { rows } = await this.pool.query<ShipmentRow>(
@@ -133,8 +109,6 @@ export class PostgresShipmentRepository implements IShipmentRepository {
   }
 
   public async search(criteria: ShipmentSearchCriteria): Promise<ShipmentSearchPage> {
-    await this.ensureSchemaAndSeed();
-
     const conditions: string[] = [];
     const params: any[] = [];
     let paramIdx = 1;
@@ -215,8 +189,6 @@ export class PostgresShipmentRepository implements IShipmentRepository {
   }
 
   public async save(shipment: Shipment): Promise<void> {
-    await this.ensureSchemaAndSeed();
-
     const upsertSql = `
       INSERT INTO fulfillment_shipments (
         id, order_id, warehouse_id, carrier_code, tracking_code, shipping_fee,
@@ -260,8 +232,6 @@ export class PostgresShipmentRepository implements IShipmentRepository {
   }
 
   public async update(shipment: Shipment): Promise<void> {
-    await this.ensureSchemaAndSeed();
-
     const updateSql = `
       UPDATE fulfillment_shipments SET
         carrier_code = $1,
@@ -291,8 +261,6 @@ export class PostgresShipmentRepository implements IShipmentRepository {
   }
 
   public async getDashboardSummary(): Promise<FulfillmentDashboardSummary> {
-    await this.ensureSchemaAndSeed();
-
     // 1. Thống kê vận đơn có vấn đề
     const flaggedRes = await this.pool.query(`
       SELECT COUNT(*)::int AS count 

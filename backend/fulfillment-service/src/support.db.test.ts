@@ -16,7 +16,7 @@ test('Fulfillment Persistence Integration Test Suite', async (t) => {
   });
 
   await t.test('1. PostgresSupportCaseRepository: nạp dữ liệu mẫu và tìm kiếm', async () => {
-    await supportRepo.ensureSchemaAndSeed();
+    await supportRepo.seedIfEmpty();
 
     const pageRes = await supportRepo.search({ page: 1, limit: 10 });
     assert.ok(pageRes.total >= 3, `Expected at least 3 support cases, got ${pageRes.total}`);
@@ -47,7 +47,7 @@ test('Fulfillment Persistence Integration Test Suite', async (t) => {
   });
 
   await t.test('3. PostgresShipmentRepository: nạp dữ liệu mẫu và tra cứu vận đơn', async () => {
-    await shipmentRepo.ensureSchemaAndSeed();
+    await shipmentRepo.seedIfEmpty();
 
     const s = await shipmentRepo.findById('shp_01hqz222trk');
     assert.ok(s !== null, 'Shipment shp_01hqz222trk should exist');

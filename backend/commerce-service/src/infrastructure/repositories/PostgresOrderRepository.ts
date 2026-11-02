@@ -39,49 +39,29 @@ interface OrderItemRow {
 
 export class PostgresOrderRepository implements IOrderRepository {
   private isInitialized = false;
-  private isInitializing = false;
 
   constructor(private readonly pool: Pool) {}
 
   /**
-   * Đảm bảo schema có đủ cột hỗ trợ và nạp dữ liệu mẫu ban đầu nếu bảng rỗng.
+   * Nạp dữ liệu mẫu ban đầu nếu bảng rỗng.
    */
-  public async ensureSchemaAndSeed(): Promise<void> {
-    if (this.isInitialized || this.isInitializing) return;
-    this.isInitializing = true;
+  public async seedIfEmpty(): Promise<void> {
+    if (this.isInitialized) return;
+    this.isInitialized = true;
 
     try {
-      // 1. Đồng bộ cấu trúc bảng tự động (chống lỗi khi chạy môi trường dev/staging chưa migrate)
-      await this.pool.query(`
-        ALTER TABLE commerce_orders 
-          ADD COLUMN IF NOT EXISTS buyer_name VARCHAR(100),
-          ADD COLUMN IF NOT EXISTS buyer_email VARCHAR(100),
-          ADD COLUMN IF NOT EXISTS seller_name VARCHAR(100),
-          ADD COLUMN IF NOT EXISTS tracking_code VARCHAR(100),
-          ADD COLUMN IF NOT EXISTS timeline JSONB DEFAULT '[]'::jsonb;
-        
-        ALTER TABLE commerce_order_items 
-          ALTER COLUMN product_id TYPE VARCHAR(100);
-      `);
-
-      // 2. Kiểm tra nếu chưa có đơn hàng nào thì nạp 5 đơn hàng mẫu (phục vụ Support Portal & Commerce)
       const countRes = await this.pool.query('SELECT COUNT(*)::int AS count FROM commerce_orders');
       const orderCount = countRes.rows[0]?.count ?? 0;
 
       if (orderCount === 0) {
         await this.seedInitialOrders();
       }
-
-      this.isInitialized = true;
     } catch (err) {
-      console.error('[PostgresOrderRepository] Schema init/seed warning:', (err as Error).message);
-    } finally {
-      this.isInitializing = false;
+      console.warn('[PostgresOrderRepository] Seed check warning:', (err as Error).message);
     }
   }
 
   public async findById(id: string): Promise<Order | null> {
-    await this.ensureSchemaAndSeed();
     const cleanId = id.trim();
 
     const { rows } = await this.pool.query<OrderRow>(
@@ -107,7 +87,6 @@ export class PostgresOrderRepository implements IOrderRepository {
   }
 
   public async findByBuyerId(buyerId: string): Promise<Order[]> {
-    await this.ensureSchemaAndSeed();
     const cleanBuyerId = buyerId.trim();
 
     const { rows } = await this.pool.query<OrderRow>(
@@ -143,8 +122,6 @@ export class PostgresOrderRepository implements IOrderRepository {
   }
 
   public async search(criteria: OrderSearchCriteria): Promise<OrderSearchPage> {
-    await this.ensureSchemaAndSeed();
-
     const conditions: string[] = [];
     const params: any[] = [];
     let paramIdx = 1;
@@ -262,7 +239,6 @@ export class PostgresOrderRepository implements IOrderRepository {
   }
 
   public async save(order: Order): Promise<void> {
-    await this.ensureSchemaAndSeed();
     const client = await this.pool.connect();
 
     try {
@@ -341,8 +317,6 @@ export class PostgresOrderRepository implements IOrderRepository {
   }
 
   public async update(order: Order): Promise<void> {
-    await this.ensureSchemaAndSeed();
-
     await this.pool.query(
       `UPDATE commerce_orders 
        SET status = $1, tracking_code = $2, timeline = $3, updated_at = $4

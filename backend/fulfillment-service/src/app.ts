@@ -59,11 +59,11 @@ export function createApplication(): Application {
     const pgSupportCaseRepo = new PostgresSupportCaseRepository(pool);
 
     // Kích hoạt nạp dữ liệu mẫu ban đầu bất đồng bộ vào PostgreSQL nếu DB rỗng
-    pgShipmentRepo.ensureSchemaAndSeed().catch((err: Error) => {
-      console.warn('[FulfillmentService] Async shipment seed failed:', err.message);
+    pgShipmentRepo.seedIfEmpty().catch((err: Error) => {
+      console.warn('[FulfillmentService] Async shipment seed warning:', err.message);
     });
-    pgSupportCaseRepo.ensureSchemaAndSeed().catch((err: Error) => {
-      console.warn('[FulfillmentService] Async support case seed failed:', err.message);
+    pgSupportCaseRepo.seedIfEmpty().catch((err: Error) => {
+      console.warn('[FulfillmentService] Async support case seed warning:', err.message);
     });
 
     shipmentRepository = pgShipmentRepo;

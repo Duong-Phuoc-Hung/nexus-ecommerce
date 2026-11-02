@@ -41,8 +41,8 @@ export function createApplication(): Application {
   } else {
     const pgOrderRepo = new PostgresOrderRepository(pool);
     // Kích hoạt nạp dữ liệu mẫu bất đồng bộ vào PostgreSQL nếu DB rỗng
-    pgOrderRepo.ensureSchemaAndSeed().catch((err: Error) => {
-      console.warn('[CommerceService] Async schema & seed failed:', err.message);
+    pgOrderRepo.seedIfEmpty().catch((err: Error) => {
+      console.warn('[CommerceService] Async seed check warning:', err.message);
     });
     orderRepository = pgOrderRepo;
   }

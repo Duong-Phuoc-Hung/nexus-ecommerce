@@ -12,8 +12,8 @@ test('PostgresOrderRepository Integration Test Suite', async (t) => {
     await pool.end();
   });
 
-  await t.test('1. ensureSchemaAndSeed nạp thành công dữ liệu mẫu', async () => {
-    await repo.ensureSchemaAndSeed();
+  await t.test('1. seedIfEmpty nạp thành công dữ liệu mẫu', async () => {
+    await repo.seedIfEmpty();
     const searchRes = await repo.search({ page: 1, limit: 10 });
     assert.ok(searchRes.total >= 5, `Expected at least 5 orders, got ${searchRes.total}`);
     assert.ok(searchRes.orders.length >= 5);

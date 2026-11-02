@@ -28,41 +28,17 @@ interface SupportCaseRow {
 
 export class PostgresSupportCaseRepository implements ISupportCaseRepository {
   private isInitialized = false;
-  private isInitializing = false;
 
   constructor(private readonly pool: Pool) {}
 
   /**
-   * Đảm bảo bảng fulfillment_support_cases tồn tại và nạp 3 ticket mẫu nếu bảng rỗng.
+   * Nạp 3 ticket mẫu nếu bảng rỗng.
    */
-  public async ensureSchemaAndSeed(): Promise<void> {
-    if (this.isInitialized || this.isInitializing) return;
-    this.isInitializing = true;
+  public async seedIfEmpty(): Promise<void> {
+    if (this.isInitialized) return;
+    this.isInitialized = true;
 
     try {
-      await this.pool.query(`
-        CREATE TABLE IF NOT EXISTS fulfillment_support_cases (
-          id VARCHAR(50) PRIMARY KEY,
-          type VARCHAR(100) NOT NULL,
-          order_id VARCHAR(100) NOT NULL,
-          order_code VARCHAR(100) NOT NULL,
-          user_id VARCHAR(50) NOT NULL,
-          customer VARCHAR(100) NOT NULL,
-          reason TEXT NOT NULL,
-          priority VARCHAR(30) NOT NULL DEFAULT 'Trung bình',
-          status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
-          resolution_note TEXT,
-          resolved_by VARCHAR(50),
-          created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE INDEX IF NOT EXISTS idx_support_case_user ON fulfillment_support_cases (user_id);
-        CREATE INDEX IF NOT EXISTS idx_support_case_order ON fulfillment_support_cases (order_id);
-        CREATE INDEX IF NOT EXISTS idx_support_case_status ON fulfillment_support_cases (status);
-        CREATE INDEX IF NOT EXISTS idx_support_case_priority ON fulfillment_support_cases (priority);
-        CREATE INDEX IF NOT EXISTS idx_support_case_created_at ON fulfillment_support_cases (created_at DESC);
-      `);
-
       const countRes = await this.pool.query(
         'SELECT COUNT(*)::int AS count FROM fulfillment_support_cases',
       );
@@ -71,20 +47,12 @@ export class PostgresSupportCaseRepository implements ISupportCaseRepository {
       if (count === 0) {
         await this.seedInitialCases();
       }
-
-      this.isInitialized = true;
     } catch (err) {
-      console.error(
-        '[PostgresSupportCaseRepository] Schema init/seed warning:',
-        (err as Error).message,
-      );
-    } finally {
-      this.isInitializing = false;
+      console.warn('[PostgresSupportCaseRepository] Seed check warning:', (err as Error).message);
     }
   }
 
   public async findById(id: string): Promise<SupportCase | null> {
-    await this.ensureSchemaAndSeed();
     const cleanId = id.trim();
 
     const { rows } = await this.pool.query<SupportCaseRow>(
@@ -102,8 +70,6 @@ export class PostgresSupportCaseRepository implements ISupportCaseRepository {
   }
 
   public async search(criteria: SupportCaseSearchCriteria): Promise<SupportCaseSearchPage> {
-    await this.ensureSchemaAndSeed();
-
     const conditions: string[] = [];
     const params: any[] = [];
     let paramIdx = 1;
@@ -168,8 +134,6 @@ export class PostgresSupportCaseRepository implements ISupportCaseRepository {
   }
 
   public async save(caseItem: SupportCase): Promise<void> {
-    await this.ensureSchemaAndSeed();
-
     const upsertSql = `
       INSERT INTO fulfillment_support_cases (
         id, type, order_id, order_code, user_id, customer, reason,
