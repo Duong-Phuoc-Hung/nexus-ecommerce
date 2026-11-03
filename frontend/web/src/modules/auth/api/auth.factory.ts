@@ -8,10 +8,22 @@ export function createAuthApi(request: RequestApi) {
     getCurrentUser(): SessionUser | null {
       return getSessionUser();
     },
-    async register(input: { email: string; fullName: string; password: string }) {
+    async register(input: {
+      email: string;
+      fullName: string;
+      password: string;
+      phone?: string;
+      otp?: string;
+    }) {
       return unwrap<RegisterResult>(
         await request('/auth/register', { method: 'POST', body: input }),
       );
+    },
+    async sendRegistrationOtp(email: string, fullName?: string) {
+      return request<{ success: boolean; message: string; devOtp?: string }>('/auth/send-otp', {
+        method: 'POST',
+        body: { email, fullName },
+      });
     },
     async login(email: string, password: string, remember = false) {
       const result = unwrap<{ token: string; user: SessionUser }>(

@@ -127,7 +127,7 @@ export function loadSeedShipments(): Shipment[] {
         orderId: raw.orderId,
         carrier: (raw.carrier as CarrierCode) || CarrierCode.GHN,
         trackingCode: raw.trackingCode,
-        status: (raw.status as ShipmentStatus) || ShipmentStatus.PENDING,
+        status: (raw.status as ShipmentStatus) || ShipmentStatus.READY_TO_PICK,
         shippingAddress: raw.shippingAddress,
         recipientName: raw.recipientName,
         recipientPhone: raw.recipientPhone,
@@ -164,7 +164,7 @@ interface RawInventory {
   id: string;
   sku: string;
   productName: string;
-  warehouseId?: number;
+  warehouseId?: string;
   warehouseName?: string;
   onHand: number;
   reserved: number;
@@ -183,7 +183,8 @@ export function loadSeedInventory(): SkuInventory[] {
           id: raw.id,
           sku: raw.sku,
           productName: raw.productName,
-          warehouseId: raw.warehouseId || defaultWarehouseId,
+          warehouseId:
+            (raw.warehouseId ? String(raw.warehouseId) : undefined) || defaultWarehouseId,
           warehouseName: raw.warehouseName || defaultWarehouseName,
           onHand: raw.onHand,
           reserved: raw.reserved,

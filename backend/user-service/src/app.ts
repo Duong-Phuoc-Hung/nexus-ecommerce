@@ -10,6 +10,7 @@ import { RegisterUserUseCase } from './application/use-cases/RegisterUserUseCase
 import { RequestPasswordResetUseCase } from './application/use-cases/RequestPasswordResetUseCase';
 import { ResetPasswordUseCase } from './application/use-cases/ResetPasswordUseCase';
 import { AssignUserRoleUseCase } from './application/use-cases/AssignUserRoleUseCase';
+import { SendRegistrationOtpUseCase } from './application/use-cases/SendRegistrationOtpUseCase';
 import { SearchUsersUseCase } from './application/use-cases/SearchUsersUseCase';
 import { UpdateUserProfileUseCase } from './application/use-cases/UpdateUserProfileUseCase';
 import { UpdateUserStatusUseCase } from './application/use-cases/UpdateUserStatusUseCase';
@@ -27,6 +28,8 @@ import { passwordResetTokenStore } from './infrastructure/security/PasswordReset
 import { BcryptPasswordHasher } from './infrastructure/security/BcryptPasswordHasher';
 import { JwtTokenService } from './infrastructure/security/JwtTokenService';
 import { RabbitMqEventPublisher } from './infrastructure/messaging/RabbitMqEventPublisher';
+import { defaultOtpStore } from './infrastructure/cache/RedisOtpStore';
+import { defaultNotificationClient } from './infrastructure/notifications/NotificationClient';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerDocument } from './interfaces/http/swagger';
 
@@ -54,6 +57,8 @@ export function createApplication(): Application {
   const passwordHasher = new BcryptPasswordHasher();
   const tokenService = new JwtTokenService();
   const eventPublisher = new RabbitMqEventPublisher();
+  const otpStore = defaultOtpStore;
+  const notificationClient = defaultNotificationClient;
 
   const getUserProfileUseCase = new GetUserProfileUseCase(userRepository);
   const loginUseCase = new LoginUseCase(
@@ -63,7 +68,18 @@ export function createApplication(): Application {
     eventPublisher,
   );
   const logoutUseCase = new LogoutUseCase();
-  const registerUseCase = new RegisterUseCase(userRepository, passwordHasher, eventPublisher);
+  const registerUseCase = new RegisterUseCase(
+    userRepository,
+    passwordHasher,
+    eventPublisher,
+    otpStore,
+    notificationClient,
+  );
+  const sendRegistrationOtpUseCase = new SendRegistrationOtpUseCase(
+    userRepository,
+    otpStore,
+    notificationClient,
+  );
   const requestPasswordResetUseCase = new RequestPasswordResetUseCase(
     userRepository,
     passwordResetTokenStore,
@@ -107,10 +123,13 @@ export function createApplication(): Application {
     deleteAddressUseCase,
     setDefaultAddressUseCase,
     updateUserStatusUseCase,
+    sendRegistrationOtpUseCase,
   );
 
   app.use('/api/v1/auth', createAuthRoutes(userController));
   app.use('/api/v1/users', createUserRoutes(userController));
+
+  // Swagger UI độc lập cho User Service
   app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
   return app;
