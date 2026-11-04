@@ -20,6 +20,18 @@ export function createShipmentRoutes(controller: ShipmentController): Router {
     controller.getById(req, res),
   );
 
+  // 3.1. Chi tiết vận đơn theo mã đơn hàng phục vụ In phiếu gửi hàng & Tracking
+  router.get(
+    '/shipments/by-order/:orderId',
+    requireAuth,
+    requireShipmentPermission('VIEW'),
+    (req, res) => controller.getByOrderId(req, res),
+  );
+
+  // 3.2. Webhook nhận biến động trạng thái từ 3PL (GHN/GHTK) hoặc Simulator
+  router.post('/carriers/webhook', (req, res) => controller.carrierWebhook(req, res));
+  router.post('/carrier/webhook', (req, res) => controller.carrierWebhook(req, res));
+
   // 4. Cập nhật trạng thái vận đơn
   router.patch(
     '/shipments/:id/status',

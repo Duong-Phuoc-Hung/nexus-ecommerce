@@ -643,7 +643,8 @@ export const userSpec = {
       patch: {
         tags: ['Users & Profile'],
         summary: 'Khóa hoặc mở khóa tài khoản người dùng',
-        description: `Cần quyền USER.UPDATE (SUPPORT_STAFF, ADMIN). Khóa tài khoản khi có dấu hiệu gian lận hoặc vi phạm quy định sàn (SRS 2.3, 2.7, 3.1.2). Khi bị SUSPENDED, toàn bộ phiên đăng nhập của người dùng sẽ bị thu hồi ngay lập tức.`,
+
+        description: `${PRIVATE} Cần quyền USER.UPDATE (SUPPORT_STAFF, ADMIN). Khóa tài khoản khi có dấu hiệu gian lận hoặc vi phạm quy định sàn (SRS 2.3, 2.7, 3.1.2). Khi bị SUSPENDED, toàn bộ phiên đăng nhập của người dùng sẽ bị thu hồi ngay lập tức.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1898,7 +1899,8 @@ export const commerceSpec = {
       post: {
         tags: ['Support Staff / Thao tác xử lý'],
         summary: 'Từ chối / Hủy yêu cầu hoàn tiền cho đơn hàng',
-        description: `Yêu cầu quyền ORDER.REFUND (SUPPORT_STAFF hoặc ADMIN). Chuyển trạng thái khiếu nại về REFUND_REJECTED / REFUND_CANCELLED, khôi phục đơn hàng về trạng thái trước đó và ghi nhận lý do vào audit timeline (SRS 2.3, 3.1.2).`,
+
+        description: `${PRIVATE} Yêu cầu quyền ORDER.REFUND (SUPPORT_STAFF hoặc ADMIN). Chuyển trạng thái khiếu nại về REFUND_REJECTED / REFUND_CANCELLED, khôi phục đơn hàng về trạng thái trước đó và ghi nhận lý do vào audit timeline (SRS 2.3, 3.1.2).`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1942,6 +1944,101 @@ export const commerceSpec = {
             'Không tìm thấy đơn hàng',
             'Order with ID "NX-ORD-8021" was not found.',
           ),
+        },
+      },
+    },
+
+    '/api/v1/orders/{id}/dispatch': {
+      post: {
+        tags: ['Orders & Checkout'],
+        summary: 'Xác nhận đóng gói & bàn giao vận chuyển (Seller)',
+        description:
+          'Người bán xác nhận đã đóng gói hàng vật lý và bàn giao cho ĐVVC 3PL (GHN/GHTK). Đơn hàng chuyển sang trạng thái SHIPPED và sinh mã vận đơn trackingCode. Bảo mật chống IDOR.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã đơn hàng (Order ID hoặc Order Code)',
+            schema: { type: 'string', example: 'NX-ORD-8021' },
+          },
+        ],
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  carrierCode: { type: 'string', example: 'GHN' },
+                  trackingCode: { type: 'string', example: 'GHN88392101VN' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Bàn giao vận chuyển thành công', {
+            success: true,
+            message: 'Đơn hàng đã được bàn giao vận chuyển thành công.',
+            data: { id: 'NX-ORD-8021', status: 'SHIPPED', trackingCode: 'GHN88392101VN' },
+          }),
+          400: errorResponse('Lỗi bàn giao', 'Không thể bàn giao đơn hàng ở trạng thái này.'),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy đơn hàng', 'Order was not found.'),
+        },
+      },
+    },
+    '/api/v1/orders/{id}/refund/request': {
+      post: {
+        tags: ['Orders & Checkout'],
+        summary: 'Người mua gửi yêu cầu Trả hàng / Hoàn tiền (Buyer)',
+        description:
+          'Khách hàng gửi yêu cầu hoàn tiền khi sản phẩm lỗi, vỡ hỏng hoặc sai mô tả. Chuyển trạng thái đơn sang REFUND_REQUESTED để bộ phận Support xử lý khiếu nại.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã đơn hàng',
+            schema: { type: 'string', example: 'NX-ORD-8021' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['reason'],
+                properties: {
+                  reason: {
+                    type: 'string',
+                    example: 'Sản phẩm lỗi vỡ màn hình trong quá trình vận chuyển.',
+                  },
+                  evidenceUrls: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    example: ['https://example.com/photos/damage1.jpg'],
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Gửi yêu cầu hoàn tiền thành công', {
+            success: true,
+            message: 'Yêu cầu trả hàng / hoàn tiền đã được gửi tới bộ phận hỗ trợ.',
+            data: { id: 'NX-ORD-8021', status: 'REFUND_REQUESTED' },
+          }),
+          400: errorResponse('Thiếu thông tin', 'Lý do yêu cầu hoàn tiền là bắt buộc.'),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy đơn hàng', 'Order was not found.'),
         },
       },
     },
@@ -2206,7 +2303,8 @@ export const fulfillmentSpec = {
       get: {
         tags: ['Inventory / Quản lý tồn kho'],
         summary: 'Tra cứu tồn kho chuẩn SKU',
-        description: `Dành cho SELLER và SUPPORT_STAFF (SRS 2.6, 3.6.1). Trả về dữ liệu chuẩn: { sku, productName, warehouseId, warehouseName, onHand, reserved, available } với available = onHand - reserved.`,
+
+        description: `${PRIVATE} Dành cho SELLER và SUPPORT_STAFF (SRS 2.6, 3.6.1). Trả về dữ liệu chuẩn: { sku, productName, warehouseId, warehouseName, onHand, reserved, available } với available = onHand - reserved.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -2263,7 +2361,8 @@ export const fulfillmentSpec = {
       post: {
         tags: ['Inventory / Quản lý tồn kho'],
         summary: 'Điều chỉnh số lượng tồn kho (STOCK_IN, STOCK_OUT, DAMAGE)',
-        description: `Dành cho SELLER và ADMIN (SRS 3.6.1). Phục vụ kiểm kê thực tế tại kho, cập nhật số lượng onHand, lưu sổ cái bất biến (Inventory Ledger) và chống bán âm (ALLOW_OVERSELL: false).`,
+
+        description: `${PRIVATE} Dành cho SELLER và ADMIN (SRS 3.6.1). Phục vụ kiểm kê thực tế tại kho, cập nhật số lượng onHand, lưu sổ cái bất biến (Inventory Ledger) và chống bán âm (ALLOW_OVERSELL: false).`,
         security: [{ BearerAuth: [] }],
         requestBody: {
           required: true,
@@ -2318,7 +2417,8 @@ export const fulfillmentSpec = {
       get: {
         tags: ['Support Staff / Quản lý khiếu nại'],
         summary: 'Tra cứu danh sách Ticket / Khiếu nại thực tế',
-        description: `Dành cho SUPPORT_STAFF và ADMIN (SRS 2.3, 3.1.2). Thay thế toàn bộ dữ liệu mock tạm thời ở giao diện Support Dashboard.`,
+
+        description: `${PRIVATE} Dành cho SUPPORT_STAFF và ADMIN (SRS 2.3, 3.1.2). Thay thế toàn bộ dữ liệu mock tạm thời ở giao diện Support Dashboard.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -2383,7 +2483,8 @@ export const fulfillmentSpec = {
       post: {
         tags: ['Support Staff / Quản lý khiếu nại'],
         summary: 'Cập nhật kết quả giải quyết khiếu nại (Resolve Case)',
-        description: `Dành cho SUPPORT_STAFF và ADMIN (SRS 2.3, 3.1.2). Duyệt (APPROVED), từ chối (REJECTED) hoặc chuyển cấp (ESCALATED) tranh chấp giữa Buyer và Seller.`,
+
+        description: `${PRIVATE} Dành cho SUPPORT_STAFF và ADMIN (SRS 2.3, 3.1.2). Duyệt (APPROVED), từ chối (REJECTED) hoặc chuyển cấp (ESCALATED) tranh chấp giữa Buyer và Seller.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -2433,6 +2534,104 @@ export const fulfillmentSpec = {
           401: unauthorized,
           403: forbidden,
           404: errorResponse('Không tìm thấy khiếu nại', 'Hồ sơ khiếu nại không tồn tại.'),
+        },
+      },
+    },
+
+    '/api/v1/fulfillment/carriers/webhook': {
+      post: {
+        tags: ['Fulfillment & Shipping'],
+        summary: 'Webhook cập nhật lộ trình vận chuyển 3PL (GHN/GHTK hoặc Simulator)',
+        description:
+          'Webhook được gọi tự động từ đối tác giao vận 3PL (hoặc bộ giả lập Simulator trên giao diện Support) khi tài xế shipper lấy hàng (PICKED_UP), đang giao (IN_TRANSIT) hoặc giao thành công (DELIVERED).',
+        parameters: [],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['status'],
+                properties: {
+                  carrier: { type: 'string', example: 'GHN' },
+                  tracking_code: { type: 'string', example: 'GHN8829103VN' },
+                  status: {
+                    type: 'string',
+                    enum: ['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'FAILED'],
+                    example: 'DELIVERED',
+                  },
+                  current_location: {
+                    type: 'string',
+                    example: 'Bưu cục Quận Bình Thạnh, TP.HCM',
+                  },
+                  shipper_name: { type: 'string', example: 'Nguyễn Văn Tài' },
+                  shipper_phone: { type: 'string', example: '0987654321' },
+                  timestamp: { type: 'string', example: '2026-11-04T15:30:00Z' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Cập nhật trạng thái vận đơn thành công', {
+            success: true,
+            message: 'Webhook cập nhật trạng thái vận đơn thành công.',
+            data: {
+              trackingCode: 'GHN8829103VN',
+              status: 'DELIVERED',
+              currentLocation: 'Bưu cục Quận Bình Thạnh, TP.HCM',
+            },
+          }),
+          400: errorResponse('Dữ liệu không hợp lệ', 'Trường status là bắt buộc.'),
+          404: errorResponse('Không tìm thấy vận đơn', 'Không tìm thấy vận đơn tương ứng.'),
+        },
+      },
+    },
+    '/api/v1/fulfillment/shipments/by-order/{orderId}': {
+      get: {
+        tags: ['Fulfillment & Shipping'],
+        summary: 'Lấy chi tiết vận đơn theo mã đơn hàng (In phiếu gửi hàng & Tracking)',
+        description:
+          'Cung cấp đầy đủ thông tin: Mã vận đơn, mã Barcode/QR, địa chỉ kho gửi (sender), địa chỉ nhận (receiver), cước phí và timeline phục vụ in Tem Vận Đơn Điện Tử.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'orderId',
+            in: 'path',
+            required: true,
+            description: 'Mã đơn hàng (Order ID hoặc Order Code)',
+            schema: { type: 'string', example: 'NX-ORD-8021' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Lấy chi tiết vận đơn in nhãn thành công', {
+            success: true,
+            data: {
+              shipmentId: 'shp_01hqz222trk',
+              orderId: 'NX-ORD-8021',
+              trackingCode: 'GHN8829103VN',
+              carrierCode: 'GHN',
+              carrierName: 'Giao Hàng Nhanh',
+              status: 'Đang giao',
+              statusCode: 'IN_TRANSIT',
+              shippingFee: 32000,
+              sender: {
+                name: 'Gian hàng Đối tác Nexus',
+                phone: '19006868',
+                warehouseName: 'Kho Tổng Nexus (WH_001)',
+                address: 'Tầng 5, Tòa nhà Nexus, Quận 1, TP.HCM',
+              },
+              receiver: {
+                name: 'Minh Anh',
+                phone: '0901234567',
+                address: '12 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
+              },
+              timeline: [],
+            },
+          }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy vận đơn', 'Vận đơn cho đơn hàng này không tồn tại.'),
         },
       },
     },

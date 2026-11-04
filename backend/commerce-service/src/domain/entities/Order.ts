@@ -4,7 +4,9 @@ export enum OrderStatus {
   PROCESSING = 'PROCESSING',
   SHIPPED = 'SHIPPED',
   DELIVERED = 'DELIVERED',
+  COMPLETED = 'COMPLETED',
   CANCELLED = 'CANCELLED',
+  REFUND_REQUESTED = 'REFUND_REQUESTED',
   REFUNDED = 'REFUNDED',
 }
 
@@ -192,6 +194,42 @@ export class Order {
       title: 'Đã kích hoạt hoàn tiền cho khách hàng',
       timestamp: new Date(),
       note: reason || 'Xử lý hoàn tiền theo khiếu nại',
+    });
+    this._updatedAt = new Date();
+  }
+
+  public dispatch(trackingCode?: string, carrierCode: string = 'GHN'): void {
+    if (this._status === OrderStatus.CANCELLED || this._status === OrderStatus.REFUNDED) {
+      throw new Error(`Không thể bàn giao vận chuyển cho đơn hàng ở trạng thái "${this._status}".`);
+    }
+    this._status = OrderStatus.SHIPPED;
+    if (trackingCode) {
+      this._trackingCode = trackingCode;
+    } else if (!this._trackingCode) {
+      this._trackingCode = `${carrierCode}${Date.now().toString().slice(-8)}VN`;
+    }
+    this._timeline.push({
+      status: 'SHIPPED',
+      title: `Đã đóng gói và bàn giao cho đơn vị vận chuyển ${carrierCode}`,
+      timestamp: new Date(),
+      note: `Mã vận đơn: ${this._trackingCode}`,
+    });
+    this._updatedAt = new Date();
+  }
+
+  public requestRefund(reason: string, _evidenceUrls?: string[]): void {
+    if (!reason || !reason.trim()) {
+      throw new Error('Lý do yêu cầu trả hàng / hoàn tiền là bắt buộc.');
+    }
+    if (this._status === OrderStatus.CANCELLED || this._status === OrderStatus.REFUNDED) {
+      throw new Error(`Không thể yêu cầu hoàn tiền cho đơn hàng ở trạng thái "${this._status}".`);
+    }
+    this._status = OrderStatus.REFUND_REQUESTED;
+    this._timeline.push({
+      status: 'REFUND_REQUESTED',
+      title: 'Khách hàng gửi yêu cầu trả hàng / hoàn tiền',
+      timestamp: new Date(),
+      note: reason.trim(),
     });
     this._updatedAt = new Date();
   }
