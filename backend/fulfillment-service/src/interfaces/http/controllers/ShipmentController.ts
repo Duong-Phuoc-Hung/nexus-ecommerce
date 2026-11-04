@@ -4,6 +4,7 @@ import { SearchShipmentsUseCase } from '../../../application/use-cases/SearchShi
 import { UpdateShipmentStatusUseCase } from '../../../application/use-cases/UpdateShipmentStatusUseCase';
 import { ManualOverrideShipmentUseCase } from '../../../application/use-cases/ManualOverrideShipmentUseCase';
 import { GetFulfillmentSummaryUseCase } from '../../../application/use-cases/GetFulfillmentSummaryUseCase';
+import { ProcessCarrierWebhookUseCase } from '../../../application/use-cases/ProcessCarrierWebhookUseCase';
 import { ShipmentNotFoundException } from '../../../domain/exceptions/ShipmentNotFoundException';
 import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
 
@@ -14,6 +15,7 @@ export class ShipmentController {
     private readonly updateShipmentStatusUseCase: UpdateShipmentStatusUseCase,
     private readonly manualOverrideShipmentUseCase: ManualOverrideShipmentUseCase,
     private readonly getFulfillmentSummaryUseCase: GetFulfillmentSummaryUseCase,
+    private readonly processCarrierWebhookUseCase?: ProcessCarrierWebhookUseCase,
   ) {}
 
   public async listShipments(req: Request, res: Response): Promise<void> {
@@ -151,6 +153,100 @@ export class ShipmentController {
       res.status(400).json({
         success: false,
         error: error.message || 'Không thể điều chỉnh thủ công vận đơn.',
+      });
+    }
+  }
+
+  public async getByOrderId(req: Request, res: Response): Promise<void> {
+    try {
+      const orderId = (req.params.orderId || '').trim();
+      const shipment = await this.getShipmentDetailUseCase.execute(orderId);
+      res.status(200).json({
+        success: true,
+        data: shipment,
+      });
+    } catch (error) {
+      if (error instanceof ShipmentNotFoundException) {
+        res.status(404).json({
+          success: false,
+          error: `Không tìm thấy vận đơn cho đơn hàng "${req.params.orderId}".`,
+        });
+        return;
+      }
+      res.status(500).json({
+        success: false,
+        error: 'Lỗi máy chủ khi tra cứu vận đơn theo mã đơn hàng.',
+      });
+    }
+  }
+
+  /**
+   * POST /api/v1/fulfillment/carriers/webhook
+   * Webhook tiếp nhận biến động lộ trình từ 3PL (GHN/GHTK) hoặc Simulator
+   */
+  public async carrierWebhook(req: Request, res: Response): Promise<void> {
+    try {
+      if (!this.processCarrierWebhookUseCase) {
+        res.status(500).json({
+          success: false,
+          error: 'ProcessCarrierWebhookUseCase not configured.',
+        });
+        return;
+      }
+
+      const carrier = (req.body.carrier || 'GHN') as string;
+      const trackingCode = (req.body.tracking_code || req.body.trackingCode || '') as string;
+      const orderId = (req.body.order_id || req.body.orderId || '') as string;
+      const status = (req.body.status || '') as string;
+      const currentLocation = (req.body.current_location ||
+        req.body.location ||
+        req.body.currentLocation) as string | undefined;
+      const shipperName = (req.body.shipper_name || req.body.shipperName) as string | undefined;
+      const shipperPhone = (req.body.shipper_phone || req.body.shipperPhone) as string | undefined;
+      const timestamp = (req.body.timestamp || new Date().toISOString()) as string;
+
+      if (!status) {
+        res.status(400).json({
+          success: false,
+          error: 'Trường "status" là bắt buộc trong payload Webhook 3PL.',
+        });
+        return;
+      }
+
+      const updated = await this.processCarrierWebhookUseCase.execute({
+        carrier,
+        trackingCode,
+        orderId,
+        status,
+        currentLocation,
+        shipperName,
+        shipperPhone,
+        timestamp,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Webhook cập nhật trạng thái vận đơn thành công.',
+        data: {
+          shipmentId: updated.id,
+          orderId: updated.orderId,
+          trackingCode: updated.trackingCode,
+          status: updated.status,
+          currentLocation: updated.currentLocation,
+          updatedAt: updated.updatedAt.toISOString(),
+        },
+      });
+    } catch (error: any) {
+      if (error instanceof ShipmentNotFoundException) {
+        res.status(404).json({
+          success: false,
+          error: `Không tìm thấy vận đơn tương ứng với mã vận chuyển/đơn hàng.`,
+        });
+        return;
+      }
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Không thể xử lý Webhook vận chuyển.',
       });
     }
   }

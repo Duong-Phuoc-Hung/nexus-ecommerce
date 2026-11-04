@@ -10,6 +10,8 @@ import { SearchOrdersUseCase } from './application/use-cases/SearchOrdersUseCase
 import { CancelOrderUseCase } from './application/use-cases/CancelOrderUseCase';
 import { RefundOrderUseCase } from './application/use-cases/RefundOrderUseCase';
 import { RejectRefundUseCase } from './application/use-cases/RejectRefundUseCase';
+import { DispatchOrderUseCase } from './application/use-cases/DispatchOrderUseCase';
+import { RequestRefundUseCase } from './application/use-cases/RequestRefundUseCase';
 
 import { OrderController } from './interfaces/http/controllers/OrderController';
 import { createOrderRoutes } from './interfaces/http/routes/OrderRoutes';
@@ -70,6 +72,8 @@ export function createApplication(): Application {
   const cancelOrderUseCase = new CancelOrderUseCase(orderRepository, getOrderDetailUseCase);
   const refundOrderUseCase = new RefundOrderUseCase(orderRepository, getOrderDetailUseCase);
   const rejectRefundUseCase = new RejectRefundUseCase(orderRepository, getOrderDetailUseCase);
+  const dispatchOrderUseCase = new DispatchOrderUseCase(orderRepository, getOrderDetailUseCase);
+  const requestRefundUseCase = new RequestRefundUseCase(orderRepository, getOrderDetailUseCase);
 
   const orderController = new OrderController(
     getOrderDetailUseCase,
@@ -77,6 +81,8 @@ export function createApplication(): Application {
     cancelOrderUseCase,
     refundOrderUseCase,
     rejectRefundUseCase,
+    dispatchOrderUseCase,
+    requestRefundUseCase,
   );
 
   app.use('/api/v1', createCheckoutRoutes(pool));

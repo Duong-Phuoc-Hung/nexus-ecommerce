@@ -292,3 +292,44 @@ test('Auto-Seed & Persistence Environment Control: GET /health reports persisten
     assert.equal(typeof json.autoSeed, 'boolean');
   });
 });
+
+test('Shipment By Order & Carrier Webhook API: GET /by-order/:orderId and POST /carriers/webhook', async () => {
+  await withFulfillmentServer(async (baseUrl) => {
+    const staffToken = createTestToken({
+      sub: 'usr_staff_01',
+      email: 'staff@nexus.vn',
+      role: 'SUPPORT_STAFF',
+    });
+
+    // 1. GET /api/v1/fulfillment/shipments/by-order/:orderId
+    const getRes = await fetch(`${baseUrl}/api/v1/fulfillment/shipments/by-order/NX-ORD-8017`, {
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+    assert.equal(getRes.status, 200);
+    const getJson = (await getRes.json()) as any;
+    assert.equal(getJson.success, true);
+    assert.equal(getJson.data.orderId, 'NX-ORD-8017');
+    assert.equal(getJson.data.trackingCode, 'GHTK5908112');
+    assert.ok(getJson.data.sender);
+    assert.ok(getJson.data.receiver);
+
+    // 2. POST /api/v1/fulfillment/carriers/webhook: Cập nhật lộ trình DELIVERED
+    const webhookRes = await fetch(`${baseUrl}/api/v1/fulfillment/carriers/webhook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        carrier: 'GHTK',
+        tracking_code: 'GHTK5908112',
+        status: 'DELIVERED',
+        current_location: 'Hà Nội · Đã phát thành công cho người nhận',
+        shipper_name: 'Trần Văn Vận',
+        shipper_phone: '0988776655',
+      }),
+    });
+    assert.equal(webhookRes.status, 200);
+    const webhookJson = (await webhookRes.json()) as any;
+    assert.equal(webhookJson.success, true);
+    assert.equal(webhookJson.data.status, 'DELIVERED');
+    assert.equal(webhookJson.data.currentLocation, 'Hà Nội · Đã phát thành công cho người nhận');
+  });
+});

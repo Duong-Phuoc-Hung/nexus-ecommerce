@@ -181,3 +181,79 @@ test('Auto-Seed & Persistence Environment Control: GET /health reports persisten
     assert.equal(typeof json.autoSeed, 'boolean');
   });
 });
+
+test('Seller Dispatch API: POST /api/v1/orders/:id/dispatch enforces RBAC, anti-IDOR, and updates trackingCode & status', async () => {
+  await withCommerceServer(async (baseUrl) => {
+    const matchingSellerToken = createTestToken({
+      sub: 'usr_01hqz333sel',
+      email: 'seller@nexus.vn',
+      role: 'SELLER',
+    });
+    const impostorSellerToken = createTestToken({
+      sub: 'usr_impostor_999',
+      email: 'impostor@nexus.vn',
+      role: 'SELLER',
+    });
+
+    // 1. Impostor seller trying to dispatch another shop's order -> 400 with IDOR error
+    const idorRes = await fetch(`${baseUrl}/api/v1/orders/ord_01hqz555abc/dispatch`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${impostorSellerToken}`,
+      },
+      body: JSON.stringify({ carrierCode: 'GHN' }),
+    });
+    assert.equal(idorRes.status, 400);
+    const idorJson = (await idorRes.json()) as any;
+    assert.equal(idorJson.success, false);
+    assert.match(idorJson.error, /không có quyền bàn giao/);
+
+    // 2. Matching seller dispatches successfully -> 200 and SHIPPED
+    const successRes = await fetch(`${baseUrl}/api/v1/orders/ord_01hqz555abc/dispatch`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${matchingSellerToken}`,
+      },
+      body: JSON.stringify({ carrierCode: 'GHN', trackingCode: 'GHN88392101VN' }),
+    });
+    const successJson = (await successRes.json()) as any;
+    if (successRes.status !== 200) {
+      console.log('Dispatch error response:', successJson);
+    }
+    assert.equal(successRes.status, 200);
+    assert.equal(successJson.success, true);
+    assert.equal(successJson.data.status, 'SHIPPED');
+    assert.equal(successJson.data.trackingCode, 'GHN88392101VN');
+  });
+});
+
+test('Buyer Request Refund API: POST /api/v1/orders/:id/refund/request allows buyer to submit refund dispute', async () => {
+  await withCommerceServer(async (baseUrl) => {
+    const buyerToken = createTestToken({
+      sub: 'usr_01hqz789abc',
+      email: 'buyer@nexus.vn',
+      role: 'BUYER',
+    });
+
+    const res = await fetch(`${baseUrl}/api/v1/orders/ord_01hqz555abc/refund/request`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${buyerToken}`,
+      },
+      body: JSON.stringify({
+        reason: 'Sản phẩm lỗi vỡ màn hình trong quá trình vận chuyển',
+        evidenceUrls: ['https://example.com/photo1.jpg'],
+      }),
+    });
+    const json = (await res.json()) as any;
+    if (res.status !== 200) {
+      console.log('RequestRefund error response:', json);
+    }
+    assert.equal(res.status, 200);
+    assert.equal(json.success, true);
+    assert.equal(json.data.status, 'REFUND_REQUESTED');
+  });
+});
