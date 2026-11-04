@@ -10,6 +10,7 @@ type LiveAuction = {
   id: string;
   productId: string;
   title: string;
+  imageUrl?: string;
   startingPrice: number;
   currentHighestBid?: number;
   increment: number;
@@ -33,12 +34,50 @@ export function SellerAuctionsPage() {
       .then((raw) => {
         const list = unwrap<LiveAuction[]>(raw);
         if (!controller.signal.aborted) {
-          setItems(Array.isArray(list) ? list : []);
+          const apiItems = Array.isArray(list) ? list : [];
+          const localItems: LiveAuction[] =
+            typeof window !== 'undefined'
+              ? JSON.parse(localStorage.getItem('nexus_seller_auctions') || '[]')
+              : [];
+
+          const combined = [
+            ...localItems,
+            ...apiItems.filter((a) => !localItems.some((l) => l.id === a.id)),
+          ];
+
+          const withImages = combined.map((item) => {
+            const cachedImg =
+              typeof window !== 'undefined'
+                ? localStorage.getItem(`nexus_auction_img_${item.id}`) ||
+                  localStorage.getItem(`nexus_prod_img_${item.productId}`)
+                : null;
+            return {
+              ...item,
+              imageUrl: item.imageUrl || cachedImg || undefined,
+            };
+          });
+
+          setItems(withImages);
         }
       })
       .catch(() => {
         if (!controller.signal.aborted) {
-          setItems([]);
+          const localItems: LiveAuction[] =
+            typeof window !== 'undefined'
+              ? JSON.parse(localStorage.getItem('nexus_seller_auctions') || '[]')
+              : [];
+          const withImages = localItems.map((item) => {
+            const cachedImg =
+              typeof window !== 'undefined'
+                ? localStorage.getItem(`nexus_auction_img_${item.id}`) ||
+                  localStorage.getItem(`nexus_prod_img_${item.productId}`)
+                : null;
+            return {
+              ...item,
+              imageUrl: item.imageUrl || cachedImg || undefined,
+            };
+          });
+          setItems(withImages);
         }
       })
       .finally(() => {
@@ -101,6 +140,7 @@ export function SellerAuctionsPage() {
               <thead>
                 <tr>
                   <th>Mã phiên</th>
+                  <th style={{ width: 64 }}>Hình ảnh</th>
                   <th>Sản phẩm</th>
                   <th>Bắt đầu</th>
                   <th>Kết thúc</th>
@@ -114,6 +154,22 @@ export function SellerAuctionsPage() {
                   <tr key={item.id}>
                     <td>
                       <strong>{item.id}</strong>
+                    </td>
+                    <td>
+                      {item.imageUrl ? (
+                        <img
+                          src={item.imageUrl}
+                          alt={item.title || item.productId}
+                          className="seller-thumb"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="seller-thumb-placeholder" title="Chưa có ảnh phiên">
+                          🏷️
+                        </div>
+                      )}
                     </td>
                     <td>{item.title || item.productId}</td>
                     <td>
