@@ -159,7 +159,7 @@ export class ShipmentController {
 
   public async getByOrderId(req: Request, res: Response): Promise<void> {
     try {
-      const orderId = (req.params.orderId || '').trim();
+      const orderId = String(req.params.orderId || '').trim();
       const shipment = await this.getShipmentDetailUseCase.execute(orderId);
       res.status(200).json({
         success: true,
