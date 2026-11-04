@@ -109,6 +109,45 @@ export function createShipmentsApi(request: RequestApi, prefix = '/support') {
         }),
       );
     },
+    async getByOrderId(orderId: string, signal?: AbortSignal): Promise<Shipment> {
+      return unwrap<Shipment>(
+        await request(`/fulfillments/shipments/by-order/${encodeURIComponent(orderId)}`, {
+          signal,
+        }),
+      );
+    },
+    async triggerCarrierWebhook(input: {
+      carrier?: string;
+      tracking_code?: string;
+      trackingCode?: string;
+      order_id?: string;
+      orderId?: string;
+      status: string;
+      current_location?: string;
+      currentLocation?: string;
+      shipper_name?: string;
+      shipperName?: string;
+      shipper_phone?: string;
+      shipperPhone?: string;
+      timestamp?: string;
+    }) {
+      const raw = await request<{
+        success: boolean;
+        message?: string;
+        data: {
+          shipmentId: string;
+          orderId: string;
+          trackingCode: string;
+          status: string;
+          currentLocation?: string;
+          updatedAt: string;
+        };
+      }>('/fulfillments/carriers/webhook', {
+        method: 'POST',
+        body: input,
+      });
+      return unwrap(raw);
+    },
   };
 }
 
