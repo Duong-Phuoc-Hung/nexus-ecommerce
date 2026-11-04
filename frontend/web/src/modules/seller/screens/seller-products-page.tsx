@@ -81,16 +81,25 @@ export function SellerProductsPage() {
       .then((data: BackendProduct[]) => {
         if (!controller.signal.aborted) {
           const mapped: DisplayProduct[] = data.map((item) => {
-            const localImg =
-              typeof window !== 'undefined'
-                ? localStorage.getItem(`nexus_prod_img_${item.id}`) ||
-                  localStorage.getItem(`nexus_prod_img_${item.slug}`) ||
-                  localStorage.getItem(`nexus_prod_img_${item.title}`)
-                : null;
+            const isRemoved =
+              typeof window !== 'undefined' &&
+              localStorage.getItem(`nexus_prod_img_removed_${item.id}`) === 'true';
+
+            let resolvedImg: string | undefined = undefined;
+            if (!isRemoved) {
+              const localImg =
+                typeof window !== 'undefined'
+                  ? localStorage.getItem(`nexus_prod_img_${item.id}`) ||
+                    localStorage.getItem(`nexus_prod_img_${item.slug}`) ||
+                    localStorage.getItem(`nexus_prod_img_${item.title}`)
+                  : null;
+              resolvedImg = localImg || item.primaryImage || item.images?.[0] || undefined;
+            }
+
             return {
               id: String(item.id),
               name: item.title,
-              imageUrl: item.primaryImage || item.images?.[0] || localImg || undefined,
+              imageUrl: resolvedImg,
               sku: item.slug ? item.slug.slice(0, 16).toUpperCase() : `SKU-${item.id}`,
               category: item.categoryId || 'Chung',
               price: Number(item.price) || 0,

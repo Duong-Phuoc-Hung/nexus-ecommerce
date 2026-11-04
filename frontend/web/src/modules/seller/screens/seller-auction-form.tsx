@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useState } from 'react';
 import { sellerProductsApi, type BackendProduct } from '../api/seller-products.api';
-import { PageHeading, DemoNote } from '../components/seller-shared';
+import { PageHeading, DemoNote, optimizeImageFile } from '../components/seller-shared';
 import {
   Select,
   SelectContent,
@@ -61,20 +61,20 @@ export function SellerAuctionForm() {
     }
   }
 
-  function handleImageFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleImageFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
       setError('Vui lòng chọn tệp định dạng hình ảnh (JPG, PNG, WebP,...).');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setImageUrl(reader.result);
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const optimized = await optimizeImageFile(file);
+      setImageUrl(optimized);
+      setError('');
+    } catch {
+      setError('Không thể xử lý tệp ảnh. Vui lòng thử lại với tệp ảnh khác.');
+    }
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -258,6 +258,21 @@ export function SellerAuctionForm() {
                       ✕ Xóa ảnh
                     </button>
                   )}
+                </div>
+                <div style={{ marginTop: '8px' }}>
+                  <input
+                    type="url"
+                    value={imageUrl.startsWith('data:') ? '' : imageUrl}
+                    onChange={(e) => setImageUrl(e.target.value.trim())}
+                    placeholder="Hoặc dán URL ảnh trực tiếp (https://...)"
+                    style={{
+                      width: '100%',
+                      padding: '6px 10px',
+                      fontSize: '0.72rem',
+                      borderRadius: '6px',
+                      border: '1px solid #d1d5db',
+                    }}
+                  />
                 </div>
                 <small
                   style={{
