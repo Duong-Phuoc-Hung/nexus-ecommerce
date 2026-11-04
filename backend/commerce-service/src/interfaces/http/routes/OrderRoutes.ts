@@ -17,6 +17,21 @@ export function createOrderRoutes(controller: OrderController): Router {
   router.post('/:id/refund', requireAuth, requireOrderPermission('REFUND'), (req, res) =>
     controller.refund(req, res),
   );
+  router.post('/:id/refund/cancel', requireAuth, requireOrderPermission('REFUND'), (req, res) =>
+    controller.rejectRefund(req, res),
+  );
+  router.post('/:id/reject-refund', requireAuth, requireOrderPermission('REFUND'), (req, res) =>
+    controller.rejectRefund(req, res),
+  );
+  router.post('/:id/dispatch', requireAuth, requireOrderPermission('DISPATCH'), (req, res) =>
+    controller.dispatch(req, res),
+  );
+  router.post(
+    '/:id/refund/request',
+    requireAuth,
+    requireOrderPermission('REQUEST_REFUND'),
+    (req, res) => controller.requestRefund(req, res),
+  );
   router.post('/checkout', (req, res) => controller.checkout(req, res));
 
   return router;

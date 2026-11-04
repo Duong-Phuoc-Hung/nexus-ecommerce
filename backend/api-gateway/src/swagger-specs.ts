@@ -640,6 +640,69 @@ export const userSpec = {
         },
       },
     },
+    '/api/v1/users/{id}/status': {
+      patch: {
+        tags: ['Users & Profile'],
+        summary: 'Khóa hoặc mở khóa tài khoản người dùng',
+        description: `${PRIVATE} Cần quyền USER.UPDATE (SUPPORT_STAFF, ADMIN). Khóa tài khoản khi có dấu hiệu gian lận hoặc vi phạm quy định sàn (SRS 2.3, 2.7, 3.1.2). Khi bị SUSPENDED, toàn bộ phiên đăng nhập của người dùng sẽ bị thu hồi ngay lập tức.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'ID của người dùng cần khóa / mở khóa',
+            schema: { type: 'string', example: 'usr_01hqz789abc' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['status', 'reason'],
+                properties: {
+                  status: {
+                    type: 'string',
+                    enum: ['ACTIVE', 'SUSPENDED'],
+                    example: 'SUSPENDED',
+                  },
+                  reason: {
+                    type: 'string',
+                    example: 'Tài khoản có dấu hiệu thông đồng buff giá đấu giá ảo.',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Cập nhật trạng thái thành công', {
+            success: true,
+            message: "Đã cập nhật trạng thái người dùng thành 'SUSPENDED'.",
+            data: {
+              id: 'usr_01hqz789abc',
+              email: 'buyer.test@nexus-ecommerce.com',
+              fullName: 'Nguyen Van Buyer',
+              status: 'SUSPENDED',
+              reason: 'Tài khoản có dấu hiệu thông đồng buff giá đấu giá ảo.',
+              updatedAt: '2026-11-01T02:00:00.000Z',
+            },
+          }),
+          400: errorResponse(
+            'Dữ liệu không hợp lệ',
+            'Trạng thái không hợp lệ hoặc thiếu lý do (reason).',
+          ),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse(
+            'Không tìm thấy người dùng',
+            'Không tìm thấy người dùng với mã ID đã chỉ định.',
+          ),
+        },
+      },
+    },
   },
 };
 
@@ -1422,6 +1485,151 @@ export const commerceSpec = {
         },
       },
     },
+    '/api/v1/orders/{id}/refund/cancel': {
+      post: {
+        tags: ['Support Staff / Thao tác xử lý'],
+        summary: 'Từ chối / Hủy yêu cầu hoàn tiền cho đơn hàng',
+        description: `${PRIVATE} Yêu cầu quyền ORDER.REFUND (SUPPORT_STAFF hoặc ADMIN). Chuyển trạng thái khiếu nại về REFUND_REJECTED / REFUND_CANCELLED, khôi phục đơn hàng về trạng thái trước đó và ghi nhận lý do vào audit timeline (SRS 2.3, 3.1.2).`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã đơn hàng cần từ chối hoàn tiền',
+            schema: { type: 'string', example: 'NX-ORD-8021' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['reason'],
+                properties: {
+                  reason: {
+                    type: 'string',
+                    example: 'Sản phẩm đã qua sử dụng quá 30 ngày, từ chối hoàn tiền.',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Từ chối hoàn tiền thành công', {
+            success: true,
+            message: 'Đã từ chối yêu cầu hoàn tiền thành công.',
+            data: { id: 'NX-ORD-8021', status: 'DELIVERED' },
+          }),
+          400: errorResponse(
+            'Thiếu thông tin',
+            'Lý do từ chối hoàn tiền (reason) không được để trống.',
+          ),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse(
+            'Không tìm thấy đơn hàng',
+            'Order with ID "NX-ORD-8021" was not found.',
+          ),
+        },
+      },
+    },
+    '/api/v1/orders/{id}/dispatch': {
+      post: {
+        tags: ['Orders & Checkout'],
+        summary: 'Xác nhận đóng gói & bàn giao vận chuyển (Seller)',
+        description:
+          'Người bán xác nhận đã đóng gói hàng vật lý và bàn giao cho ĐVVC 3PL (GHN/GHTK). Đơn hàng chuyển sang trạng thái SHIPPED và sinh mã vận đơn trackingCode. Bảo mật chống IDOR.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã đơn hàng (Order ID hoặc Order Code)',
+            schema: { type: 'string', example: 'NX-ORD-8021' },
+          },
+        ],
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  carrierCode: { type: 'string', example: 'GHN' },
+                  trackingCode: { type: 'string', example: 'GHN88392101VN' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Bàn giao vận chuyển thành công', {
+            success: true,
+            message: 'Đơn hàng đã được bàn giao vận chuyển thành công.',
+            data: { id: 'NX-ORD-8021', status: 'SHIPPED', trackingCode: 'GHN88392101VN' },
+          }),
+          400: errorResponse('Lỗi bàn giao', 'Không thể bàn giao đơn hàng ở trạng thái này.'),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy đơn hàng', 'Order was not found.'),
+        },
+      },
+    },
+    '/api/v1/orders/{id}/refund/request': {
+      post: {
+        tags: ['Orders & Checkout'],
+        summary: 'Người mua gửi yêu cầu Trả hàng / Hoàn tiền (Buyer)',
+        description:
+          'Khách hàng gửi yêu cầu hoàn tiền khi sản phẩm lỗi, vỡ hỏng hoặc sai mô tả. Chuyển trạng thái đơn sang REFUND_REQUESTED để bộ phận Support xử lý khiếu nại.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã đơn hàng',
+            schema: { type: 'string', example: 'NX-ORD-8021' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['reason'],
+                properties: {
+                  reason: {
+                    type: 'string',
+                    example: 'Sản phẩm lỗi vỡ màn hình trong quá trình vận chuyển.',
+                  },
+                  evidenceUrls: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    example: ['https://example.com/photos/damage1.jpg'],
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Gửi yêu cầu hoàn tiền thành công', {
+            success: true,
+            message: 'Yêu cầu trả hàng / hoàn tiền đã được gửi tới bộ phận hỗ trợ.',
+            data: { id: 'NX-ORD-8021', status: 'REFUND_REQUESTED' },
+          }),
+          400: errorResponse('Thiếu thông tin', 'Lý do yêu cầu hoàn tiền là bắt buộc.'),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy đơn hàng', 'Order was not found.'),
+        },
+      },
+    },
   },
 };
 
@@ -1676,6 +1884,337 @@ export const fulfillmentSpec = {
           }),
           401: unauthorized,
           403: forbidden,
+        },
+      },
+    },
+    '/api/v1/fulfillments/inventory': {
+      get: {
+        tags: ['Inventory / Quản lý tồn kho'],
+        summary: 'Tra cứu tồn kho chuẩn SKU',
+        description: `${PRIVATE} Dành cho SELLER và SUPPORT_STAFF (SRS 2.6, 3.6.1). Trả về dữ liệu chuẩn: { sku, productName, warehouseId, warehouseName, onHand, reserved, available } với available = onHand - reserved.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'sku',
+            in: 'query',
+            required: false,
+            description: 'Lọc theo mã SKU hoặc tên sản phẩm',
+            schema: { type: 'string', example: 'NX-IPHONE-15-BLUE' },
+          },
+          {
+            name: 'warehouseId',
+            in: 'query',
+            required: false,
+            description: 'Lọc theo kho (Mặc định: WH_001)',
+            schema: { type: 'string', example: 'WH_001' },
+          },
+          {
+            name: 'page',
+            in: 'query',
+            required: false,
+            schema: { type: 'integer', default: 1 },
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            required: false,
+            schema: { type: 'integer', default: 10 },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Danh sách tồn kho theo SKU', {
+            success: true,
+            data: [
+              {
+                sku: 'NX-IPHONE-15-BLUE',
+                productName: 'iPhone 15 128GB Xanh Lam',
+                warehouseId: 'WH_001',
+                warehouseName: 'Kho Tổng TP.HCM',
+                onHand: 150,
+                reserved: 25,
+                available: 125,
+                unavailableQuantity: 2,
+                updatedAt: '2026-11-01T02:00:00.000Z',
+              },
+            ],
+            pagination: { total: 1, page: 1, limit: 10, totalPages: 1 },
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+    },
+    '/api/v1/fulfillments/inventory/adjust': {
+      post: {
+        tags: ['Inventory / Quản lý tồn kho'],
+        summary: 'Điều chỉnh số lượng tồn kho (STOCK_IN, STOCK_OUT, DAMAGE)',
+        description: `${PRIVATE} Dành cho SELLER và ADMIN (SRS 3.6.1). Phục vụ kiểm kê thực tế tại kho, cập nhật số lượng onHand, lưu sổ cái bất biến (Inventory Ledger) và chống bán âm (ALLOW_OVERSELL: false).`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['sku', 'adjustmentType', 'quantity', 'reason'],
+                properties: {
+                  sku: { type: 'string', example: 'NX-IPHONE-15-BLUE' },
+                  warehouseId: { type: 'string', example: 'WH_001' },
+                  adjustmentType: {
+                    type: 'string',
+                    enum: ['STOCK_IN', 'STOCK_OUT', 'DAMAGE'],
+                    example: 'STOCK_IN',
+                  },
+                  quantity: { type: 'integer', example: 20 },
+                  reason: {
+                    type: 'string',
+                    example: 'Kiểm kê nhập bổ sung lô hàng mới vào kho',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Điều chỉnh tồn kho thành công', {
+            success: true,
+            message: "Đã điều chỉnh tồn kho thành công theo hình thức 'STOCK_IN'.",
+            data: {
+              sku: 'NX-IPHONE-15-BLUE',
+              productName: 'iPhone 15 128GB Xanh Lam',
+              warehouseId: 'WH_001',
+              warehouseName: 'Kho Tổng TP.HCM',
+              onHand: 170,
+              reserved: 25,
+              available: 145,
+            },
+            ledgerId: 'led_1793472000000_abcd',
+          }),
+          400: errorResponse(
+            'Dữ liệu không hợp lệ hoặc vượt hạn mức tồn kho',
+            'Không thể xuất kho vượt quá số lượng khả dụng (ALLOW_OVERSELL: false).',
+          ),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+    },
+    '/api/v1/support/cases': {
+      get: {
+        tags: ['Support Staff / Quản lý khiếu nại'],
+        summary: 'Tra cứu danh sách Ticket / Khiếu nại thực tế',
+        description: `${PRIVATE} Dành cho SUPPORT_STAFF và ADMIN (SRS 2.3, 3.1.2). Thay thế toàn bộ dữ liệu mock tạm thời ở giao diện Support Dashboard.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'userId',
+            in: 'query',
+            required: false,
+            description: 'Lọc theo mã người dùng',
+            schema: { type: 'string', example: 'usr_01hqz789abc' },
+          },
+          {
+            name: 'status',
+            in: 'query',
+            required: false,
+            description:
+              'Lọc theo trạng thái (PENDING, IN_PROGRESS, RESOLVED, REJECTED, ESCALATED)',
+            schema: { type: 'string', example: 'PENDING' },
+          },
+          {
+            name: 'priority',
+            in: 'query',
+            required: false,
+            description: 'Lọc theo độ ưu tiên (Cao, Trung bình, Thấp)',
+            schema: { type: 'string', example: 'Cao' },
+          },
+          {
+            name: 'page',
+            in: 'query',
+            required: false,
+            schema: { type: 'integer', default: 1 },
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            required: false,
+            schema: { type: 'integer', default: 10 },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Danh sách hồ sơ khiếu nại', {
+            success: true,
+            data: [
+              {
+                id: 'CS-4021',
+                type: 'Yêu cầu hoàn tiền',
+                order: 'NX-ORD-8021',
+                orderId: 'ord_01hqz555abc',
+                customer: 'Minh Anh',
+                reason: 'Sản phẩm chưa đúng mô tả',
+                priority: 'Cao',
+                age: '12 phút',
+                status: 'PENDING',
+              },
+            ],
+            pagination: { total: 1, page: 1, limit: 10, totalPages: 1 },
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+    },
+    '/api/v1/support/cases/{id}/resolve': {
+      post: {
+        tags: ['Support Staff / Quản lý khiếu nại'],
+        summary: 'Cập nhật kết quả giải quyết khiếu nại (Resolve Case)',
+        description: `${PRIVATE} Dành cho SUPPORT_STAFF và ADMIN (SRS 2.3, 3.1.2). Duyệt (APPROVED), từ chối (REJECTED) hoặc chuyển cấp (ESCALATED) tranh chấp giữa Buyer và Seller.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã hồ sơ khiếu nại',
+            schema: { type: 'string', example: 'CS-4021' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['resolution', 'note'],
+                properties: {
+                  resolution: {
+                    type: 'string',
+                    enum: ['APPROVED', 'REJECTED', 'ESCALATED'],
+                    example: 'APPROVED',
+                  },
+                  note: {
+                    type: 'string',
+                    example: 'Đã xác thực sản phẩm không đúng mô tả, đồng ý xử lý khiếu nại.',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Cập nhật kết quả khiếu nại thành công', {
+            success: true,
+            message: "Đã cập nhật trạng thái khiếu nại thành 'RESOLVED'.",
+            data: {
+              id: 'CS-4021',
+              status: 'RESOLVED',
+              resolutionNote: 'Đã xác thực sản phẩm không đúng mô tả, đồng ý xử lý khiếu nại.',
+            },
+          }),
+          400: errorResponse(
+            'Dữ liệu không hợp lệ',
+            'Kết quả xử lý không hợp lệ hoặc thiếu ghi chú note.',
+          ),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy khiếu nại', 'Hồ sơ khiếu nại không tồn tại.'),
+        },
+      },
+    },
+    '/api/v1/fulfillment/carriers/webhook': {
+      post: {
+        tags: ['Fulfillment & Shipping'],
+        summary: 'Webhook cập nhật lộ trình vận chuyển 3PL (GHN/GHTK hoặc Simulator)',
+        description:
+          'Webhook được gọi tự động từ đối tác giao vận 3PL (hoặc bộ giả lập Simulator trên giao diện Support) khi tài xế shipper lấy hàng (PICKED_UP), đang giao (IN_TRANSIT) hoặc giao thành công (DELIVERED).',
+        parameters: [],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['status'],
+                properties: {
+                  carrier: { type: 'string', example: 'GHN' },
+                  tracking_code: { type: 'string', example: 'GHN8829103VN' },
+                  status: {
+                    type: 'string',
+                    enum: ['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'FAILED'],
+                    example: 'DELIVERED',
+                  },
+                  current_location: {
+                    type: 'string',
+                    example: 'Bưu cục Quận Bình Thạnh, TP.HCM',
+                  },
+                  shipper_name: { type: 'string', example: 'Nguyễn Văn Tài' },
+                  shipper_phone: { type: 'string', example: '0987654321' },
+                  timestamp: { type: 'string', example: '2026-11-04T15:30:00Z' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Cập nhật trạng thái vận đơn thành công', {
+            success: true,
+            message: 'Webhook cập nhật trạng thái vận đơn thành công.',
+            data: {
+              trackingCode: 'GHN8829103VN',
+              status: 'DELIVERED',
+              currentLocation: 'Bưu cục Quận Bình Thạnh, TP.HCM',
+            },
+          }),
+          400: errorResponse('Dữ liệu không hợp lệ', 'Trường status là bắt buộc.'),
+          404: errorResponse('Không tìm thấy vận đơn', 'Không tìm thấy vận đơn tương ứng.'),
+        },
+      },
+    },
+    '/api/v1/fulfillment/shipments/by-order/{orderId}': {
+      get: {
+        tags: ['Fulfillment & Shipping'],
+        summary: 'Lấy chi tiết vận đơn theo mã đơn hàng (In phiếu gửi hàng & Tracking)',
+        description:
+          'Cung cấp đầy đủ thông tin: Mã vận đơn, mã Barcode/QR, địa chỉ kho gửi (sender), địa chỉ nhận (receiver), cước phí và timeline phục vụ in Tem Vận Đơn Điện Tử.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'orderId',
+            in: 'path',
+            required: true,
+            description: 'Mã đơn hàng (Order ID hoặc Order Code)',
+            schema: { type: 'string', example: 'NX-ORD-8021' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Lấy chi tiết vận đơn in nhãn thành công', {
+            success: true,
+            data: {
+              shipmentId: 'shp_01hqz222trk',
+              orderId: 'NX-ORD-8021',
+              trackingCode: 'GHN8829103VN',
+              carrierCode: 'GHN',
+              carrierName: 'Giao Hàng Nhanh',
+              status: 'Đang giao',
+              statusCode: 'IN_TRANSIT',
+              shippingFee: 32000,
+              sender: {
+                name: 'Gian hàng Đối tác Nexus',
+                phone: '19006868',
+                warehouseName: 'Kho Tổng Nexus (WH_001)',
+                address: 'Tầng 5, Tòa nhà Nexus, Quận 1, TP.HCM',
+              },
+              receiver: {
+                name: 'Minh Anh',
+                phone: '0901234567',
+                address: '12 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
+              },
+              timeline: [],
+            },
+          }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy vận đơn', 'Vận đơn cho đơn hàng này không tồn tại.'),
         },
       },
     },

@@ -11,14 +11,18 @@ export interface ShipmentTimelineStep {
 export interface ShipmentDetailDto {
   // Canonical ID & Codes
   id: string;
+  shipmentId?: string;
   code: string;
   trackingCode: string;
+  carrierCode?: string;
+  carrierName?: string;
+  shippingFee?: number;
 
   // Order link
   orderId: string;
   order: string;
 
-  // Carrier & Recipient
+  // Carrier & Recipient / Sender (Phục vụ In phiếu gửi hàng)
   carrier: string;
   recipient: string;
   recipientName: string;
@@ -26,6 +30,20 @@ export interface ShipmentDetailDto {
   shippingAddress: string;
   city: string;
   currentLocation: string;
+  sender?: {
+    name: string;
+    phone: string;
+    warehouseName: string;
+    address: string;
+  };
+  receiver?: {
+    name: string;
+    phone: string;
+    address: string;
+  };
+  codAmount?: number;
+  paymentMethod?: string;
+  shippingNote?: string;
 
   // Status with dual compatibility
   status: string; // Vietnamese friendly status label (e.g. 'Đang giao')
@@ -125,10 +143,21 @@ export function mapShipmentToDto(shipment: Shipment): ShipmentDetailDto {
   const statusLabel = mapShipmentStatusToVietnamese(shipment.status);
   const updatedLabel = formatVietnameseDateTime(shipment.updatedAt);
 
+  const carrierNameMap: Record<string, string> = {
+    GHN: 'Giao Hàng Nhanh',
+    GHTK: 'Giao Hàng Tiết Kiệm',
+    VNPOST: 'Bưu điện Việt Nam VNPost',
+    VIETTEL_POST: 'Viettel Post',
+  };
+
   return {
     id: shipment.id,
+    shipmentId: shipment.id,
     code: shipment.trackingCode,
     trackingCode: shipment.trackingCode,
+    carrierCode: shipment.carrier,
+    carrierName: carrierNameMap[shipment.carrier] || shipment.carrier,
+    shippingFee: 32000,
     orderId: shipment.orderId,
     order: shipment.orderId,
     carrier: shipment.carrier,
@@ -138,6 +167,20 @@ export function mapShipmentToDto(shipment: Shipment): ShipmentDetailDto {
     shippingAddress: shipment.shippingAddress,
     city: shipment.city,
     currentLocation: shipment.currentLocation,
+    sender: {
+      name: 'Gian hàng Đối tác Nexus',
+      phone: '19006868',
+      warehouseName: 'Kho Tổng Nexus (WH_001)',
+      address: 'Tầng 5, Tòa nhà Nexus, Quận 1, TP.HCM',
+    },
+    receiver: {
+      name: shipment.recipientName,
+      phone: shipment.recipientPhone,
+      address: shipment.shippingAddress,
+    },
+    codAmount: 0,
+    paymentMethod: 'PAYOS_VIETQR',
+    shippingNote: 'Cho xem hàng, không cho thử',
     status: statusLabel,
     statusCode: shipment.status,
     statusEnum: shipment.status,

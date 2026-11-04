@@ -26,6 +26,7 @@ export interface OrderDetailDto {
   totalAmount: number;
   status: string;
   tracking: string; // Tương thích FE: order.tracking
+  trackingCode?: string; // Tương thích API contract
   itemsCount: number;
   items: OrderItemDetailDto[];
   timeline: OrderTimelineDto[];
