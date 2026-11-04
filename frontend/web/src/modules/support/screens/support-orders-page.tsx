@@ -18,6 +18,8 @@ export function getOrderStatusLabel(status: string): string {
   switch (status) {
     case 'PENDING':
       return 'Chờ xử lý';
+    case 'PAID':
+      return 'Đã thanh toán (Chờ giao)';
     case 'PROCESSING':
       return 'Đang xử lý';
     case 'SHIPPED':
@@ -26,6 +28,8 @@ export function getOrderStatusLabel(status: string): string {
       return 'Đã giao hàng';
     case 'CANCELLED':
       return 'Đã hủy';
+    case 'REFUND_REQUESTED':
+      return 'Khiếu nại / Hoàn tiền';
     case 'REFUNDED':
       return 'Đã hoàn tiền';
     case 'REFUND_CANCELLED':
@@ -99,10 +103,13 @@ export function SupportOrdersPage() {
                 <SelectContent>
                   <SelectItem value="ALL">Tất cả trạng thái</SelectItem>
                   <SelectItem value="PENDING">Chờ xử lý</SelectItem>
+                  <SelectItem value="PAID">Đã thanh toán (Chờ giao)</SelectItem>
                   <SelectItem value="PROCESSING">Đang xử lý</SelectItem>
                   <SelectItem value="SHIPPED">Đang giao hàng</SelectItem>
                   <SelectItem value="DELIVERED">Đã giao hàng</SelectItem>
                   <SelectItem value="CANCELLED">Đã hủy</SelectItem>
+                  <SelectItem value="REFUND_REQUESTED">Khiếu nại / Hoàn tiền</SelectItem>
+                  <SelectItem value="REFUNDED">Đã hoàn tiền</SelectItem>
                 </SelectContent>
               </Select>
             </div>
