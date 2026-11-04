@@ -46,8 +46,9 @@ export class InMemoryAuctionRepository implements IAuctionRepository {
     return this.findAll({ sellerId });
   }
 
-  public async save(auction: Auction): Promise<void> {
+  public async create(auction: Auction): Promise<Auction> {
     this.auctions.set(auction.id, auction);
+    return auction;
   }
 
   public async update(auction: Auction): Promise<void> {

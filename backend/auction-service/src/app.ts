@@ -1,10 +1,16 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
-import { InMemoryAuctionRepository } from './infrastructure/repositories/InMemoryAuctionRepository';
+import { PostgresAuctionRepository } from './infrastructure/repositories/PostgresAuctionRepository';
 import { GetAuctionDetailUseCase } from './application/use-cases/GetAuctionDetailUseCase';
+import { CreateAuctionRoomUseCase } from './application/use-cases/CreateAuctionRoomUseCase';
 import { AuctionController } from './interfaces/http/controllers/AuctionController';
 import { createAuctionRoutes } from './interfaces/http/routes/AuctionRoutes';
 import { checkRedisHealth, RedisHealthStatus } from './infrastructure/redis/RedisClient';
+import { PlaceBidUseCase } from './application/use-cases/PlaceBidUseCase';
+import { GetBidHistoryUseCase } from './application/use-cases/GetBidHistoryUseCase';
+import { UpdateAuctionUseCase } from './application/use-cases/UpdateAuctionUseCase';
+import { BuyNowUseCase } from './application/use-cases/BuyNowUseCase';
+import { CancelAuctionUseCase } from './application/use-cases/CancelAuctionUseCase';
 
 export function createApplication(
   healthChecker: () => Promise<RedisHealthStatus> = checkRedisHealth,
@@ -15,7 +21,6 @@ export function createApplication(
   app.use(express.json());
 
   // Aggregated Health Endpoint (SCRUM-41: Redis Ping Health Indicator)
-  // Trả về HTTP 200 khi Redis UP, HTTP 503 khi Redis DOWN/timeout nhằm tránh "healthy giả"
   app.get('/health', async (_req: Request, res: Response) => {
     let redisHealth: RedisHealthStatus;
 
@@ -53,7 +58,7 @@ export function createApplication(
     res.status(statusCode).json(health);
   });
 
-  // Lightweight Liveness Probe (Kiểm tra HTTP Server tiến trình còn sống)
+  // Lightweight Liveness Probe
   app.get('/health/liveness', (_req: Request, res: Response) => {
     res.status(200).json({
       status: 'UP',
@@ -63,9 +68,25 @@ export function createApplication(
     });
   });
 
-  const auctionRepository = new InMemoryAuctionRepository();
+  const auctionRepository = new PostgresAuctionRepository();
   const getAuctionDetailUseCase = new GetAuctionDetailUseCase(auctionRepository);
-  const auctionController = new AuctionController(getAuctionDetailUseCase, auctionRepository);
+  const createAuctionRoomUseCase = new CreateAuctionRoomUseCase(auctionRepository);
+  const placeBidUseCase = new PlaceBidUseCase(auctionRepository);
+  const getBidHistoryUseCase = new GetBidHistoryUseCase(auctionRepository);
+  const updateAuctionUseCase = new UpdateAuctionUseCase(auctionRepository);
+  const buyNowUseCase = new BuyNowUseCase(auctionRepository);
+  const cancelAuctionUseCase = new CancelAuctionUseCase(auctionRepository);
+
+  const auctionController = new AuctionController(
+    getAuctionDetailUseCase,
+    createAuctionRoomUseCase,
+    placeBidUseCase,
+    getBidHistoryUseCase,
+    updateAuctionUseCase,
+    buyNowUseCase,
+    cancelAuctionUseCase,
+    auctionRepository,
+  );
 
   app.use('/api/v1/auctions', createAuctionRoutes(auctionController));
 

@@ -1206,22 +1206,133 @@ export const auctionSpec = {
     '/api/v1/auctions': {
       get: {
         tags: ['Auctions'],
-        summary: 'Lấy danh sách các phiên đấu giá đang diễn ra',
-        description: `${PUBLIC} Method: GET.`,
+        summary: 'Lấy danh sách các phiên đấu giá',
+        description: `${PUBLIC} Method: GET. Hỗ trợ lọc theo trạng thái (status) hoặc người bán (sellerId).`,
+        parameters: [
+          {
+            name: 'status',
+            in: 'query',
+            required: false,
+            description:
+              'Lọc theo trạng thái phiên (SCHEDULED, ACTIVE, EXTENDED, ENDED, CANCELLED)',
+            schema: {
+              type: 'string',
+              enum: ['SCHEDULED', 'ACTIVE', 'EXTENDED', 'ENDED', 'CANCELLED'],
+            },
+          },
+          {
+            name: 'sellerId',
+            in: 'query',
+            required: false,
+            description: 'Lọc các phiên của một người bán cụ thể',
+            schema: { type: 'string' },
+          },
+        ],
         responses: {
           200: jsonResponse('Danh sách phiên đấu giá', {
             success: true,
             data: [
               {
-                id: 'auc_01hqz777live',
-                productId: 'prod_01hqz999xyz',
-                currentHighestBid: 250,
-                highestBidderId: 'usr_01hqz789abc',
+                id: '1',
+                productId: '1',
+                sellerId: 'a0000000-0000-0000-0000-000000000002',
+                title: 'Đấu giá iPhone 15 Pro Max 256GB Titan Tự Nhiên',
+                startingPrice: 20000000,
+                currentHighestBid: 25000000,
+                highestBidderId: 'a0000000-0000-0000-0000-000000000003',
+                bidIncrement: 500000,
                 status: 'ACTIVE',
-                endTime: '2026-10-21T15:34:06.147Z',
+                startTime: '2026-11-02T08:00:00.000Z',
+                endTime: '2026-11-05T08:00:00.000Z',
               },
             ],
           }),
+        },
+      },
+      post: {
+        tags: ['Auctions'],
+        summary: 'Tạo phòng đấu giá mới (Seller / Admin)',
+        description: 'Tạo phiên đấu giá mới cho sản phẩm. Yêu cầu quyền SELLER hoặc ADMIN.',
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['productId', 'startPrice', 'startTime', 'endTime'],
+                properties: {
+                  productId: {
+                    type: 'string',
+                    example: '1',
+                    description: 'Mã ID của sản phẩm đấu giá',
+                  },
+                  title: {
+                    type: 'string',
+                    example: 'Đấu giá iPhone 15 Pro Max 256GB Titan Tự Nhiên',
+                  },
+                  startPrice: {
+                    type: 'number',
+                    example: 20000000,
+                    description: 'Giá khởi điểm (VND)',
+                  },
+                  bidStep: {
+                    type: 'number',
+                    example: 500000,
+                    description: 'Bước giá tối thiểu (mặc định 10.000)',
+                  },
+                  buyNowPrice: {
+                    type: 'number',
+                    example: 30000000,
+                    description: 'Giá mua ngay (tùy chọn)',
+                  },
+                  startTime: {
+                    type: 'string',
+                    format: 'date-time',
+                    example: '2026-11-02T10:00:00.000Z',
+                  },
+                  endTime: {
+                    type: 'string',
+                    format: 'date-time',
+                    example: '2026-11-05T10:00:00.000Z',
+                  },
+                  antiSnipingExtensionSeconds: {
+                    type: 'number',
+                    example: 120,
+                    description: 'Số giây tự động gia hạn khi có bid phút chót',
+                  },
+                  sellerId: {
+                    type: 'string',
+                    example: 'a0000000-0000-0000-0000-000000000002',
+                    description: 'Admin có thể chỉ định người bán',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: jsonResponse('Tạo phòng đấu giá thành công', {
+            success: true,
+            message: 'Tạo phòng đấu giá thành công.',
+            data: {
+              id: '1',
+              productId: '1',
+              sellerId: 'a0000000-0000-0000-0000-000000000002',
+              title: 'Đấu giá iPhone 15 Pro Max 256GB Titan Tự Nhiên',
+              startingPrice: 20000000,
+              currentHighestBid: 20000000,
+              bidIncrement: 500000,
+              buyNowPrice: 30000000,
+              status: 'SCHEDULED',
+              startTime: '2026-11-02T10:00:00.000Z',
+              endTime: '2026-11-05T10:00:00.000Z',
+              createdAt: '2026-11-02T08:00:00.000Z',
+            },
+          }),
+          400: errorResponse('Dữ liệu không hợp lệ', 'Giá khởi điểm (startPrice) phải lớn hơn 0.'),
+          401: errorResponse('Chưa đăng nhập', 'Vui lòng đăng nhập để thực hiện thao tác này.'),
+          403: errorResponse('Không có quyền', 'Cần quyền SELLER hoặc ADMIN.'),
         },
       },
     },
@@ -1236,23 +1347,22 @@ export const auctionSpec = {
             in: 'path',
             required: true,
             description: 'Mã phòng đấu giá (Auction ID)',
-            schema: { type: 'string', example: 'auc_01hqz777live' },
+            schema: { type: 'string', example: '1' },
           },
         ],
         responses: {
           200: jsonResponse('Chi tiết phòng đấu giá', {
             success: true,
-            data: { id: 'auc_01hqz777live', status: 'ACTIVE', currentHighestBid: 250 },
+            data: { id: '1', status: 'ACTIVE', currentHighestBid: 25000000 },
           }),
           404: errorResponse('Không tìm thấy', 'Auction with ID "999" was not found.'),
         },
       },
-    },
-    '/api/v1/auctions/{id}/bids': {
-      post: {
+      put: {
         tags: ['Auctions'],
-        summary: 'Trả giá / Đặt giá thầu (Place Bid)',
-        description: `LƯU Ý: Hiện tại Auction Service chưa kiểm tra token và chưa validate body (chế độ Skeleton), nên request không token hoặc body sai vẫn trả 200. Gửi lượt trả giá mới vào phiên đấu giá.`,
+        summary: 'Chỉnh sửa phòng đấu giá (Seller / Admin)',
+        description:
+          'Chỉnh sửa thông tin phòng đấu giá khi phiên chưa bắt đầu (SCHEDULED). Yêu cầu quyền SELLER hoặc ADMIN.',
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1260,7 +1370,7 @@ export const auctionSpec = {
             in: 'path',
             required: true,
             description: 'Mã phòng đấu giá (Auction ID)',
-            schema: { type: 'string', example: 'auc_01hqz777live' },
+            schema: { type: 'string', example: '1' },
           },
         ],
         requestBody: {
@@ -1269,27 +1379,211 @@ export const auctionSpec = {
             'application/json': {
               schema: {
                 type: 'object',
-                required: ['bidderId', 'bidAmount'],
                 properties: {
-                  bidderId: { type: 'string', example: '01a15822-43b8-78c3-a246-16bff78bc6e8' },
-                  bidAmount: { type: 'number', example: 15000000 },
+                  title: {
+                    type: 'string',
+                    example: 'Đấu giá iPhone 15 Pro Max 256GB - Bản Titan Tự Nhiên',
+                  },
+                  bidIncrement: { type: 'number', example: 500000 },
+                  buyNowPrice: { type: 'number', example: 32000000 },
+                  startTime: { type: 'string', format: 'date-time' },
+                  endTime: { type: 'string', format: 'date-time' },
                 },
               },
             },
           },
         },
         responses: {
-          200: jsonResponse('Trả giá thành công (Skeleton)', {
+          200: jsonResponse('Cập nhật phòng đấu giá thành công', {
             success: true,
-            message: 'Bid accepted by bidding engine (Skeleton mode)',
+            message: 'Cập nhật phòng đấu giá thành công.',
             data: {
-              auctionId: 'auc_01hqz777live',
-              bidderId: 'a0000000-0000-0000-0000-000000000003',
-              acceptedAmount: 15000000,
-              status: 'ACCEPTED',
+              id: '1',
+              title: 'Đấu giá iPhone 15 Pro Max 256GB - Bản Titan Tự Nhiên',
+              currentHighestBid: 20000000,
+              bidIncrement: 500000,
+              buyNowPrice: 32000000,
+              status: 'SCHEDULED',
             },
           }),
-          401: unauthorized,
+          400: errorResponse(
+            'Không hợp lệ',
+            'Chỉ có thể chỉnh sửa phiên đấu giá khi chưa bắt đầu (SCHEDULED).',
+          ),
+          401: errorResponse('Chưa đăng nhập', 'Vui lòng đăng nhập để thực hiện thao tác này.'),
+          404: errorResponse('Không tìm thấy', 'Auction with ID "1" was not found.'),
+        },
+      },
+      delete: {
+        tags: ['Auctions'],
+        summary: 'Hủy phòng đấu giá (Seller / Admin)',
+        description:
+          'Hủy một phiên đấu giá. Yêu cầu quyền SELLER (chủ phiên) hoặc ADMIN. Không thể hủy phiên đã kết thúc (ENDED).',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã phòng đấu giá (Auction ID)',
+            schema: { type: 'string', example: '1' },
+          },
+        ],
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  reason: { type: 'string', example: 'Sản phẩm lỗi hoặc không còn khả dụng' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Hủy phòng đấu giá thành công', {
+            success: true,
+            message: 'Hủy phiên đấu giá thành công.',
+            data: {
+              auctionId: '1',
+              status: 'CANCELLED',
+            },
+          }),
+          400: errorResponse('Không hợp lệ', 'Không thể hủy phiên đấu giá đã kết thúc.'),
+          401: errorResponse('Chưa đăng nhập', 'Vui lòng đăng nhập để thực hiện thao tác này.'),
+          403: errorResponse(
+            'Không có quyền',
+            'Chỉ người tạo phiên đấu giá hoặc Quản trị viên mới có quyền hủy.',
+          ),
+          404: errorResponse('Không tìm thấy', 'Auction with ID "1" was not found.'),
+        },
+      },
+    },
+    '/api/v1/auctions/{id}/buy-now': {
+      post: {
+        tags: ['Auctions'],
+        summary: 'Mua thẳng phiên đấu giá (Buy It Now)',
+        description:
+          'Người mua mua đứt sản phẩm theo giá buyNowPrice được định sẵn, kết thúc phiên ngay lập tức và trở thành người chiến thắng.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã phòng đấu giá (Auction ID)',
+            schema: { type: 'string', example: '1' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Mua thẳng thành công', {
+            success: true,
+            message: 'Mua ngay thành công! Bạn đã giành chiến thắng phiên đấu giá.',
+            data: {
+              auctionId: '1',
+              winnerId: 'a0000000-0000-0000-0000-000000000003',
+              purchasePrice: 32000000,
+              status: 'ENDED',
+            },
+          }),
+          400: errorResponse(
+            'Không hợp lệ',
+            'Phiên đấu giá không hỗ trợ tính năng mua ngay hoặc đã kết thúc.',
+          ),
+          401: errorResponse('Chưa đăng nhập', 'Vui lòng đăng nhập để thực hiện mua ngay.'),
+          404: errorResponse('Không tìm thấy', 'Auction with ID "1" was not found.'),
+        },
+      },
+    },
+    '/api/v1/auctions/{id}/bids': {
+      get: {
+        tags: ['Auctions'],
+        summary: 'Xem lịch sử các lượt đặt giá của phiên',
+        description: `${PUBLIC} Method: GET. Lấy danh sách lịch sử trả giá của phòng đấu giá (mới nhất lên đầu).`,
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã phòng đấu giá (Auction ID)',
+            schema: { type: 'string', example: '1' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Lịch sử đặt giá', {
+            success: true,
+            data: [
+              {
+                id: '1',
+                auctionId: '1',
+                bidderId: 'a0000000-0000-0000-0000-000000000003',
+                bidAmount: 25000000,
+                bidTime: '2026-11-02T08:30:00.000Z',
+                isWinning: true,
+              },
+            ],
+          }),
+          404: errorResponse('Không tìm thấy', 'Auction with ID "1" was not found.'),
+        },
+      },
+      post: {
+        tags: ['Auctions'],
+        summary: 'Trả giá / Đặt giá thầu (Place Bid)',
+        description:
+          'Gửi lượt trả giá mới vào phiên đấu giá. Tự động kích hoạt Anti-sniping nếu đặt giá ở phút chót.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã phòng đấu giá (Auction ID)',
+            schema: { type: 'string', example: '1' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['bidAmount'],
+                properties: {
+                  bidAmount: {
+                    type: 'number',
+                    example: 25500000,
+                    description: 'Số tiền đặt giá (VND)',
+                  },
+                  bidderId: {
+                    type: 'string',
+                    example: 'a0000000-0000-0000-0000-000000000003',
+                    description: 'Tùy chọn nếu đã có Bearer token',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Đặt giá thành công', {
+            success: true,
+            message: 'Đặt giá thành công!',
+            data: {
+              auctionId: '1',
+              bidderId: 'a0000000-0000-0000-0000-000000000003',
+              currentHighestBid: 25500000,
+              status: 'ACTIVE',
+              isExtended: false,
+            },
+          }),
+          400: errorResponse(
+            'Không hợp lệ',
+            'Mức giá đặt tối thiểu hợp lệ phải là 25.500.000 VND.',
+          ),
+          401: errorResponse('Chưa đăng nhập', 'Vui lòng đăng nhập để tham gia trả giá.'),
+          404: errorResponse('Không tìm thấy', 'Auction with ID "1" was not found.'),
         },
       },
     },

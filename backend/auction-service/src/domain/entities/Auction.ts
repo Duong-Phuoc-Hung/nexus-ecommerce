@@ -29,6 +29,7 @@ export interface AuctionProps {
   status: AuctionStatus;
   startTime: Date;
   endTime: Date;
+  actualEndTime?: Date;
   antiSnipingExtensionSeconds?: number;
   createdAt?: Date;
   updatedAt?: Date;
@@ -47,6 +48,7 @@ export class Auction {
   private _status: AuctionStatus;
   private _startTime: Date;
   private _endTime: Date;
+  private _actualEndTime?: Date;
   private readonly _antiSnipingExtensionSeconds: number;
   private readonly _createdAt: Date;
   private _updatedAt: Date;
@@ -64,6 +66,7 @@ export class Auction {
     this._status = props.status;
     this._startTime = props.startTime;
     this._endTime = props.endTime;
+    this._actualEndTime = props.actualEndTime;
     this._antiSnipingExtensionSeconds = props.antiSnipingExtensionSeconds ?? 120;
     this._createdAt = props.createdAt || new Date();
     this._updatedAt = props.updatedAt || new Date();
@@ -105,6 +108,9 @@ export class Auction {
   public get endTime(): Date {
     return this._endTime;
   }
+  public get actualEndTime(): Date | undefined {
+    return this._actualEndTime;
+  }
   public get antiSnipingExtensionSeconds(): number {
     return this._antiSnipingExtensionSeconds;
   }
@@ -137,6 +143,27 @@ export class Auction {
     }
 
     this._updatedAt = new Date();
+  }
+
+  // Nghiệp vụ mua thẳng (Buy It Now) kết thúc phiên ngay lập tức
+  public buyNow(buyerId: string, now: Date = new Date()): void {
+    if (this._status !== AuctionStatus.ACTIVE && this._status !== AuctionStatus.EXTENDED) {
+      throw new Error(`Phiên đấu giá #${this._id} hiện không mở để mua ngay.`);
+    }
+
+    if (!this._buyNowPrice || this._buyNowPrice <= 0) {
+      throw new Error(`Phiên đấu giá #${this._id} không hỗ trợ tính năng mua ngay.`);
+    }
+
+    if (this._sellerId === buyerId) {
+      throw new Error('Người bán không thể tự mua sản phẩm của chính mình.');
+    }
+
+    this._currentHighestBid = this._buyNowPrice;
+    this._highestBidderId = buyerId;
+    this._status = AuctionStatus.ENDED;
+    this._actualEndTime = now;
+    this._updatedAt = now;
   }
 
   // Nghiệp vụ hủy phiên

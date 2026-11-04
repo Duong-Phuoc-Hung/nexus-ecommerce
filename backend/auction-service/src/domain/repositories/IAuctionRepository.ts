@@ -5,7 +5,7 @@ export interface IAuctionRepository {
   findActiveAuctions(): Promise<Auction[]>;
   findAll(filters?: { status?: string; sellerId?: string }): Promise<Auction[]>;
   findBySellerId(sellerId: string): Promise<Auction[]>;
-  save(auction: Auction): Promise<void>;
+  create(auction: Auction): Promise<Auction>;
   update(auction: Auction): Promise<void>;
   saveBid?(bid: BidRecord): Promise<void>;
   findBidsByAuctionId?(auctionId: string): Promise<BidRecord[]>;
