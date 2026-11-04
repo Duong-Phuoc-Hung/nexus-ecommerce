@@ -40,6 +40,7 @@ export function MarketplaceCard({
   product,
   elapsed,
   favorite,
+  canFavorite,
   onFavorite,
   onOpen,
   compact = false,
@@ -47,6 +48,7 @@ export function MarketplaceCard({
   product: MarketplaceProduct;
   elapsed: number;
   favorite: boolean;
+  canFavorite: boolean;
   onFavorite: () => void;
   onOpen: () => void;
   compact?: boolean;
@@ -77,16 +79,18 @@ export function MarketplaceCard({
             {product.status === 'scheduled' ? 'Sắp mở phiên' : ended ? 'Đã kết thúc' : 'Đấu giá'}
           </span>
         )}
-        <Button
-          variant="ghost"
-          size="plain"
-          onClick={onFavorite}
-          aria-label={`${favorite ? 'Bỏ lưu' : 'Lưu'} ${product.name}`}
-          aria-pressed={favorite}
-          className={`absolute right-2 top-2 grid size-11 place-items-center rounded-full bg-white/95 shadow-sm transition hover:text-brand ${favorite ? 'text-brand' : 'text-ink/65'}`}
-        >
-          <MarketplaceIcon name="heart" className="size-[18px]" filled={favorite} />
-        </Button>
+        {canFavorite && (
+          <Button
+            variant="ghost"
+            size="plain"
+            onClick={onFavorite}
+            aria-label={`${favorite ? 'Bỏ lưu' : 'Lưu'} ${product.name}`}
+            aria-pressed={favorite}
+            className={`absolute right-2 top-2 grid size-11 place-items-center rounded-full bg-white/95 shadow-sm transition hover:text-brand ${favorite ? 'text-brand' : 'text-ink/65'}`}
+          >
+            <MarketplaceIcon name="heart" className="size-[18px]" filled={favorite} />
+          </Button>
+        )}
         {product.mode === 'auction' && (
           <div className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-2 rounded-lg bg-white/95 px-3 py-2 text-xs font-semibold text-ink shadow-sm">
             <span className="flex items-center gap-1.5">
@@ -131,7 +135,11 @@ export function MarketplaceCard({
         <div className="mt-2 flex flex-wrap items-center justify-between gap-1 text-[10px] text-muted">
           <span className="truncate">{product.seller}</span>
           <span>
-            {product.mode === 'auction' ? `${product.bids} lượt trả giá` : product.location}
+            {product.mode === 'auction'
+              ? product.bidCountKnown === false
+                ? 'Lượt trả giá đang cập nhật'
+                : `${product.bids} lượt trả giá`
+              : product.location}
           </span>
         </div>
         <Button

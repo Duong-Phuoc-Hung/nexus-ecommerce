@@ -3,6 +3,9 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
+import { useSession } from '@/modules/auth/hooks/use-session';
+import { SellerRouteGuard } from './seller-route-guard';
+import { ReputationBadge } from '@/components/reputation';
 
 const navigation = [
   { href: '/seller', label: 'Tổng quan', icon: '⌂' },
@@ -10,11 +13,27 @@ const navigation = [
   { href: '/seller/auctions', label: 'Đấu giá', icon: '◷' },
   { href: '/seller/orders', label: 'Đơn hàng', icon: '▤' },
   { href: '/seller/inventory', label: 'Tồn kho', icon: '▥' },
+  { href: '/seller/reputation', label: 'Điểm uy tín', icon: '✦' },
 ];
 
 export function SellerShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const demoSeller = { fullName: 'Nexus Demo Seller' };
+  const { user, logout: logoutSession } = useSession();
+
+  async function logout() {
+    await logoutSession();
+    window.location.replace('/login');
+  }
+
+  const displayName = user?.fullName || user?.email || 'Người bán';
+  const roleLabel =
+    user?.role === 'SELLER'
+      ? 'Người bán · Đối tác'
+      : user?.role === 'ADMIN'
+        ? 'Quản trị viên'
+        : user?.role
+          ? `Vai trò: ${user.role}`
+          : 'Chưa đăng nhập';
 
   return (
     <div className="seller-workspace">
@@ -45,7 +64,7 @@ export function SellerShell({ children }: { children: ReactNode }) {
           })}
         </nav>
         <div className="seller-sidebar-foot">
-          <span>DEMO WORKSPACE</span>
+          <span>KHO HÀNG ĐỐI TÁC</span>
           <br />
           Nexus Marketplace
         </div>
@@ -65,14 +84,26 @@ export function SellerShell({ children }: { children: ReactNode }) {
             </span>
           </div>
           <div className="seller-account">
-            <span className="seller-avatar">{demoSeller.fullName.slice(0, 1).toUpperCase()}</span>
+            <ReputationBadge score={user?.reputationScore ?? 98} size="sm" />
+            <span className="seller-avatar">{displayName.slice(0, 1).toUpperCase()}</span>
             <span>
-              <strong>{demoSeller.fullName}</strong>
-              <small>Seller · Demo</small>
+              <strong>{displayName}</strong>
+              <small>{roleLabel}</small>
             </span>
+            <Link href="/" className="seller-to-store-btn" title="Quay về trang chủ cửa hàng">
+              <span aria-hidden="true">⌂</span>
+              <span>Về cửa hàng</span>
+            </Link>
+            {user && (
+              <button type="button" onClick={logout} title="Đăng xuất khỏi tài khoản">
+                Đăng xuất
+              </button>
+            )}
           </div>
         </header>
-        <main className="seller-content">{children}</main>
+        <main className="seller-content">
+          <SellerRouteGuard>{children}</SellerRouteGuard>
+        </main>
       </div>
     </div>
   );

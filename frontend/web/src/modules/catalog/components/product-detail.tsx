@@ -2,10 +2,14 @@
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { Heart } from 'lucide-react';
 import { catalogApi } from '../api/catalog.api';
 import { formatPrice, type CatalogProduct } from '../api/catalog.factory';
 import { ApiError, userMessage } from '../../../lib/axios/http';
 import { StoreHeader } from '@/components/layout/store-header';
+import { useSession } from '@/modules/auth/hooks/use-session';
+import { addCartProduct } from '@/modules/commerce/utils/cart';
+import { FAVORITES_EVENT, hasFavorite, toggleFavorite } from '@/modules/commerce/utils/favorites';
 const conditions: Record<string, string> = {
   NEW: 'Mới',
   LIKE_NEW: 'Như mới',
@@ -19,6 +23,9 @@ export function ProductDetail({ productId }: { productId: string }) {
   const [loading, setLoading] = useState(true);
   const [revision, setRevision] = useState(0);
   const [photo, setPhoto] = useState(0);
+  const [cartNotice, setCartNotice] = useState('');
+  const [favorite, setFavorite] = useState(false);
+  const { user } = useSession();
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -48,6 +55,12 @@ export function ProductDetail({ productId }: { productId: string }) {
       });
     return () => controller.abort();
   }, [productId, revision]);
+  useEffect(() => {
+    const sync = () => setFavorite(hasFavorite(productId));
+    sync();
+    window.addEventListener(FAVORITES_EVENT, sync);
+    return () => window.removeEventListener(FAVORITES_EVENT, sync);
+  }, [productId]);
   return (
     <>
       <StoreHeader />
@@ -159,9 +172,42 @@ export function ProductDetail({ productId }: { productId: string }) {
                   <p className="text-xs font-semibold uppercase tracking-wider text-brand-dark">
                     {product.categoryName || 'Bộ sưu tập Nexus'}
                   </p>
-                  <h1 className="mt-3 text-3xl font-bold leading-tight tracking-tight">
-                    {product.title}
-                  </h1>
+                  <div className="mt-3 flex items-start justify-between gap-3">
+                    <h1 className="text-3xl font-bold leading-tight tracking-tight">
+                      {product.title}
+                    </h1>
+                    {user?.role === 'BUYER' && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        aria-label={favorite ? 'Bỏ sản phẩm khỏi yêu thích' : 'Thêm vào yêu thích'}
+                        aria-pressed={favorite}
+                        title={favorite ? 'Bỏ yêu thích' : 'Thêm vào yêu thích'}
+                        className={
+                          'size-11 shrink-0 rounded-full ' +
+                          (favorite ? 'border-brand text-brand' : 'text-muted')
+                        }
+                        onClick={() =>
+                          setFavorite(
+                            toggleFavorite({
+                              id: product.id,
+                              name: product.title,
+                              image: product.images[0] || '/images/nexus-product-placeholder.svg',
+                              price: product.price ?? 0,
+                              href: '/products/' + encodeURIComponent(product.id),
+                            }),
+                          )
+                        }
+                      >
+                        <Heart
+                          aria-hidden="true"
+                          className="size-5"
+                          fill={favorite ? 'currentColor' : 'none'}
+                        />
+                      </Button>
+                    )}
+                  </div>
                   <div className="mt-4 flex flex-wrap gap-2 text-xs">
                     {product.condition && (
                       <span className="rounded-full bg-stone-100 px-3 py-2">
@@ -218,6 +264,51 @@ export function ProductDetail({ productId }: { productId: string }) {
                       'Kiểm tra hình ảnh, tình trạng và thông tin người bán trước khi lựa chọn sản phẩm.'
                     }
                   </div>
+                  {product.saleType === 'FIXED_PRICE' && product.stockQuantity !== 0 && (
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      {user?.role === 'BUYER' ? (
+                        <>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="min-h-12 rounded-xl border-brand-dark font-semibold text-brand-dark"
+                            onClick={() => {
+                              addCartProduct(product);
+                              setCartNotice('Đã thêm vào giỏ hàng.');
+                            }}
+                          >
+                            Thêm vào giỏ hàng
+                          </Button>
+                          <Link
+                            href="/cart"
+                            className="inline-flex min-h-12 items-center justify-center rounded-xl bg-brand-dark px-4 text-sm font-semibold text-white hover:bg-brand"
+                          >
+                            Xem giỏ hàng
+                          </Link>
+                        </>
+                      ) : user ? (
+                        <p
+                          className="rounded-xl bg-stone-50 p-4 text-sm leading-6 text-muted sm:col-span-2"
+                          role="note"
+                        >
+                          Bạn vẫn có thể xem đầy đủ sản phẩm. Chức năng mua hàng và giỏ hàng dành
+                          cho tài khoản Buyer.
+                        </p>
+                      ) : (
+                        <Link
+                          href={`/login?next=${encodeURIComponent(`/products/${product.id}`)}`}
+                          className="inline-flex min-h-12 items-center justify-center rounded-xl border border-line px-4 text-sm font-semibold sm:col-span-2"
+                        >
+                          Đăng nhập để mua
+                        </Link>
+                      )}
+                    </div>
+                  )}
+                  {cartNotice && (
+                    <p className="mt-3 text-sm font-medium text-emerald-700" role="status">
+                      {cartNotice}
+                    </p>
+                  )}
                   <Link
                     href="/products"
                     className="mt-6 inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-brand-dark px-5 text-sm font-semibold text-white hover:bg-brand"

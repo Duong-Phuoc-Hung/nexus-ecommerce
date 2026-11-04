@@ -46,8 +46,7 @@
   line-height: 1.4;
   letter-spacing: -0.3px;
 }
-.nexus-admin h2,
-.nexus-admin p {
+.nexus-admin h2 {
   margin-top: 0;
 }
 .nexus-admin fieldset {
@@ -162,8 +161,8 @@
   color: var(--muted);
 }
 .admin-week-sidebar nav a span {
-  font-size: 10px;
-  opacity: 0.6;
+  font-size: inherit;
+  opacity: 1;
 }
 .admin-week-sidebar nav a[aria-current='page'] {
   background: #fff0f0;
@@ -747,7 +746,6 @@
     padding: 10px;
     font-size: 12px;
   }
-  .admin-week-sidebar nav a span,
   .admin-nav-label,
   .admin-sidebar-bottom {
     display: none;
@@ -931,7 +929,7 @@
 /* Admin workspace: seller-style navigation with Nexus branding and a calm ops palette. */
 .nexus-admin {
   --ink: #202a3b;
-  --muted: #788396;
+  --muted: #58677c;
   --line: #e3e8ef;
   --surface: #f5f6f8;
   --brand: #9e0b0f;
@@ -965,21 +963,21 @@
   height: 39px;
 }
 .nexus-admin .admin-home-logo .nexus-logo-word {
-  font-size: .96rem;
+  font-size: 0.96rem;
 }
 .nexus-admin .admin-brand-caption {
   margin: 0;
   color: #9eabc0;
-  font-size: .59rem;
+  font-size: 0.59rem;
   font-weight: 700;
-  letter-spacing: .13em;
+  letter-spacing: 0.13em;
   line-height: 1.6;
 }
 .nexus-admin .admin-nav-label {
   margin: 38px 10px 13px;
-  color: #7e8aa0;
-  font-size: .63rem;
-  letter-spacing: .14em;
+  color: #aab6c8;
+  font-size: 0.63rem;
+  letter-spacing: 0.14em;
 }
 .nexus-admin .admin-week-sidebar nav {
   display: grid;
@@ -994,15 +992,17 @@
   padding: 11px;
   border-radius: 9px;
   color: #aab6c8;
-  font-size: .84rem;
-  transition: background .16s ease, color .16s ease;
+  font-size: 0.84rem;
+  transition:
+    background 0.16s ease,
+    color 0.16s ease;
 }
 .nexus-admin .admin-week-sidebar nav a > svg {
   color: #ef5962;
 }
 .nexus-admin .admin-week-sidebar nav a small {
   color: #718098;
-  font-size: .62rem;
+  font-size: 0.62rem;
   font-weight: 700;
 }
 .nexus-admin .admin-week-sidebar nav a[aria-current='page'] {
@@ -1019,11 +1019,11 @@
   padding: 15px 10px 0;
   border-top-color: #334057;
   color: #dce5f2;
-  font-size: .72rem;
+  font-size: 0.72rem;
 }
 .nexus-admin .admin-sidebar-bottom p {
   color: #9eabc0;
-  font-size: .69rem;
+  font-size: 0.69rem;
 }
 .nexus-admin .admin-week-panel {
   margin-left: 252px;
@@ -1039,11 +1039,11 @@
   align-items: center;
   gap: 9px;
   color: #39465a;
-  font-size: .8rem;
+  font-size: 0.8rem;
   font-weight: 600;
 }
 .nexus-admin .admin-breadcrumb-current {
-  color: #788396;
+  color: #58677c;
   font-weight: 400;
 }
 .nexus-admin .admin-topbar-right,
@@ -1076,13 +1076,13 @@
 .nexus-admin .admin-account-details strong {
   overflow: hidden;
   color: #313d50;
-  font-size: .74rem;
+  font-size: 0.74rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .nexus-admin .admin-account-details small {
-  color: #8b95a4;
-  font-size: .66rem;
+  color: #58677c;
+  font-size: 0.66rem;
 }
 .nexus-admin .admin-logout-button {
   min-height: 40px;
@@ -1110,9 +1110,15 @@
   box-shadow: 16px 16px 0 rgb(40 54 77 / 10%);
 }
 @media (max-width: 1100px) {
-  .nexus-admin .admin-week-sidebar { width: 210px; }
-  .nexus-admin .admin-week-panel { margin-left: 210px; }
-  .nexus-admin .admin-week-content { padding: 28px 24px 42px; }
+  .nexus-admin .admin-week-sidebar {
+    width: 210px;
+  }
+  .nexus-admin .admin-week-panel {
+    margin-left: 210px;
+  }
+  .nexus-admin .admin-week-content {
+    padding: 28px 24px 42px;
+  }
 }
 @media (max-width: 760px) {
   .nexus-admin .admin-week-sidebar {
@@ -1125,12 +1131,23 @@
     border-right: 0;
     border-bottom: 1px solid #293750;
   }
-  .nexus-admin .admin-brand-wrap { gap: 0; padding: 0; }
-  .nexus-admin .admin-home-logo { min-height: 42px; padding: 2px 7px; }
-  .nexus-admin .admin-home-logo .nexus-logo-mark { width: 34px; height: 34px; }
+  .nexus-admin .admin-brand-wrap {
+    gap: 0;
+    padding: 0;
+  }
+  .nexus-admin .admin-home-logo {
+    min-height: 42px;
+    padding: 2px 7px;
+  }
+  .nexus-admin .admin-home-logo .nexus-logo-mark {
+    width: 34px;
+    height: 34px;
+  }
   .nexus-admin .admin-brand-caption,
   .nexus-admin .admin-nav-label,
-  .nexus-admin .admin-sidebar-bottom { display: none; }
+  .nexus-admin .admin-sidebar-bottom {
+    display: none;
+  }
   .nexus-admin .admin-week-sidebar nav {
     display: flex;
     flex-wrap: wrap;
@@ -1142,25 +1159,63 @@
     min-height: 42px;
     gap: 7px;
     padding: 8px 9px;
-    font-size: .72rem;
+    font-size: 0.72rem;
   }
-  .nexus-admin .admin-week-sidebar nav a small { display: none; }
-  .nexus-admin .admin-week-panel { margin: 0; }
-  .nexus-admin .admin-week-topbar { padding: 10px 16px; }
-  .nexus-admin .admin-topbar-right { gap: 10px; }
-  .nexus-admin .admin-account { gap: 7px; }
-  .nexus-admin .admin-account-details { display: none; }
-  .nexus-admin .admin-logout-button { width: 40px; min-width: 40px; padding: 0; font-size: 0; }
-  .nexus-admin .admin-logout-button svg { margin: 0; }
-  .nexus-admin .admin-week-content { padding: 24px 18px 40px; }
+  .nexus-admin .admin-week-sidebar nav a small {
+    display: none;
+  }
+  .nexus-admin .admin-week-panel {
+    margin: 0;
+  }
+  .nexus-admin .admin-week-topbar {
+    padding: 10px 16px;
+  }
+  .nexus-admin .admin-topbar-right {
+    gap: 10px;
+  }
+  .nexus-admin .admin-account {
+    gap: 7px;
+  }
+  .nexus-admin .admin-account-details {
+    display: none;
+  }
+  .nexus-admin .admin-logout-button {
+    width: 40px;
+    min-width: 40px;
+    padding: 0;
+    font-size: 0;
+  }
+  .nexus-admin .admin-logout-button svg {
+    margin: 0;
+  }
+  .nexus-admin .admin-week-content {
+    padding: 24px 18px 40px;
+  }
 }
 @media (max-width: 520px) {
-  .nexus-admin .admin-week-sidebar { align-items: flex-start; flex-direction: column; }
-  .nexus-admin .admin-week-sidebar nav { width: 100%; justify-content: space-between; margin: 0; }
-  .nexus-admin .admin-week-sidebar nav a { flex: 1; justify-content: center; }
-  .nexus-admin .admin-week-topbar { align-items: flex-start; gap: 10px; }
-  .nexus-admin .admin-breadcrumb-current { display: none; }
-  .nexus-admin .admin-topbar-right { margin-left: auto; }
+  .nexus-admin .admin-week-sidebar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .nexus-admin .admin-week-sidebar nav {
+    width: 100%;
+    justify-content: space-between;
+    margin: 0;
+  }
+  .nexus-admin .admin-week-sidebar nav a {
+    flex: 1;
+    justify-content: center;
+  }
+  .nexus-admin .admin-week-topbar {
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .nexus-admin .admin-breadcrumb-current {
+    display: none;
+  }
+  .nexus-admin .admin-topbar-right {
+    margin-left: auto;
+  }
 }
 .nexus-admin .admin-store-button {
   min-height: 40px;
@@ -1179,4 +1234,100 @@
   justify-content: center;
   gap: 8px;
   color: inherit;
+}
+
+/* Shared Admin semantic tokens, including portalled dialogs. */
+.nexus-admin,
+.admin-dialog {
+  --color-ink: #202a3b;
+  --color-muted: #58677c;
+  --color-muted-foreground: #58677c;
+  --color-line: #dce3eb;
+  --color-border: #dce3eb;
+  --color-input: #dce3eb;
+  --color-brand: #9e0b0f;
+  --color-brand-dark: #9e0b0f;
+  --color-brand-soft: #fdf1f2;
+  --color-ring: #9e0b0f;
+  --color-accent: #f1f4f8;
+  --color-accent-foreground: #202a3b;
+  --ink: #202a3b;
+  --muted: #58677c;
+  --line: #dce3eb;
+}
+.nexus-admin [data-slot='button'][data-variant='default'],
+.admin-dialog [data-slot='button'][data-variant='default'] {
+  background: #9e0b0f;
+  color: #fff;
+}
+.nexus-admin [data-slot='button'][data-variant='default']:hover,
+.admin-dialog [data-slot='button'][data-variant='default']:hover,
+.nexus-admin .admin-button:not(.admin-button-outline):hover {
+  background: #820b0e;
+}
+.nexus-admin [data-slot='button'][data-variant='outline']:hover,
+.nexus-admin [data-slot='button'][data-variant='ghost']:hover {
+  background: #f1f4f8;
+  color: #202a3b;
+}
+.nexus-admin [data-slot='button'].admin-danger,
+.admin-dialog [data-slot='button'].admin-danger {
+  border: 1px solid #b91c1c;
+  background: #fff;
+  color: #b91c1c;
+}
+.nexus-admin [data-slot='button'].admin-danger:hover,
+.admin-dialog [data-slot='button'].admin-danger:hover {
+  background: #fef2f2;
+  color: #991b1b;
+}
+.nexus-admin .admin-week-sidebar nav a > svg {
+  color: inherit;
+}
+.nexus-admin .admin-week-sidebar nav a[aria-current='page'] > svg {
+  color: #ffb4b9;
+}
+.nexus-admin .admin-week-sidebar nav a span {
+  display: inline;
+  font-size: inherit;
+  opacity: 1;
+}
+.nexus-admin .admin-week-sidebar nav a small {
+  color: #aab6c8;
+}
+.nexus-admin .admin-account .admin-logout-button {
+  border: 1px solid var(--line);
+  background: #fff;
+  text-decoration: none;
+  min-height: 44px;
+}
+.nexus-admin .admin-store-button {
+  min-height: 44px;
+}
+.nexus-admin .admin-products-table {
+  font-size: 14px;
+}
+.nexus-admin .admin-products-table th,
+.nexus-admin .admin-badge {
+  font-size: 12px;
+}
+.nexus-admin .admin-product-cell .admin-muted {
+  font-size: 12px;
+}
+.nexus-admin .admin-field label,
+.nexus-admin .admin-edit-link {
+  font-size: 14px;
+}
+.nexus-admin .admin-week-sidebar nav a {
+  min-height: 44px;
+}
+.nexus-admin .admin-select-content {
+  color: var(--ink);
+}
+@media (prefers-reduced-motion: reduce) {
+  .nexus-admin *,
+  .admin-dialog * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }

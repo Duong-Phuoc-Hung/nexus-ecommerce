@@ -17,6 +17,17 @@ const forbidden = errorResponse(
 const PUBLIC = 'Route PUBLIC: không cần token.';
 const PRIVATE = 'Route PRIVATE: bắt buộc header `Authorization: Bearer <JWT>`.';
 
+const commonComponents = {
+  securitySchemes: {
+    BearerAuth: {
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'JWT',
+      description: 'Nhập JWT token sau khi đăng nhập (không cần gõ Bearer)',
+    },
+  },
+};
+
 export const userSpec = {
   openapi: '3.0.0',
   info: {
@@ -25,17 +36,8 @@ export const userSpec = {
     description:
       'Dịch vụ quản lý Người dùng, Đăng nhập (Auth) & Phân quyền (RBAC). Hỗ trợ UUID và tìm kiếm theo Email.',
   },
-  servers: [{ url: 'http://localhost:4000', description: 'API Gateway (Cổng 4000)' }],
-  components: {
-    securitySchemes: {
-      BearerAuth: {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        description: 'Nhập JWT token sau khi đăng nhập',
-      },
-    },
-  },
+  servers: [{ url: '/', description: 'API Gateway (Same Origin)' }],
+  components: commonComponents,
   paths: {
     '/api/v1/auth/login': {
       post: {
@@ -81,11 +83,46 @@ export const userSpec = {
         },
       },
     },
+    '/api/v1/auth/send-otp': {
+      post: {
+        tags: ['Authentication'],
+        summary: 'Gửi mã OTP xác thực đăng ký đến Gmail',
+        description: `${PUBLIC} Method: POST. Header: Content-Type: application/json. Gửi mã OTP 6 số ngẫu nhiên qua Gmail SMTP (thời hạn 5 phút). Kiểm tra trùng lặp email trước khi gửi. Áp dụng Cooldown 60s giữa các lần gửi và giới hạn tối đa 5 lần/giờ cho mỗi email. Trường devOtp chỉ được xuất trong môi trường test nội bộ.`,
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['email'],
+                properties: {
+                  email: { type: 'string', example: 'nguyen.buyer@gmail.com' },
+                  fullName: { type: 'string', example: 'Nguyễn Văn Buyer' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Gửi OTP thành công', {
+            success: true,
+            message:
+              'Mã xác thực OTP đã được gửi đến hòm thư Gmail của bạn. Vui lòng kiểm tra hộp thư (kể cả mục Spam).',
+          }),
+          400: errorResponse('Dữ liệu không hợp lệ', 'Định dạng email không hợp lệ.'),
+          409: errorResponse('Email đã tồn tại', 'Email này đã được đăng ký trong hệ thống.'),
+          429: errorResponse(
+            'Quá nhiều yêu cầu OTP (Rate Limit / Cooldown)',
+            'Vui lòng đợi 60 giây trước khi yêu cầu gửi lại mã OTP mới.',
+          ),
+        },
+      },
+    },
     '/api/v1/auth/register': {
       post: {
         tags: ['Authentication'],
         summary: 'Đăng ký tài khoản mới',
-        description: `${PUBLIC} Method: POST. Header: Content-Type: application/json. Tài khoản mới mặc định có vai trò BUYER. email bắt buộc đúng định dạng, fullName tối đa 100 ký tự, password tối thiểu 6 ký tự.`,
+        description: `${PUBLIC} Method: POST. Header: Content-Type: application/json. Tài khoản mới mặc định có vai trò BUYER. email bắt buộc đúng định dạng, fullName tối đa 100 ký tự, password tối thiểu 6 ký tự. Nếu đã yêu cầu gửi OTP, bắt buộc truyền trường otp để hoàn tất xác thực.`,
         requestBody: {
           required: true,
           content: {
@@ -97,6 +134,12 @@ export const userSpec = {
                   email: { type: 'string', example: 'khachhangmoi@gmail.com' },
                   fullName: { type: 'string', example: 'Nguyễn Văn A' },
                   password: { type: 'string', example: 'Password@123' },
+                  phone: { type: 'string', example: '0912345678' },
+                  otp: {
+                    type: 'string',
+                    example: '123456',
+                    description: 'Mã xác thực OTP 6 số đã gửi qua Gmail',
+                  },
                 },
               },
             },
@@ -223,6 +266,7 @@ export const userSpec = {
               id: 'a0000000-0000-0000-0000-000000000003',
               email: 'buyer@gmail.com',
               fullName: 'Nguyễn Văn Buyer',
+              phone: '0901234567',
               role: 'BUYER',
               status: 'ACTIVE',
               reputationScore: 100,
@@ -230,6 +274,195 @@ export const userSpec = {
           }),
           401: unauthorized,
           403: forbidden,
+        },
+      },
+      patch: {
+        tags: ['Users & Profile'],
+        summary: 'Cập nhật họ tên và số điện thoại của chính mình (P0 #2)',
+        description: `${PRIVATE} Cần quyền PROFILE.UPDATE. Cho phép cập nhật fullName và phone thật. Số điện thoại được đối chiếu chống trùng lặp.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  fullName: { type: 'string', example: 'Nguyễn Văn Buyer Mới' },
+                  phone: { type: 'string', example: '0912345678' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Cập nhật thành công', {
+            success: true,
+            data: {
+              id: 'a0000000-0000-0000-0000-000000000003',
+              email: 'buyer@gmail.com',
+              fullName: 'Nguyễn Văn Buyer Mới',
+              phone: '0912345678',
+              role: 'BUYER',
+              status: 'ACTIVE',
+              reputationScore: 100,
+            },
+          }),
+          400: errorResponse(
+            'Dữ liệu không hợp lệ',
+            'Số điện thoại không đúng định dạng Việt Nam.',
+          ),
+          401: unauthorized,
+          409: errorResponse(
+            'Số điện thoại trùng lặp',
+            'Số điện thoại này đã được đăng ký bởi tài khoản khác.',
+          ),
+        },
+      },
+    },
+    '/api/v1/users/me/addresses': {
+      get: {
+        tags: ['Buyer Address Book'],
+        summary: 'Lấy sổ địa chỉ nhận hàng của Buyer (P0 #3)',
+        description: `${PRIVATE} Lấy danh sách địa chỉ đã lưu của chính Buyer (tối đa 5 địa chỉ). Luôn có tối đa 1 địa chỉ mặc định được ưu tiên lên đầu.`,
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: jsonResponse('Danh sách địa chỉ', {
+            success: true,
+            data: [
+              {
+                id: 'addr_123',
+                userId: 'usr_01',
+                label: 'Nhà riêng',
+                recipientName: 'Nguyễn Văn Buyer',
+                phone: '0901234567',
+                provinceCode: '79',
+                provinceName: 'Thành phố Hồ Chí Minh',
+                wardCode: '26734',
+                wardName: 'Phường Bến Nghé',
+                street: '123 Lê Lợi',
+                note: 'Giao giờ hành chính',
+                isDefault: true,
+                createdAt: '2026-10-28T07:00:00.000Z',
+              },
+            ],
+          }),
+          401: unauthorized,
+        },
+      },
+      post: {
+        tags: ['Buyer Address Book'],
+        summary: 'Tạo địa chỉ nhận hàng mới (P0 #4)',
+        description: `${PRIVATE} Thêm địa chỉ mới theo chuẩn 2 cấp (Tỉnh/Thành -> Phường/Xã). Giới hạn tối đa 5 địa chỉ active. Địa chỉ đầu tiên tự động đặt làm mặc định.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: [
+                  'recipientName',
+                  'phone',
+                  'provinceCode',
+                  'provinceName',
+                  'wardCode',
+                  'wardName',
+                  'street',
+                ],
+                properties: {
+                  label: { type: 'string', example: 'Nhà riêng' },
+                  recipientName: { type: 'string', example: 'Nguyễn Văn Buyer' },
+                  phone: { type: 'string', example: '0901234567' },
+                  provinceCode: { type: 'string', example: '79' },
+                  provinceName: { type: 'string', example: 'Thành phố Hồ Chí Minh' },
+                  wardCode: { type: 'string', example: '26734' },
+                  wardName: { type: 'string', example: 'Phường Bến Nghé' },
+                  street: { type: 'string', example: '123 Lê Lợi' },
+                  note: { type: 'string', example: 'Giao giờ hành chính' },
+                  isDefault: { type: 'boolean', example: false },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: jsonResponse('Tạo địa chỉ thành công', {
+            success: true,
+            data: { id: 'addr_new', isDefault: true },
+          }),
+          400: errorResponse(
+            'Dữ liệu không hợp lệ',
+            'Thiếu thông tin hoặc số điện thoại không hợp lệ.',
+          ),
+          401: unauthorized,
+          422: errorResponse(
+            'Vượt quá giới hạn',
+            'ADDRESS_LIMIT_REACHED: Mỗi khách hàng chỉ được lưu tối đa 5 địa chỉ đang hoạt động.',
+          ),
+        },
+      },
+    },
+    '/api/v1/users/me/addresses/{addressId}': {
+      patch: {
+        tags: ['Buyer Address Book'],
+        summary: 'Cập nhật địa chỉ nhận hàng (P0 #5)',
+        description: `${PRIVATE} Sửa địa chỉ thuộc sở hữu của Buyer. Không làm thay đổi snapshot trong các đơn hàng cũ đã đặt.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'addressId', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  label: { type: 'string' },
+                  recipientName: { type: 'string' },
+                  phone: { type: 'string' },
+                  street: { type: 'string' },
+                  note: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Cập nhật thành công', { success: true }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy', 'Địa chỉ không tồn tại.'),
+        },
+      },
+      delete: {
+        tags: ['Buyer Address Book'],
+        summary: 'Xóa địa chỉ nhận hàng (P0 #6)',
+        description: `${PRIVATE} Xóa địa chỉ. Nếu xóa đúng địa chỉ mặc định, tự động chuyển mặc định cho địa chỉ còn lại tạo sớm nhất.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'addressId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: jsonResponse('Xóa thành công', {
+            success: true,
+            message: 'Địa chỉ đã được xóa thành công.',
+          }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy', 'Địa chỉ không tồn tại.'),
+        },
+      },
+    },
+    '/api/v1/users/me/addresses/{addressId}/default': {
+      put: {
+        tags: ['Buyer Address Book'],
+        summary: 'Đặt địa chỉ làm mặc định (P0 #7)',
+        description: `${PRIVATE} Chuyển địa chỉ chỉ định thành mặc định duy nhất trong 1 giao dịch cơ sở dữ liệu.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [{ name: 'addressId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: jsonResponse('Đặt mặc định thành công', { success: true }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy', 'Địa chỉ không tồn tại.'),
         },
       },
     },
@@ -417,7 +650,8 @@ export const catalogSpec = {
     version: '1.0.0',
     description: 'Dịch vụ quản lý Danh mục & Sản phẩm bán trên sàn Nexus.',
   },
-  servers: [{ url: 'http://localhost:4000', description: 'API Gateway (Cổng 4000)' }],
+  servers: [{ url: '/', description: 'API Gateway (Same Origin)' }],
+  components: commonComponents,
   paths: {
     '/api/v1/categories': {
       get: {
@@ -473,11 +707,56 @@ export const catalogSpec = {
         },
       },
     },
+
+    '/api/v1/products/mine': {
+      get: {
+        tags: ['Products'],
+        summary: 'Xem kho hàng (Seller)',
+        description: `${PRIVATE} Method: GET. Bắt buộc đăng nhập tài khoản Seller. Trả về toàn bộ danh sách sản phẩm thuộc về chính người bán đó (bao gồm cả ACTIVE, DRAFT, ARCHIVED để quản lý kho).`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'status',
+            in: 'query',
+            required: false,
+            schema: { type: 'string', enum: ['ACTIVE', 'DRAFT', 'ARCHIVED', 'OUT_OF_STOCK'] },
+            description: 'Lọc kho hàng theo trạng thái (tùy chọn)',
+          },
+        ],
+        responses: {
+          200: jsonResponse('Kho hàng của Seller', {
+            success: true,
+            total: 15,
+            data: [
+              {
+                id: '15',
+                sellerId: '01a15822-3fd0-7b39-ad01-f11da72d5b80',
+                sellerName: 'Trần Thị Seller',
+                title: 'Mô hình LEGO Icons NASA Apollo 11 Lunar Lander 10266',
+                price: 3450000,
+                stockQuantity: 10,
+                status: 'ACTIVE',
+                createdAt: '2026-10-24T18:00:00.000Z',
+                updatedAt: '2026-10-24T18:00:00.000Z',
+              },
+            ],
+          }),
+          401: errorResponse(
+            'Chưa xác thực',
+            'Vui lòng đăng nhập tài khoản Seller để thực hiện thao tác này.',
+          ),
+          403: errorResponse(
+            'Không có quyền',
+            'Chỉ tài khoản vai trò SELLER hoặc ADMIN mới có quyền truy cập.',
+          ),
+        },
+      },
+    },
     '/api/v1/products': {
       get: {
         tags: ['Products'],
-        summary: 'Lấy danh sách tất cả sản phẩm',
-        description: `${PUBLIC} Method: GET. Truy xuất toàn bộ sản phẩm đang được bày bán (không phân trang).`,
+        summary: 'Danh sách tất cả sản phẩm (khách hàng)',
+        description: `${PUBLIC} Method: GET. Truy xuất toàn bộ sản phẩm đang được bày bán công khai ngoài trang chủ (không cần đăng nhập).`,
         responses: {
           200: jsonResponse('Danh sách sản phẩm', {
             success: true,
@@ -500,6 +779,73 @@ export const catalogSpec = {
               },
             ],
           }),
+        },
+      },
+      post: {
+        tags: ['Products'],
+        summary: 'Tạo sản phẩm mới (Seller)',
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['title', 'description', 'categoryId', 'price'],
+                properties: {
+                  title: { type: 'string', example: 'iPhone 15 Pro Max 512GB Blue Titanium' },
+                  description: {
+                    type: 'string',
+                    example: 'Điện thoại chính hãng VN/A nguyên seal bảo hành 12 tháng',
+                  },
+                  categoryId: { type: 'string', example: '100' },
+                  price: { type: 'number', example: 34990000 },
+                  stockQuantity: { type: 'integer', example: 15 },
+                  condition: {
+                    type: 'string',
+                    enum: ['NEW', 'LIKE_NEW', 'USED', 'REFURBISHED'],
+                    default: 'NEW',
+                  },
+                  allowAuction: { type: 'boolean', default: false },
+                  images: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    example: ['https://images.unsplash.com/photo-1695048133142-1a20484d2569'],
+                  },
+                  attributes: {
+                    type: 'object',
+                    description: 'Các thuộc tính kỹ thuật chi tiết của sản phẩm (dạng key-value)',
+                    example: {
+                      'Màu sắc': 'Blue Titanium',
+                      'Dung lượng': '512GB',
+                      RAM: '8GB',
+                      'Bảo hành': '12 tháng VN/A',
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: jsonResponse('Tạo sản phẩm thành công', {
+            success: true,
+            message: 'Tạo sản phẩm mới thành công!',
+            data: {
+              id: '16',
+              slug: 'iphone-15-pro-max-512gb-blue-titanium-123456',
+              title: 'iPhone 15 Pro Max 512GB Blue Titanium',
+            },
+          }),
+          400: errorResponse('Dữ liệu không hợp lệ', 'Giá sản phẩm phải lớn hơn 0 VND.'),
+          401: errorResponse(
+            'Chưa xác thực',
+            'Vui lòng đăng nhập tài khoản Seller để thực hiện thao tác này.',
+          ),
+          403: errorResponse(
+            'Không có quyền',
+            'Tài khoản với vai trò BUYER không có quyền đăng bán sản phẩm.',
+          ),
         },
       },
     },
@@ -604,6 +950,108 @@ export const catalogSpec = {
           404: errorResponse('Không tìm thấy sản phẩm', 'Product with ID "999999" was not found.'),
         },
       },
+      put: {
+        tags: ['Products'],
+        summary: 'Cập nhật sản phẩm (Seller)',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã ID của sản phẩm cần cập nhật (ví dụ: 17)',
+            schema: { type: 'string', example: '17' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  title: {
+                    type: 'string',
+                    example: 'iPhone 15 Pro Max 512GB Blue Titanium (Đã giảm giá)',
+                  },
+                  description: {
+                    type: 'string',
+                    example: 'Bản chính hãng VN/A nguyên seal bảo hành 12 tháng tại Apple Store',
+                  },
+                  categoryId: { type: 'string', example: '100' },
+                  price: { type: 'number', example: 32990000 },
+                  stockQuantity: { type: 'integer', example: 20 },
+                  condition: {
+                    type: 'string',
+                    enum: ['NEW', 'LIKE_NEW', 'USED', 'REFURBISHED'],
+                    default: 'NEW',
+                  },
+                  status: {
+                    type: 'string',
+                    enum: ['ACTIVE', 'DRAFT', 'ARCHIVED', 'OUT_OF_STOCK'],
+                    default: 'ACTIVE',
+                  },
+                  allowAuction: { type: 'boolean', default: false },
+                  images: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    example: ['https://images.unsplash.com/photo-1695048133142-1a20484d2569'],
+                  },
+                  attributes: {
+                    type: 'object',
+                    example: {
+                      'Màu sắc': 'Blue Titanium',
+                      'Dung lượng': '512GB',
+                      RAM: '8GB',
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Cập nhật thành công', {
+            success: true,
+            message: 'Cập nhật sản phẩm thành công!',
+            data: {
+              id: '17',
+              title: 'iPhone 15 Pro Max 512GB Blue Titanium (Đã giảm giá)',
+              price: 32990000,
+              stockQuantity: 20,
+              status: 'ACTIVE',
+              updatedAt: '2026-10-25T01:20:00.000Z',
+            },
+          }),
+          400: errorResponse('Dữ liệu không hợp lệ', 'Giá sản phẩm phải lớn hơn 0 VND.'),
+          401: errorResponse('Chưa xác thực', 'Vui lòng đăng nhập để thực hiện thao tác này.'),
+          403: errorResponse('Từ chối truy cập', 'Bạn không có quyền chỉnh sửa sản phẩm này.'),
+          404: errorResponse('Không tìm thấy', 'Product with ID "999" was not found.'),
+        },
+      },
+      delete: {
+        tags: ['Products'],
+        summary: 'Xóa sản phẩm (Seller)',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã ID của sản phẩm cần xóa',
+            schema: { type: 'string', example: '15' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Xóa thành công', {
+            success: true,
+            message: "Đã xóa thành công sản phẩm với mã ID '15'.",
+          }),
+          401: errorResponse('Chưa xác thực', 'Vui lòng đăng nhập để thực hiện thao tác này.'),
+          403: errorResponse('Từ chối truy cập', 'Bạn không có quyền xóa sản phẩm của người khác.'),
+          404: errorResponse('Không tìm thấy', 'Product with ID "999" was not found.'),
+        },
+      },
     },
   },
 };
@@ -615,7 +1063,8 @@ export const auctionSpec = {
     version: '1.0.0',
     description: 'Dịch vụ quản lý các Phiên đấu giá và Đặt giá thầu (Bidding).',
   },
-  servers: [{ url: 'http://localhost:4000', description: 'API Gateway (Cổng 4000)' }],
+  servers: [{ url: '/', description: 'API Gateway (Same Origin)' }],
+  components: commonComponents,
   paths: {
     '/api/v1/auctions': {
       get: {
@@ -718,17 +1167,8 @@ export const commerceSpec = {
     description:
       'Dịch vụ quản lý Giỏ hàng, Đặt hàng (Checkout), Hóa đơn & Xử lý khiếu nại (Support Staff).',
   },
-  servers: [{ url: 'http://localhost:4000', description: 'API Gateway (Cổng 4000)' }],
-  components: {
-    securitySchemes: {
-      BearerAuth: {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        description: 'Nhập JWT token của SUPPORT_STAFF hoặc ADMIN',
-      },
-    },
-  },
+  servers: [{ url: '/', description: 'API Gateway (Same Origin)' }],
+  components: commonComponents,
   paths: {
     '/api/v1/orders': {
       get: {

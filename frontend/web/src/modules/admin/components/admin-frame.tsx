@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { Gavel, LayoutDashboard, LogOut, PackageSearch } from 'lucide-react';
+import { Gavel, LayoutDashboard, LogOut, PackageSearch, ReceiptText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { NexusLogo } from '@/components/layout/nexus-logo';
 import { useSession } from '@/modules/auth/hooks/use-session';
@@ -12,6 +12,7 @@ const navigation = [
   { href: '/admin', label: 'Tổng quan', icon: LayoutDashboard },
   { href: '/admin/products', label: 'Sản phẩm', icon: PackageSearch },
   { href: '/admin/auctions', label: 'Phiên đấu giá', icon: Gavel },
+  { href: '/admin/orders', label: 'Đơn hàng', icon: ReceiptText },
 ];
 
 export function AdminFrame({
@@ -30,7 +31,6 @@ export function AdminFrame({
   productsPath?: string;
 }) {
   const pathname = usePathname() || homePath;
-  const router = useRouter();
   const { user, logout } = useSession();
   const [loggingOut, setLoggingOut] = useState(false);
   const displayName = user?.fullName || name || 'Quản trị viên';
@@ -39,7 +39,8 @@ export function AdminFrame({
     setLoggingOut(true);
     try {
       await logout();
-      router.replace('/login');
+      // Leave the protected route with a clean URL so its guard cannot re-add `next=/admin/...`.
+      window.location.replace('/login');
     } finally {
       setLoggingOut(false);
     }
@@ -85,7 +86,9 @@ export function AdminFrame({
                 ? 'Phiên đấu giá'
                 : pathname.includes('/products')
                   ? 'Sản phẩm'
-                  : 'Tổng quan'}
+                  : pathname.includes('/orders')
+                    ? 'Đơn hàng'
+                    : 'Tổng quan'}
             </span>
           </div>
           <div className="admin-topbar-right">

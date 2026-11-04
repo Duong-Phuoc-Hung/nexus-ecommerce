@@ -1,14 +1,35 @@
 'use client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+  type ClipboardEvent,
+} from 'react';
 import { useSearchParams } from 'next/navigation';
 import { NexusLogo } from '@/components/layout/nexus-logo';
 import { authApi } from '@/modules/auth/api/auth.api';
 import { ApiError, userMessage } from '../../../lib/axios/http';
-import { safeNextPath } from '../../../lib/utils/navigation';
+import {
+  canRoleVisitPath,
+  roleHomePath,
+  safeNextPath,
+  resolveAuthDestination,
+} from '../../../lib/utils/navigation';
+import { saveContactPhone } from '@/modules/user/utils/address-book';
 import './auth.css';
 type Mode = 'login' | 'register' | 'forgot-password' | 'reset-password';
+
+const DEMO_ACCOUNTS = [
+  { label: 'Người bán (Seller)', email: 'seller@gmail.com' },
+  { label: 'Hỗ trợ (Support)', email: 'staff@gmail.com' },
+  { label: 'Quản trị (Admin)', email: 'admin@gmail.com' },
+  { label: 'Người mua (Buyer)', email: 'buyer@gmail.com' },
+];
+
 export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
   const params = useSearchParams();
   const token = useRef(params?.get('token') || '');
@@ -16,6 +37,7 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
   const [values, setValues] = useState({
     email: '',
     fullName: '',
+    phone: '',
     password: '',
     confirmPassword: '',
   });
@@ -25,20 +47,34 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
   const [busy, setBusy] = useState(false);
   const [shown, setShown] = useState(false);
   const [remember, setRemember] = useState(false);
+
+  // OTP Verification States
+  const [otpStep, setOtpStep] = useState(false);
+  const [otpValues, setOtpValues] = useState<string[]>(['', '', '', '', '', '']);
+  const [otpCooldown, setOtpCooldown] = useState(0);
+  const [devOtpCode, setDevOtpCode] = useState<string | null>(null);
+  const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
+
   const summary = useRef<HTMLParagraphElement>(null);
   const isRegister = mode === 'register',
     isReset = mode === 'reset-password',
     isForgot = mode === 'forgot-password';
-  const title = isRegister
-    ? 'Tạo tài khoản Nexus'
-    : isReset
-      ? 'Đặt mật khẩu mới'
-      : isForgot
-        ? 'Quên mật khẩu'
-        : 'Chào mừng bạn trở lại';
+  const title = otpStep
+    ? 'Xác thực mã OTP'
+    : isRegister
+      ? 'Tạo tài khoản Nexus'
+      : isReset
+        ? 'Đặt mật khẩu mới'
+        : isForgot
+          ? 'Quên mật khẩu'
+          : 'Chào mừng bạn trở lại';
   const next = safeNextPath(params?.get('next'));
+
   function changeMode(nextMode: Mode) {
     setMode(nextMode);
+    setOtpStep(false);
+    setOtpValues(['', '', '', '', '', '']);
+    setDevOtpCode(null);
     setErrors({});
     setNotice('');
     setSuccess(false);
@@ -50,11 +86,15 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
       '/' + nextMode + (next === '/' ? '' : '?next=' + encodeURIComponent(next)),
     );
   }
+
   useEffect(() => {
     const onBack = () => {
       const value = location.pathname.slice(1);
       if (['login', 'register', 'forgot-password', 'reset-password'].includes(value)) {
         setMode(value as Mode);
+        setOtpStep(false);
+        setOtpValues(['', '', '', '', '', '']);
+        setDevOtpCode(null);
         setErrors({});
         setNotice('');
         setValues((v) => ({ ...v, password: '', confirmPassword: '' }));
@@ -63,21 +103,180 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
     window.addEventListener('popstate', onBack);
     return () => window.removeEventListener('popstate', onBack);
   }, []);
+
+  // Cooldown countdown for resend OTP
+  useEffect(() => {
+    if (otpCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setOtpCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [otpCooldown]);
+
   function field(key: keyof typeof values, value: string) {
     setValues((v) => ({ ...v, [key]: value }));
     setErrors((e) => ({ ...e, [key]: '' }));
   }
+
   function focusError() {
     requestAnimationFrame(() => summary.current?.focus());
   }
+
+  // OTP Input event handlers
+  function handleOtpChange(index: number, val: string) {
+    const cleaned = val.replace(/\D/g, '');
+    if (!cleaned) {
+      const nextOtp = [...otpValues];
+      nextOtp[index] = '';
+      setOtpValues(nextOtp);
+      return;
+    }
+    const digit = cleaned.slice(-1);
+    const nextOtp = [...otpValues];
+    nextOtp[index] = digit;
+    setOtpValues(nextOtp);
+    setErrors((prev) => ({ ...prev, otp: '' }));
+
+    if (index < 5) {
+      otpRefs.current[index + 1]?.focus();
+    }
+  }
+
+  function handleOtpKeyDown(index: number, e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Backspace') {
+      if (!otpValues[index] && index > 0) {
+        otpRefs.current[index - 1]?.focus();
+      }
+    } else if (e.key === 'ArrowLeft' && index > 0) {
+      otpRefs.current[index - 1]?.focus();
+    } else if (e.key === 'ArrowRight' && index < 5) {
+      otpRefs.current[index + 1]?.focus();
+    }
+  }
+
+  function handleOtpPaste(e: ClipboardEvent<HTMLDivElement>) {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text/plain') || '';
+    const digits = pasted.replace(/\D/g, '').slice(0, 6);
+    if (!digits) return;
+    const nextOtp = [...otpValues];
+    for (let i = 0; i < digits.length; i++) {
+      nextOtp[i] = digits[i];
+    }
+    setOtpValues(nextOtp);
+    setErrors((prev) => ({ ...prev, otp: '' }));
+    const focusIndex = Math.min(digits.length, 5);
+    otpRefs.current[focusIndex]?.focus();
+  }
+
+  function fillDevOtp() {
+    if (!devOtpCode) return;
+    const digits = devOtpCode.split('').slice(0, 6);
+    const nextOtp = [...otpValues];
+    digits.forEach((d, i) => {
+      nextOtp[i] = d;
+    });
+    setOtpValues(nextOtp);
+    setErrors((prev) => ({ ...prev, otp: '' }));
+    otpRefs.current[5]?.focus();
+  }
+
+  async function handleResendOtp() {
+    if (otpCooldown > 0 || busy) return;
+    setBusy(true);
+    setNotice('');
+    try {
+      const res = await authApi.sendRegistrationOtp(values.email.trim(), values.fullName.trim());
+      setOtpCooldown(60);
+      if (res?.devOtp) setDevOtpCode(res.devOtp);
+      setSuccess(true);
+      setNotice('Đã gửi lại mã xác thực OTP mới về Gmail của bạn.');
+      otpRefs.current[0]?.focus();
+    } catch (err) {
+      setSuccess(false);
+      setNotice(userMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
+
+    // STEP 2: When user is in OTP verification step
+    if (isRegister && otpStep) {
+      const fullOtp = otpValues.join('');
+      if (fullOtp.length < 6) {
+        setErrors({ otp: 'Vui lòng nhập đầy đủ 6 chữ số mã OTP.' });
+        setNotice('Vui lòng nhập đầy đủ 6 chữ số mã OTP.');
+        setSuccess(false);
+        focusError();
+        return;
+      }
+
+      setBusy(true);
+      setNotice('');
+      try {
+        await authApi.register({
+          email: values.email.trim(),
+          fullName: values.fullName.trim(),
+          password: values.password,
+          phone: values.phone.replace(/[\s.-]/g, ''),
+          otp: fullOtp,
+        });
+
+        // Tự động đăng nhập sau khi xác thực OTP thành công
+        try {
+          await authApi.login(values.email.trim(), values.password, remember);
+        } catch {
+          changeMode('login');
+          setSuccess(true);
+          setNotice('Tài khoản đã được tạo thành công! Vui lòng đăng nhập để tiếp tục.');
+          return;
+        }
+
+        const profile = await authApi.getProfile();
+        if (profile.status !== 'ACTIVE') {
+          throw new ApiError('Tài khoản chưa ở trạng thái hoạt động.', 423);
+        }
+        if (profile.role === 'BUYER') {
+          saveContactPhone(profile.id, values.phone.replace(/[\s.-]/g, ''));
+          window.location.assign('/account/addresses?setup=1&next=' + encodeURIComponent(next));
+          return;
+        }
+        const destination = resolveAuthDestination(profile.role, next);
+        window.location.assign(destination);
+      } catch (error) {
+        const e = error instanceof ApiError ? error : null;
+        setErrors({ otp: 'Mã OTP không hợp lệ hoặc đã hết hạn.' });
+        setNotice(
+          e?.status === 400
+            ? 'Mã xác thực OTP không chính xác hoặc đã hết hạn. Vui lòng kiểm tra lại hoặc nhận lại mã mới.'
+            : userMessage(error),
+        );
+        setSuccess(false);
+        focusError();
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    // STEP 1: Registration form validation & Requesting OTP
     const validation: Record<string, string> = {};
     if (!isReset && !/^\S+@\S+\.\S+$/.test(values.email.trim()))
       validation.email = 'Nhập địa chỉ email hợp lệ.';
     if (isRegister && (!values.fullName.trim() || values.fullName.trim().length > 100))
       validation.fullName = 'Nhập họ và tên từ 1 đến 100 ký tự.';
+    if (isRegister && !/^(?:0|\+84)\d{9}$/.test(values.phone.replace(/[\s.-]/g, '')))
+      validation.phone = 'Nhập số điện thoại Việt Nam hợp lệ để liên hệ giao hàng.';
     if (
       !isForgot &&
       (!values.password ||
@@ -93,6 +292,7 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
       validation.confirmPassword = 'Mật khẩu xác nhận chưa trùng khớp.';
     if (isReset && !token.current)
       validation.token = 'Liên kết đặt lại mật khẩu chưa hợp lệ. Hãy gửi yêu cầu mới.';
+
     setErrors(validation);
     setSuccess(false);
     if (Object.keys(validation).length) {
@@ -100,8 +300,10 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
       focusError();
       return;
     }
+
     setBusy(true);
     setNotice('');
+
     try {
       if (isForgot) {
         await authApi.requestPasswordReset(values.email.trim());
@@ -116,33 +318,29 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
         setValues((v) => ({ ...v, password: '', confirmPassword: '' }));
         setSuccess(true);
         setNotice('Mật khẩu đã được thay đổi. Vui lòng đăng nhập lại bằng mật khẩu mới.');
-      } else {
-        if (isRegister) {
-          await authApi.register({
-            email: values.email.trim(),
-            fullName: values.fullName.trim(),
-            password: values.password,
-          });
-          try {
-            await authApi.login(values.email.trim(), values.password, remember);
-          } catch {
-            changeMode('login');
-            setSuccess(true);
-            setNotice('Tài khoản đã được tạo. Vui lòng đăng nhập để tiếp tục.');
-            return;
-          }
+      } else if (isRegister) {
+        // Gửi OTP qua Gmail và chuyển sang màn hình 6 ô nhập mã
+        const res = await authApi.sendRegistrationOtp(values.email.trim(), values.fullName.trim());
+        setOtpStep(true);
+        setOtpValues(['', '', '', '', '', '']);
+        setOtpCooldown(60);
+        if (res?.devOtp) {
+          setDevOtpCode(res.devOtp);
         } else {
-          await authApi.login(values.email.trim(), values.password, remember);
+          setDevOtpCode(null);
         }
+        setSuccess(true);
+        setNotice(
+          'Mã xác thực OTP đã được gửi đến email của bạn. Vui lòng nhập mã để hoàn tất đăng ký.',
+        );
+        requestAnimationFrame(() => otpRefs.current[0]?.focus());
+      } else {
+        await authApi.login(values.email.trim(), values.password, remember);
         const profile = await authApi.getProfile();
         if (profile.status !== 'ACTIVE') {
           throw new ApiError('Tài khoản chưa ở trạng thái hoạt động.', 423);
         }
-        let destination = next;
-        if (profile.role === 'ADMIN' && next === '/') destination = '/admin';
-        else if (profile.role === 'BUYER' && next === '/') destination = '/';
-        else if (profile.role === 'SELLER' && next === '/') destination = '/seller';
-        else if (profile.role === 'BUYER' && next.startsWith('/admin')) destination = '/';
+        const destination = resolveAuthDestination(profile.role, next);
         window.location.assign(destination);
       }
     } catch (error) {
@@ -155,15 +353,18 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
             ? 'Email hoặc mật khẩu chưa chính xác.'
             : e?.status === 409
               ? 'Email này đã được sử dụng. Bạn có thể đăng nhập hoặc đặt lại mật khẩu.'
-              : isReset && e?.status === 400
-                ? 'Mật khẩu chưa hợp lệ hoặc liên kết đã hết hạn/được sử dụng. Hãy kiểm tra thông tin hoặc gửi yêu cầu mới.'
-                : userMessage(error),
+              : e?.status === 429
+                ? 'Bạn đã yêu cầu gửi mã quá nhiều lần. Vui lòng đợi 1 lát rồi thử lại.'
+                : isReset && e?.status === 400
+                  ? 'Mật khẩu chưa hợp lệ hoặc liên kết đã hết hạn/được sử dụng. Hãy kiểm tra thông tin hoặc gửi yêu cầu mới.'
+                  : userMessage(error),
       );
       focusError();
     } finally {
       setBusy(false);
     }
   }
+
   function input(key: keyof typeof values, label: string, type = 'text', autoComplete?: string) {
     return (
       <div className="form-field">
@@ -187,6 +388,7 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
       </div>
     );
   }
+
   return (
     <div className="auth-page">
       <header className="auth-header">
@@ -194,7 +396,13 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
           <div className="auth-brand-group">
             <NexusLogo />
             <span className="auth-heading">
-              {isRegister ? 'Đăng ký' : isForgot || isReset ? 'Khôi phục tài khoản' : 'Đăng nhập'}
+              {isRegister
+                ? otpStep
+                  ? 'Xác thực OTP'
+                  : 'Đăng ký'
+                : isForgot || isReset
+                  ? 'Khôi phục tài khoản'
+                  : 'Đăng nhập'}
             </span>
           </div>
           <a className="help-link" href="/">
@@ -252,13 +460,15 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
               {title}
             </h2>
             <p className="auth-week-description">
-              {isReset
-                ? 'Chỉ sử dụng liên kết khôi phục do hệ thống cung cấp.'
-                : isForgot
-                  ? 'Nhập email bạn đã dùng để đăng ký tài khoản.'
-                  : 'Một tài khoản để khám phá những món đồ bạn yêu thích.'}
+              {otpStep
+                ? 'Mã xác thực 6 số bảo mật đã được gửi đến email của bạn.'
+                : isReset
+                  ? 'Chỉ sử dụng liên kết khôi phục do hệ thống cung cấp.'
+                  : isForgot
+                    ? 'Nhập email bạn đã dùng để đăng ký tài khoản.'
+                    : 'Một tài khoản để khám phá những món đồ bạn yêu thích.'}
             </p>
-            {!isForgot && !isReset && (
+            {!isForgot && !isReset && !otpStep && (
               <div className="auth-tabs">
                 <Button
                   variant="ghost"
@@ -286,60 +496,185 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
             )}
             <form className="auth-form" noValidate onSubmit={submit} aria-busy={busy}>
               <fieldset disabled={busy} className="auth-week-fieldset">
-                {!isReset && input('email', 'Email', 'email', 'email')}
-                {isRegister && input('fullName', 'Họ và tên', 'text', 'name')}
-                {!isForgot && (
-                  <>
-                    <div className="form-field">
-                      <label htmlFor="auth-password">{isReset ? 'Mật khẩu mới' : 'Mật khẩu'}</label>
-                      <div className="password-wrap">
-                        <Input
-                          id="auth-password"
-                          name="password"
-                          type={shown ? 'text' : 'password'}
-                          autoComplete={isRegister || isReset ? 'new-password' : 'current-password'}
-                          value={values.password}
-                          onChange={(e) => field('password', e.target.value)}
-                          aria-invalid={!!errors.password}
-                          aria-describedby={
-                            errors.password ? 'auth-password-error' : 'auth-password-hint'
-                          }
-                        />
-                        <Button
-                          variant="ghost"
-                          size="plain"
+                {mode === 'login' && (
+                  <div className="auth-demo-accounts">
+                    <span className="auth-demo-label">⚡ Đăng nhập nhanh tài khoản mẫu:</span>
+                    <div className="auth-demo-pills">
+                      {DEMO_ACCOUNTS.map((acc) => (
+                        <button
+                          key={acc.email}
                           type="button"
-                          className="password-toggle"
-                          onClick={() => setShown(!shown)}
-                          aria-label={shown ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
-                          aria-pressed={shown}
+                          className={`auth-demo-pill ${values.email === acc.email ? 'active' : ''}`}
+                          onClick={() => {
+                            field('email', acc.email);
+                            field('password', '123456');
+                            setNotice('');
+                            setErrors({});
+                            if (params?.get('next')) {
+                              history.replaceState(null, '', `/${mode}`);
+                            }
+                          }}
+                          disabled={busy}
+                          title={`Điền thông tin ${acc.email} / 123456`}
                         >
-                          {shown ? 'Ẩn' : 'Hiện'}
-                        </Button>
+                          {acc.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* OTP SCREEN VIEW */}
+                {isRegister && otpStep ? (
+                  <div className="auth-otp-wrap">
+                    <div className="auth-otp-email-badge">
+                      <span>
+                        Mã gửi tới: <strong>{values.email}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        className="auth-otp-change-email-btn"
+                        onClick={() => {
+                          setOtpStep(false);
+                          setNotice('');
+                          setSuccess(false);
+                          setErrors({});
+                        }}
+                        disabled={busy}
+                      >
+                        Đổi email
+                      </button>
+                    </div>
+
+                    {devOtpCode && (
+                      <div className="auth-otp-dev-badge">
+                        <span>
+                          💡 Mã thử nghiệm: <code>{devOtpCode}</code>
+                        </span>
+                        <button
+                          type="button"
+                          className="auth-otp-dev-fill-btn"
+                          onClick={fillDevOtp}
+                          disabled={busy}
+                        >
+                          Điền nhanh
+                        </button>
                       </div>
-                      {errors.password ? (
-                        <span className="field-error" id="auth-password-error">
-                          {errors.password}
-                        </span>
+                    )}
+
+                    <div className="auth-otp-row" onPaste={handleOtpPaste}>
+                      {otpValues.map((digit, idx) => (
+                        <input
+                          key={idx}
+                          ref={(el) => {
+                            otpRefs.current[idx] = el;
+                          }}
+                          type="text"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          pattern="\d*"
+                          maxLength={1}
+                          value={digit}
+                          onChange={(e) => handleOtpChange(idx, e.target.value)}
+                          onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                          className={`auth-otp-box ${digit ? 'has-value' : ''} ${
+                            errors.otp ? 'is-invalid' : ''
+                          }`}
+                          aria-label={`Chữ số OTP thứ ${idx + 1}`}
+                          disabled={busy}
+                        />
+                      ))}
+                    </div>
+
+                    <div className="auth-otp-resend-row">
+                      <span>Chưa nhận được mã?</span>
+                      {otpCooldown > 0 ? (
+                        <span className="auth-otp-timer">Gửi lại sau {otpCooldown}s</span>
                       ) : (
-                        <span id="auth-password-hint" className="auth-week-hint">
-                          {isReset
-                            ? 'Tối thiểu 12 ký tự.'
-                            : isRegister
-                              ? 'Tối thiểu 6 ký tự.'
-                              : 'Mật khẩu phân biệt chữ hoa và chữ thường.'}
-                        </span>
+                        <button
+                          type="button"
+                          className="auth-otp-resend-action"
+                          onClick={handleResendOtp}
+                          disabled={busy}
+                        >
+                          Gửi lại mã OTP
+                        </button>
                       )}
                     </div>
-                    {(isRegister || isReset) &&
-                      input(
-                        'confirmPassword',
-                        'Xác nhận mật khẩu',
-                        shown ? 'text' : 'password',
-                        'new-password',
-                      )}
+                  </div>
+                ) : (
+                  /* STANDARD FORM VIEW */
+                  <>
+                    {!isReset && input('email', 'Email', 'email', 'email')}
+                    {isRegister && input('fullName', 'Họ và tên', 'text', 'name')}
+                    {isRegister && (
+                      <>
+                        {input('phone', 'Số điện thoại liên hệ', 'tel', 'tel')}
+                        <p className="auth-week-hint">
+                          Số này dùng để điền nhanh thông tin giao hàng; hiện lưu trên trình duyệt
+                          này.
+                        </p>
+                      </>
+                    )}
+                    {!isForgot && (
+                      <>
+                        <div className="form-field">
+                          <label htmlFor="auth-password">
+                            {isReset ? 'Mật khẩu mới' : 'Mật khẩu'}
+                          </label>
+                          <div className="password-wrap">
+                            <Input
+                              id="auth-password"
+                              name="password"
+                              type={shown ? 'text' : 'password'}
+                              autoComplete={
+                                isRegister || isReset ? 'new-password' : 'current-password'
+                              }
+                              value={values.password}
+                              onChange={(e) => field('password', e.target.value)}
+                              aria-invalid={!!errors.password}
+                              aria-describedby={
+                                errors.password ? 'auth-password-error' : 'auth-password-hint'
+                              }
+                            />
+                            <Button
+                              variant="ghost"
+                              size="plain"
+                              type="button"
+                              className="password-toggle"
+                              onClick={() => setShown(!shown)}
+                              aria-label={shown ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                              aria-pressed={shown}
+                            >
+                              {shown ? 'Ẩn' : 'Hiện'}
+                            </Button>
+                          </div>
+                          {errors.password ? (
+                            <span className="field-error" id="auth-password-error">
+                              {errors.password}
+                            </span>
+                          ) : (
+                            <span id="auth-password-hint" className="auth-week-hint">
+                              {isReset
+                                ? 'Tối thiểu 12 ký tự.'
+                                : isRegister
+                                  ? 'Tối thiểu 6 ký tự.'
+                                  : 'Mật khẩu phân biệt chữ hoa và chữ thường.'}
+                            </span>
+                          )}
+                        </div>
+                        {(isRegister || isReset) &&
+                          input(
+                            'confirmPassword',
+                            'Xác nhận mật khẩu',
+                            shown ? 'text' : 'password',
+                            'new-password',
+                          )}
+                      </>
+                    )}
                   </>
                 )}
+
                 {mode === 'login' && (
                   <div className="auth-week-options">
                     <label>
@@ -376,6 +711,11 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
                     {errors.token}
                   </p>
                 )}
+                {errors.otp && !notice && (
+                  <p className="field-error" role="alert">
+                    {errors.otp}
+                  </p>
+                )}
                 {!(isReset && success) && (
                   <Button
                     variant="ghost"
@@ -387,7 +727,9 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
                     {busy
                       ? 'ĐANG XỬ LÝ…'
                       : isRegister
-                        ? 'TẠO TÀI KHOẢN'
+                        ? otpStep
+                          ? 'XÁC NHẬN VÀ TẠO TÀI KHOẢN'
+                          : 'TIẾP TỤC & NHẬN MÃ OTP'
                         : isForgot
                           ? 'GỬI HƯỚNG DẪN'
                           : isReset

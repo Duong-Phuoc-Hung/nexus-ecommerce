@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { AuctionBadge } from './auction-ui';
 import { auctionApi, auctionStatusLabel, currentPrice, type Auction } from '../api/auction.api';
 export function AuctionList() {
   const [rows, setRows] = useState<Auction[]>([]),
@@ -37,7 +38,9 @@ export function AuctionList() {
       }
     };
     void load();
-    const timer = setInterval(() => void load(), 3000);
+    const timer = setInterval(() => {
+      if (!document.hidden) void load();
+    }, 3000);
     const off = auctionApi.subscribe(() => void load());
     return () => {
       ignore = true;
@@ -55,7 +58,7 @@ export function AuctionList() {
       sort === 'price'
         ? currentPrice(a) - currentPrice(b)
         : sort === 'popular'
-          ? b.bids.length - a.bids.length
+          ? (b.bidCount ?? b.bids.length) - (a.bidCount ?? a.bids.length)
           : a.endAt - b.endAt,
     );
   const pages = Math.max(1, Math.ceil(matching.length / 8)),
@@ -110,7 +113,13 @@ export function AuctionList() {
               }}
             />
           </label>
-          <Select value={sort} onValueChange={setSort}>
+          <Select
+            value={sort}
+            onValueChange={(value) => {
+              setSort(value);
+              setPage(1);
+            }}
+          >
             <SelectTrigger aria-label="Sắp xếp phiên" className="w-full sm:w-52">
               <SelectValue />
             </SelectTrigger>
@@ -128,6 +137,11 @@ export function AuctionList() {
         )}
         {loading ? (
           <p role="status">Đang tải phiên đấu…</p>
+        ) : error && !rows.length ? (
+          <div className="rounded-3xl border border-line bg-white p-10 text-center">
+            <h2 className="text-xl font-semibold">Chưa tải được phiên đấu</h2>
+            <p className="mt-3 text-sm text-muted">Vui lòng kiểm tra kết nối và tải lại trang.</p>
+          </div>
         ) : !matching.length ? (
           <div className="rounded-3xl border border-line py-16 text-center">
             <Gavel className="mx-auto mb-4 text-muted" />
@@ -137,6 +151,7 @@ export function AuctionList() {
               onClick={() => {
                 setQ('');
                 setTab('all');
+                setPage(1);
               }}
             >
               Xóa bộ lọc
@@ -160,8 +175,8 @@ export function AuctionList() {
                       alt={a.title}
                       className="aspect-[4/3] w-full object-cover transition-transform motion-safe:group-hover:scale-105"
                     />
-                    <span className="absolute top-3 left-3 rounded-full bg-white px-3 py-2 text-[11px] font-semibold">
-                      {auctionStatusLabel[a.status]}
+                    <span className="absolute top-3 left-3">
+                      <AuctionBadge status={a.status} />
                     </span>
                   </div>
                   <div className="p-5">
@@ -171,7 +186,11 @@ export function AuctionList() {
                       {currentPrice(a).toLocaleString('vi-VN')} ₫
                     </p>
                     <div className="mt-4 flex items-center justify-between border-t border-line pt-4 text-xs text-muted">
-                      <span>{a.bids.length} lượt trả giá</span>
+                      <span>
+                        {a.bidCount === null
+                          ? 'Lượt trả giá đang cập nhật'
+                          : `${a.bidCount ?? a.bids.length} lượt trả giá`}
+                      </span>
                       <ArrowUpRight size={18} />
                     </div>
                     <p className="mt-2 text-xs text-muted">

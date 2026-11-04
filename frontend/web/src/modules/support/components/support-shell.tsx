@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useSession } from '@/modules/auth/hooks/use-session';
+import { SupportRouteGuard } from './support-route-guard';
 
 const items = [
   { href: '/support', label: 'Tổng quan', icon: '⌂' },
@@ -14,12 +15,21 @@ const items = [
 
 export function SupportShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
   const { user, logout: logoutSession } = useSession();
-  const name = user?.role === 'SUPPORT_STAFF' ? user.fullName || user.email : 'Nhân viên hỗ trợ';
+
+  const displayName = user?.fullName || user?.email || 'Nhân viên hỗ trợ';
+  const roleLabel =
+    user?.role === 'SUPPORT_STAFF'
+      ? 'Nhân viên hỗ trợ · Ca trực'
+      : user?.role === 'ADMIN'
+        ? 'Quản trị viên'
+        : user?.role
+          ? `Vai trò: ${user.role}`
+          : 'Chưa đăng nhập';
+
   async function logout() {
     await logoutSession();
-    router.push('/');
+    window.location.replace('/login');
   }
 
   return (
@@ -28,10 +38,10 @@ export function SupportShell({ children }: { children: ReactNode }) {
         <Link className="support-brand" href="/support">
           <span className="support-brand-mark">N</span>
           <span>
-            NEXUS <small>SUPPORT</small>
+            NEXUS <small>HỖ TRỢ</small>
           </span>
         </Link>
-        <p className="support-nav-caption">CUSTOMER OPERATIONS</p>
+        <p className="support-nav-caption">VẬN HÀNH & HỖ TRỢ</p>
         <nav aria-label="Support navigation">
           {items.map((item) => {
             const active =
@@ -51,7 +61,7 @@ export function SupportShell({ children }: { children: ReactNode }) {
           })}
         </nav>
         <div className="support-sidebar-foot">
-          <span>SUPPORT WORKSPACE</span>
+          <span>CỔNG HỖ TRỢ KHÁCH HÀNG</span>
           <br />
           Nexus Operations
         </div>
@@ -59,7 +69,7 @@ export function SupportShell({ children }: { children: ReactNode }) {
       <div className="support-main">
         <header className="support-topbar">
           <div>
-            <span>Support workspace</span>
+            <span>Cổng hỗ trợ vận hành</span>
             <small>
               {' '}
               /{' '}
@@ -71,17 +81,23 @@ export function SupportShell({ children }: { children: ReactNode }) {
             </small>
           </div>
           <div className="support-agent">
-            <span className="support-agent-avatar">{name.slice(0, 1).toUpperCase()}</span>
+            <span className="support-agent-avatar">{displayName.slice(0, 1).toUpperCase()}</span>
             <span>
-              <strong>{name}</strong>
-              <small>Support Staff · Demo</small>
+              <strong>{displayName}</strong>
+              <small>{roleLabel}</small>
             </span>
+            <Link href="/" className="support-to-store-btn" title="Quay về trang chủ cửa hàng">
+              <span aria-hidden="true">⌂</span>
+              <span>Về cửa hàng</span>
+            </Link>
             <button type="button" onClick={logout}>
               Đăng xuất
             </button>
           </div>
         </header>
-        <main className="support-content">{children}</main>
+        <main className="support-content">
+          <SupportRouteGuard>{children}</SupportRouteGuard>
+        </main>
       </div>
     </div>
   );

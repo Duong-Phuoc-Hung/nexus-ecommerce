@@ -36,6 +36,14 @@ export class InMemoryProductRepository implements IProductRepository {
     return Array.from(this.products.values()).filter((p) => p.categoryId === categoryId);
   }
 
+  public async findBySellerId(sellerId: string, status?: string): Promise<Product[]> {
+    return Array.from(this.products.values()).filter((p) => {
+      if (p.sellerId !== sellerId) return false;
+      if (status && p.status !== status.toUpperCase()) return false;
+      return true;
+    });
+  }
+
   public async search(criteria: ProductSearchCriteria): Promise<ProductSearchPage> {
     const keyword = criteria.q.toLocaleLowerCase();
     const matches = Array.from(this.products.values()).filter((product) => {
@@ -58,12 +66,20 @@ export class InMemoryProductRepository implements IProductRepository {
     };
   }
 
-  public async save(product: Product): Promise<void> {
+  public async save(product: Product): Promise<string> {
     this.products.set(product.id, product);
+    return product.id;
   }
 
   public async update(product: Product): Promise<void> {
     this.products.set(product.id, product);
+  }
+
+  public async recover(id: string): Promise<void> {
+    const product = this.products.get(id);
+    if (product) {
+      product.updateDetails({ status: ProductStatus.ACTIVE });
+    }
   }
 
   public async delete(id: string): Promise<void> {

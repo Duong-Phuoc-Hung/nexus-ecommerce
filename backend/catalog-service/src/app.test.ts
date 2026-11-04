@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import test from 'node:test';
 import { createApplication } from './app';
-import { CategoryRecord } from './domain/repositories/ICategoryRepository';
 
 interface SearchApiResponse {
   success: boolean;
@@ -96,65 +95,24 @@ test('GET /api/v1/products/search rejects invalid pagination', async () => {
 });
 
 test('GET /api/v1/categories?tree=true returns active categories as a nested tree', async () => {
-  const categories: CategoryRecord[] = [
-    {
-      id: '1',
-      name: 'Thiết bị điện tử',
-      slug: 'thiet-bi-dien-tu',
-      description: null,
-      imageUrl: null,
-      parentId: null,
-      level: 1,
-      displayOrder: 1,
-    },
-    {
-      id: '10',
-      name: 'Điện thoại & Tablet',
-      slug: 'dien-thoai-tablet',
-      description: null,
-      imageUrl: null,
-      parentId: '1',
-      level: 2,
-      displayOrder: 1,
-    },
-    {
-      id: '100',
-      name: 'iPhone',
-      slug: 'dien-thoai-iphone',
-      description: null,
-      imageUrl: null,
-      parentId: '10',
-      level: 3,
-      displayOrder: 1,
-    },
-  ];
-  const app = createApplication({
-    categoryRepository: { findActive: async () => categories },
-  });
-
-  const server = app.listen(0, '127.0.0.1');
-  await new Promise<void>((resolve) => server.once('listening', resolve));
-  const address = server.address();
-  assert.ok(address && typeof address !== 'string');
-
-  try {
-    const response = await fetch(`http://127.0.0.1:${address.port}/api/v1/categories?tree=true`);
+  await withCatalogServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/v1/categories?tree=true`);
     const result = (await response.json()) as {
       success: boolean;
       data: Array<{
         id: string;
-        children: Array<{ id: string; children: Array<{ id: string }> }>;
+        children?: Array<{ id: string; children?: Array<{ id: string }> }>;
       }>;
     };
 
     assert.equal(response.status, 200);
     assert.equal(result.success, true);
     assert.equal(result.data[0].id, '1');
+    assert.ok(result.data[0].children && result.data[0].children.length > 0);
     assert.equal(result.data[0].children[0].id, '10');
-    assert.equal(result.data[0].children[0].children[0].id, '100');
-  } finally {
-    await new Promise<void>((resolve, reject) =>
-      server.close((error) => (error ? reject(error) : resolve())),
+    assert.ok(
+      result.data[0].children[0].children && result.data[0].children[0].children.length > 0,
     );
-  }
+    assert.equal(result.data[0].children[0].children[0].id, '100');
+  });
 });

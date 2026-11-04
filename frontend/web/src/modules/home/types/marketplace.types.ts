@@ -8,6 +8,7 @@ export type MarketplaceCategory = {
 export type BidEntry = { bidder: string; amount: number; label: string };
 export type MarketplaceProduct = {
   id: string;
+  auctionId?: string;
   name: string;
   category: Exclude<CategoryId, 'all'>;
   categoryName: string;
@@ -22,6 +23,7 @@ export type MarketplaceProduct = {
   increment: number;
   remainingSeconds: number;
   bids: number;
+  bidCountKnown?: boolean;
   condition: string;
   seller: string;
   reputation: number;

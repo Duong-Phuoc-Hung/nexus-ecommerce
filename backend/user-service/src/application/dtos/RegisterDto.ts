@@ -10,6 +10,7 @@ export interface RegisterRequestDto {
   phone?: string;
   identifyNumber?: string;
   role?: UserRole;
+  otp?: string;
 }
 
 /**
@@ -19,6 +20,7 @@ export interface RegisterResponseDto {
   id: string;
   email: string;
   fullName: string;
+  phone?: string;
   role: string;
   status: string;
   reputationScore: number;

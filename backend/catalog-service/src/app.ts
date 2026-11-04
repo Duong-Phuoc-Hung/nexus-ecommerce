@@ -2,22 +2,26 @@ import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import { PostgresProductRepository } from './infrastructure/repositories/PostgresProductRepository';
 import { InMemoryProductRepository } from './infrastructure/repositories/InMemoryProductRepository';
-import { IProductRepository } from './domain/repositories/IProductRepository';
 import { GetProductDetailUseCase } from './application/use-cases/GetProductDetailUseCase';
 import { ProductController } from './interfaces/http/controllers/ProductController';
 import { createProductRoutes } from './interfaces/http/routes/ProductRoutes';
+import { createCatalogAccessRoutes } from './interfaces/http/routes/CatalogAccessRoutes';
+import { PostgresCatalogQuery } from './infrastructure/repositories/PostgresCatalogQuery';
+import { createCatalogAdminWriteRoutes } from './interfaces/http/routes/CatalogAdminWriteRoutes';
+import { HttpSellerDirectory } from './infrastructure/clients/HttpSellerDirectory';
 import { SearchProductsUseCase } from './application/use-cases/SearchProductsUseCase';
+import { CreateProductUseCase } from './application/use-cases/CreateProductUseCase';
+import { UpdateProductUseCase } from './application/use-cases/UpdateProductUseCase';
+import { DeleteProductUseCase } from './application/use-cases/DeleteProductUseCase';
+import { GetSellerProductsUseCase } from './application/use-cases/GetSellerProductsUseCase';
+
+import { PostgresCategoryRepository } from './infrastructure/repositories/PostgresCategoryRepository';
+import { InMemoryCategoryRepository } from './infrastructure/repositories/InMemoryCategoryRepository';
+import { GetCategoriesUseCase } from './application/use-cases/GetCategoriesUseCase';
 import { CategoryController } from './interfaces/http/controllers/CategoryController';
 import { createCategoryRoutes } from './interfaces/http/routes/CategoryRoutes';
-import { ICategoryRepository } from './domain/repositories/ICategoryRepository';
-import { PostgresCategoryRepository } from './infrastructure/repositories/PostgresCategoryRepository';
 
-export interface CatalogAppOptions {
-  productRepository?: IProductRepository;
-  categoryRepository?: ICategoryRepository;
-}
-
-export function createApplication(options: CatalogAppOptions = {}): Application {
+export function createApplication(): Application {
   const app = express();
 
   app.use(cors());
@@ -39,23 +43,50 @@ export function createApplication(options: CatalogAppOptions = {}): Application 
     process.env.USE_IN_MEMORY_DB === 'true' ||
     process.env.CATALOG_USE_IN_MEMORY === 'true';
 
-  const productRepository =
-    options.productRepository ||
-    (isTest ? new InMemoryProductRepository() : new PostgresProductRepository());
+  // DANH MỤC (CATEGORY):
+  const categoryRepository = isTest
+    ? new InMemoryCategoryRepository()
+    : new PostgresCategoryRepository();
+  const getCategoriesUseCase = new GetCategoriesUseCase(categoryRepository);
+  const categoryController = new CategoryController(getCategoriesUseCase);
 
+  app.use('/api/v1/categories', createCategoryRoutes(categoryController));
+
+  // SẢN PHẨM (PRODUCT):
+  const productRepository = isTest
+    ? new InMemoryProductRepository()
+    : new PostgresProductRepository();
   const getProductDetailUseCase = new GetProductDetailUseCase(productRepository);
   const searchProductsUseCase = new SearchProductsUseCase(productRepository);
+  const createProductUseCase = new CreateProductUseCase(productRepository, categoryRepository);
+  const updateProductUseCase = new UpdateProductUseCase(productRepository, categoryRepository);
+  const deleteProductUseCase = new DeleteProductUseCase(productRepository);
+  const getSellerProductsUseCase = new GetSellerProductsUseCase(productRepository);
+
   const productController = new ProductController(
     getProductDetailUseCase,
     productRepository,
     searchProductsUseCase,
-  );
-  const categoryController = new CategoryController(
-    options.categoryRepository || new PostgresCategoryRepository(),
+    createProductUseCase,
+    updateProductUseCase,
+    deleteProductUseCase,
+    getSellerProductsUseCase,
   );
 
+  app.use(
+    '/api/v1/products',
+    createCatalogAdminWriteRoutes({
+      createProduct: createProductUseCase,
+      updateProduct: updateProductUseCase,
+      deleteProduct: deleteProductUseCase,
+      sellerDirectory: new HttpSellerDirectory(),
+    }),
+  );
+  app.use(
+    '/api/v1/products',
+    createCatalogAccessRoutes(productRepository, isTest ? undefined : new PostgresCatalogQuery()),
+  );
   app.use('/api/v1/products', createProductRoutes(productController));
-  app.use('/api/v1/categories', createCategoryRoutes(categoryController));
 
   return app;
 }

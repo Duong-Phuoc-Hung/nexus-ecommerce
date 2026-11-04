@@ -10,7 +10,16 @@ import { RegisterUserUseCase } from './application/use-cases/RegisterUserUseCase
 import { RequestPasswordResetUseCase } from './application/use-cases/RequestPasswordResetUseCase';
 import { ResetPasswordUseCase } from './application/use-cases/ResetPasswordUseCase';
 import { AssignUserRoleUseCase } from './application/use-cases/AssignUserRoleUseCase';
+import { SendRegistrationOtpUseCase } from './application/use-cases/SendRegistrationOtpUseCase';
 import { SearchUsersUseCase } from './application/use-cases/SearchUsersUseCase';
+import { UpdateUserProfileUseCase } from './application/use-cases/UpdateUserProfileUseCase';
+import { GetUserAddressesUseCase } from './application/use-cases/GetUserAddressesUseCase';
+import { CreateAddressUseCase } from './application/use-cases/CreateAddressUseCase';
+import { UpdateAddressUseCase } from './application/use-cases/UpdateAddressUseCase';
+import { DeleteAddressUseCase } from './application/use-cases/DeleteAddressUseCase';
+import { SetDefaultAddressUseCase } from './application/use-cases/SetDefaultAddressUseCase';
+import { InMemoryAddressRepository } from './infrastructure/repositories/InMemoryAddressRepository';
+import { PostgresAddressRepository } from './infrastructure/repositories/PostgresAddressRepository';
 import { UserController } from './interfaces/http/controllers/UserController';
 import { createAuthRoutes, createUserRoutes } from './interfaces/http/routes/UserRoutes';
 import { authTokenStore } from './infrastructure/security/AuthTokenStore';
@@ -18,6 +27,8 @@ import { passwordResetTokenStore } from './infrastructure/security/PasswordReset
 import { BcryptPasswordHasher } from './infrastructure/security/BcryptPasswordHasher';
 import { JwtTokenService } from './infrastructure/security/JwtTokenService';
 import { RabbitMqEventPublisher } from './infrastructure/messaging/RabbitMqEventPublisher';
+import { defaultOtpStore } from './infrastructure/cache/RedisOtpStore';
+import { defaultNotificationClient } from './infrastructure/notifications/NotificationClient';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerDocument } from './interfaces/http/swagger';
 
@@ -45,6 +56,8 @@ export function createApplication(): Application {
   const passwordHasher = new BcryptPasswordHasher();
   const tokenService = new JwtTokenService();
   const eventPublisher = new RabbitMqEventPublisher();
+  const otpStore = defaultOtpStore;
+  const notificationClient = defaultNotificationClient;
 
   const getUserProfileUseCase = new GetUserProfileUseCase(userRepository);
   const loginUseCase = new LoginUseCase(
@@ -54,7 +67,18 @@ export function createApplication(): Application {
     eventPublisher,
   );
   const logoutUseCase = new LogoutUseCase();
-  const registerUseCase = new RegisterUseCase(userRepository, passwordHasher, eventPublisher);
+  const registerUseCase = new RegisterUseCase(
+    userRepository,
+    passwordHasher,
+    eventPublisher,
+    otpStore,
+    notificationClient,
+  );
+  const sendRegistrationOtpUseCase = new SendRegistrationOtpUseCase(
+    userRepository,
+    otpStore,
+    notificationClient,
+  );
   const requestPasswordResetUseCase = new RequestPasswordResetUseCase(
     userRepository,
     passwordResetTokenStore,
@@ -68,6 +92,19 @@ export function createApplication(): Application {
     authTokenStore.revokeUserTokens(userId),
   );
   const searchUsersUseCase = new SearchUsersUseCase(userRepository);
+
+  const addressRepository =
+    process.env.USE_IN_MEMORY_DB === 'true'
+      ? new InMemoryAddressRepository()
+      : new PostgresAddressRepository();
+
+  const updateUserProfileUseCase = new UpdateUserProfileUseCase(userRepository);
+  const getUserAddressesUseCase = new GetUserAddressesUseCase(addressRepository);
+  const createAddressUseCase = new CreateAddressUseCase(addressRepository);
+  const updateAddressUseCase = new UpdateAddressUseCase(addressRepository);
+  const deleteAddressUseCase = new DeleteAddressUseCase(addressRepository);
+  const setDefaultAddressUseCase = new SetDefaultAddressUseCase(addressRepository);
+
   const userController = new UserController(
     getUserProfileUseCase,
     loginUseCase,
@@ -77,10 +114,19 @@ export function createApplication(): Application {
     resetPasswordUseCase,
     assignUserRoleUseCase,
     searchUsersUseCase,
+    updateUserProfileUseCase,
+    getUserAddressesUseCase,
+    createAddressUseCase,
+    updateAddressUseCase,
+    deleteAddressUseCase,
+    setDefaultAddressUseCase,
+    sendRegistrationOtpUseCase,
   );
 
   app.use('/api/v1/auth', createAuthRoutes(userController));
   app.use('/api/v1/users', createUserRoutes(userController));
+
+  // Swagger UI độc lập cho User Service
   app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
   return app;

@@ -21,11 +21,22 @@ async function withUserServer<T>(run: (baseUrl: string) => Promise<T>): Promise<
 
 test('POST /api/v1/auth/register uses RegisterUseCase with Bcrypt hashing and returns created user', async () => {
   await withUserServer(async (baseUrl) => {
+    const otpRes = await fetch(`${baseUrl}/api/v1/auth/send-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'integration.tester@nexus.vn',
+        fullName: 'Integration Tester',
+      }),
+    });
+    const otp = ((await otpRes.json()) as any).devOtp;
+
     const registerPayload = {
       email: 'integration.tester@nexus.vn',
       fullName: 'Integration Tester',
       password: 'SecurePassword123!',
       role: 'BUYER',
+      otp,
     };
 
     const res = await fetch(`${baseUrl}/api/v1/auth/register`, {
@@ -46,6 +57,13 @@ test('POST /api/v1/auth/register uses RegisterUseCase with Bcrypt hashing and re
 
 test('POST /api/v1/auth/login returns both accessToken and backward-compatible token (BUG-12)', async () => {
   await withUserServer(async (baseUrl) => {
+    const otpRes = await fetch(`${baseUrl}/api/v1/auth/send-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'login.tester@nexus.vn', fullName: 'Login Tester' }),
+    });
+    const otp = ((await otpRes.json()) as any).devOtp;
+
     // 1. Đăng ký tài khoản
     const registerRes = await fetch(`${baseUrl}/api/v1/auth/register`, {
       method: 'POST',
@@ -54,6 +72,7 @@ test('POST /api/v1/auth/login returns both accessToken and backward-compatible t
         email: 'login.tester@nexus.vn',
         fullName: 'Login Tester',
         password: 'Password123!',
+        otp,
       }),
     });
     assert.equal(registerRes.status, 201);
