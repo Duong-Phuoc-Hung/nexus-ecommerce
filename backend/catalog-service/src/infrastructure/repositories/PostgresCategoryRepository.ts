@@ -4,7 +4,7 @@ import { ICategoryRepository } from '../../domain/repositories/ICategoryReposito
 import { Category } from '../../domain/entities/Category';
 
 export class PostgresCategoryRepository implements ICategoryRepository {
-  private prisma: PrismaClient;
+  private prisma: any;
 
   constructor(prisma?: PrismaClient) {
     this.prisma = prisma || PrismaClientWrapper.getInstance();
@@ -15,7 +15,7 @@ export class PostgresCategoryRepository implements ICategoryRepository {
       where: { isActive: true },
       orderBy: [{ level: 'asc' }, { displayOrder: 'asc' }, { id: 'asc' }],
     });
-    return rows.map((row) => this.mapRowToCategory(row));
+    return rows.map((row: any) => this.mapRowToCategory(row));
   }
 
   public async findById(id: string): Promise<Category | null> {

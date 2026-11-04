@@ -12,7 +12,7 @@ import {
 } from '../../application/use-cases/ListCatalogProductsUseCase';
 
 export class PostgresProductRepository implements IProductRepository {
-  private prisma: PrismaClient;
+  private prisma: any;
 
   constructor(prisma?: PrismaClient) {
     this.prisma = prisma || PrismaClientWrapper.getInstance();
@@ -44,7 +44,7 @@ export class PostgresProductRepository implements IProductRepository {
       include: { images: { orderBy: { displayOrder: 'asc' } }, attributes: true },
       orderBy: { createdAt: 'desc' },
     });
-    return rows.map((r) => this.mapRowToProduct(r));
+    return rows.map((r: any) => this.mapRowToProduct(r));
   }
 
   // 3. Lọc sản phẩm theo mã danh mục
@@ -54,7 +54,7 @@ export class PostgresProductRepository implements IProductRepository {
       include: { images: { orderBy: { displayOrder: 'asc' } }, attributes: true },
       orderBy: { createdAt: 'desc' },
     });
-    return rows.map((r) => this.mapRowToProduct(r));
+    return rows.map((r: any) => this.mapRowToProduct(r));
   }
 
   // 4. Xem kho hàng của Seller (kèm lọc trạng thái nếu có)
@@ -67,7 +67,7 @@ export class PostgresProductRepository implements IProductRepository {
       include: { images: { orderBy: { displayOrder: 'asc' } }, attributes: true },
       orderBy: { createdAt: 'desc' },
     });
-    return rows.map((r) => this.mapRowToProduct(r));
+    return rows.map((r: any) => this.mapRowToProduct(r));
   }
 
   // 5. Tìm kiếm sản phẩm theo từ khóa q và khoảng giá
@@ -101,7 +101,7 @@ export class PostgresProductRepository implements IProductRepository {
     ]);
 
     return {
-      products: rows.map((r) => this.mapRowToProduct(r)),
+      products: rows.map((r: any) => this.mapRowToProduct(r)),
       total,
     };
   }
@@ -157,7 +157,7 @@ export class PostgresProductRepository implements IProductRepository {
     const totalPages = Math.ceil(total / limit) || 1;
 
     return {
-      products: rows.map((r) => this.mapRowToProduct(r)),
+      products: rows.map((r: any) => this.mapRowToProduct(r)),
       meta: {
         page,
         limit,
@@ -210,7 +210,7 @@ export class PostgresProductRepository implements IProductRepository {
   public async update(product: Product): Promise<void> {
     const pId = BigInt(product.id);
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: any) => {
       await tx.product.update({
         where: { id: pId },
         data: {

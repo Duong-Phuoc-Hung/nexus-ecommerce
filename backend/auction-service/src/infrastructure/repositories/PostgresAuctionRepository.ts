@@ -1,10 +1,10 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../database/generated/client';
 import { PrismaClientWrapper } from '../database/PrismaClient';
 import { IAuctionRepository } from '../../domain/repositories/IAuctionRepository';
 import { Auction, AuctionStatus, BidRecord } from '../../domain/entities/Auction';
 
 export class PostgresAuctionRepository implements IAuctionRepository {
-  private prisma: any;
+  private prisma: PrismaClient;
   private fallbackMemory: Map<string, Auction> = new Map();
   private fallbackBids: Map<string, BidRecord[]> = new Map();
 
