@@ -10,10 +10,12 @@ import { EventLogService } from './application/services/EventLogService';
 import { EventLogController } from './interfaces/http/controllers/EventLogController';
 import { createEventLogRoutes } from './interfaces/http/routes/EventLogRoutes';
 import { GlobalEventAuditSubscriber } from './application/listeners/GlobalEventAuditSubscriber';
+import { EmailService } from './infrastructure/email/EmailService';
 
 export interface AppDependencies {
   eventLogRepository?: IEventLogRepository;
   eventPublisher?: any;
+  emailService?: EmailService;
 }
 
 export function createApplication(deps?: AppDependencies): Application {
@@ -32,10 +34,14 @@ export function createApplication(deps?: AppDependencies): Application {
     });
   });
 
-  // Notifications
+  // Email & Notifications
+  const emailService = deps?.emailService || new EmailService();
   const notificationRepository = new InMemoryNotificationRepository();
   const getNotificationDetailUseCase = new GetNotificationDetailUseCase(notificationRepository);
-  const notificationController = new NotificationController(getNotificationDetailUseCase);
+  const notificationController = new NotificationController(
+    getNotificationDetailUseCase,
+    emailService,
+  );
   app.use('/api/v1/notifications', createNotificationRoutes(notificationController));
 
   // Event Logs (Audit according to SRS 2.7 & 3.2.1)

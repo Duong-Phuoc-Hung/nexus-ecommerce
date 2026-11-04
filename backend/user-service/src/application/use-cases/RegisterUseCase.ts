@@ -5,16 +5,20 @@ import { RegisterRequestDto, RegisterResponseDto } from '../dtos/RegisterDto';
 import { User, UserRole, UserStatus } from '../../domain/entities/User';
 import { UserAlreadyExistsException } from '../../domain/exceptions/UserAlreadyExistsException';
 import { UserRegisteredEvent } from '../../domain/events/UserRegisteredEvent';
+import { RedisOtpStore } from '../../infrastructure/cache/RedisOtpStore';
+import { NotificationClient } from '../../infrastructure/notifications/NotificationClient';
 
 /**
  * Application Use Case: RegisterUseCase
- * Xử lý luồng đăng ký tài khoản mới, kiểm tra trùng lặp và băm mật khẩu (SRS 3.1.1).
+ * Xử lý luồng đăng ký tài khoản mới, xác thực mã OTP Gmail, kiểm tra trùng lặp và băm mật khẩu (SRS 3.1.1).
  */
 export class RegisterUseCase {
   constructor(
     private readonly userRepository: IUserRepository,
     private readonly passwordHasher: IPasswordHasher,
     private readonly eventPublisher?: IEventPublisher,
+    private readonly otpStore?: RedisOtpStore,
+    private readonly notificationClient?: NotificationClient,
   ) {}
 
   public async execute(dto: RegisterRequestDto): Promise<RegisterResponseDto> {
@@ -43,7 +47,20 @@ export class RegisterUseCase {
       throw new UserAlreadyExistsException('Tài khoản với email này đã tồn tại trong hệ thống');
     }
 
-    // 3. Kiểm tra số điện thoại (nếu có truyền)
+    // 3. Xác thực mã OTP từ Gmail (Bắt buộc 100% để chống bypass OTP)
+    if (this.otpStore) {
+      if (!dto.otp || !dto.otp.trim()) {
+        throw new Error('Vui lòng nhập mã xác thực OTP đã gửi qua hòm thư Gmail của bạn.');
+      }
+      const isValidOtp = await this.otpStore.verifyAndConsumeOtp(normalizedEmail, dto.otp);
+      if (!isValidOtp) {
+        throw new Error(
+          'Mã xác thực OTP không chính xác hoặc đã hết hạn (hoặc đã bị khóa do nhập sai quá nhiều lần). Vui lòng nhận lại mã mới.',
+        );
+      }
+    }
+
+    // 4. Kiểm tra số điện thoại (nếu có truyền)
     let normalizedPhone: string;
     if (dto.phone && dto.phone.trim()) {
       const trimmedPhone = dto.phone.trim();
@@ -64,10 +81,10 @@ export class RegisterUseCase {
       normalizedPhone = '09' + Math.floor(10000000 + Math.random() * 90000000);
     }
 
-    // 4. Băm mật khẩu an toàn bằng thư viện bcrypt
+    // 5. Băm mật khẩu an toàn bằng thư viện bcrypt
     const passwordHash = await this.passwordHasher.hash(dto.password);
 
-    // 5. Tạo thực thể User mới (luôn là BUYER, không nhận role từ client)
+    // 6. Tạo thực thể User mới (luôn là BUYER, không nhận role từ client)
     const now = new Date();
     const generatedId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const role = UserRole.BUYER;
@@ -85,10 +102,17 @@ export class RegisterUseCase {
       updatedAt: now,
     });
 
-    // 5. Lưu thực thể vào cơ sở dữ liệu thông qua Repository
+    // 7. Lưu thực thể vào cơ sở dữ liệu thông qua Repository
     await this.userRepository.save(newUser);
 
-    // 6. Phát tán Domain Event ra RabbitMQ nếu có event publisher
+    // 8. Gửi email thông báo chào mừng trực tiếp qua NotificationClient
+    if (this.notificationClient) {
+      this.notificationClient.sendWelcomeEmail(newUser.email, newUser.fullName).catch((err) => {
+        console.warn('[RegisterUseCase] Không thể gửi welcome email:', err);
+      });
+    }
+
+    // 9. Phát tán Domain Event ra RabbitMQ nếu có event publisher
     if (this.eventPublisher) {
       try {
         const event = new UserRegisteredEvent({
@@ -104,7 +128,7 @@ export class RegisterUseCase {
       }
     }
 
-    // 7. Trả về kết quả đăng ký
+    // 10. Trả về kết quả đăng ký
     return {
       id: newUser.id,
       email: newUser.email,

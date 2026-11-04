@@ -10,6 +10,7 @@ export interface RegisterRequestDto {
   phone?: string;
   identifyNumber?: string;
   role?: UserRole;
+  otp?: string;
 }
 
 /**

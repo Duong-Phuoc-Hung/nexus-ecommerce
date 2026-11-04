@@ -46,6 +46,7 @@ export function createUserRoutes(controller: UserController): Router {
 export function createAuthRoutes(controller: UserController): Router {
   const router = Router();
 
+  router.post('/send-otp', (req, res) => controller.sendRegistrationOtp(req, res));
   router.post('/register', (req, res) => controller.register(req, res));
   router.post('/login', (req, res) => controller.login(req, res));
   router.post('/logout', requireAuth, (req, res) => controller.logout(req, res));
