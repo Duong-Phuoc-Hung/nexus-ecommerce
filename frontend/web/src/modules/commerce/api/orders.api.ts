@@ -27,14 +27,28 @@ export type OrderDetail = {
   product: string;
   date: string;
   total: number;
+  totalAmount: number;
+  subtotal?: number;
+  shippingFee?: number;
+  discountAmount?: number;
+  paymentMethod?: string;
+  shippingAddress?: {
+    fullName?: string;
+    phone?: string;
+    province?: string;
+    district?: string;
+    ward?: string;
+    addressLine?: string;
+    country?: string;
+  };
   items: {
     productId: string;
     productName?: string;
     quantity: number;
     unitPrice: number;
     totalPrice: number;
+    imageUrl?: string;
   }[];
-  totalAmount: number;
   status: string;
   tracking: string;
   paymentTransactionId?: string;

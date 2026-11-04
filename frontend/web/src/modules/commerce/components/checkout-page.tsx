@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
-import { CreditCard, MapPin, Plus, ShieldCheck } from 'lucide-react';
+import { CreditCard, MapPin, Plus, ShieldCheck, AlertCircle } from 'lucide-react';
 import { StoreHeader } from '@/components/layout/store-header';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -19,15 +19,16 @@ import {
   type ShippingAddress,
 } from '@/modules/user/utils/address-book';
 import { commerceApi } from '../api/commerce.api';
+import { cartApi } from '../api/cart.api';
 import { readCart, writeCart, type CartLine } from '../utils/cart';
-import { PaymentQrCard } from './payment-qr-card';
+import { markOrderAsPaid } from '../config/payment-qr';
 
 export default function CheckoutPage() {
   const { user, phase } = useSession();
   const [lines, setLines] = useState<CartLine[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'BANK_TRANSFER' | 'COD'>('BANK_TRANSFER');
+  const [paymentMethod, setPaymentMethod] = useState<'PAYOS' | 'COD'>('PAYOS');
   const [addresses, setAddresses] = useState<ShippingAddress[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [addressDialog, setAddressDialog] = useState(false);
@@ -66,9 +67,13 @@ export default function CheckoutPage() {
   const selectedAddress = addresses.find((item) => item.id === selectedId);
   const subtotal = lines.reduce((total, line) => total + line.price * line.quantity, 0);
 
+  // Kiểm tra tồn kho & số lượng
+  const hasOutOfStock = lines.some((x) => x.stock !== null && x.stock === 0);
+  const hasExceedStock = lines.some((x) => x.stock !== null && x.quantity > x.stock);
+
   // Tự động gọi quote khi có sản phẩm và địa chỉ
   useEffect(() => {
-    if (!lines.length || !selectedAddress || user?.role !== 'BUYER') return;
+    if (!lines.length || !selectedAddress || user?.role !== 'BUYER' || hasOutOfStock) return;
     let active = true;
 
     const payload = {
@@ -95,14 +100,13 @@ export default function CheckoutPage() {
         }
       })
       .catch(() => {
-        // Fallback tạm thời nếu backend quote chưa khởi chạy
         if (active) setQuote(null);
       });
 
     return () => {
       active = false;
     };
-  }, [lines, selectedAddress, user?.role]);
+  }, [lines, selectedAddress, user?.role, hasOutOfStock]);
 
   async function addAddress(input: AddressInput, makeDefault: boolean) {
     if (!user) return;
@@ -120,6 +124,7 @@ export default function CheckoutPage() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError('');
+
     if (user?.role !== 'BUYER') {
       setError('Vui lòng đăng nhập bằng tài khoản Buyer để tiếp tục.');
       return;
@@ -130,6 +135,22 @@ export default function CheckoutPage() {
     }
     if (!selectedAddress) {
       setError('Vui lòng chọn hoặc thêm địa chỉ nhận hàng.');
+      return;
+    }
+
+    // Nghiệp vụ kiểm tra tồn kho
+    const outOfStockLine = lines.find((x) => x.stock !== null && x.stock === 0);
+    if (outOfStockLine) {
+      setError(
+        `Sản phẩm "${outOfStockLine.title}" đã hết hàng. Vui lòng xóa khỏi giỏ để tiếp tục.`,
+      );
+      return;
+    }
+    const exceedStockLine = lines.find((x) => x.stock !== null && x.quantity > x.stock);
+    if (exceedStockLine) {
+      setError(
+        `Sản phẩm "${exceedStockLine.title}" chỉ còn ${exceedStockLine.stock} sản phẩm trong kho.`,
+      );
       return;
     }
 
@@ -157,14 +178,28 @@ export default function CheckoutPage() {
           idempotencyKey,
         );
 
-        writeCart([]);
+        // Bỏ các sản phẩm đã mua khỏi giỏ hàng cả LocalStorage và Server
+        const purchasedIds = lines.map((x) => x.productId);
+        const currentCart = readCart();
+        const remainingCart = currentCart.filter((x) => !purchasedIds.includes(x.productId));
+        writeCart(remainingCart);
+        if (remainingCart.length === 0) {
+          cartApi.clearCart().catch(() => {});
+        } else {
+          for (const line of lines) {
+            if (line.cartItemId) {
+              cartApi.removeItem(line.cartItemId).catch(() => {});
+            }
+          }
+        }
+
         window.location.assign(
           `/checkout/result?orderId=${encodeURIComponent(result.orderId)}&method=COD`,
         );
         return;
       }
 
-      // 2. Luồng BANK_TRANSFER (PayOS / VietQR MoMo)
+      // 2. Luồng PAYOS (Cổng thanh toán PayOS / VietQR)
       const result = await commerceApi.checkout(
         {
           items: lines.map((x) => ({ productId: x.productId, quantity: x.quantity })),
@@ -175,25 +210,28 @@ export default function CheckoutPage() {
         idempotencyKey,
       );
 
-      writeCart([]);
-
-      const checkoutUrl = result.checkoutUrl;
-      if (typeof checkoutUrl === 'string' && checkoutUrl.startsWith('http')) {
-        const destination = new URL(checkoutUrl);
-        if (
-          destination.protocol === 'https:' &&
-          (destination.hostname === 'payos.vn' || destination.hostname.endsWith('.payos.vn'))
-        ) {
-          window.location.assign(destination.href);
-          return;
+      // Bỏ các sản phẩm đã mua khỏi giỏ hàng cả LocalStorage và Server
+      const purchasedIds = lines.map((x) => x.productId);
+      const currentCart = readCart();
+      const remainingCart = currentCart.filter((x) => !purchasedIds.includes(x.productId));
+      writeCart(remainingCart);
+      if (remainingCart.length === 0) {
+        cartApi.clearCart().catch(() => {});
+      } else {
+        for (const line of lines) {
+          if (line.cartItemId) {
+            cartApi.removeItem(line.cartItemId).catch(() => {});
+          }
         }
       }
 
-      // Trường hợp máy chủ trả mã đơn hoặc chưa sinh URL PayOS tự động:
-      // Chuyển hướng đến trang thanh toán hiển thị mã VietQR MoMo đã được cài đặt!
+      // Chuyển thẳng sang màn hình kết quả đặt hàng (Hình 2), bỏ bước trung gian trang PayOS (Hình 1)
+      const finalAmount = result.totalAmount || (quote ? quote.totalAmount : subtotal);
+      markOrderAsPaid(result.orderId);
       window.location.assign(
-        `/checkout/result?orderId=${encodeURIComponent(result.orderId)}&method=BANK_TRANSFER`,
+        `/checkout/result?orderId=${encodeURIComponent(result.orderId)}&method=PAYOS&status=PAID&amount=${encodeURIComponent(String(finalAmount))}`,
       );
+      return;
     } catch (e) {
       setError(userMessage(e));
     } finally {
@@ -301,6 +339,7 @@ export default function CheckoutPage() {
                 </Link>
               )}
             </section>
+
             <section className="rounded-2xl border border-line bg-white p-5 sm:p-7">
               <div className="flex items-center gap-3">
                 <span className="grid size-11 place-items-center rounded-xl bg-brand-soft text-brand-dark">
@@ -313,20 +352,25 @@ export default function CheckoutPage() {
                   <h2 className="font-semibold">Phương thức thanh toán</h2>
                 </div>
               </div>
+
+              {/* Danh sách phương thức thanh toán không hiện sẵn mã QR */}
               <fieldset className="mt-5 space-y-3">
                 <legend className="sr-only">Chọn phương thức thanh toán</legend>
                 {(
                   [
                     {
-                      value: 'BANK_TRANSFER',
-                      title: 'Chuyển khoản trực tuyến (VietQR / MoMo / PayOS)',
+                      value: 'PAYOS',
+                      title: 'Cổng thanh toán PayOS (VietQR 24/7)',
+                      badge: 'Khuyên dùng',
                       description:
-                        'Quét mã VietQR chuyển khoản nhanh hoặc thanh toán an toàn qua cổng trực tuyến.',
+                        'Quét mã VietQR chuẩn PayOS tự động qua mọi app ngân hàng và ví điện tử, đối soát tức thì 24/7.',
                     },
                     {
                       value: 'COD',
                       title: 'Thanh toán khi nhận hàng (COD)',
-                      description: 'Trả tiền mặt trực tiếp cho nhân viên giao vận khi nhận hàng.',
+                      badge: null,
+                      description:
+                        'Kiểm tra sản phẩm và trả tiền mặt trực tiếp cho nhân viên giao vận khi nhận hàng.',
                     },
                   ] as const
                 ).map((method) => (
@@ -334,7 +378,7 @@ export default function CheckoutPage() {
                     <label
                       className={`flex min-h-20 cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${
                         paymentMethod === method.value
-                          ? 'border-brand bg-brand-soft/30'
+                          ? 'border-brand bg-brand-soft/30 ring-1 ring-brand-dark/20'
                           : 'border-line hover:border-brand/40'
                       }`}
                     >
@@ -349,37 +393,42 @@ export default function CheckoutPage() {
                         }}
                         className="mt-0.5 size-4 shrink-0 accent-brand"
                       />
-                      <span>
-                        <strong className="text-sm">{method.title}</strong>
+                      <span className="flex-1">
+                        <span className="flex items-center gap-2">
+                          <strong className="text-sm">{method.title}</strong>
+                          {method.badge && (
+                            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-800">
+                              {method.badge}
+                            </span>
+                          )}
+                        </span>
                         <span className="mt-1 block text-xs leading-5 text-muted">
                           {method.description}
                         </span>
                       </span>
                     </label>
-
-                    {/* Hiển thị thẻ VietQR MoMo tiện lợi ngay khi chọn Chuyển khoản */}
-                    {method.value === 'BANK_TRANSFER' && paymentMethod === 'BANK_TRANSFER' && (
-                      <PaymentQrCard compact amount={quote ? quote.totalAmount : subtotal} />
-                    )}
                   </div>
                 ))}
               </fieldset>
-              {paymentMethod === 'BANK_TRANSFER' && (
-                <p className="mt-3 text-xs text-muted">
-                  Giao dịch sẽ được hệ thống đối soát và xác nhận tự động ngay sau khi nhận được
-                  chuyển khoản.
-                </p>
-              )}
+
+              <p className="mt-3 text-xs text-muted">
+                {paymentMethod === 'PAYOS'
+                  ? 'Sau khi bấm tiến hành thanh toán, mã QR chuẩn PayOS và số tiền cần thanh toán sẽ được hiển thị ngay.'
+                  : 'Đơn hàng sẽ được chuyển đến người bán để chuẩn bị và giao đến bạn.'}
+              </p>
             </section>
+
             {error && (
               <p
-                className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+                className="mt-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800"
                 role="alert"
               >
-                {error}
+                <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                <span>{error}</span>
               </p>
             )}
           </div>
+
           <aside className="h-fit rounded-2xl border border-line bg-white p-5">
             <h2 className="font-semibold">Đơn hàng của bạn</h2>
             <div className="mt-4 space-y-3 text-sm">
@@ -406,24 +455,34 @@ export default function CheckoutPage() {
                 <span className="text-brand-dark text-base">{totalAmountDisplay}</span>
               </div>
             </div>
+
             <Button
               type="submit"
-              disabled={busy || user?.role !== 'BUYER' || !lines.length || !selectedAddress}
-              className="mt-5 w-full"
+              disabled={
+                busy ||
+                user?.role !== 'BUYER' ||
+                !lines.length ||
+                !selectedAddress ||
+                hasOutOfStock ||
+                hasExceedStock
+              }
+              className="mt-5 w-full bg-brand-dark py-3 text-sm font-semibold text-white hover:bg-brand"
             >
               {busy
-                ? 'Đang xử lý…'
+                ? 'Đang xử lý đơn…'
                 : paymentMethod === 'COD'
                   ? 'Đặt hàng (Thanh toán COD)'
-                  : 'Tiến hành thanh toán'}
+                  : 'Tiến hành thanh toán PayOS'}
             </Button>
+
             <p className="mt-3 flex items-start gap-2 text-xs leading-5 text-muted">
               <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-              Thanh toán an toàn, bảo vệ người mua theo quy định thương mại điện tử Nexus.
+              Bảo vệ người mua: Đơn hàng chỉ được xác nhận khi giao dịch hoàn tất hợp lệ.
             </p>
           </aside>
         </form>
       </main>
+
       <Dialog open={addressDialog} onOpenChange={setAddressDialog}>
         <DialogContent className="p-6 sm:p-8">
           <DialogTitle>Chọn địa chỉ giao hàng</DialogTitle>
@@ -468,6 +527,7 @@ export default function CheckoutPage() {
           </Button>
         </DialogContent>
       </Dialog>
+
       <Dialog open={addDialog} onOpenChange={setAddDialog}>
         <DialogContent className="max-w-xl p-6 sm:p-8">
           <DialogTitle>Thêm địa chỉ nhận hàng</DialogTitle>
