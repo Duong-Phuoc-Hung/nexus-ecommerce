@@ -146,3 +146,52 @@ export function OrdersTable({
     </div>
   );
 }
+
+/**
+ * Tối ưu hóa tệp ảnh người bán tải lên bằng HTML5 Canvas:
+ * - Giảm kích thước xuống tối đa 400x400 (phù hợp thumbnail và preview)
+ * - Nén định dạng JPEG 0.8 để dung lượng chỉ còn ~15-30 KB
+ * - Tránh lỗi HTTP 413 (Payload Too Large) và lỗi tràn bộ nhớ LocalStorage
+ */
+export function optimizeImageFile(
+  file: File,
+  maxWidth = 400,
+  maxHeight = 400,
+  quality = 0.8,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const img = new window.Image();
+      img.onerror = reject;
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth || height > maxHeight) {
+          if (width > height) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(reader.result as string);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}

@@ -1152,3 +1152,48 @@
   outline: 2px solid #38bdf8 !important;
   outline-offset: 2px !important;
 }
+
+/* Image Thumbnails & Upload UI */
+.seller-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  display: block;
+}
+.seller-thumb-placeholder {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  border: 1px dashed #cbd5e1;
+  background: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  font-size: 1.1rem;
+}
+.seller-image-upload-zone {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 10px;
+  background: #f8fafc;
+  transition: all 0.2s ease;
+}
+.seller-image-upload-zone:hover {
+  border-color: #ed1c24;
+  background: #fff;
+}
+.seller-image-preview-lg {
+  width: 72px;
+  height: 72px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}

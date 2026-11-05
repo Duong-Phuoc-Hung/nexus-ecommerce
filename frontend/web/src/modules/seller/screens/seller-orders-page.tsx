@@ -147,39 +147,23 @@ export function SellerOrdersPage() {
     setActionNotice('');
     setActionError('');
     try {
-      // Sinh mã vận đơn hợp lệ theo chuẩn 3PL GHN/GHTK nếu đơn chưa có mã
-      const trackingCode =
-        selectedOrder.tracking &&
-        selectedOrder.tracking !== 'Đang cập nhật' &&
-        selectedOrder.tracking !== '—'
-          ? selectedOrder.tracking
-          : `GHN${Math.floor(10000000 + Math.random() * 90000000)}VN`;
-
-      const newStep = {
-        status: 'SHIPPED',
-        title: 'Đã bàn giao đơn vị vận chuyển',
-        timestamp: new Date().toISOString(),
-        note: `Người bán đã đóng gói và bàn giao cho ĐVVC (GHN). Mã vận đơn: ${trackingCode}`,
-      };
-
-      const updated: OrderDetail = {
-        ...selectedOrder,
-        status: 'SHIPPED',
-        tracking: trackingCode,
-        updatedAt: new Date().toISOString(),
-        timeline: [...(selectedOrder.timeline || []), newStep],
-      };
-
+      // 1. Gọi trực tiếp API Backend Commerce Service: POST /api/v1/orders/:id/dispatch
+      const updated = await ordersApi.dispatch(orderId);
       setSelectedOrder(updated);
       setItems((prev) =>
         prev.map((item) =>
           item.id === updated.id
-            ? { ...item, status: 'SHIPPED', tracking: trackingCode, updatedAt: updated.updatedAt }
+            ? {
+                ...item,
+                status: updated.status,
+                tracking: updated.tracking,
+                updatedAt: updated.updatedAt,
+              }
             : item,
         ),
       );
       setActionNotice(
-        `✓ Đã đóng gói & bàn giao cho đơn vị vận chuyển thành công! Mã vận đơn 3PL: ${trackingCode}`,
+        `✓ Đã đóng gói & bàn giao cho đơn vị vận chuyển thành công! Mã vận đơn 3PL: ${updated.tracking || 'Đã cấp'}`,
       );
     } catch (err) {
       setActionError(userMessage(err));

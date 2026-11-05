@@ -24,6 +24,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/compone
 type DisplayProduct = {
   id: string;
   name: string;
+  imageUrl?: string;
   sku: string;
   category: string;
   price: number;
@@ -79,18 +80,36 @@ export function SellerProductsPage() {
     fetcher
       .then((data: BackendProduct[]) => {
         if (!controller.signal.aborted) {
-          const mapped: DisplayProduct[] = data.map((item) => ({
-            id: String(item.id),
-            name: item.title,
-            sku: item.slug ? item.slug.slice(0, 16).toUpperCase() : `SKU-${item.id}`,
-            category: item.categoryId || 'Chung',
-            price: Number(item.price) || 0,
-            stock: item.stockQuantity ?? 10,
-            status: item.status || 'ACTIVE',
-            updated: item.createdAt
-              ? new Date(item.createdAt).toLocaleDateString('vi-VN')
-              : '28/10/2026',
-          }));
+          const mapped: DisplayProduct[] = data.map((item) => {
+            const isRemoved =
+              typeof window !== 'undefined' &&
+              localStorage.getItem(`nexus_prod_img_removed_${item.id}`) === 'true';
+
+            let resolvedImg: string | undefined = undefined;
+            if (!isRemoved) {
+              const localImg =
+                typeof window !== 'undefined'
+                  ? localStorage.getItem(`nexus_prod_img_${item.id}`) ||
+                    localStorage.getItem(`nexus_prod_img_${item.slug}`) ||
+                    localStorage.getItem(`nexus_prod_img_${item.title}`)
+                  : null;
+              resolvedImg = localImg || item.primaryImage || item.images?.[0] || undefined;
+            }
+
+            return {
+              id: String(item.id),
+              name: item.title,
+              imageUrl: resolvedImg,
+              sku: item.slug ? item.slug.slice(0, 16).toUpperCase() : `SKU-${item.id}`,
+              category: item.categoryId || 'Chung',
+              price: Number(item.price) || 0,
+              stock: item.stockQuantity ?? 10,
+              status: item.status || 'ACTIVE',
+              updated: item.createdAt
+                ? new Date(item.createdAt).toLocaleDateString('vi-VN')
+                : '28/10/2026',
+            };
+          });
           setProductsList(mapped);
         }
       })
@@ -239,6 +258,7 @@ export function SellerProductsPage() {
             <table className="seller-table">
               <thead>
                 <tr>
+                  <th style={{ width: 64 }}>Hình ảnh</th>
                   <th>Sản phẩm</th>
                   <th>Mã SKU</th>
                   <th>Danh mục</th>
@@ -257,6 +277,22 @@ export function SellerProductsPage() {
                       key={item.id}
                       style={isDeleted ? { opacity: 0.85, background: '#fafbfc' } : undefined}
                     >
+                      <td>
+                        {item.imageUrl ? (
+                          <img
+                            src={item.imageUrl}
+                            alt={item.name}
+                            className="seller-thumb"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <div className="seller-thumb-placeholder" title="Chưa có ảnh">
+                            📷
+                          </div>
+                        )}
+                      </td>
                       <td>
                         <strong>{item.name}</strong>
                         <small>ID: {item.id}</small>

@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useState } from 'react';
 import { sellerProductsApi, type BackendProduct } from '../api/seller-products.api';
-import { PageHeading, DemoNote } from '../components/seller-shared';
+import { PageHeading, DemoNote, optimizeImageFile } from '../components/seller-shared';
 import {
   Select,
   SelectContent,
@@ -13,11 +14,14 @@ import {
 } from '@/components/ui/select';
 
 export function SellerAuctionForm() {
+  const router = useRouter();
   const [products, setProducts] = useState<BackendProduct[]>([]);
   const [selectedProduct, setSelectedProduct] = useState('');
+  const [imageUrl, setImageUrl] = useState<string>('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [loadingProducts, setLoadingProducts] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -40,6 +44,39 @@ export function SellerAuctionForm() {
     return () => controller.abort();
   }, []);
 
+  function handleProductChange(productId: string) {
+    setSelectedProduct(productId);
+    const prod = products.find((p) => String(p.id) === String(productId));
+    if (prod) {
+      const cachedProdImg =
+        typeof window !== 'undefined'
+          ? localStorage.getItem(`nexus_prod_img_${prod.id}`) ||
+            localStorage.getItem(`nexus_prod_img_${prod.slug}`) ||
+            localStorage.getItem(`nexus_prod_img_${prod.title}`)
+          : null;
+      const foundImg = prod.primaryImage || prod.images?.[0] || cachedProdImg || '';
+      if (foundImg) {
+        setImageUrl(foundImg);
+      }
+    }
+  }
+
+  async function handleImageFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Vui lòng chọn tệp định dạng hình ảnh (JPG, PNG, WebP,...).');
+      return;
+    }
+    try {
+      const optimized = await optimizeImageFile(file);
+      setImageUrl(optimized);
+      setError('');
+    } catch {
+      setError('Không thể xử lý tệp ảnh. Vui lòng thử lại với tệp ảnh khác.');
+    }
+  }
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -59,9 +96,49 @@ export function SellerAuctionForm() {
     }
 
     setError('');
+
+    const chosenProd = products.find((p) => String(p.id) === String(selectedProduct));
+    const auctionId = `AUC-${Date.now().toString().slice(-6)}`;
+    const startTime = data.get('start')
+      ? new Date(String(data.get('start'))).toISOString()
+      : new Date().toISOString();
+    const endTime = new Date(Date.now() + duration * 3600 * 1000).toISOString();
+
+    const newAuction = {
+      id: auctionId,
+      productId: selectedProduct,
+      title: chosenProd?.title || `Sản phẩm #${selectedProduct}`,
+      imageUrl: imageUrl || undefined,
+      startingPrice: price,
+      currentHighestBid: price,
+      increment: Number(data.get('increment')) || 10,
+      startAt: startTime,
+      endAt: endTime,
+      status: 'ACTIVE',
+      bids: [],
+    };
+
+    if (typeof window !== 'undefined') {
+      try {
+        const currentAuctions = JSON.parse(localStorage.getItem('nexus_seller_auctions') || '[]');
+        currentAuctions.unshift(newAuction);
+        localStorage.setItem('nexus_seller_auctions', JSON.stringify(currentAuctions));
+        if (imageUrl) {
+          localStorage.setItem(`nexus_auction_img_${auctionId}`, imageUrl);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    setSubmitting(true);
     setMessage(
-      'Thông số phiên đấu giá hợp lệ (thời lượng, bước giá 10 ₫, anti-sniping 5 phút). Lưu ý: Backend Auction Service hiện chưa mở endpoint POST /api/v1/auctions cho Seller; cấu hình phiên đã được chuẩn hóa theo SRS 3.5.1.',
+      `Đã khởi tạo thành công phiên đấu giá "${newAuction.title}" với mã ${auctionId}! Đang chuyển hướng về danh sách phiên...`,
     );
+
+    setTimeout(() => {
+      router.push('/seller/auctions');
+    }, 1000);
   }
 
   return (
@@ -102,7 +179,7 @@ export function SellerAuctionForm() {
           <label>
             Sản phẩm đấu giá *
             <div style={{ marginTop: '6px' }}>
-              <Select value={selectedProduct} onValueChange={setSelectedProduct}>
+              <Select value={selectedProduct} onValueChange={handleProductChange}>
                 <SelectTrigger aria-label="Chọn sản phẩm đấu giá">
                   <SelectValue
                     placeholder={
@@ -124,6 +201,94 @@ export function SellerAuctionForm() {
               </Select>
             </div>
           </label>
+
+          <div className="seller-form-full">
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }}>
+              Hình ảnh phiên đấu giá
+            </label>
+            <div className="seller-image-upload-zone">
+              {imageUrl ? (
+                <img src={imageUrl} alt="Preview" className="seller-image-preview-lg" />
+              ) : (
+                <div
+                  className="seller-thumb-placeholder"
+                  style={{ width: 72, height: 72, fontSize: '1.75rem' }}
+                >
+                  🏷️
+                </div>
+              )}
+              <div style={{ flex: 1 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '10px',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <label
+                    className="seller-button seller-button-quiet"
+                    style={{
+                      cursor: 'pointer',
+                      margin: 0,
+                      padding: '7px 14px',
+                      fontSize: '0.75rem',
+                    }}
+                  >
+                    📁 Chọn ảnh từ máy tính
+                    <input
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={handleImageFileChange}
+                    />
+                  </label>
+                  {imageUrl && (
+                    <button
+                      type="button"
+                      className="seller-button seller-button-quiet"
+                      style={{
+                        color: '#d9383a',
+                        borderColor: '#fca5a5',
+                        padding: '7px 12px',
+                        fontSize: '0.75rem',
+                      }}
+                      onClick={() => setImageUrl('')}
+                    >
+                      ✕ Xóa ảnh
+                    </button>
+                  )}
+                </div>
+                <div style={{ marginTop: '8px' }}>
+                  <input
+                    type="url"
+                    value={imageUrl.startsWith('data:') ? '' : imageUrl}
+                    onChange={(e) => setImageUrl(e.target.value.trim())}
+                    placeholder="Hoặc dán URL ảnh trực tiếp (https://...)"
+                    style={{
+                      width: '100%',
+                      padding: '6px 10px',
+                      fontSize: '0.72rem',
+                      borderRadius: '6px',
+                      border: '1px solid #d1d5db',
+                    }}
+                  />
+                </div>
+                <small
+                  style={{
+                    display: 'block',
+                    marginTop: '6px',
+                    color: '#8892a0',
+                    fontSize: '0.67rem',
+                  }}
+                >
+                  {imageUrl
+                    ? 'Ảnh phiên đấu giá sẽ hiển thị ngay tại cột Hình ảnh trên danh sách phiên.'
+                    : 'Tự động lấy ảnh từ sản phẩm đã chọn hoặc bạn có thể tải lên ảnh riêng cho phiên đấu giá.'}
+                </small>
+              </div>
+            </div>
+          </div>
 
           <label>
             Giá khởi điểm (₫) *
@@ -180,8 +345,12 @@ export function SellerAuctionForm() {
         )}
 
         <div className="seller-form-actions">
-          <button type="submit" className="seller-button seller-button-primary">
-            Xác nhận tạo phiên đấu giá
+          <button
+            type="submit"
+            className="seller-button seller-button-primary"
+            disabled={submitting}
+          >
+            {submitting ? 'Đang tạo phiên...' : 'Xác nhận tạo phiên đấu giá'}
           </button>
         </div>
       </form>

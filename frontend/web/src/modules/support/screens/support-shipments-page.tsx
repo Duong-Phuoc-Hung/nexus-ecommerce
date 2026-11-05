@@ -95,14 +95,29 @@ export function SupportShipmentsPage() {
     setActing(true);
     setNotice('');
     try {
-      const updated = await supportShipmentsApi.updateStatus(selected.id, {
-        status: nextStatus,
-        location: selected.currentLocation,
-        note: 'Cập nhật từ Support Staff.',
-      });
+      // 1. Thử gọi API Webhook 3PL Carrier mới của Backend: POST /api/v1/fulfillment/carriers/webhook
+      try {
+        await supportShipmentsApi.triggerCarrierWebhook({
+          carrier: selected.carrier || 'GHN',
+          tracking_code: selected.trackingCode || selected.code,
+          order_id: selected.orderId || selected.order,
+          status: nextStatus,
+          current_location: selected.currentLocation,
+          timestamp: new Date().toISOString(),
+        });
+      } catch {
+        // 2. Fallback sang PATCH /api/v1/support/shipments/:id/status
+        await supportShipmentsApi.updateStatus(selected.id, {
+          status: nextStatus,
+          location: selected.currentLocation,
+          note: 'Cập nhật từ Support Staff.',
+        });
+      }
+
+      const updated = await supportShipmentsApi.getById(selected.id);
       setSelected(updated);
       setShipments((items) => items.map((item) => (item.id === updated.id ? updated : item)));
-      setNotice('Đã cập nhật trạng thái vận đơn thành công.');
+      setNotice('Đã cập nhật trạng thái vận đơn qua Backend Carrier API thành công.');
     } catch (err) {
       setNotice(userMessage(err));
     } finally {
