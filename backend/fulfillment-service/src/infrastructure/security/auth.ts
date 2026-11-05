@@ -112,7 +112,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 }
 
 export function requireShipmentPermission(
-  action: 'VIEW' | 'LIST' | 'UPDATE_STATUS' | 'MANUAL_OVERRIDE',
+  action: 'VIEW' | 'LIST' | 'UPDATE_STATUS' | 'MANUAL_OVERRIDE' | 'CREATE',
 ) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const user = (req as AuthenticatedRequest).user;
@@ -126,21 +126,30 @@ export function requireShipmentPermission(
 
     const normalizedRole = (user.role || '').toUpperCase();
 
-    // 1. ADMIN và SUPPORT_STAFF có toàn quyền xem, tìm kiếm, cập nhật trạng thái và can thiệp thủ công vận đơn
-    if (normalizedRole === 'ADMIN' || normalizedRole === 'SUPPORT_STAFF') {
+    // 1. ADMIN và SUPPORT_STAFF có toàn quyền xem, tìm kiếm, cập nhật trạng thái, can thiệp thủ công và tạo vận đơn
+    if (
+      normalizedRole === 'ADMIN' ||
+      normalizedRole === 'SUPPORT_STAFF' ||
+      normalizedRole === 'SYSTEM'
+    ) {
       return next();
     }
 
-    // 2. Đối tác vận chuyển (CARRIER_AGENT) có quyền VIEW, LIST và UPDATE_STATUS
+    // 2. Đối tác vận chuyển (CARRIER_AGENT) có quyền VIEW, LIST, UPDATE_STATUS và CREATE
     if (normalizedRole === 'CARRIER_AGENT' || normalizedRole === 'CARRIER') {
-      if (action === 'VIEW' || action === 'LIST' || action === 'UPDATE_STATUS') {
+      if (
+        action === 'VIEW' ||
+        action === 'LIST' ||
+        action === 'UPDATE_STATUS' ||
+        action === 'CREATE'
+      ) {
         return next();
       }
     }
 
-    // 3. SELLER có quyền VIEW và LIST vận đơn liên quan tới shop của mình
+    // 3. SELLER có quyền VIEW, LIST và CREATE vận đơn liên quan tới shop của mình
     if (normalizedRole === 'SELLER') {
-      if (action === 'VIEW' || action === 'LIST') {
+      if (action === 'VIEW' || action === 'LIST' || action === 'CREATE') {
         return next();
       }
     }

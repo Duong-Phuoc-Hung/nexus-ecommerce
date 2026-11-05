@@ -333,3 +333,71 @@ test('Shipment By Order & Carrier Webhook API: GET /by-order/:orderId and POST /
     assert.equal(webhookJson.data.currentLocation, 'Hà Nội · Đã phát thành công cho người nhận');
   });
 });
+
+test('Sandbox Shipping Lifecycle: POST /shipments, Auto-provisioning on by-order/:id and Webhook on the fly', async () => {
+  await withFulfillmentServer(async (baseUrl) => {
+    const adminToken = createTestToken({
+      sub: 'usr_admin',
+      email: 'admin@nexus.vn',
+      role: 'ADMIN',
+    });
+    const staffToken = createTestToken({
+      sub: 'usr_staff_01',
+      email: 'staff@nexus.vn',
+      role: 'SUPPORT_STAFF',
+    });
+
+    // 1. POST /api/v1/fulfillment/shipments tạo mới vận đơn cho đơn hàng
+    const createRes = await fetch(`${baseUrl}/api/v1/fulfillment/shipments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: JSON.stringify({
+        orderId: 'NX-ORD-NEW-999',
+        carrier: 'GHN',
+        trackingCode: 'GHN999888VN',
+        recipientName: 'Khách Hàng Mới',
+        city: 'TP. Hồ Chí Minh',
+      }),
+    });
+    assert.equal(createRes.status, 201);
+    const createJson = (await createRes.json()) as any;
+    assert.equal(createJson.success, true);
+    assert.equal(createJson.data.orderId, 'NX-ORD-NEW-999');
+    assert.equal(createJson.data.trackingCode, 'GHN999888VN');
+
+    // 2. GET /by-order/:orderId cho đơn hàng chưa từng có vận đơn -> Tự động cấp phát Sandbox
+    const autoProvisionRes = await fetch(
+      `${baseUrl}/api/v1/fulfillment/shipments/by-order/NX-ORD-AUTO-777`,
+      {
+        headers: { Authorization: `Bearer ${staffToken}` },
+      },
+    );
+    assert.equal(autoProvisionRes.status, 200);
+    const autoProvisionJson = (await autoProvisionRes.json()) as any;
+    assert.equal(autoProvisionJson.success, true);
+    assert.equal(autoProvisionJson.data.orderId, 'NX-ORD-AUTO-777');
+    assert.ok(autoProvisionJson.data.trackingCode);
+    assert.equal(autoProvisionJson.data.statusCode, 'READY_TO_PICK');
+    assert.equal(autoProvisionJson.data.status, 'Đã tạo vận đơn');
+
+    // 3. POST /carriers/webhook cho tracking chưa từng tồn tại -> Tự động cấp phát và cập nhật lộ trình
+    const unseededWebhookRes = await fetch(`${baseUrl}/api/v1/fulfillment/carriers/webhook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        carrier: 'GHN',
+        tracking_code: 'GHN_RANDOM_NEW_CODE_555',
+        status: 'IN_TRANSIT',
+        current_location: 'Trung tâm phân loại Long Biên · Đang trung chuyển',
+      }),
+    });
+    assert.equal(unseededWebhookRes.status, 200);
+    const unseededWebhookJson = (await unseededWebhookRes.json()) as any;
+    assert.equal(unseededWebhookJson.success, true);
+    assert.equal(unseededWebhookJson.data.trackingCode, 'GHN_RANDOM_NEW_CODE_555');
+    assert.equal(unseededWebhookJson.data.status, 'IN_TRANSIT');
+  });
+});

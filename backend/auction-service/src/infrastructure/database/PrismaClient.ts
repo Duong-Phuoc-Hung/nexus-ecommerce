@@ -15,13 +15,20 @@ export class PrismaClientWrapper {
         process.env.DATABASE_URL ||
         `postgresql://${user}:${password}@${host}:${port}/${dbName}?schema=public`;
 
-      PrismaClientWrapper.instance = new PrismaClient({
-        datasources: {
-          db: {
-            url: dbUrl,
+      try {
+        PrismaClientWrapper.instance = new PrismaClient({
+          datasources: {
+            db: {
+              url: dbUrl,
+            },
           },
-        },
-      });
+        });
+      } catch (err) {
+        console.warn(
+          '[auction-service] Warning: Could not initialize PrismaClient:',
+          (err as Error).message,
+        );
+      }
     }
     return PrismaClientWrapper.instance;
   }

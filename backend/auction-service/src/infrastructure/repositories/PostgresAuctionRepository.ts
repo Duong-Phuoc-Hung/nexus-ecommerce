@@ -4,13 +4,22 @@ import { IAuctionRepository } from '../../domain/repositories/IAuctionRepository
 import { Auction, AuctionStatus, BidRecord } from '../../domain/entities/Auction';
 
 export class PostgresAuctionRepository implements IAuctionRepository {
-  private prisma: PrismaClient;
+  private _prisma?: PrismaClient;
   private fallbackMemory: Map<string, Auction> = new Map();
   private fallbackBids: Map<string, BidRecord[]> = new Map();
 
   constructor(prisma?: PrismaClient) {
-    this.prisma = prisma || PrismaClientWrapper.getInstance();
+    if (prisma) {
+      this._prisma = prisma;
+    }
     this.initSampleMemory();
+  }
+
+  private get prisma(): PrismaClient {
+    if (!this._prisma) {
+      this._prisma = PrismaClientWrapper.getInstance();
+    }
+    return this._prisma;
   }
 
   // Khởi tạo phòng mẫu trong bộ nhớ phòng khi CSDL chưa kết nối

@@ -3,13 +3,17 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { LogOut, Menu } from 'lucide-react';
-import { adminNavigation } from '../config/navigation';
+import { Gavel, LayoutDashboard, LogOut, PackageSearch, ReceiptText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { NexusLogo } from '@/components/layout/nexus-logo';
 import { useSession } from '@/modules/auth/hooks/use-session';
 
-const navigation = adminNavigation.flatMap((group) => group.items);
+const navigation = [
+  { href: '/admin', label: 'Tổng quan', icon: LayoutDashboard },
+  { href: '/admin/products', label: 'Sản phẩm', icon: PackageSearch },
+  { href: '/admin/auctions', label: 'Phiên đấu giá', icon: Gavel },
+  { href: '/admin/orders', label: 'Đơn hàng', icon: ReceiptText },
+];
 
 export function AdminFrame({
   children,
@@ -29,7 +33,6 @@ export function AdminFrame({
   const pathname = usePathname() || homePath;
   const { user, logout } = useSession();
   const [loggingOut, setLoggingOut] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
   const displayName = user?.fullName || name || 'Quản trị viên';
 
   async function handleLogout() {
@@ -53,40 +56,18 @@ export function AdminFrame({
           <NexusLogo className="marketplace-logo admin-home-logo" href={homePath} />
           <p className="admin-brand-caption">QUẢN TRỊ · KHÔNG GIAN LÀM VIỆC</p>
         </div>
-        <Button
-          className="admin-mobile-toggle"
-          variant="outline"
-          aria-expanded={menuOpen}
-          aria-controls="admin-navigation"
-          onClick={() => setMenuOpen((v) => !v)}
-        >
-          <Menu size={18} />
-          Menu quản trị
-        </Button>
-        <nav
-          id="admin-navigation"
-          aria-label="Quản trị"
-          className={menuOpen ? 'admin-nav-open' : ''}
-        >
-          {adminNavigation.map((group) => (
-            <div key={group.group} className="admin-nav-group">
-              <p className="admin-nav-label">{group.group}</p>
-              {group.items.map(({ href, label, icon: Icon }) => {
-                const active = href === '/admin' ? pathname === href : pathname.startsWith(href);
-                return (
-                  <Link
-                    href={href}
-                    aria-current={active ? 'page' : undefined}
-                    key={href}
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    <Icon aria-hidden="true" size={18} strokeWidth={1.8} />
-                    <span>{label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          ))}
+        <p className="admin-nav-label">MENU QUẢN TRỊ</p>
+        <nav aria-label="Quản trị">
+          {navigation.map(({ href, label, icon: Icon }, index) => {
+            const active = href === '/admin' ? pathname === href : pathname.startsWith(href);
+            return (
+              <Link href={href} aria-current={active ? 'page' : undefined} key={href}>
+                <Icon aria-hidden="true" size={18} strokeWidth={1.8} />
+                <span>{label}</span>
+                <small aria-hidden="true">0{index + 1}</small>
+              </Link>
+            );
+          })}
         </nav>
         <div className="admin-sidebar-bottom">
           <strong>Project Nexus</strong>
@@ -101,8 +82,13 @@ export function AdminFrame({
               /
             </span>
             <span className="admin-breadcrumb-current">
-              {navigation.find((item) => item.href !== '/admin' && pathname.startsWith(item.href))
-                ?.label || 'Tổng quan'}
+              {pathname.includes('/auctions')
+                ? 'Phiên đấu giá'
+                : pathname.includes('/products')
+                  ? 'Sản phẩm'
+                  : pathname.includes('/orders')
+                    ? 'Đơn hàng'
+                    : 'Tổng quan'}
             </span>
           </div>
           <div className="admin-topbar-right">

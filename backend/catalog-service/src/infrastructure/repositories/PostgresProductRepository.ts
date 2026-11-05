@@ -12,10 +12,17 @@ import {
 } from '../../application/use-cases/ListCatalogProductsUseCase';
 
 export class PostgresProductRepository implements IProductRepository {
-  private prisma: any;
+  private _prisma?: any;
 
   constructor(prisma?: PrismaClient) {
-    this.prisma = prisma || PrismaClientWrapper.getInstance();
+    if (prisma) this._prisma = prisma;
+  }
+
+  private get prisma(): any {
+    if (!this._prisma) {
+      this._prisma = PrismaClientWrapper.getInstance();
+    }
+    return this._prisma;
   }
 
   // 1. Xem chi tiết sản phẩm theo ID hoặc Slug

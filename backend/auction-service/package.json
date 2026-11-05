@@ -6,7 +6,7 @@
   "main": "dist/index.js",
   "scripts": {
     "predev": "node ../../scripts/free-port.js 4004",
-    "build": "tsc",
+    "build": "prisma generate --schema=./prisma/schema.prisma && tsc && node -e \"const fs=require('fs'); if(fs.existsSync('src/infrastructure/database/generated')) fs.cpSync('src/infrastructure/database/generated', 'dist/infrastructure/database/generated', { recursive: true });\"",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "test": "node --import tsx --test tests/**/*.test.ts"

@@ -32,7 +32,40 @@ export class ProcessCarrierWebhookUseCase {
     }
 
     if (!shipment) {
-      throw new ShipmentNotFoundException(rawTracking || rawOrderId || 'unknown');
+      if (rawTracking || rawOrderId) {
+        // Tự động cấp phát vận đơn Sandbox tức thì cho mã đơn / tracking thử nghiệm
+        const autoOrderId =
+          rawOrderId ||
+          (rawTracking.startsWith('ORD') || rawTracking.startsWith('NX-')
+            ? rawTracking
+            : `ORD-${Date.now().toString().slice(-6)}`);
+        const carrierCode =
+          (input.carrier || '').toUpperCase() === 'GHTK' ? CarrierCode.GHTK : CarrierCode.GHN;
+        const autoTracking =
+          rawTracking ||
+          `${carrierCode}${autoOrderId
+            .replace(/[^a-zA-Z0-9]/g, '')
+            .slice(-8)
+            .toUpperCase()}`;
+
+        shipment = new Shipment({
+          id: `shp_${autoOrderId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || Date.now()}`,
+          orderId: autoOrderId,
+          carrier: carrierCode,
+          trackingCode: autoTracking,
+          status: ShipmentStatus.READY_TO_PICK,
+          shippingAddress: 'Địa chỉ giao hàng (Sandbox Testbed)',
+          recipientName: 'Khách hàng Sandbox',
+          recipientPhone: '0901234567',
+          city: 'TP. Hồ Chí Minh',
+          currentLocation: 'Kho trung chuyển',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+        await this.shipmentRepository.save(shipment);
+      } else {
+        throw new ShipmentNotFoundException(rawTracking || rawOrderId || 'unknown');
+      }
     }
 
     const mappedStatus = this.mapStatus(input.status);

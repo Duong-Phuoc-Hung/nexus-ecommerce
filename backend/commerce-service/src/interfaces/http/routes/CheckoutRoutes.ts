@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { Pool } from 'pg';
 import { CheckoutService } from '../../../application/checkout/CheckoutService';
+import { IShippingQuote } from '../../../application/checkout/ports';
 import { FlatRateShippingQuote } from '../../../infrastructure/clients/FlatRateShippingQuote';
+import { GhnShippingQuoteClient } from '../../../infrastructure/clients/GhnShippingQuoteClient';
 import { HttpCatalogClient } from '../../../infrastructure/clients/HttpCatalogClient';
 import { PayOsGateway } from '../../../infrastructure/clients/PayOsGateway';
 import { PostgresCheckoutRepository } from '../../../infrastructure/repositories/PostgresCheckoutRepository';
@@ -23,12 +25,15 @@ export function createCheckoutRouter(controller: CheckoutController): Router {
 }
 
 /** Cấu hình từ biến môi trường; Pool của pg chỉ kết nối khi có truy vấn đầu tiên. */
-export function createCheckoutRoutes(customPool?: Pool): Router {
+export function createCheckoutRoutes(
+  customPool?: Pool,
+  customShippingQuote?: IShippingQuote,
+): Router {
   const pool = customPool || getCommerceDbPool();
   const service = new CheckoutService(
     new PostgresCheckoutRepository(pool),
     new HttpCatalogClient(),
-    new FlatRateShippingQuote(),
+    customShippingQuote || new GhnShippingQuoteClient(),
     new PayOsGateway(),
   );
   return createCheckoutRouter(new CheckoutController(service));

@@ -22,6 +22,9 @@ function createTestToken(payload: { sub: string; email: string; role: string }):
 }
 
 async function withFulfillmentServer<T>(run: (baseUrl: string) => Promise<T>): Promise<T> {
+  process.env.NODE_ENV = 'test';
+  process.env.USE_IN_MEMORY_DB = 'true';
+  process.env.JWT_ACCESS_SECRET = 'nexus_super_secret_jwt_access_key_min_32_chars_local_dev';
   const server = createApplication().listen(0, '127.0.0.1');
   await new Promise<void>((resolve) => server.once('listening', resolve));
   const address = server.address();
