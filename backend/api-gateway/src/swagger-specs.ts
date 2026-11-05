@@ -15,6 +15,7 @@ const forbidden = errorResponse(
   'Forbidden: missing permission "ROLE.VIEW".',
 );
 const PUBLIC = 'Route PUBLIC: không cần token.';
+const PRIVATE = 'Route PRIVATE: bắt buộc header `Authorization: Bearer <JWT>`.';
 
 const commonComponents = {
   securitySchemes: {
