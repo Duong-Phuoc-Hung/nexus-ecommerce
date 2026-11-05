@@ -1,6 +1,22 @@
 export type SupportCasePriority = 'Cao' | 'Trung bình' | 'Thấp' | 'HIGH' | 'MEDIUM' | 'LOW';
 export type SupportCaseStatus = 'PENDING' | 'IN_PROGRESS' | 'RESOLVED' | 'REJECTED' | 'ESCALATED';
 
+export interface DisputeEvidence {
+  photos?: string[];
+  videos?: string[];
+  note?: string;
+  submittedAt?: Date;
+}
+
+export interface ArbitrationVerdict {
+  decision: 'REFUND_BUYER' | 'REJECT_BUYER' | 'REQUIRE_RETURN_FIRST';
+  refundAmount?: number;
+  liableParty?: 'SELLER' | 'BUYER' | 'CARRIER';
+  note: string;
+  arbitratorId?: string;
+  issuedAt?: Date;
+}
+
 export interface SupportCaseProps {
   id: string;
   type: string;
@@ -13,6 +29,10 @@ export interface SupportCaseProps {
   status?: SupportCaseStatus;
   resolutionNote?: string;
   resolvedBy?: string;
+  buyerEvidence?: DisputeEvidence;
+  sellerEvidence?: DisputeEvidence;
+  slaDeadline?: Date;
+  verdict?: ArbitrationVerdict;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -34,6 +54,10 @@ export class SupportCase {
   private _status: SupportCaseStatus;
   private _resolutionNote?: string;
   private _resolvedBy?: string;
+  private _buyerEvidence?: DisputeEvidence;
+  private _sellerEvidence?: DisputeEvidence;
+  private _slaDeadline: Date;
+  private _verdict?: ArbitrationVerdict;
   private readonly _createdAt: Date;
   private _updatedAt: Date;
 
@@ -49,7 +73,12 @@ export class SupportCase {
     this._status = props.status || 'PENDING';
     this._resolutionNote = props.resolutionNote;
     this._resolvedBy = props.resolvedBy;
-    this._createdAt = props.createdAt || new Date();
+    this._buyerEvidence = props.buyerEvidence;
+    this._sellerEvidence = props.sellerEvidence;
+    const created = props.createdAt || new Date();
+    this._createdAt = created;
+    this._slaDeadline = props.slaDeadline || new Date(created.getTime() + 24 * 60 * 60 * 1000);
+    this._verdict = props.verdict;
     this._updatedAt = props.updatedAt || new Date();
   }
 
@@ -95,6 +124,22 @@ export class SupportCase {
 
   public get resolvedBy(): string | undefined {
     return this._resolvedBy;
+  }
+
+  public get buyerEvidence(): DisputeEvidence | undefined {
+    return this._buyerEvidence;
+  }
+
+  public get sellerEvidence(): DisputeEvidence | undefined {
+    return this._sellerEvidence;
+  }
+
+  public get slaDeadline(): Date {
+    return this._slaDeadline;
+  }
+
+  public get verdict(): ArbitrationVerdict | undefined {
+    return this._verdict;
   }
 
   public get createdAt(): Date {
@@ -154,6 +199,36 @@ export class SupportCase {
     this._updatedAt = new Date();
   }
 
+  /**
+   * Cập nhật kết quả phán quyết trọng tài tranh chấp (Dispute Verdict)
+   */
+  public issueVerdict(verdict: ArbitrationVerdict, arbitratorId?: string): void {
+    if (!verdict.decision) {
+      throw new Error('Quyết định phán quyết (decision) là bắt buộc.');
+    }
+    if (!verdict.note || !verdict.note.trim()) {
+      throw new Error('Ghi chú phán quyết (note) không được để trống.');
+    }
+
+    this._verdict = {
+      ...verdict,
+      arbitratorId: arbitratorId || verdict.arbitratorId,
+      issuedAt: new Date(),
+    };
+
+    if (verdict.decision === 'REFUND_BUYER') {
+      this._status = 'RESOLVED';
+    } else if (verdict.decision === 'REJECT_BUYER') {
+      this._status = 'REJECTED';
+    } else {
+      this._status = 'IN_PROGRESS';
+    }
+
+    this._resolutionNote = verdict.note.trim();
+    this._resolvedBy = arbitratorId;
+    this._updatedAt = new Date();
+  }
+
   public toResponseDto() {
     return {
       id: this.id,
@@ -168,8 +243,52 @@ export class SupportCase {
       status: this.status,
       resolutionNote: this.resolutionNote,
       resolvedBy: this.resolvedBy,
+      buyerEvidence: this.buyerEvidence,
+      sellerEvidence: this.sellerEvidence,
+      slaDeadline: this.slaDeadline,
+      verdict: this.verdict,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
+    };
+  }
+
+  public toDisputeDto() {
+    const now = Date.now();
+    const slaMsRemaining = this.slaDeadline.getTime() - now;
+    const slaRemainingHours = Math.round(slaMsRemaining / (1000 * 3600));
+
+    return {
+      caseId: this._id,
+      id: this._id,
+      orderId: this._orderId,
+      order: this._orderCode,
+      orderCode: this._orderCode,
+      customer: this._customer,
+      userId: this._userId,
+      type: this._type,
+      reason: this._reason,
+      priority: this._priority,
+      status: this._status,
+      slaDeadline: this._slaDeadline.toISOString(),
+      slaRemainingHours,
+      isSlaOverdue: now > this._slaDeadline.getTime() && this._status === 'PENDING',
+      buyerEvidence: this._buyerEvidence || {
+        photos: [
+          'https://images.unsplash.com/photo-1584438784894-089d6a62b8fa?w=800',
+          'https://images.unsplash.com/photo-1544816155-12df9643f363?w=800',
+        ],
+        note: this._reason,
+        submittedAt: this._createdAt,
+      },
+      sellerEvidence: this._sellerEvidence || {
+        videos: ['https://assets.nexus.vn/evidence/packaging_video_sample.mp4'],
+        photos: ['https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=800'],
+        note: 'Đã đóng gói chèn xốp bóng khí 3 lớp dán băng keo niêm phong trước khi giao bưu tá.',
+        submittedAt: this._createdAt,
+      },
+      verdict: this._verdict,
+      createdAt: this._createdAt.toISOString(),
+      updatedAt: this._updatedAt.toISOString(),
     };
   }
 }

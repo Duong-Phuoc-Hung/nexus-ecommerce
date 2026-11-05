@@ -6,6 +6,8 @@ import { RefundOrderUseCase } from '../../../application/use-cases/RefundOrderUs
 import { RejectRefundUseCase } from '../../../application/use-cases/RejectRefundUseCase';
 import { DispatchOrderUseCase } from '../../../application/use-cases/DispatchOrderUseCase';
 import { RequestRefundUseCase } from '../../../application/use-cases/RequestRefundUseCase';
+import { ExecuteRefundUseCase } from '../../../application/use-cases/ExecuteRefundUseCase';
+import { GetRefundStatusUseCase } from '../../../application/use-cases/GetRefundStatusUseCase';
 import { OrderNotFoundException } from '../../../domain/exceptions/OrderNotFoundException';
 import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
 
@@ -18,6 +20,8 @@ export class OrderController {
     private readonly rejectRefundUseCase?: RejectRefundUseCase,
     private readonly dispatchOrderUseCase?: DispatchOrderUseCase,
     private readonly requestRefundUseCase?: RequestRefundUseCase,
+    private readonly executeRefundUseCase?: ExecuteRefundUseCase,
+    private readonly getRefundStatusUseCase?: GetRefundStatusUseCase,
   ) {}
 
   public async listOrders(req: Request, res: Response): Promise<void> {
@@ -283,5 +287,75 @@ export class OrderController {
         clientSecret: 'pi_skeleton_secret_test_123',
       },
     });
+  }
+
+  /**
+   * POST /api/v1/orders/:id/refund/execute
+   * Kích hoạt hoàn tiền thật qua Cổng thanh toán (PayOS Refund Integration)
+   * Quyền: SUPPORT_STAFF, ADMIN
+   */
+  public async executeRefund(req: Request, res: Response): Promise<void> {
+    try {
+      if (!this.executeRefundUseCase) {
+        res.status(500).json({ success: false, error: 'ExecuteRefundUseCase not configured.' });
+        return;
+      }
+
+      const orderId = req.params.id as string;
+      const { refundAmount, reason } = req.body || {};
+      const user = (req as AuthenticatedRequest).user;
+
+      const result = await this.executeRefundUseCase.execute({
+        orderId,
+        refundAmount: typeof refundAmount === 'number' ? refundAmount : undefined,
+        reason,
+        operatorId: user?.sub,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result,
+      });
+    } catch (error: any) {
+      if (error instanceof OrderNotFoundException) {
+        res.status(404).json({ success: false, error: error.message });
+        return;
+      }
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Không thể thực thi lệnh hoàn tiền qua cổng PayOS.',
+      });
+    }
+  }
+
+  /**
+   * GET /api/v1/orders/:id/refund/status
+   * Kiểm tra trạng thái hoàn tiền đã về tài khoản khách chưa (PENDING / SUCCESS / FAILED)
+   */
+  public async getRefundStatus(req: Request, res: Response): Promise<void> {
+    try {
+      if (!this.getRefundStatusUseCase) {
+        res.status(500).json({ success: false, error: 'GetRefundStatusUseCase not configured.' });
+        return;
+      }
+
+      const orderId = req.params.id as string;
+      const result = await this.getRefundStatusUseCase.execute(orderId);
+
+      res.status(200).json({
+        success: true,
+        data: result,
+      });
+    } catch (error: any) {
+      if (error instanceof OrderNotFoundException) {
+        res.status(404).json({ success: false, error: error.message });
+        return;
+      }
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Không thể tra cứu trạng thái hoàn tiền.',
+      });
+    }
   }
 }

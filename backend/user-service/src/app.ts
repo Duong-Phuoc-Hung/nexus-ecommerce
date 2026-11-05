@@ -14,6 +14,8 @@ import { SendRegistrationOtpUseCase } from './application/use-cases/SendRegistra
 import { SearchUsersUseCase } from './application/use-cases/SearchUsersUseCase';
 import { UpdateUserProfileUseCase } from './application/use-cases/UpdateUserProfileUseCase';
 import { UpdateUserStatusUseCase } from './application/use-cases/UpdateUserStatusUseCase';
+import { AdjustUserReputationUseCase } from './application/use-cases/AdjustUserReputationUseCase';
+import { RestrictUserFeaturesUseCase } from './application/use-cases/RestrictUserFeaturesUseCase';
 import { GetUserAddressesUseCase } from './application/use-cases/GetUserAddressesUseCase';
 import { CreateAddressUseCase } from './application/use-cases/CreateAddressUseCase';
 import { UpdateAddressUseCase } from './application/use-cases/UpdateAddressUseCase';
@@ -22,7 +24,11 @@ import { SetDefaultAddressUseCase } from './application/use-cases/SetDefaultAddr
 import { InMemoryAddressRepository } from './infrastructure/repositories/InMemoryAddressRepository';
 import { PostgresAddressRepository } from './infrastructure/repositories/PostgresAddressRepository';
 import { UserController } from './interfaces/http/controllers/UserController';
-import { createAuthRoutes, createUserRoutes } from './interfaces/http/routes/UserRoutes';
+import {
+  createAuthRoutes,
+  createUserRoutes,
+  createSupportUserRoutes,
+} from './interfaces/http/routes/UserRoutes';
 import { authTokenStore } from './infrastructure/security/AuthTokenStore';
 import { passwordResetTokenStore } from './infrastructure/security/PasswordResetTokenStore';
 import { BcryptPasswordHasher } from './infrastructure/security/BcryptPasswordHasher';
@@ -106,6 +112,8 @@ export function createApplication(): Application {
   const deleteAddressUseCase = new DeleteAddressUseCase(addressRepository);
   const setDefaultAddressUseCase = new SetDefaultAddressUseCase(addressRepository);
   const updateUserStatusUseCase = new UpdateUserStatusUseCase(userRepository);
+  const adjustUserReputationUseCase = new AdjustUserReputationUseCase(userRepository);
+  const restrictUserFeaturesUseCase = new RestrictUserFeaturesUseCase(userRepository);
 
   const userController = new UserController(
     getUserProfileUseCase,
@@ -124,10 +132,13 @@ export function createApplication(): Application {
     setDefaultAddressUseCase,
     updateUserStatusUseCase,
     sendRegistrationOtpUseCase,
+    adjustUserReputationUseCase,
+    restrictUserFeaturesUseCase,
   );
 
   app.use('/api/v1/auth', createAuthRoutes(userController));
   app.use('/api/v1/users', createUserRoutes(userController));
+  app.use('/api/v1/support/users', createSupportUserRoutes(userController));
 
   // Swagger UI độc lập cho User Service
   app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));

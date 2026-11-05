@@ -39,6 +39,31 @@ export function createUserRoutes(controller: UserController): Router {
   router.patch('/:id/status', requireAuth, requirePermission('USER.UPDATE'), (req, res) =>
     controller.updateStatus(req, res),
   );
+  router.post('/:id/adjust-reputation', requireAuth, requirePermission('USER.UPDATE'), (req, res) =>
+    controller.adjustReputation(req, res),
+  );
+  router.post('/:id/restrict-features', requireAuth, requirePermission('USER.UPDATE'), (req, res) =>
+    controller.restrictFeatures(req, res),
+  );
+
+  return router;
+}
+
+export function createSupportUserRoutes(controller: UserController): Router {
+  const router = Router();
+
+  router.post(
+    '/:userId/adjust-reputation',
+    requireAuth,
+    requirePermission('USER.UPDATE'),
+    (req, res) => controller.adjustReputation(req, res),
+  );
+  router.post(
+    '/:userId/restrict-features',
+    requireAuth,
+    requirePermission('USER.UPDATE'),
+    (req, res) => controller.restrictFeatures(req, res),
+  );
 
   return router;
 }

@@ -257,3 +257,45 @@ test('Buyer Request Refund API: POST /api/v1/orders/:id/refund/request allows bu
     assert.equal(json.data.status, 'REFUND_REQUESTED');
   });
 });
+
+test('Task 2 - PayOS Refund Integration: POST /orders/:id/refund/execute and GET /orders/:id/refund/status', async () => {
+  await withCommerceServer(async (baseUrl) => {
+    const staffToken = createTestToken({
+      sub: 'usr_staff_01',
+      email: 'staff@nexus.vn',
+      role: 'SUPPORT_STAFF',
+    });
+
+    // 1. POST /orders/:id/refund/execute kích hoạt hoàn tiền tự động qua cổng PayOS
+    const executeRes = await fetch(`${baseUrl}/api/v1/orders/NX-ORD-8009/refund/execute`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${staffToken}`,
+      },
+      body: JSON.stringify({
+        refundAmount: 890000,
+        reason: 'Phán quyết trọng tài chấp thuận hoàn tiền',
+      }),
+    });
+    assert.equal(executeRes.status, 200);
+    const executeJson = (await executeRes.json()) as any;
+    assert.equal(executeJson.success, true);
+    assert.equal(executeJson.data.orderId, 'NX-ORD-8009');
+    assert.equal(executeJson.data.status, 'SUCCESS');
+    assert.ok(executeJson.data.refundTransactionId);
+    assert.equal(executeJson.data.amount, 890000);
+
+    // 2. GET /orders/:id/refund/status kiểm tra trạng thái tiền đã về tài khoản khách
+    const statusRes = await fetch(`${baseUrl}/api/v1/orders/NX-ORD-8009/refund/status`, {
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+    assert.equal(statusRes.status, 200);
+    const statusJson = (await statusRes.json()) as any;
+    assert.equal(statusJson.success, true);
+    assert.equal(statusJson.data.orderId, 'NX-ORD-8009');
+    assert.equal(statusJson.data.refundStatus, 'SUCCESS');
+    assert.ok(statusJson.data.refundTransactionId);
+    assert.equal(statusJson.data.refundAmount, 890000);
+  });
+});
