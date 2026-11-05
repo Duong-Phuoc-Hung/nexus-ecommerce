@@ -44,5 +44,20 @@
     "actualDeliveryDate": "2026-10-17T16:40:00.000Z",
     "createdAt": "2026-10-16T08:30:00.000Z",
     "updatedAt": "2026-10-17T16:40:00.000Z"
+  },
+  {
+    "id": "shp_04ghn112233vn",
+    "orderId": "ord_01hqz555abc",
+    "carrier": "GHN",
+    "trackingCode": "GHN112233VN",
+    "status": "READY_TO_PICK",
+    "shippingAddress": "Số 1 Đại Cồ Việt, Hai Bà Trưng, Hà Nội",
+    "recipientName": "Nguyen Van Buyer",
+    "recipientPhone": "0901234567",
+    "city": "Hà Nội",
+    "currentLocation": "Kho tổng Nexus Hà Nội · Chờ bưu tá GHN lấy hàng",
+    "estimatedDaysAhead": 3,
+    "createdAt": "2026-10-20T08:00:00.000Z",
+    "updatedAt": "2026-10-20T08:30:00.000Z"
   }
 ]

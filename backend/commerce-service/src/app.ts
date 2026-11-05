@@ -12,6 +12,7 @@ import { RefundOrderUseCase } from './application/use-cases/RefundOrderUseCase';
 import { RejectRefundUseCase } from './application/use-cases/RejectRefundUseCase';
 import { DispatchOrderUseCase } from './application/use-cases/DispatchOrderUseCase';
 import { RequestRefundUseCase } from './application/use-cases/RequestRefundUseCase';
+import { GhnCarrierClient } from './infrastructure/clients/GhnCarrierClient';
 
 import { OrderController } from './interfaces/http/controllers/OrderController';
 import { createOrderRoutes } from './interfaces/http/routes/OrderRoutes';
@@ -72,7 +73,12 @@ export function createApplication(): Application {
   const cancelOrderUseCase = new CancelOrderUseCase(orderRepository, getOrderDetailUseCase);
   const refundOrderUseCase = new RefundOrderUseCase(orderRepository, getOrderDetailUseCase);
   const rejectRefundUseCase = new RejectRefundUseCase(orderRepository, getOrderDetailUseCase);
-  const dispatchOrderUseCase = new DispatchOrderUseCase(orderRepository, getOrderDetailUseCase);
+  const ghnCarrierClient = new GhnCarrierClient();
+  const dispatchOrderUseCase = new DispatchOrderUseCase(
+    orderRepository,
+    getOrderDetailUseCase,
+    ghnCarrierClient,
+  );
   const requestRefundUseCase = new RequestRefundUseCase(orderRepository, getOrderDetailUseCase);
 
   const orderController = new OrderController(

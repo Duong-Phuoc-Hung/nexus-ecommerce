@@ -198,7 +198,7 @@ export class Order {
     this._updatedAt = new Date();
   }
 
-  public dispatch(trackingCode?: string, carrierCode: string = 'GHN'): void {
+  public dispatch(trackingCode?: string, carrierCode: string = 'GHN', awbUrl?: string): void {
     if (this._status === OrderStatus.CANCELLED || this._status === OrderStatus.REFUNDED) {
       throw new Error(`Không thể bàn giao vận chuyển cho đơn hàng ở trạng thái "${this._status}".`);
     }
@@ -212,7 +212,7 @@ export class Order {
       status: 'SHIPPED',
       title: `Đã đóng gói và bàn giao cho đơn vị vận chuyển ${carrierCode}`,
       timestamp: new Date(),
-      note: `Mã vận đơn: ${this._trackingCode}`,
+      note: `Mã vận đơn: ${this._trackingCode}${awbUrl ? ` · Tem in bưu gửi (AWB): ${awbUrl}` : ''}`,
     });
     this._updatedAt = new Date();
   }
