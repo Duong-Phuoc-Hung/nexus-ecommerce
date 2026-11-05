@@ -4,10 +4,17 @@ import { ICategoryRepository } from '../../domain/repositories/ICategoryReposito
 import { Category } from '../../domain/entities/Category';
 
 export class PostgresCategoryRepository implements ICategoryRepository {
-  private prisma: any;
+  private _prisma?: any;
 
   constructor(prisma?: PrismaClient) {
-    this.prisma = prisma || PrismaClientWrapper.getInstance();
+    if (prisma) this._prisma = prisma;
+  }
+
+  private get prisma(): any {
+    if (!this._prisma) {
+      this._prisma = PrismaClientWrapper.getInstance();
+    }
+    return this._prisma;
   }
 
   public async findAllActive(): Promise<Category[]> {
