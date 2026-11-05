@@ -1,5 +1,4 @@
 'use client';
-import Link from 'next/link';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Gavel, Search } from 'lucide-react';
@@ -78,13 +77,9 @@ export function AdminAuctions() {
             AUCTION MANAGEMENT
           </p>
           <h1 className="text-3xl font-bold">Quản lý phiên đấu</h1>
-          <p className="mt-2 text-sm text-muted">
-            Thống kê trong phạm vi danh sách hiện được cung cấp.
-          </p>
+          <p className="mt-3 text-muted">Dữ liệu được tải từ Auction API.</p>
         </div>
-        <Button asChild variant="outline">
-          <Link href="/admin/auctions/new">Thiết lập phiên đấu</Link>
-        </Button>
+        <span className="text-sm text-muted">Chỉ xem · thao tác quản lý chưa được API hỗ trợ</span>
       </div>
 
       <div className="my-7 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -172,12 +167,7 @@ export function AdminAuctions() {
                 {visible.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((row) => (
                   <tr key={row.id}>
                     <td className="max-w-64 px-3 py-4">
-                      <Link
-                        href={'/admin/auctions/' + encodeURIComponent(row.id)}
-                        className="font-semibold underline underline-offset-4"
-                      >
-                        Phiên đấu {row.id}
-                      </Link>
+                      <p className="font-semibold">Phiên đấu {row.id}</p>
                       <p className="mt-1 text-xs text-muted">Sản phẩm: {row.productId}</p>
                     </td>
                     <td className="px-3 py-4">

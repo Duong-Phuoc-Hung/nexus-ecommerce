@@ -507,7 +507,6 @@ export function CatalogListing({ embedded = false }: { embedded?: boolean }) {
                         name: product.title,
                         image: product.images[0] || '/images/nexus-product-placeholder.svg',
                         price: product.price ?? 0,
-                        saleType: product.saleType,
                         href: '/products/' + encodeURIComponent(product.id),
                       })
                     }

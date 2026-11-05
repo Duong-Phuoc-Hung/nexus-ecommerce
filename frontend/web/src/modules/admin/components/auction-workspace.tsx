@@ -19,10 +19,9 @@ import {
   canManageAuction,
 } from '@/modules/auction/api/auction.api';
 import { useSession } from '@/modules/auth/hooks/use-session';
-import { appConfig } from '@/configs/app.config';
 import { AdminAuctions } from './admin-auctions';
 export function AuctionWorkspace() {
-  if (appConfig.auctionSource !== 'mock') return <AdminAuctions />;
+  if (process.env.NEXT_PUBLIC_AUCTION_SOURCE !== 'mock') return <AdminAuctions />;
   return <AuctionWorkspaceContent />;
 }
 function AuctionWorkspaceContent() {

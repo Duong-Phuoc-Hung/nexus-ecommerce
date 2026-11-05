@@ -13,7 +13,6 @@ import { defaultQuery } from '@/modules/catalog/api/catalog.factory';
 import { appConfig } from '@/configs/app.config';
 import { userMessage } from '@/lib/axios/http';
 import { AccountControls } from '@/modules/user/components/account-controls';
-import { BuyerStoreActions } from '@/modules/commerce/components/buyer-store-actions';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import type { CategoryId, MarketplaceFeed, MarketplaceProduct } from '../types/marketplace.types';
 import { MarketplaceIcon } from './marketplace-icon';
@@ -31,7 +30,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-export function MarketplaceHome() {
+export function MarketplaceHome({ feed }: { feed: MarketplaceFeed }) {
   const [auctionRows, setAuctionRows] = useState<Auction[] | null>(null);
   const [catalogProducts, setCatalogProducts] = useState<MarketplaceProduct[]>([]);
   const [apiError, setApiError] = useState('');
@@ -107,7 +106,7 @@ export function MarketplaceHome() {
   }, []);
   const router = useRouter();
   const { user } = useSession();
-  const [headerCategories, setHeaderCategories] = useState<MarketplaceFeed['categories']>([]);
+  const [headerCategories, setHeaderCategories] = useState(feed.categories.slice(0, 0));
   useEffect(() => {
     const controller = new AbortController();
     catalogApi
@@ -118,13 +117,7 @@ export function MarketplaceHome() {
             rows.map((row) => ({
               id: row.id,
               name: row.name,
-              icon: row.name.toLocaleLowerCase('vi').includes('đồng hồ')
-                ? 'watch'
-                : row.name.toLocaleLowerCase('vi').includes('âm thanh')
-                  ? 'headphones'
-                  : row.name.toLocaleLowerCase('vi').includes('điện tử')
-                    ? 'camera'
-                    : 'gem',
+              icon: feed.categories.find((c) => c.id === row.id)?.icon || 'gem',
               description: 'Khám phá sản phẩm trong danh mục',
             })),
           );
@@ -133,7 +126,7 @@ export function MarketplaceHome() {
         if (!controller.signal.aborted) setHeaderCategories([]);
       });
     return () => controller.abort();
-  }, []);
+  }, [feed.categories]);
   const featuredCategories = useMemo(() => {
     const priorityIds = ['1', '2', '3', '18'];
     const selected = priorityIds
@@ -143,9 +136,7 @@ export function MarketplaceHome() {
     return selected.length === 4 ? selected : headerCategories.slice(0, 4);
   }, [headerCategories]);
   const [elapsed, setElapsed] = useState(0);
-  // Dữ liệu sản phẩm mẫu trong feed không còn được đưa lên trang chủ khi Catalog API đã có.
-  // const sourceProducts = appConfig.catalogSource === 'api' ? catalogProducts : feed.products;
-  const sourceProducts = catalogProducts;
+  const sourceProducts = appConfig.catalogSource === 'api' ? catalogProducts : feed.products;
   const products = sourceProducts.flatMap((product) => {
     if (product.mode !== 'auction' || !auctionRows) return [product];
     const a = auctionRows.find((row) => row.productId === product.id);
@@ -278,16 +269,13 @@ export function MarketplaceHome() {
               <span className="hidden sm:inline">Tìm kiếm</span>
             </Button>
           </form>
-          <div className="ml-auto flex items-center gap-2 sm:gap-3">
-            <BuyerStoreActions />
-            <Link
-              href="/account"
-              className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-ink"
-            >
-              <MarketplaceIcon name="users" className="size-5" />
-              <span className="hidden sm:block">Tài khoản</span>
-            </Link>
-          </div>
+          <a
+            href="/account"
+            className="ml-auto inline-flex min-h-11 items-center gap-2 text-sm font-medium text-ink"
+          >
+            <MarketplaceIcon name="users" className="size-5" />
+            <span className="hidden sm:block">Tài khoản</span>
+          </a>
         </div>
         <div className="nexus-container relative flex min-h-12 items-center justify-between gap-4 border-t border-line/60 text-xs font-medium">
           <nav aria-label="Điều hướng chính" className="flex items-center gap-4 sm:gap-7">
@@ -496,7 +484,6 @@ export function MarketplaceHome() {
                         name: product.name,
                         image: product.image,
                         price: product.price,
-                        saleType: product.mode === 'auction' ? 'AUCTION' : 'FIXED_PRICE',
                         href:
                           product.mode === 'auction'
                             ? '/auctions/' + encodeURIComponent(product.auctionId ?? product.id)
