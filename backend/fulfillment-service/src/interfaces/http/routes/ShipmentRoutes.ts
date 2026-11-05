@@ -10,6 +10,11 @@ export function createShipmentRoutes(controller: ShipmentController): Router {
     controller.getDashboardSummary(req, res),
   );
 
+  // 1.1 Khởi tạo hoặc đăng ký vận đơn sandbox (hỗ trợ tạo đơn từ Commerce Service)
+  router.post('/shipments', requireAuth, requireShipmentPermission('CREATE'), (req, res) =>
+    controller.createShipment(req, res),
+  );
+
   // 2. Tra cứu danh sách vận đơn (Search / Filter / Pagination)
   router.get('/shipments', requireAuth, requireShipmentPermission('LIST'), (req, res) =>
     controller.listShipments(req, res),

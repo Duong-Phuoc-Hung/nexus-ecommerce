@@ -5,6 +5,7 @@ import { UpdateShipmentStatusUseCase } from '../../../application/use-cases/Upda
 import { ManualOverrideShipmentUseCase } from '../../../application/use-cases/ManualOverrideShipmentUseCase';
 import { GetFulfillmentSummaryUseCase } from '../../../application/use-cases/GetFulfillmentSummaryUseCase';
 import { ProcessCarrierWebhookUseCase } from '../../../application/use-cases/ProcessCarrierWebhookUseCase';
+import { CreateShipmentUseCase } from '../../../application/use-cases/CreateShipmentUseCase';
 import { ShipmentNotFoundException } from '../../../domain/exceptions/ShipmentNotFoundException';
 import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
 
@@ -16,6 +17,7 @@ export class ShipmentController {
     private readonly manualOverrideShipmentUseCase: ManualOverrideShipmentUseCase,
     private readonly getFulfillmentSummaryUseCase: GetFulfillmentSummaryUseCase,
     private readonly processCarrierWebhookUseCase?: ProcessCarrierWebhookUseCase,
+    private readonly createShipmentUseCase?: CreateShipmentUseCase,
   ) {}
 
   public async listShipments(req: Request, res: Response): Promise<void> {
@@ -157,10 +159,84 @@ export class ShipmentController {
     }
   }
 
+  /**
+   * POST /api/v1/fulfillment/shipments
+   * Khởi tạo hoặc đăng ký vận đơn sandbox cho đơn hàng
+   */
+  public async createShipment(req: Request, res: Response): Promise<void> {
+    try {
+      if (!this.createShipmentUseCase) {
+        res.status(500).json({
+          success: false,
+          error: 'CreateShipmentUseCase not configured.',
+        });
+        return;
+      }
+
+      const {
+        orderId,
+        carrier,
+        trackingCode,
+        shippingAddress,
+        recipientName,
+        recipientPhone,
+        city,
+        currentLocation,
+        status,
+      } = req.body || {};
+
+      if (!orderId) {
+        res.status(400).json({
+          success: false,
+          error: 'Trường "orderId" là bắt buộc khi khởi tạo vận đơn.',
+        });
+        return;
+      }
+
+      const shipment = await this.createShipmentUseCase.execute({
+        orderId,
+        carrier,
+        trackingCode,
+        shippingAddress,
+        recipientName,
+        recipientPhone,
+        city,
+        currentLocation,
+        status,
+      });
+
+      res.status(201).json({
+        success: true,
+        message: 'Khởi tạo vận đơn sandbox thành công.',
+        data: shipment,
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Không thể khởi tạo vận đơn.',
+      });
+    }
+  }
+
   public async getByOrderId(req: Request, res: Response): Promise<void> {
     try {
       const orderId = String(req.params.orderId || '').trim();
-      const shipment = await this.getShipmentDetailUseCase.execute(orderId);
+      let shipment: any;
+      try {
+        shipment = await this.getShipmentDetailUseCase.execute(orderId);
+      } catch (err) {
+        if (err instanceof ShipmentNotFoundException && this.createShipmentUseCase) {
+          // Tự động cấp phát vận đơn Sandbox cho đơn hàng trong hệ thống nếu chưa từng tạo
+          shipment = await this.createShipmentUseCase.execute({
+            orderId,
+            carrier: 'GHN',
+            shippingAddress: 'Địa chỉ giao hàng mặc định (Sandbox)',
+            status: 'READY_TO_PICK',
+          });
+        } else {
+          throw err;
+        }
+      }
       res.status(200).json({
         success: true,
         data: shipment,

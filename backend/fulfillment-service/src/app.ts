@@ -15,6 +15,7 @@ import { UpdateShipmentStatusUseCase } from './application/use-cases/UpdateShipm
 import { ManualOverrideShipmentUseCase } from './application/use-cases/ManualOverrideShipmentUseCase';
 import { GetFulfillmentSummaryUseCase } from './application/use-cases/GetFulfillmentSummaryUseCase';
 import { ProcessCarrierWebhookUseCase } from './application/use-cases/ProcessCarrierWebhookUseCase';
+import { CreateShipmentUseCase } from './application/use-cases/CreateShipmentUseCase';
 
 import { GetSkuInventoryUseCase } from './application/use-cases/GetSkuInventoryUseCase';
 import { AdjustInventoryUseCase } from './application/use-cases/AdjustInventoryUseCase';
@@ -95,6 +96,7 @@ export function createApplication(): Application {
   const manualOverrideShipmentUseCase = new ManualOverrideShipmentUseCase(shipmentRepository);
   const getFulfillmentSummaryUseCase = new GetFulfillmentSummaryUseCase(shipmentRepository);
   const processCarrierWebhookUseCase = new ProcessCarrierWebhookUseCase(shipmentRepository);
+  const createShipmentUseCase = new CreateShipmentUseCase(shipmentRepository);
 
   // 3. Use Cases - Tồn kho (Inventory)
   const getSkuInventoryUseCase = new GetSkuInventoryUseCase(inventoryRepository);
@@ -112,6 +114,7 @@ export function createApplication(): Application {
     manualOverrideShipmentUseCase,
     getFulfillmentSummaryUseCase,
     processCarrierWebhookUseCase,
+    createShipmentUseCase,
   );
   const inventoryController = new InventoryController(
     getSkuInventoryUseCase,

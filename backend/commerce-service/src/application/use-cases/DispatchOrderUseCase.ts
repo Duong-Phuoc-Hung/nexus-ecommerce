@@ -64,6 +64,64 @@ export class DispatchOrderUseCase {
     order.dispatch(trackingCode, carrier, awbBarcodeUrl);
 
     await this.orderRepository.update(order);
+
+    // Tự động đồng bộ tạo vận đơn sang fulfillment-service phục vụ kiểm thử Sandbox (SRS 3.6)
+    await this.syncToFulfillmentService(order, carrier, order.trackingCode || trackingCode || '');
+
     return this.getOrderDetailUseCase.execute(input.orderId);
+  }
+
+  private async syncToFulfillmentService(
+    order: { id: string; buyerName?: string; buyerEmail?: string },
+    carrier: string,
+    trackingCode: string,
+  ): Promise<void> {
+    const fulfillmentUrl = (
+      process.env.FULFILLMENT_SERVICE_URL ||
+      `http://127.0.0.1:${process.env.FULFILLMENT_SERVICE_PORT || 4005}`
+    ).replace(/\/$/, '');
+
+    try {
+      const payload = {
+        orderId: order.id,
+        carrier,
+        trackingCode,
+        shippingAddress: 'Địa chỉ nhận hàng Nexus (Sandbox)',
+        recipientName: order.buyerName || 'Khách hàng',
+        recipientPhone: order.buyerEmail || '0901234567',
+        city: 'TP. Hồ Chí Minh',
+        status: 'READY_TO_PICK',
+      };
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 2000);
+
+      const res = await fetch(`${fulfillmentUrl}/api/v1/fulfillment/shipments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': 'usr_system',
+          'x-user-role': 'ADMIN',
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      }).catch(() => null);
+
+      clearTimeout(timer);
+
+      if (res && !res.ok) {
+        await fetch(`${fulfillmentUrl}/api/v1/fulfillments/shipments`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': 'usr_system',
+            'x-user-role': 'ADMIN',
+          },
+          body: JSON.stringify(payload),
+        }).catch(() => null);
+      }
+    } catch (err: any) {
+      console.warn('[DispatchOrderUseCase] Fulfillment sync warning:', err.message);
+    }
   }
 }
