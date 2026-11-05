@@ -226,7 +226,7 @@ export const userSpec = {
       post: {
         tags: ['Authentication'],
         summary: 'Đăng xuất tài khoản',
-        description: `${PRIVATE} Method: POST. Token bị thu hồi, dùng lại sẽ nhận 401.`,
+        description: `Method: POST. Token bị thu hồi, dùng lại sẽ nhận 401.`,
         security: [{ BearerAuth: [] }],
         responses: {
           200: jsonResponse('Đăng xuất thành công', {
@@ -241,7 +241,7 @@ export const userSpec = {
       get: {
         tags: ['Authentication'],
         summary: 'Danh sách các quyền (Permissions) theo vai trò',
-        description: `${PRIVATE} Cần quyền ROLE.VIEW (ADMIN).`,
+        description: `Cần quyền ROLE.VIEW (ADMIN).`,
         security: [{ BearerAuth: [] }],
         responses: {
           200: jsonResponse('Thành công', {
@@ -257,7 +257,7 @@ export const userSpec = {
       get: {
         tags: ['Users & Profile'],
         summary: 'Xem hồ sơ của chính mình (Từ JWT token)',
-        description: `${PRIVATE} Cần quyền PROFILE.VIEW.`,
+        description: `Cần quyền PROFILE.VIEW.`,
         security: [{ BearerAuth: [] }],
         responses: {
           200: jsonResponse('Thông tin cá nhân', {
@@ -279,7 +279,7 @@ export const userSpec = {
       patch: {
         tags: ['Users & Profile'],
         summary: 'Cập nhật họ tên và số điện thoại của chính mình (P0 #2)',
-        description: `${PRIVATE} Cần quyền PROFILE.UPDATE. Cho phép cập nhật fullName và phone thật. Số điện thoại được đối chiếu chống trùng lặp.`,
+        description: `Cần quyền PROFILE.UPDATE. Cho phép cập nhật fullName và phone thật. Số điện thoại được đối chiếu chống trùng lặp.`,
         security: [{ BearerAuth: [] }],
         requestBody: {
           required: true,
@@ -324,7 +324,7 @@ export const userSpec = {
       get: {
         tags: ['Buyer Address Book'],
         summary: 'Lấy sổ địa chỉ nhận hàng của Buyer (P0 #3)',
-        description: `${PRIVATE} Lấy danh sách địa chỉ đã lưu của chính Buyer (tối đa 5 địa chỉ). Luôn có tối đa 1 địa chỉ mặc định được ưu tiên lên đầu.`,
+        description: `Lấy danh sách địa chỉ đã lưu của chính Buyer (tối đa 5 địa chỉ). Luôn có tối đa 1 địa chỉ mặc định được ưu tiên lên đầu.`,
         security: [{ BearerAuth: [] }],
         responses: {
           200: jsonResponse('Danh sách địa chỉ', {
@@ -353,7 +353,7 @@ export const userSpec = {
       post: {
         tags: ['Buyer Address Book'],
         summary: 'Tạo địa chỉ nhận hàng mới (P0 #4)',
-        description: `${PRIVATE} Thêm địa chỉ mới theo chuẩn 2 cấp (Tỉnh/Thành -> Phường/Xã). Giới hạn tối đa 5 địa chỉ active. Địa chỉ đầu tiên tự động đặt làm mặc định.`,
+        description: `Thêm địa chỉ mới theo chuẩn 2 cấp (Tỉnh/Thành -> Phường/Xã). Giới hạn tối đa 5 địa chỉ active. Địa chỉ đầu tiên tự động đặt làm mặc định.`,
         security: [{ BearerAuth: [] }],
         requestBody: {
           required: true,
@@ -407,7 +407,7 @@ export const userSpec = {
       patch: {
         tags: ['Buyer Address Book'],
         summary: 'Cập nhật địa chỉ nhận hàng (P0 #5)',
-        description: `${PRIVATE} Sửa địa chỉ thuộc sở hữu của Buyer. Không làm thay đổi snapshot trong các đơn hàng cũ đã đặt.`,
+        description: `Sửa địa chỉ thuộc sở hữu của Buyer. Không làm thay đổi snapshot trong các đơn hàng cũ đã đặt.`,
         security: [{ BearerAuth: [] }],
         parameters: [{ name: 'addressId', in: 'path', required: true, schema: { type: 'string' } }],
         requestBody: {
@@ -437,7 +437,7 @@ export const userSpec = {
       delete: {
         tags: ['Buyer Address Book'],
         summary: 'Xóa địa chỉ nhận hàng (P0 #6)',
-        description: `${PRIVATE} Xóa địa chỉ. Nếu xóa đúng địa chỉ mặc định, tự động chuyển mặc định cho địa chỉ còn lại tạo sớm nhất.`,
+        description: `Xóa địa chỉ. Nếu xóa đúng địa chỉ mặc định, tự động chuyển mặc định cho địa chỉ còn lại tạo sớm nhất.`,
         security: [{ BearerAuth: [] }],
         parameters: [{ name: 'addressId', in: 'path', required: true, schema: { type: 'string' } }],
         responses: {
@@ -455,7 +455,7 @@ export const userSpec = {
       put: {
         tags: ['Buyer Address Book'],
         summary: 'Đặt địa chỉ làm mặc định (P0 #7)',
-        description: `${PRIVATE} Chuyển địa chỉ chỉ định thành mặc định duy nhất trong 1 giao dịch cơ sở dữ liệu.`,
+        description: `Chuyển địa chỉ chỉ định thành mặc định duy nhất trong 1 giao dịch cơ sở dữ liệu.`,
         security: [{ BearerAuth: [] }],
         parameters: [{ name: 'addressId', in: 'path', required: true, schema: { type: 'string' } }],
         responses: {
@@ -470,7 +470,7 @@ export const userSpec = {
       get: {
         tags: ['Users & Profile'],
         summary: 'Tra cứu & tìm kiếm danh sách người dùng (Support Staff & Admin)',
-        description: `${PRIVATE} Cần quyền USER.VIEW (Role: SUPPORT_STAFF hoặc ADMIN). Hỗ trợ tìm kiếm từ khóa q, lọc theo email, vai trò (role), trạng thái (status), sắp xếp và phân trang.`,
+        description: `Cần quyền USER.VIEW (Role: SUPPORT_STAFF hoặc ADMIN). Hỗ trợ tìm kiếm từ khóa q, lọc theo email, vai trò (role), trạng thái (status), sắp xếp và phân trang.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -569,7 +569,7 @@ export const userSpec = {
       get: {
         tags: ['Users & Profile'],
         summary: 'Xem thông tin người dùng theo UUID hoặc Email',
-        description: `${PRIVATE} Cần quyền USER.VIEW.`,
+        description: `Cần quyền USER.VIEW.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -599,7 +599,7 @@ export const userSpec = {
       put: {
         tags: ['Users & Profile'],
         summary: 'Cập nhật vai trò (Role) cho tài khoản',
-        description: `${PRIVATE} Cần quyền ROLE.UPDATE (ADMIN). Header: Content-Type: application/json. Sau khi đổi role, token cũ của user đó bị thu hồi.`,
+        description: `Cần quyền ROLE.UPDATE (ADMIN). Header: Content-Type: application/json. Sau khi đổi role, token cũ của user đó bị thu hồi.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -644,6 +644,7 @@ export const userSpec = {
       patch: {
         tags: ['Users & Profile'],
         summary: 'Khóa hoặc mở khóa tài khoản người dùng',
+
         description: `${PRIVATE} Cần quyền USER.UPDATE (SUPPORT_STAFF, ADMIN). Khóa tài khoản khi có dấu hiệu gian lận hoặc vi phạm quy định sàn (SRS 2.3, 2.7, 3.1.2). Khi bị SUSPENDED, toàn bộ phiên đăng nhập của người dùng sẽ bị thu hồi ngay lập tức.`,
         security: [{ BearerAuth: [] }],
         parameters: [
@@ -774,8 +775,8 @@ export const catalogSpec = {
     '/api/v1/products/mine': {
       get: {
         tags: ['Products'],
-        summary: 'Xem kho hàng (Seller)',
-        description: `${PRIVATE} Method: GET. Bắt buộc đăng nhập tài khoản Seller. Trả về toàn bộ danh sách sản phẩm thuộc về chính người bán đó (bao gồm cả ACTIVE, DRAFT, ARCHIVED để quản lý kho).`,
+        summary: 'Xem kho hàng (Seller / Admin)',
+        description: `Method: GET. Bắt buộc đăng nhập tài khoản Seller. Trả về toàn bộ danh sách sản phẩm thuộc về chính người bán đó (bao gồm cả ACTIVE, DRAFT, ARCHIVED để quản lý kho).`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -818,8 +819,92 @@ export const catalogSpec = {
     '/api/v1/products': {
       get: {
         tags: ['Products'],
-        summary: 'Danh sách tất cả sản phẩm (khách hàng)',
-        description: `${PUBLIC} Method: GET. Truy xuất toàn bộ sản phẩm đang được bày bán công khai ngoài trang chủ (không cần đăng nhập).`,
+        summary: 'Danh sách sản phẩm (Khách hàng & Quản trị)',
+        description: `${PUBLIC} Method: GET. Lấy danh sách sản phẩm có hỗ trợ phân trang và bộ lọc nâng cao. Khách hàng xem danh sách công khai (mặc định scope=buyer). Quản trị viên (ADMIN) có thể truyền query \`scope=admin\` (kèm header Authorization: Bearer <JWT>) để xem toàn bộ sản phẩm gồm cả DRAFT, ARCHIVED, OUT_OF_STOCK.`,
+        parameters: [
+          {
+            name: 'scope',
+            in: 'query',
+            required: false,
+            description:
+              'Phạm vi truy vấn: "buyer" (công khai) hoặc "admin" (dành riêng cho Admin)',
+            schema: { type: 'string', enum: ['buyer', 'admin'], default: 'buyer' },
+          },
+          {
+            name: 'page',
+            in: 'query',
+            required: false,
+            description: 'Số trang (bắt đầu từ 1, mặc định 1)',
+            schema: { type: 'integer', default: 1, example: 1 },
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            required: false,
+            description: 'Số lượng sản phẩm trên mỗi trang (1-100, mặc định 20)',
+            schema: { type: 'integer', default: 20, example: 20 },
+          },
+          {
+            name: 'sort',
+            in: 'query',
+            required: false,
+            description: 'Tiêu chí sắp xếp',
+            schema: {
+              type: 'string',
+              enum: ['newest', 'oldest', 'price_asc', 'price_desc'],
+              default: 'newest',
+            },
+          },
+          {
+            name: 'categoryId',
+            in: 'query',
+            required: false,
+            description: 'Lọc theo ID danh mục',
+            schema: { type: 'string', example: '100' },
+          },
+          {
+            name: 'condition',
+            in: 'query',
+            required: false,
+            description: 'Tình trạng sản phẩm',
+            schema: { type: 'string', enum: ['NEW', 'LIKE_NEW', 'USED', 'REFURBISHED'] },
+          },
+          {
+            name: 'status',
+            in: 'query',
+            required: false,
+            description: 'Trạng thái sản phẩm (chỉ hỗ trợ khi scope=admin)',
+            schema: { type: 'string', enum: ['ACTIVE', 'DRAFT', 'ARCHIVED', 'OUT_OF_STOCK'] },
+          },
+          {
+            name: 'saleType',
+            in: 'query',
+            required: false,
+            description: 'Hình thức bán hàng',
+            schema: { type: 'string', enum: ['DIRECT_SALE', 'AUCTION'] },
+          },
+          {
+            name: 'minPrice',
+            in: 'query',
+            required: false,
+            description: 'Giá tối thiểu (VND)',
+            schema: { type: 'number', example: 1000000 },
+          },
+          {
+            name: 'maxPrice',
+            in: 'query',
+            required: false,
+            description: 'Giá tối đa (VND)',
+            schema: { type: 'number', example: 50000000 },
+          },
+          {
+            name: 'q',
+            in: 'query',
+            required: false,
+            description: 'Từ khóa tìm kiếm tiêu đề/mô tả sản phẩm',
+            schema: { type: 'string', example: 'iphone' },
+          },
+        ],
         responses: {
           200: jsonResponse('Danh sách sản phẩm', {
             success: true,
@@ -846,7 +931,8 @@ export const catalogSpec = {
       },
       post: {
         tags: ['Products'],
-        summary: 'Tạo sản phẩm mới (Seller)',
+        summary: 'Tạo sản phẩm mới (Seller / Admin)',
+        description: `Tạo sản phẩm mới. Seller tạo cho chính mình; Admin có thể truyền thêm \`sellerId\` để tạo thay mặt cho Seller khác.`,
         security: [{ BearerAuth: [] }],
         requestBody: {
           required: true,
@@ -856,6 +942,11 @@ export const catalogSpec = {
                 type: 'object',
                 required: ['title', 'description', 'categoryId', 'price'],
                 properties: {
+                  sellerId: {
+                    type: 'string',
+                    description: 'Tùy chọn: Dành riêng cho ADMIN để tạo sản phẩm thay mặt Seller',
+                    example: 'a0000000-0000-0000-0000-000000000002',
+                  },
                   title: { type: 'string', example: 'iPhone 15 Pro Max 512GB Blue Titanium' },
                   description: {
                     type: 'string',
@@ -1015,7 +1106,7 @@ export const catalogSpec = {
       },
       put: {
         tags: ['Products'],
-        summary: 'Cập nhật sản phẩm (Seller)',
+        summary: 'Cập nhật sản phẩm (Seller / Admin)',
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1094,7 +1185,7 @@ export const catalogSpec = {
       },
       delete: {
         tags: ['Products'],
-        summary: 'Xóa sản phẩm (Seller)',
+        summary: 'Xóa sản phẩm (Seller / Admin)',
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1116,6 +1207,32 @@ export const catalogSpec = {
         },
       },
     },
+    '/api/v1/products/{id}/recover': {
+      post: {
+        tags: ['Products'],
+        summary: 'Khôi phục sản phẩm đã xóa mềm (Seller / Admin)',
+        description: `Khôi phục sản phẩm đã bị xóa hoặc lưu trữ về trạng thái ACTIVE. Yêu cầu quyền SELLER (chính chủ sản phẩm) hoặc ADMIN.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã ID của sản phẩm cần khôi phục',
+            schema: { type: 'string', example: '15' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Khôi phục sản phẩm thành công', {
+            success: true,
+            message: "Đã khôi phục thành công sản phẩm với mã ID '15'.",
+          }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy sản phẩm', 'Product with ID "15" was not found.'),
+        },
+      },
+    },
   },
 };
 
@@ -1132,22 +1249,133 @@ export const auctionSpec = {
     '/api/v1/auctions': {
       get: {
         tags: ['Auctions'],
-        summary: 'Lấy danh sách các phiên đấu giá đang diễn ra',
-        description: `${PUBLIC} Method: GET.`,
+        summary: 'Lấy danh sách các phiên đấu giá',
+        description: `${PUBLIC} Method: GET. Hỗ trợ lọc theo trạng thái (status) hoặc người bán (sellerId).`,
+        parameters: [
+          {
+            name: 'status',
+            in: 'query',
+            required: false,
+            description:
+              'Lọc theo trạng thái phiên (SCHEDULED, ACTIVE, EXTENDED, ENDED, CANCELLED)',
+            schema: {
+              type: 'string',
+              enum: ['SCHEDULED', 'ACTIVE', 'EXTENDED', 'ENDED', 'CANCELLED'],
+            },
+          },
+          {
+            name: 'sellerId',
+            in: 'query',
+            required: false,
+            description: 'Lọc các phiên của một người bán cụ thể',
+            schema: { type: 'string' },
+          },
+        ],
         responses: {
           200: jsonResponse('Danh sách phiên đấu giá', {
             success: true,
             data: [
               {
-                id: 'auc_01hqz777live',
-                productId: 'prod_01hqz999xyz',
-                currentHighestBid: 250,
-                highestBidderId: 'usr_01hqz789abc',
+                id: '1',
+                productId: '1',
+                sellerId: 'a0000000-0000-0000-0000-000000000002',
+                title: 'Đấu giá iPhone 15 Pro Max 256GB Titan Tự Nhiên',
+                startingPrice: 20000000,
+                currentHighestBid: 25000000,
+                highestBidderId: 'a0000000-0000-0000-0000-000000000003',
+                bidIncrement: 500000,
                 status: 'ACTIVE',
-                endTime: '2026-10-21T15:34:06.147Z',
+                startTime: '2026-11-02T08:00:00.000Z',
+                endTime: '2026-11-05T08:00:00.000Z',
               },
             ],
           }),
+        },
+      },
+      post: {
+        tags: ['Auctions'],
+        summary: 'Tạo phòng đấu giá mới (Seller / Admin)',
+        description: 'Tạo phiên đấu giá mới cho sản phẩm. Yêu cầu quyền SELLER hoặc ADMIN.',
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['productId', 'startPrice', 'startTime', 'endTime'],
+                properties: {
+                  productId: {
+                    type: 'string',
+                    example: '1',
+                    description: 'Mã ID của sản phẩm đấu giá',
+                  },
+                  title: {
+                    type: 'string',
+                    example: 'Đấu giá iPhone 15 Pro Max 256GB Titan Tự Nhiên',
+                  },
+                  startPrice: {
+                    type: 'number',
+                    example: 20000000,
+                    description: 'Giá khởi điểm (VND)',
+                  },
+                  bidStep: {
+                    type: 'number',
+                    example: 500000,
+                    description: 'Bước giá tối thiểu (mặc định 10.000)',
+                  },
+                  buyNowPrice: {
+                    type: 'number',
+                    example: 30000000,
+                    description: 'Giá mua ngay (tùy chọn)',
+                  },
+                  startTime: {
+                    type: 'string',
+                    format: 'date-time',
+                    example: '2026-11-02T10:00:00.000Z',
+                  },
+                  endTime: {
+                    type: 'string',
+                    format: 'date-time',
+                    example: '2026-11-05T10:00:00.000Z',
+                  },
+                  antiSnipingExtensionSeconds: {
+                    type: 'number',
+                    example: 120,
+                    description: 'Số giây tự động gia hạn khi có bid phút chót',
+                  },
+                  sellerId: {
+                    type: 'string',
+                    example: 'a0000000-0000-0000-0000-000000000002',
+                    description: 'Admin có thể chỉ định người bán',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: jsonResponse('Tạo phòng đấu giá thành công', {
+            success: true,
+            message: 'Tạo phòng đấu giá thành công.',
+            data: {
+              id: '1',
+              productId: '1',
+              sellerId: 'a0000000-0000-0000-0000-000000000002',
+              title: 'Đấu giá iPhone 15 Pro Max 256GB Titan Tự Nhiên',
+              startingPrice: 20000000,
+              currentHighestBid: 20000000,
+              bidIncrement: 500000,
+              buyNowPrice: 30000000,
+              status: 'SCHEDULED',
+              startTime: '2026-11-02T10:00:00.000Z',
+              endTime: '2026-11-05T10:00:00.000Z',
+              createdAt: '2026-11-02T08:00:00.000Z',
+            },
+          }),
+          400: errorResponse('Dữ liệu không hợp lệ', 'Giá khởi điểm (startPrice) phải lớn hơn 0.'),
+          401: errorResponse('Chưa đăng nhập', 'Vui lòng đăng nhập để thực hiện thao tác này.'),
+          403: errorResponse('Không có quyền', 'Cần quyền SELLER hoặc ADMIN.'),
         },
       },
     },
@@ -1162,23 +1390,22 @@ export const auctionSpec = {
             in: 'path',
             required: true,
             description: 'Mã phòng đấu giá (Auction ID)',
-            schema: { type: 'string', example: 'auc_01hqz777live' },
+            schema: { type: 'string', example: '1' },
           },
         ],
         responses: {
           200: jsonResponse('Chi tiết phòng đấu giá', {
             success: true,
-            data: { id: 'auc_01hqz777live', status: 'ACTIVE', currentHighestBid: 250 },
+            data: { id: '1', status: 'ACTIVE', currentHighestBid: 25000000 },
           }),
           404: errorResponse('Không tìm thấy', 'Auction with ID "999" was not found.'),
         },
       },
-    },
-    '/api/v1/auctions/{id}/bids': {
-      post: {
+      put: {
         tags: ['Auctions'],
-        summary: 'Trả giá / Đặt giá thầu (Place Bid)',
-        description: `Route PRIVATE (theo thiết kế): cần header \`Authorization: Bearer <JWT>\` và Content-Type: application/json. LƯU Ý: hiện tại Auction Service chưa kiểm tra token và chưa validate body (chế độ Skeleton), nên request không token hoặc body sai vẫn trả 200. Gửi lượt trả giá mới vào phiên đấu giá.`,
+        summary: 'Chỉnh sửa phòng đấu giá (Seller / Admin)',
+        description:
+          'Chỉnh sửa thông tin phòng đấu giá khi phiên chưa bắt đầu (SCHEDULED). Yêu cầu quyền SELLER hoặc ADMIN.',
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1186,7 +1413,7 @@ export const auctionSpec = {
             in: 'path',
             required: true,
             description: 'Mã phòng đấu giá (Auction ID)',
-            schema: { type: 'string', example: 'auc_01hqz777live' },
+            schema: { type: 'string', example: '1' },
           },
         ],
         requestBody: {
@@ -1195,27 +1422,211 @@ export const auctionSpec = {
             'application/json': {
               schema: {
                 type: 'object',
-                required: ['bidderId', 'bidAmount'],
                 properties: {
-                  bidderId: { type: 'string', example: '01a15822-43b8-78c3-a246-16bff78bc6e8' },
-                  bidAmount: { type: 'number', example: 15000000 },
+                  title: {
+                    type: 'string',
+                    example: 'Đấu giá iPhone 15 Pro Max 256GB - Bản Titan Tự Nhiên',
+                  },
+                  bidIncrement: { type: 'number', example: 500000 },
+                  buyNowPrice: { type: 'number', example: 32000000 },
+                  startTime: { type: 'string', format: 'date-time' },
+                  endTime: { type: 'string', format: 'date-time' },
                 },
               },
             },
           },
         },
         responses: {
-          200: jsonResponse('Trả giá thành công (Skeleton)', {
+          200: jsonResponse('Cập nhật phòng đấu giá thành công', {
             success: true,
-            message: 'Bid accepted by bidding engine (Skeleton mode)',
+            message: 'Cập nhật phòng đấu giá thành công.',
             data: {
-              auctionId: 'auc_01hqz777live',
-              bidderId: 'a0000000-0000-0000-0000-000000000003',
-              acceptedAmount: 15000000,
-              status: 'ACCEPTED',
+              id: '1',
+              title: 'Đấu giá iPhone 15 Pro Max 256GB - Bản Titan Tự Nhiên',
+              currentHighestBid: 20000000,
+              bidIncrement: 500000,
+              buyNowPrice: 32000000,
+              status: 'SCHEDULED',
             },
           }),
-          401: unauthorized,
+          400: errorResponse(
+            'Không hợp lệ',
+            'Chỉ có thể chỉnh sửa phiên đấu giá khi chưa bắt đầu (SCHEDULED).',
+          ),
+          401: errorResponse('Chưa đăng nhập', 'Vui lòng đăng nhập để thực hiện thao tác này.'),
+          404: errorResponse('Không tìm thấy', 'Auction with ID "1" was not found.'),
+        },
+      },
+      delete: {
+        tags: ['Auctions'],
+        summary: 'Hủy phòng đấu giá (Seller / Admin)',
+        description:
+          'Hủy một phiên đấu giá. Yêu cầu quyền SELLER (chủ phiên) hoặc ADMIN. Không thể hủy phiên đã kết thúc (ENDED).',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã phòng đấu giá (Auction ID)',
+            schema: { type: 'string', example: '1' },
+          },
+        ],
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  reason: { type: 'string', example: 'Sản phẩm lỗi hoặc không còn khả dụng' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Hủy phòng đấu giá thành công', {
+            success: true,
+            message: 'Hủy phiên đấu giá thành công.',
+            data: {
+              auctionId: '1',
+              status: 'CANCELLED',
+            },
+          }),
+          400: errorResponse('Không hợp lệ', 'Không thể hủy phiên đấu giá đã kết thúc.'),
+          401: errorResponse('Chưa đăng nhập', 'Vui lòng đăng nhập để thực hiện thao tác này.'),
+          403: errorResponse(
+            'Không có quyền',
+            'Chỉ người tạo phiên đấu giá hoặc Quản trị viên mới có quyền hủy.',
+          ),
+          404: errorResponse('Không tìm thấy', 'Auction with ID "1" was not found.'),
+        },
+      },
+    },
+    '/api/v1/auctions/{id}/buy-now': {
+      post: {
+        tags: ['Auctions'],
+        summary: 'Mua thẳng phiên đấu giá (Buy It Now)',
+        description:
+          'Người mua mua đứt sản phẩm theo giá buyNowPrice được định sẵn, kết thúc phiên ngay lập tức và trở thành người chiến thắng.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã phòng đấu giá (Auction ID)',
+            schema: { type: 'string', example: '1' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Mua thẳng thành công', {
+            success: true,
+            message: 'Mua ngay thành công! Bạn đã giành chiến thắng phiên đấu giá.',
+            data: {
+              auctionId: '1',
+              winnerId: 'a0000000-0000-0000-0000-000000000003',
+              purchasePrice: 32000000,
+              status: 'ENDED',
+            },
+          }),
+          400: errorResponse(
+            'Không hợp lệ',
+            'Phiên đấu giá không hỗ trợ tính năng mua ngay hoặc đã kết thúc.',
+          ),
+          401: errorResponse('Chưa đăng nhập', 'Vui lòng đăng nhập để thực hiện mua ngay.'),
+          404: errorResponse('Không tìm thấy', 'Auction with ID "1" was not found.'),
+        },
+      },
+    },
+    '/api/v1/auctions/{id}/bids': {
+      get: {
+        tags: ['Auctions'],
+        summary: 'Xem lịch sử các lượt đặt giá của phiên',
+        description: `${PUBLIC} Method: GET. Lấy danh sách lịch sử trả giá của phòng đấu giá (mới nhất lên đầu).`,
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã phòng đấu giá (Auction ID)',
+            schema: { type: 'string', example: '1' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Lịch sử đặt giá', {
+            success: true,
+            data: [
+              {
+                id: '1',
+                auctionId: '1',
+                bidderId: 'a0000000-0000-0000-0000-000000000003',
+                bidAmount: 25000000,
+                bidTime: '2026-11-02T08:30:00.000Z',
+                isWinning: true,
+              },
+            ],
+          }),
+          404: errorResponse('Không tìm thấy', 'Auction with ID "1" was not found.'),
+        },
+      },
+      post: {
+        tags: ['Auctions'],
+        summary: 'Trả giá / Đặt giá thầu (Place Bid)',
+        description:
+          'Gửi lượt trả giá mới vào phiên đấu giá. Tự động kích hoạt Anti-sniping nếu đặt giá ở phút chót.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã phòng đấu giá (Auction ID)',
+            schema: { type: 'string', example: '1' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['bidAmount'],
+                properties: {
+                  bidAmount: {
+                    type: 'number',
+                    example: 25500000,
+                    description: 'Số tiền đặt giá (VND)',
+                  },
+                  bidderId: {
+                    type: 'string',
+                    example: 'a0000000-0000-0000-0000-000000000003',
+                    description: 'Tùy chọn nếu đã có Bearer token',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Đặt giá thành công', {
+            success: true,
+            message: 'Đặt giá thành công!',
+            data: {
+              auctionId: '1',
+              bidderId: 'a0000000-0000-0000-0000-000000000003',
+              currentHighestBid: 25500000,
+              status: 'ACTIVE',
+              isExtended: false,
+            },
+          }),
+          400: errorResponse(
+            'Không hợp lệ',
+            'Mức giá đặt tối thiểu hợp lệ phải là 25.500.000 VND.',
+          ),
+          401: errorResponse('Chưa đăng nhập', 'Vui lòng đăng nhập để tham gia trả giá.'),
+          404: errorResponse('Không tìm thấy', 'Auction with ID "1" was not found.'),
         },
       },
     },
@@ -1237,7 +1648,7 @@ export const commerceSpec = {
       get: {
         tags: ['Support Staff / Tra cứu đơn hàng'],
         summary: 'Tra cứu danh sách đơn hàng (Search, Filter & Pagination)',
-        description: `${PRIVATE} Yêu cầu quyền ORDER.LIST (SUPPORT_STAFF hoặc ADMIN). Hỗ trợ tìm kiếm theo từ khóa mã đơn, email, người mua, người bán.`,
+        description: `Yêu cầu quyền ORDER.LIST (SUPPORT_STAFF hoặc ADMIN). Hỗ trợ tìm kiếm theo từ khóa mã đơn, email, người mua, người bán.`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1340,7 +1751,7 @@ export const commerceSpec = {
       get: {
         tags: ['Support Staff / Tra cứu đơn hàng'],
         summary: 'Chi tiết hồ sơ đơn hàng & diễn biến lịch sử (Timeline)',
-        description: `${PRIVATE} Yêu cầu token hợp lệ (SUPPORT_STAFF, ADMIN, hoặc chủ sở hữu đơn hàng).`,
+        description: `Yêu cầu token hợp lệ (SUPPORT_STAFF, ADMIN, hoặc chủ sở hữu đơn hàng).`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1403,7 +1814,7 @@ export const commerceSpec = {
       post: {
         tags: ['Support Staff / Thao tác xử lý'],
         summary: 'Hủy đơn hàng trong trường hợp khiếu nại hoặc tranh chấp',
-        description: `${PRIVATE} Yêu cầu quyền ORDER.CANCEL (SUPPORT_STAFF hoặc ADMIN).`,
+        description: `Yêu cầu quyền ORDER.CANCEL (SUPPORT_STAFF hoặc ADMIN).`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1446,7 +1857,7 @@ export const commerceSpec = {
       post: {
         tags: ['Support Staff / Thao tác xử lý'],
         summary: 'Hoàn tiền cho khách hàng khi tranh chấp được duyệt',
-        description: `${PRIVATE} Yêu cầu quyền ORDER.REFUND (SUPPORT_STAFF hoặc ADMIN).`,
+        description: `Yêu cầu quyền ORDER.REFUND (SUPPORT_STAFF hoặc ADMIN).`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1489,6 +1900,7 @@ export const commerceSpec = {
       post: {
         tags: ['Support Staff / Thao tác xử lý'],
         summary: 'Từ chối / Hủy yêu cầu hoàn tiền cho đơn hàng',
+
         description: `${PRIVATE} Yêu cầu quyền ORDER.REFUND (SUPPORT_STAFF hoặc ADMIN). Chuyển trạng thái khiếu nại về REFUND_REJECTED / REFUND_CANCELLED, khôi phục đơn hàng về trạng thái trước đó và ghi nhận lý do vào audit timeline (SRS 2.3, 3.1.2).`,
         security: [{ BearerAuth: [] }],
         parameters: [
@@ -1536,6 +1948,7 @@ export const commerceSpec = {
         },
       },
     },
+
     '/api/v1/orders/{id}/dispatch': {
       post: {
         tags: ['Orders & Checkout'],
@@ -1657,7 +2070,7 @@ export const fulfillmentSpec = {
       get: {
         tags: ['Support Staff / Tra cứu vận đơn'],
         summary: 'Tra cứu danh sách vận đơn (Search & Filter theo Hãng, Mã, Người nhận)',
-        description: `${PRIVATE} Yêu cầu quyền SHIPPING.VIEW_SHIPMENT (SUPPORT_STAFF hoặc ADMIN).`,
+        description: `Yêu cầu quyền SHIPPING.VIEW_SHIPMENT (SUPPORT_STAFF hoặc ADMIN).`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1708,7 +2121,7 @@ export const fulfillmentSpec = {
       get: {
         tags: ['Support Staff / Tra cứu vận đơn'],
         summary: 'Chi tiết vận đơn theo ID hoặc Mã vận đơn (Tracking Code)',
-        description: `${PRIVATE} Hỗ trợ tra cứu nhanh bằng cả id hệ thống hoặc mã vận đơn (VD: GHN8829103VN).`,
+        description: `Hỗ trợ tra cứu nhanh bằng cả id hệ thống hoặc mã vận đơn (VD: GHN8829103VN).`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1750,7 +2163,7 @@ export const fulfillmentSpec = {
       patch: {
         tags: ['Support Staff / Thao tác xử lý'],
         summary: 'Cập nhật trạng thái và vị trí hành trình vận đơn',
-        description: `${PRIVATE} Yêu cầu quyền SHIPPING.UPDATE_STATUS (SUPPORT_STAFF, ADMIN, hoặc CARRIER_AGENT).`,
+        description: `Yêu cầu quyền SHIPPING.UPDATE_STATUS (SUPPORT_STAFF, ADMIN, hoặc CARRIER_AGENT).`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1798,7 +2211,7 @@ export const fulfillmentSpec = {
       patch: {
         tags: ['Support Staff / Thao tác xử lý'],
         summary: 'Can thiệp thủ công (Manual Override) thông tin hãng, mã vận đơn, địa chỉ giao',
-        description: `${PRIVATE} Yêu cầu quyền SHIPPING.MANUAL_OVERRIDE (SUPPORT_STAFF hoặc ADMIN).`,
+        description: `Yêu cầu quyền SHIPPING.MANUAL_OVERRIDE (SUPPORT_STAFF hoặc ADMIN).`,
         security: [{ BearerAuth: [] }],
         parameters: [
           {
@@ -1853,7 +2266,7 @@ export const fulfillmentSpec = {
       get: {
         tags: ['Support Staff / Dashboard Tổng quan'],
         summary: 'Thống kê tổng quan ca trực Support Staff (Dashboard Summary)',
-        description: `${PRIVATE} Trả về số liệu ca trực: Đang chờ xử lý, Đang xử lý, Đã giải quyết hôm nay, Vận đơn cần theo dõi và Work Queue các ca trực gần nhất.`,
+        description: `Trả về số liệu ca trực: Đang chờ xử lý, Đang xử lý, Đã giải quyết hôm nay, Vận đơn cần theo dõi và Work Queue các ca trực gần nhất.`,
         security: [{ BearerAuth: [] }],
         responses: {
           200: jsonResponse('Số liệu tổng quan ca trực', {
@@ -1891,6 +2304,7 @@ export const fulfillmentSpec = {
       get: {
         tags: ['Inventory / Quản lý tồn kho'],
         summary: 'Tra cứu tồn kho chuẩn SKU',
+
         description: `${PRIVATE} Dành cho SELLER và SUPPORT_STAFF (SRS 2.6, 3.6.1). Trả về dữ liệu chuẩn: { sku, productName, warehouseId, warehouseName, onHand, reserved, available } với available = onHand - reserved.`,
         security: [{ BearerAuth: [] }],
         parameters: [
@@ -1948,6 +2362,7 @@ export const fulfillmentSpec = {
       post: {
         tags: ['Inventory / Quản lý tồn kho'],
         summary: 'Điều chỉnh số lượng tồn kho (STOCK_IN, STOCK_OUT, DAMAGE)',
+
         description: `${PRIVATE} Dành cho SELLER và ADMIN (SRS 3.6.1). Phục vụ kiểm kê thực tế tại kho, cập nhật số lượng onHand, lưu sổ cái bất biến (Inventory Ledger) và chống bán âm (ALLOW_OVERSELL: false).`,
         security: [{ BearerAuth: [] }],
         requestBody: {
@@ -2003,6 +2418,7 @@ export const fulfillmentSpec = {
       get: {
         tags: ['Support Staff / Quản lý khiếu nại'],
         summary: 'Tra cứu danh sách Ticket / Khiếu nại thực tế',
+
         description: `${PRIVATE} Dành cho SUPPORT_STAFF và ADMIN (SRS 2.3, 3.1.2). Thay thế toàn bộ dữ liệu mock tạm thời ở giao diện Support Dashboard.`,
         security: [{ BearerAuth: [] }],
         parameters: [
@@ -2068,6 +2484,7 @@ export const fulfillmentSpec = {
       post: {
         tags: ['Support Staff / Quản lý khiếu nại'],
         summary: 'Cập nhật kết quả giải quyết khiếu nại (Resolve Case)',
+
         description: `${PRIVATE} Dành cho SUPPORT_STAFF và ADMIN (SRS 2.3, 3.1.2). Duyệt (APPROVED), từ chối (REJECTED) hoặc chuyển cấp (ESCALATED) tranh chấp giữa Buyer và Seller.`,
         security: [{ BearerAuth: [] }],
         parameters: [
@@ -2121,6 +2538,7 @@ export const fulfillmentSpec = {
         },
       },
     },
+
     '/api/v1/fulfillment/carriers/webhook': {
       post: {
         tags: ['Fulfillment & Shipping'],
