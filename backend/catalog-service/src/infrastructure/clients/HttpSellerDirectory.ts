@@ -19,6 +19,7 @@ export class HttpSellerDirectory implements ISellerDirectory {
 
   public async findUser(userId: string, authorization: string): Promise<SellerInfo | null> {
     const response = await fetch(`${this.baseUrl}/api/v1/users/${encodeURIComponent(userId)}`, {
+      // Dòng tra cứu bằng api
       headers: { authorization },
       signal: AbortSignal.timeout(5000),
     });

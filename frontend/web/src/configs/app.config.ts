@@ -6,13 +6,12 @@ const apiBaseUrl =
 const timeoutValue = process.env.NEXT_PUBLIC_API_TIMEOUT_MS?.trim();
 const apiTimeoutMs = timeoutValue ? Number(timeoutValue) : 10_000;
 
-const source = process.env.NEXT_PUBLIC_CATALOG_SOURCE || 'api';
-if (!['api', 'mock'].includes(source))
-  throw new Error('NEXT_PUBLIC_CATALOG_SOURCE must be api or mock.');
-
-const auctionSource = process.env.NEXT_PUBLIC_AUCTION_SOURCE || 'api';
-if (!['api', 'mock'].includes(auctionSource))
-  throw new Error('NEXT_PUBLIC_AUCTION_SOURCE must be api or mock.');
+// Catalog and auction listing/detail already have live endpoints. Keep the old
+// mock adapters for tests and unfinished admin actions, but disable runtime switches.
+// const source = process.env.NEXT_PUBLIC_CATALOG_SOURCE || 'api';
+// const auctionSource = process.env.NEXT_PUBLIC_AUCTION_SOURCE || 'api';
+const source = 'api';
+const auctionSource = 'api';
 
 export const appConfig = {
   api: {

@@ -9,6 +9,11 @@
     "pnpm": ">=9.0.0"
   },
   "scripts": {
+    "predev": "node scripts/free-port.js 3000",
+    "predev:all": "node scripts/free-port.js 3000 4000 4001 4002 4003 4004 4005 4006",
+    "predev:shop": "node scripts/free-port.js 3000 4000 4002 4003",
+    "predev:auth": "node scripts/free-port.js 3000 4000 4001",
+    "predev:auction": "node scripts/free-port.js 3000 4000 4004",
     "dev": "npm --prefix frontend/web run dev",
     "free:ports": "node scripts/free-port.js 3000 4000 4001 4002 4003 4004 4005 4006",
     "prepare": "husky",

@@ -24,6 +24,7 @@ export default function CheckoutPage() {
   const [lines, setLines] = useState<CartLine[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'BANK_TRANSFER' | 'COD'>('BANK_TRANSFER');
   const [addresses, setAddresses] = useState<ShippingAddress[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [addressDialog, setAddressDialog] = useState(false);
@@ -74,6 +75,12 @@ export default function CheckoutPage() {
       setError('Vui lòng chọn hoặc thêm địa chỉ nhận hàng.');
       return;
     }
+    if (paymentMethod === 'COD') {
+      setError(
+        'Thanh toán khi nhận hàng chưa được hệ thống hỗ trợ. Vui lòng chọn chuyển khoản ngân hàng hoặc thử lại khi phương thức này được mở.',
+      );
+      return;
+    }
     setBusy(true);
     try {
       const result = await commerceApi.checkout({
@@ -87,7 +94,7 @@ export default function CheckoutPage() {
       });
       const checkoutUrl = result.checkoutUrl;
       if (typeof checkoutUrl !== 'string') {
-        setError('Máy chủ chưa cung cấp liên kết thanh toán PayOS cho đơn này.');
+        setError('Máy chủ chưa cung cấp liên kết chuyển khoản ngân hàng cho đơn này.');
         return;
       }
       const destination = new URL(checkoutUrl);
@@ -200,23 +207,51 @@ export default function CheckoutPage() {
                   <h2 className="font-semibold">Phương thức thanh toán</h2>
                 </div>
               </div>
-              <div className="mt-5 flex items-start gap-3 rounded-xl border border-brand/25 p-4">
-                <span
-                  className="mt-0.5 size-4 shrink-0 rounded-full border-[5px] border-brand"
-                  aria-hidden="true"
-                />
-                <div>
-                  <strong className="text-sm">Chuyển khoản qua PayOS</strong>
-                  <p className="mt-1 text-xs leading-5 text-muted">
-                    Khi thanh toán được mở, bạn sẽ hoàn tất trên trang PayOS và quay lại Nexus để
-                    theo dõi đơn hàng.
-                  </p>
-                </div>
-              </div>
-              <p className="mt-3 text-xs text-muted">
-                Trạng thái giao dịch chỉ được xác nhận từ máy chủ, không dựa vào trang trình duyệt
-                quay lại.
-              </p>
+              <fieldset className="mt-5 space-y-3">
+                <legend className="sr-only">Chọn phương thức thanh toán</legend>
+                {(
+                  [
+                    {
+                      value: 'BANK_TRANSFER',
+                      title: 'Chuyển khoản ngân hàng',
+                      description: 'Thanh toán trực tuyến an toàn sau khi xác nhận đơn hàng.',
+                    },
+                    {
+                      value: 'COD',
+                      title: 'Thanh toán khi nhận hàng',
+                      description: 'Trả tiền mặt khi đơn hàng được giao đến bạn. Sắp hỗ trợ.',
+                    },
+                  ] as const
+                ).map((method) => (
+                  <label
+                    key={method.value}
+                    className={`flex min-h-20 cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${paymentMethod === method.value ? 'border-brand bg-brand-soft/30' : 'border-line hover:border-brand/40'}`}
+                  >
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value={method.value}
+                      checked={paymentMethod === method.value}
+                      onChange={() => {
+                        setPaymentMethod(method.value);
+                        setError('');
+                      }}
+                      className="mt-0.5 size-4 shrink-0 accent-brand"
+                    />
+                    <span>
+                      <strong className="text-sm">{method.title}</strong>
+                      <span className="mt-1 block text-xs leading-5 text-muted">
+                        {method.description}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+              {paymentMethod === 'BANK_TRANSFER' && (
+                <p className="mt-3 text-xs text-muted">
+                  Giao dịch chỉ được xác nhận khi hệ thống nhận được kết quả thanh toán.
+                </p>
+              )}
             </section>
             {error && (
               <p
@@ -258,7 +293,11 @@ export default function CheckoutPage() {
               disabled={busy || user?.role !== 'BUYER' || !lines.length || !selectedAddress}
               className="mt-5 w-full"
             >
-              {busy ? 'Đang kiểm tra…' : 'Tiếp tục với PayOS'}
+              {busy
+                ? 'Đang kiểm tra…'
+                : paymentMethod === 'COD'
+                  ? 'Đặt hàng khi nhận hàng'
+                  : 'Tiếp tục thanh toán'}
             </Button>
             <p className="mt-3 flex items-start gap-2 text-xs leading-5 text-muted">
               <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0" />

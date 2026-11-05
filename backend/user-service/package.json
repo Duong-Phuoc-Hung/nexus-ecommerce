@@ -5,6 +5,7 @@
   "description": "Project Nexus - User & Authentication Bounded Context (SRS 3.1)",
   "main": "dist/index.js",
   "scripts": {
+    "predev": "node ../../scripts/free-port.js 4001",
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",

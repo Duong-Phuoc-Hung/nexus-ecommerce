@@ -277,6 +277,7 @@ async function readServerAuction(id: string) {
   return { auction, serverTime: Date.now() };
 }
 export const auctionApi = {
+  // Nhánh localStorage chỉ còn cho luồng thử nghiệm chưa có API ghi; app luôn đọc API thật.
   async list() {
     if (appConfig.auctionSource === 'api') return readServerAuctions();
     return (await read()).map((a) => ({ ...a, status: lifecycle(a) }));

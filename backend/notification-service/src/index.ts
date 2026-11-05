@@ -1,7 +1,11 @@
 import dotenv from 'dotenv';
+import path from 'path';
 import { createApplication } from './app';
 
 dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 const PORT = process.env.PORT
   ? parseInt(process.env.PORT, 10)

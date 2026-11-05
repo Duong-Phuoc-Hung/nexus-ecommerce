@@ -4,6 +4,10 @@ import {
   ProductSearchPage,
 } from '../../domain/repositories/IProductRepository';
 import { Product, ProductStatus } from '../../domain/entities/Product';
+import {
+  ListCatalogProductsQuery,
+  ListCatalogProductsResult,
+} from '../../application/use-cases/ListCatalogProductsUseCase';
 
 export class InMemoryProductRepository implements IProductRepository {
   private readonly products: Map<string, Product> = new Map();
@@ -63,6 +67,31 @@ export class InMemoryProductRepository implements IProductRepository {
     return {
       products: matches.slice(criteria.offset, criteria.offset + criteria.limit),
       total: matches.length,
+    };
+  }
+
+  public async list(query: ListCatalogProductsQuery): Promise<ListCatalogProductsResult> {
+    const all = Array.from(this.products.values());
+    const filtered = all.filter((p) => {
+      if (query.scope === 'buyer' && (!p.isAvailable() || p.status !== ProductStatus.ACTIVE))
+        return false;
+      if (query.status && p.status !== query.status) return false;
+      if (query.categoryId && p.categoryId !== query.categoryId) return false;
+      if (query.minPrice !== undefined && p.price < query.minPrice) return false;
+      if (query.maxPrice !== undefined && p.price > query.maxPrice) return false;
+      return true;
+    });
+    const page = Math.max(1, query.page || 1);
+    const limit = Math.max(1, query.limit || 20);
+    const offset = (page - 1) * limit;
+    return {
+      products: filtered.slice(offset, offset + limit),
+      meta: {
+        page,
+        limit,
+        total: filtered.length,
+        totalPages: Math.ceil(filtered.length / limit) || 1,
+      },
     };
   }
 
