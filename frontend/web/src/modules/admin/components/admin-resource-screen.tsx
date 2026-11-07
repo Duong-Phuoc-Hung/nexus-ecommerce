@@ -11,6 +11,8 @@ import {
   Inbox,
   ShieldCheck,
   Info,
+  Store,
+  Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +28,7 @@ import { requestApi } from '@/lib/axios/api-client';
 import { unwrap, userMessage } from '@/lib/axios/http';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import { resources } from '../config/resources';
+import { AdminSellerApplicationsPage } from './seller-applications-page';
 
 type Row = Record<string, unknown>;
 const roleDescriptions = {
@@ -70,6 +73,7 @@ function flattenCategories(rows: Row[], parent: string | null = null, depth = 1)
 export function AdminResourceScreen({ section }: { section: string }) {
   const config = resources[section];
   const { user } = useSession();
+  const [usersTab, setUsersTab] = useState<'accounts' | 'seller-applications'>('accounts');
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(Boolean(config.path));
   const [error, setError] = useState('');
@@ -136,7 +140,15 @@ export function AdminResourceScreen({ section }: { section: string }) {
           ),
     [rows, search, config],
   );
-  const canAssign = action === 'Đổi vai trò' && !!selected?.id && String(selected.id) !== user?.id;
+  const currentSelectedRole = String(selected?.role ?? '').toUpperCase();
+  const isBlockedBuyerToSeller = currentSelectedRole === 'BUYER' && role === 'SELLER';
+  const isBlockedSellerToBuyer = currentSelectedRole === 'SELLER' && role === 'BUYER';
+  const canAssign =
+    action === 'Đổi vai trò' &&
+    !!selected?.id &&
+    String(selected.id) !== user?.id &&
+    !isBlockedBuyerToSeller &&
+    !isBlockedSellerToBuyer;
   const rolePreview = roleDescriptions[role as keyof typeof roleDescriptions];
   function openAction(label: string, row: Row | null = null) {
     setSelected(row);
@@ -151,7 +163,7 @@ export function AdminResourceScreen({ section }: { section: string }) {
     try {
       await requestApi('/users/' + encodeURIComponent(String(selected!.id)) + '/role', {
         method: 'PUT',
-        body: { role },
+        body: { role, source: 'ADMIN_USER_DROPDOWN' },
       });
       setNotice('Đã cập nhật vai trò. Quyền sẽ được áp dụng theo phiên xác thực của người dùng.');
       setAction('');
@@ -172,6 +184,14 @@ export function AdminResourceScreen({ section }: { section: string }) {
           <p className="mt-2 max-w-2xl text-sm text-slate-600">{config.subtitle}</p>
         </div>
         <div className="flex gap-2">
+          {section === 'users' && (
+            <Button asChild variant="outline">
+              <Link href="/admin/seller-applications">
+                <Store size={16} />
+                Hàng chờ hồ sơ Seller
+              </Link>
+            </Button>
+          )}
           {config.path && (
             <Button variant="outline" onClick={() => setRevision((v) => v + 1)} disabled={loading}>
               <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
@@ -186,192 +206,245 @@ export function AdminResourceScreen({ section }: { section: string }) {
           )}
         </div>
       </header>
-      {notice && (
-        <p
-          role="status"
-          className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"
+
+      {section === 'users' && (
+        <div
+          role="tablist"
+          aria-label="Phân mục quản lý tài khoản và đăng ký bán hàng"
+          className="flex flex-wrap gap-2 border-b border-slate-200 pb-3"
         >
-          {notice}
-        </p>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={usersTab === 'accounts'}
+            onClick={() => setUsersTab('accounts')}
+            className={`inline-flex min-h-11 items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
+              usersTab === 'accounts'
+                ? 'bg-brand-dark text-white shadow-2xs'
+                : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            <Users size={16} aria-hidden="true" />
+            <span>Danh sách tài khoản</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={usersTab === 'seller-applications'}
+            onClick={() => setUsersTab('seller-applications')}
+            className={`inline-flex min-h-11 items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
+              usersTab === 'seller-applications'
+                ? 'bg-brand-dark text-white shadow-2xs'
+                : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            <Store size={16} aria-hidden="true" />
+            <span>Đăng ký bán hàng</span>
+          </button>
+        </div>
       )}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="admin-metric">
-          <span>Phạm vi</span>
-          <strong>{config.path ? 'Dữ liệu hệ thống' : 'Đang hoàn thiện'}</strong>
-        </div>
-        <div className="admin-metric">
-          <span>Hiển thị trên trang</span>
-          <strong>
-            {loading ? 'Đang tải' : config.path ? visible.length + ' bản ghi' : 'Chưa có số liệu'}
-          </strong>
-        </div>
-        <div className="admin-metric">
-          <span>Quy tắc xử lý</span>
-          <strong>
-            {['audit', 'events', 'reports', 'notifications'].includes(section)
-              ? 'Chỉ đọc & đối chiếu'
-              : 'Xác nhận trước thay đổi'}
-          </strong>
-        </div>
-      </div>
-      {config.note && (
-        <p className="flex gap-2 rounded-xl bg-slate-100 p-4 text-sm text-slate-600">
-          <Info size={18} className="shrink-0" />
-          {config.note}
-        </p>
-      )}
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            setSearch(query.trim());
-            setPage(1);
-          }}
-          className="flex flex-wrap items-end gap-3 border-b border-slate-200 p-5"
-        >
-          <label className="min-w-48 flex-1 space-y-2 text-sm font-medium">
-            Tìm kiếm
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Nhập tên, mã hoặc nội dung cần tìm…"
-            />
-          </label>
-          {['reports', 'events', 'audit', 'notifications'].includes(section) && (
-            <>
-              <label className="space-y-2 text-sm">
-                Từ ngày
-                <Input type="date" disabled={!config.path} />
-              </label>
-              <label className="space-y-2 text-sm">
-                Đến ngày
-                <Input type="date" disabled={!config.path} />
-              </label>
-            </>
+
+      {section === 'users' && usersTab === 'seller-applications' ? (
+        <AdminSellerApplicationsPage embedded />
+      ) : (
+        <>
+          {notice && (
+            <p
+              role="status"
+              className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"
+            >
+              {notice}
+            </p>
           )}
-          <Button type="submit" variant="outline" disabled={!config.path}>
-            <Search size={16} />
-            Tìm kiếm
-          </Button>
-        </form>
-        {error ? (
-          <div role="alert" className="p-8">
-            <h2 className="font-semibold">Chưa tải được dữ liệu</h2>
-            <p className="mt-2 text-sm text-slate-600">{error}</p>
-            <Button variant="outline" className="mt-4" onClick={() => setRevision((v) => v + 1)}>
-              Thử lại
-            </Button>
-          </div>
-        ) : loading ? (
-          <div role="status" className="space-y-4 p-6">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-12 animate-pulse rounded-lg bg-slate-100" />
-            ))}
-            <span className="sr-only">Đang tải danh sách</span>
-          </div>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    {config.columns.map(([key, label]) => (
-                      <th
-                        key={key}
-                        className="whitespace-nowrap px-5 py-4 font-medium text-slate-600"
-                      >
-                        {label}
-                      </th>
-                    ))}
-                    <th className="px-5 py-4">
-                      <span className="sr-only">Chi tiết</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visible.map((row, index) => (
-                    <tr
-                      key={String(row.id ?? row.role ?? index)}
-                      className="border-t border-slate-100 hover:bg-slate-50/60"
-                    >
-                      {config.columns.map(([key]) => (
-                        <td key={key} className="max-w-72 px-5 py-4">
-                          <span
-                            className={
-                              key === 'status' || key === 'role'
-                                ? 'admin-neutral-badge'
-                                : 'line-clamp-2 break-words'
-                            }
-                          >
-                            {key === 'permissions' && Array.isArray(row[key])
-                              ? String(row[key].length) + ' quyền'
-                              : displayAdminValue(
-                                  row[key] ?? (key === 'totalAmount' ? row.total : undefined),
-                                )}
-                          </span>
-                        </td>
-                      ))}
-                      <td className="px-5 py-4">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setSelected(row);
-                            setAction('');
-                          }}
-                        >
-                          Xem
-                          <ArrowUpRight size={15} />
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="admin-metric">
+              <span>Phạm vi</span>
+              <strong>{config.path ? 'Dữ liệu hệ thống' : 'Đang hoàn thiện'}</strong>
             </div>
-            {!visible.length && (
-              <div className="px-6 py-14 text-center">
-                <Inbox className="mx-auto text-slate-400" size={36} />
-                <h2 className="mt-4 font-semibold">
-                  {config.path ? 'Không có kết quả phù hợp' : 'Chức năng đang được hoàn thiện'}
-                </h2>
-                <p className="mx-auto mt-2 max-w-lg text-sm text-slate-500">
-                  {config.path
-                    ? 'Thử thay đổi từ khóa hoặc làm mới danh sách.'
-                    : 'Khu vực đã được chuẩn bị. Dữ liệu sẽ hiển thị khi dịch vụ sẵn sàng.'}
-                </p>
+            <div className="admin-metric">
+              <span>Hiển thị trên trang</span>
+              <strong>
+                {loading
+                  ? 'Đang tải'
+                  : config.path
+                    ? visible.length + ' bản ghi'
+                    : 'Chưa có số liệu'}
+              </strong>
+            </div>
+            <div className="admin-metric">
+              <span>Quy tắc xử lý</span>
+              <strong>
+                {['audit', 'events', 'reports', 'notifications'].includes(section)
+                  ? 'Chỉ đọc & đối chiếu'
+                  : 'Xác nhận trước thay đổi'}
+              </strong>
+            </div>
+          </div>
+          {config.note && (
+            <p className="flex gap-2 rounded-xl bg-slate-100 p-4 text-sm text-slate-600">
+              <Info size={18} className="shrink-0" />
+              {config.note}
+            </p>
+          )}
+          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                setSearch(query.trim());
+                setPage(1);
+              }}
+              className="flex flex-wrap items-end gap-3 border-b border-slate-200 p-5"
+            >
+              <label className="min-w-48 flex-1 space-y-2 text-sm font-medium">
+                Tìm kiếm
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Nhập tên, mã hoặc nội dung cần tìm…"
+                />
+              </label>
+              {['reports', 'events', 'audit', 'notifications'].includes(section) && (
+                <>
+                  <label className="space-y-2 text-sm">
+                    Từ ngày
+                    <Input type="date" disabled={!config.path} />
+                  </label>
+                  <label className="space-y-2 text-sm">
+                    Đến ngày
+                    <Input type="date" disabled={!config.path} />
+                  </label>
+                </>
+              )}
+              <Button type="submit" variant="outline" disabled={!config.path}>
+                <Search size={16} />
+                Tìm kiếm
+              </Button>
+            </form>
+            {error ? (
+              <div role="alert" className="p-8">
+                <h2 className="font-semibold">Chưa tải được dữ liệu</h2>
+                <p className="mt-2 text-sm text-slate-600">{error}</p>
+                <Button
+                  variant="outline"
+                  className="mt-4"
+                  onClick={() => setRevision((v) => v + 1)}
+                >
+                  Thử lại
+                </Button>
               </div>
+            ) : loading ? (
+              <div role="status" className="space-y-4 p-6">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="h-12 animate-pulse rounded-lg bg-slate-100" />
+                ))}
+                <span className="sr-only">Đang tải danh sách</span>
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        {config.columns.map(([key, label]) => (
+                          <th
+                            key={key}
+                            className="whitespace-nowrap px-5 py-4 font-medium text-slate-600"
+                          >
+                            {label}
+                          </th>
+                        ))}
+                        <th className="px-5 py-4">
+                          <span className="sr-only">Chi tiết</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visible.map((row, index) => (
+                        <tr
+                          key={String(row.id ?? row.role ?? index)}
+                          className="border-t border-slate-100 hover:bg-slate-50/60"
+                        >
+                          {config.columns.map(([key]) => (
+                            <td key={key} className="max-w-72 px-5 py-4">
+                              <span
+                                className={
+                                  key === 'status' || key === 'role'
+                                    ? 'admin-neutral-badge'
+                                    : 'line-clamp-2 break-words'
+                                }
+                              >
+                                {key === 'permissions' && Array.isArray(row[key])
+                                  ? String(row[key].length) + ' quyền'
+                                  : displayAdminValue(
+                                      row[key] ?? (key === 'totalAmount' ? row.total : undefined),
+                                    )}
+                              </span>
+                            </td>
+                          ))}
+                          <td className="px-5 py-4">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setSelected(row);
+                                setAction('');
+                              }}
+                            >
+                              Xem
+                              <ArrowUpRight size={15} />
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {!visible.length && (
+                  <div className="px-6 py-14 text-center">
+                    <Inbox className="mx-auto text-slate-400" size={36} />
+                    <h2 className="mt-4 font-semibold">
+                      {config.path ? 'Không có kết quả phù hợp' : 'Chức năng đang được hoàn thiện'}
+                    </h2>
+                    <p className="mx-auto mt-2 max-w-lg text-sm text-slate-500">
+                      {config.path
+                        ? 'Thử thay đổi từ khóa hoặc làm mới danh sách.'
+                        : 'Khu vực đã được chuẩn bị. Dữ liệu sẽ hiển thị khi dịch vụ sẵn sàng.'}
+                    </p>
+                  </div>
+                )}
+              </>
             )}
-          </>
-        )}
-        {config.paged && (
-          <footer className="flex items-center justify-between border-t border-slate-200 p-4 text-sm">
-            <span>
-              Trang {page} / {pages}
-            </span>
-            <div className="flex gap-2">
-              <Button
-                aria-label="Trang trước"
-                size="icon"
-                variant="outline"
-                disabled={page === 1 || loading}
-                onClick={() => setPage((v) => v - 1)}
-              >
-                <ChevronLeft size={16} />
-              </Button>
-              <Button
-                aria-label="Trang sau"
-                size="icon"
-                variant="outline"
-                disabled={page >= pages || loading}
-                onClick={() => setPage((v) => v + 1)}
-              >
-                <ChevronRight size={16} />
-              </Button>
-            </div>
-          </footer>
-        )}
-      </section>
+            {config.paged && (
+              <footer className="flex items-center justify-between border-t border-slate-200 p-4 text-sm">
+                <span>
+                  Trang {page} / {pages}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    aria-label="Trang trước"
+                    size="icon"
+                    variant="outline"
+                    disabled={page === 1 || loading}
+                    onClick={() => setPage((v) => v - 1)}
+                  >
+                    <ChevronLeft size={16} />
+                  </Button>
+                  <Button
+                    aria-label="Trang sau"
+                    size="icon"
+                    variant="outline"
+                    disabled={page >= pages || loading}
+                    onClick={() => setPage((v) => v + 1)}
+                  >
+                    <ChevronRight size={16} />
+                  </Button>
+                </div>
+              </footer>
+            )}
+          </section>
+        </>
+      )}
+
       <Dialog
         open={!!selected && !action}
         onOpenChange={(open) => {
@@ -435,7 +508,8 @@ export function AdminResourceScreen({ section }: { section: string }) {
                 )}
               </strong>
               <p className="mt-1 text-slate-500">
-                {displayAdminValue(selected.email ?? selected.status)}
+                {displayAdminValue(selected.email ?? selected.status)} · Vai trò hiện tại:{' '}
+                <strong>{currentSelectedRole || 'N/A'}</strong>
               </p>
             </div>
           )}
@@ -456,6 +530,48 @@ export function AdminResourceScreen({ section }: { section: string }) {
                   </SelectContent>
                 </Select>
               </label>
+
+              {isBlockedBuyerToSeller && (
+                <div
+                  role="alert"
+                  className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs leading-relaxed text-amber-950"
+                >
+                  <p className="font-bold">
+                    Không chuyển trực tiếp Buyer → Seller qua dropdown chung
+                  </p>
+                  <p>
+                    Theo quy định MVP, tài khoản Buyer cần gửi hồ sơ đăng ký bán hàng, được Admin
+                    xét duyệt và vượt qua bước kiểm tra nghĩa vụ đơn hàng/đấu giá trước khi kích
+                    hoạt Seller.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setAction('');
+                      setSelected(null);
+                      setUsersTab('seller-applications');
+                    }}
+                  >
+                    Mở tab Xét duyệt đăng ký bán hàng
+                  </Button>
+                </div>
+              )}
+
+              {isBlockedSellerToBuyer && (
+                <div
+                  role="alert"
+                  className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs leading-relaxed text-red-900"
+                >
+                  <p className="font-bold">Không hỗ trợ chuyển ngược Seller → Buyer trong MVP</p>
+                  <p className="mt-1">
+                    Nếu cần tạm ngưng hoạt động của Seller vi phạm, vui lòng sử dụng chức năng Khóa
+                    / Đình chỉ tài khoản thay vì đổi vai trò về Buyer.
+                  </p>
+                </div>
+              )}
+
               <div
                 aria-live="polite"
                 className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm"
@@ -476,7 +592,7 @@ export function AdminResourceScreen({ section }: { section: string }) {
               </div>
             </div>
           ) : null}
-          {!canAssign && (
+          {!canAssign && !isBlockedBuyerToSeller && !isBlockedSellerToBuyer && (
             <p role="status" className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900">
               {action === 'Đổi vai trò'
                 ? 'Không đổi vai trò của chính bạn tại đây để tránh mất quyền truy cập.'

@@ -84,6 +84,15 @@ export function AccountControls() {
           <span>Dashboard Support</span>
         </Link>
       )}
+      {user.role === 'BUYER' && (
+        <Link
+          href="/account/seller-registration"
+          className="hidden min-h-8 items-center gap-1.5 rounded-lg border border-brand/25 bg-brand-soft/60 px-2.5 py-1 text-xs font-semibold text-brand-dark transition hover:bg-brand-soft md:inline-flex"
+          title="Đăng ký mở gian hàng Người bán"
+        >
+          <span>Đăng ký bán hàng</span>
+        </Link>
+      )}
       <Link
         href="/account"
         className="max-w-40 truncate text-sm font-semibold text-ink"
