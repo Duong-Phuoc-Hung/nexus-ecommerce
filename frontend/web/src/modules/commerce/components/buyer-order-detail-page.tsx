@@ -63,7 +63,7 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
   };
 
   const fetchOrderDetail = (signal?: AbortSignal) => {
-    if (phase === 'loading' || !user || user.role !== 'BUYER') return;
+    if (phase === 'loading' || !user || (user.role !== 'BUYER' && user.role !== 'SELLER')) return;
     commerceApi
       .getOrder(orderId, signal)
       .then(setOrder)
@@ -153,7 +153,7 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
       </>
     );
 
-  if (!user || user.role !== 'BUYER')
+  if (!user || (user.role !== 'BUYER' && user.role !== 'SELLER'))
     return (
       <>
         <StoreHeader />
