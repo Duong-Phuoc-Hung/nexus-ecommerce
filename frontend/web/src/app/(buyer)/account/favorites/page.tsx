@@ -1,11 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { Heart, Trash2 } from 'lucide-react';
+import { Heart, ShoppingCart, Trash2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { StoreHeader } from '@/components/layout/store-header';
 import { useSession } from '@/modules/auth/hooks/use-session';
+import { catalogApi } from '@/modules/catalog/api/catalog.api';
+import { addCartProduct } from '@/modules/commerce/utils/cart';
+import { userMessage } from '@/lib/axios/http';
 import {
   FAVORITES_EVENT,
   readFavorites,
@@ -16,8 +20,39 @@ import {
 const money = (value: number) => `${new Intl.NumberFormat('vi-VN').format(value)} ₫`;
 
 export default function BuyerFavoritesPage() {
+  const router = useRouter();
   const { user, phase } = useSession();
   const [items, setItems] = useState<FavoriteProduct[]>([]);
+  const [addingId, setAddingId] = useState<string | null>(null);
+  const [cartError, setCartError] = useState<{ id: string; message: string } | null>(null);
+
+  async function moveToCart(item: FavoriteProduct) {
+    setAddingId(item.id);
+    setCartError(null);
+    try {
+      const product = await catalogApi.detail(item.id);
+      if (product.saleType !== 'FIXED_PRICE') {
+        setCartError({
+          id: item.id,
+          message: 'Món này thuộc phiên đấu giá, không thể thêm vào giỏ.',
+        });
+        return;
+      }
+      if (product.status !== 'ACTIVE' || product.stockQuantity === 0 || product.price === null) {
+        setCartError({
+          id: item.id,
+          message: 'Sản phẩm hiện chưa thể mua. Vui lòng xem lại thông tin sản phẩm.',
+        });
+        return;
+      }
+      addCartProduct(product);
+      router.push('/cart');
+    } catch (error) {
+      setCartError({ id: item.id, message: userMessage(error) });
+    } finally {
+      setAddingId(null);
+    }
+  }
 
   useEffect(() => {
     const sync = () => setItems(readFavorites());
@@ -96,6 +131,29 @@ export default function BuyerFavoritesPage() {
                       Bỏ lưu
                     </Button>
                   </div>
+                  {item.saleType === 'AUCTION' || item.href.startsWith('/auctions/') ? (
+                    <Link
+                      href={item.href}
+                      className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-brand/25 bg-brand-soft px-4 text-sm font-semibold text-brand-dark transition hover:border-brand/50"
+                    >
+                      Xem phiên đấu giá
+                    </Link>
+                  ) : (
+                    <Button
+                      type="button"
+                      className="mt-4 w-full"
+                      disabled={addingId !== null}
+                      onClick={() => void moveToCart(item)}
+                    >
+                      <ShoppingCart aria-hidden="true" className="size-4" />
+                      {addingId === item.id ? 'Đang kiểm tra…' : 'Thêm vào giỏ và xem giỏ'}
+                    </Button>
+                  )}
+                  {cartError?.id === item.id && (
+                    <p role="alert" className="mt-2 text-xs leading-5 text-brand-dark">
+                      {cartError.message}
+                    </p>
+                  )}
                 </div>
               </article>
             ))}

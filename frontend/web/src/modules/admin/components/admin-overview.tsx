@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ArrowUpRight, PackageSearch, Gavel, Store, ShieldCheck, ReceiptText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { adminNavigation } from '../config/navigation';
 export function AdminOverview({ productsPath = '/admin/products' }: { productsPath?: string }) {
   return (
     <div className="space-y-7">
@@ -11,8 +12,7 @@ export function AdminOverview({ productsPath = '/admin/products' }: { productsPa
           </p>
           <h1>Tổng quan vận hành</h1>
           <p className="max-w-2xl text-sm leading-6 text-muted">
-            Truy cập nhanh sản phẩm và phiên đấu giá. Theo dõi nội dung trước khi thực hiện thay
-            đổi.
+            Điều hành nội dung, giao dịch và quyền truy cập trong một không gian thống nhất.
           </p>
         </div>
         <Button asChild variant="outline">
@@ -70,6 +70,28 @@ export function AdminOverview({ productsPath = '/admin/products' }: { productsPa
           </section>
         ))}
       </div>
+      <section className="grid gap-4 md:grid-cols-2">
+        {adminNavigation.map((group) => (
+          <div key={group.group} className="rounded-2xl border border-line bg-white p-6">
+            <h2 className="mb-4 text-lg font-semibold">{group.group}</h2>
+            <div className="grid gap-2">
+              {group.items
+                .filter((item) => item.href !== '/admin')
+                .map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-red-700"
+                  >
+                    <item.icon size={18} className="text-slate-500" />
+                    {item.label}
+                    <ArrowUpRight size={15} className="ml-auto text-slate-400" />
+                  </Link>
+                ))}
+            </div>
+          </div>
+        ))}
+      </section>
       <section className="rounded-3xl border border-line bg-white p-6 sm:p-8">
         <div className="flex items-center gap-3">
           <ShieldCheck size={21} className="text-slate-600" />

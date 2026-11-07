@@ -80,3 +80,4 @@ export function createUserApi(request: RequestApi) {
 }
 
 export const userApi = createUserApi(requestApi);
+export { addressApi } from './address.api';
