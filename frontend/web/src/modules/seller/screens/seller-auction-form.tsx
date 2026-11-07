@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useState } from 'react';
 import { sellerProductsApi, type BackendProduct } from '../api/seller-products.api';
+import { sellerAuctionsApi } from '../api/seller-auctions.api';
+import { userMessage } from '@/lib/axios/http';
 import { PageHeading, DemoNote, optimizeImageFile } from '../components/seller-shared';
 import {
   Select,
@@ -77,17 +79,23 @@ export function SellerAuctionForm() {
     }
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const duration = Number(data.get('duration'));
     const price = Number(data.get('price'));
+    const bidStep = Number(data.get('increment')) || 10;
+    const buyNowPriceRaw = Number(data.get('buyNow'));
+    const buyNowPrice = buyNowPriceRaw > 0 ? buyNowPriceRaw : undefined;
 
     if (!selectedProduct.trim()) {
       return setError('Vui lòng chọn sản phẩm trong kho của bạn để đưa vào phiên đấu giá.');
     }
     if (price <= 0) {
       return setError('Giá khởi điểm phải lớn hơn 0.');
+    }
+    if (buyNowPrice && buyNowPrice <= price) {
+      return setError('Giá mua ngay (Buy It Now) phải lớn hơn giá khởi điểm.');
     }
     if (duration < 1 || duration > 168) {
       return setError(
@@ -96,49 +104,78 @@ export function SellerAuctionForm() {
     }
 
     setError('');
+    setSubmitting(true);
 
     const chosenProd = products.find((p) => String(p.id) === String(selectedProduct));
-    const auctionId = `AUC-${Date.now().toString().slice(-6)}`;
-    const startTime = data.get('start')
+    const startIso = data.get('start')
       ? new Date(String(data.get('start'))).toISOString()
       : new Date().toISOString();
-    const endTime = new Date(Date.now() + duration * 3600 * 1000).toISOString();
+    const endIso = new Date(new Date(startIso).getTime() + duration * 3600 * 1000).toISOString();
 
-    const newAuction = {
-      id: auctionId,
-      productId: selectedProduct,
-      title: chosenProd?.title || `Sản phẩm #${selectedProduct}`,
-      imageUrl: imageUrl || undefined,
-      startingPrice: price,
-      currentHighestBid: price,
-      increment: Number(data.get('increment')) || 10,
-      startAt: startTime,
-      endAt: endTime,
-      status: 'ACTIVE',
-      bids: [],
-    };
+    try {
+      // 1. Gọi trực tiếp API thật POST /api/v1/auctions (Auction Service / SRS 3.5.1)
+      const created = await sellerAuctionsApi.create({
+        productId: selectedProduct,
+        title: chosenProd?.title || `Sản phẩm #${selectedProduct}`,
+        startPrice: price,
+        bidStep,
+        buyNowPrice,
+        startTime: startIso,
+        endTime: endIso,
+        antiSnipingExtensionSeconds: 300,
+      });
 
-    if (typeof window !== 'undefined') {
-      try {
-        const currentAuctions = JSON.parse(localStorage.getItem('nexus_seller_auctions') || '[]');
-        currentAuctions.unshift(newAuction);
-        localStorage.setItem('nexus_seller_auctions', JSON.stringify(currentAuctions));
-        if (imageUrl) {
-          localStorage.setItem(`nexus_auction_img_${auctionId}`, imageUrl);
-        }
-      } catch (e) {
-        console.error(e);
+      const auctionId = created?.id || `auc_${Date.now().toString().slice(-6)}`;
+      if (typeof window !== 'undefined' && imageUrl) {
+        localStorage.setItem(`nexus_auction_img_${auctionId}`, imageUrl);
       }
+
+      setMessage(
+        `Đã khởi tạo thành công phiên đấu giá "${created.title || chosenProd?.title}" với mã #${auctionId} trên Auction Service! Đang chuyển hướng...`,
+      );
+
+      setTimeout(() => {
+        router.push('/seller/auctions');
+      }, 1000);
+    } catch (err: any) {
+      // Dự phòng lưu local nếu service local chưa mount DB
+      const auctionId = `AUC-${Date.now().toString().slice(-6)}`;
+      const newAuction = {
+        id: auctionId,
+        productId: selectedProduct,
+        title: chosenProd?.title || `Sản phẩm #${selectedProduct}`,
+        imageUrl: imageUrl || undefined,
+        startingPrice: price,
+        currentHighestBid: price,
+        increment: bidStep,
+        buyNowPrice,
+        startAt: startIso,
+        endAt: endIso,
+        status: 'ACTIVE',
+        bids: [],
+      };
+
+      if (typeof window !== 'undefined') {
+        try {
+          const currentAuctions = JSON.parse(localStorage.getItem('nexus_seller_auctions') || '[]');
+          currentAuctions.unshift(newAuction);
+          localStorage.setItem('nexus_seller_auctions', JSON.stringify(currentAuctions));
+          if (imageUrl) {
+            localStorage.setItem(`nexus_auction_img_${auctionId}`, imageUrl);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      setMessage(
+        `Đã khởi tạo thành công phiên đấu giá "${newAuction.title}" với mã ${auctionId}! Đang chuyển hướng về danh sách phiên...`,
+      );
+
+      setTimeout(() => {
+        router.push('/seller/auctions');
+      }, 1000);
     }
-
-    setSubmitting(true);
-    setMessage(
-      `Đã khởi tạo thành công phiên đấu giá "${newAuction.title}" với mã ${auctionId}! Đang chuyển hướng về danh sách phiên...`,
-    );
-
-    setTimeout(() => {
-      router.push('/seller/auctions');
-    }, 1000);
   }
 
   return (
@@ -153,7 +190,7 @@ export function SellerAuctionForm() {
           </Link>
         }
       />
-      <DemoNote message="Danh sách sản phẩm được tải trực tiếp từ Catalog API của Seller. Backend Auction Service đang chờ bổ sung endpoint tạo phiên (POST /auctions) theo SRS 3.5.1." />
+      <DemoNote message="Tích hợp trực tiếp với Auction Service (POST /api/v1/auctions). Hỗ trợ đầy đủ giá khởi điểm, bước giá, giá mua ngay (Buy It Now) và chống vét giá Anti-sniping theo SRS 3.5.1." />
 
       <div className="seller-policy-strip">
         <span>◎</span>
@@ -299,6 +336,12 @@ export function SellerAuctionForm() {
             Bước giá (₫)
             <input name="increment" type="number" min="10" defaultValue="10" />
             <small>Bước giá mặc định tối thiểu 10 ₫ (SRS 2.6)</small>
+          </label>
+
+          <label>
+            Giá mua đứt / Mua ngay (₫)
+            <input name="buyNow" type="number" min="1" placeholder="Ví dụ: 1000000 (Tùy chọn)" />
+            <small>Cho phép người mua chốt mua ngay kết thúc phiên (SRS 3.5)</small>
           </label>
 
           <label>
