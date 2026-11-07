@@ -12,12 +12,13 @@ import { safeNextPath } from '@/lib/utils/navigation';
 import { AddressForm } from './address-form';
 import {
   ADDRESS_CHANGE_EVENT,
-  deleteAddress,
+  deleteAddressAsync,
   formatAddress,
   readAddresses,
   readContactPhone,
-  saveAddress,
-  setDefaultAddress,
+  saveAddressAsync,
+  setDefaultAddressAsync,
+  syncAddressesFromServer,
   type AddressInput,
   type ShippingAddress,
 } from '../utils/address-book';
@@ -31,27 +32,34 @@ export function BuyerAddressesPage() {
   const [editing, setEditing] = useState<ShippingAddress | 'new' | null>(null);
   const [deleting, setDeleting] = useState<ShippingAddress | null>(null);
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!user?.id) return;
     const sync = () => setAddresses(readAddresses(user.id));
     sync();
+    syncAddressesFromServer(user.id).then((items) => {
+      if (items.length) setAddresses(items);
+    });
     window.addEventListener(ADDRESS_CHANGE_EVENT, sync);
     return () => window.removeEventListener(ADDRESS_CHANGE_EVENT, sync);
   }, [user?.id]);
 
-  function save(input: AddressInput, makeDefault: boolean) {
+  async function save(input: AddressInput, makeDefault: boolean) {
     if (!user) return;
+    setSaving(true);
+    setError('');
     try {
-      saveAddress(user.id, input, {
+      await saveAddressAsync(user.id, input, {
         id: editing && editing !== 'new' ? editing.id : undefined,
         makeDefault,
       });
       setEditing(null);
-      setError('');
       if (setup) window.location.assign(next);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Chưa lưu được địa chỉ.');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -148,7 +156,7 @@ export function BuyerAddressesPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setDefaultAddress(user.id, address.id)}
+                      onClick={() => setDefaultAddressAsync(user.id, address.id)}
                     >
                       Đặt mặc định
                     </Button>
@@ -171,8 +179,7 @@ export function BuyerAddressesPage() {
         )}
         {user?.role === 'BUYER' && (
           <p className="mt-6 text-xs text-muted">
-            Địa chỉ hiện được lưu riêng cho tài khoản này trên trình duyệt; chưa đồng bộ với máy
-            khác.
+            Sổ địa chỉ được đồng bộ trực tiếp với máy chủ Nexus và hỗ trợ tối đa 5 địa chỉ.
           </p>
         )}
         {error && (
@@ -202,6 +209,7 @@ export function BuyerAddressesPage() {
               onCancel={() => setEditing(null)}
             />
           )}
+          {saving && <p className="mt-2 text-xs text-muted">Đang lưu lên máy chủ…</p>}
           {error && (
             <p role="alert" className="mt-3 text-sm text-brand-dark">
               {error}
@@ -226,8 +234,8 @@ export function BuyerAddressesPage() {
               Giữ lại
             </Button>
             <Button
-              onClick={() => {
-                if (user && deleting) deleteAddress(user.id, deleting.id);
+              onClick={async () => {
+                if (user && deleting) await deleteAddressAsync(user.id, deleting.id);
                 setDeleting(null);
               }}
             >

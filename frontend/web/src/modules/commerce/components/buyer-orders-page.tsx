@@ -5,7 +5,9 @@ import { StoreHeader } from '@/components/layout/store-header';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import { commerceApi } from '../api/commerce.api';
 import type { OrderSummary } from '../types/order.types';
+import { formatOrderStatus, getOrderStatusBadgeClass } from '../utils/order-status';
 import { userMessage } from '@/lib/axios/http';
+import { isOrderMarkedPaid } from '../config/payment-qr';
 const money = (n: number) => `${new Intl.NumberFormat('vi-VN').format(n)} ₫`;
 export default function BuyerOrdersPage() {
   const { user, phase } = useSession();
@@ -13,8 +15,9 @@ export default function BuyerOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
+  const canViewBuyerHistory = Boolean(user && (user.role === 'BUYER' || user.role === 'SELLER'));
   useEffect(() => {
-    if (!user || user.role !== 'BUYER') {
+    if (!user || !canViewBuyerHistory) {
       setLoading(false);
       return;
     }
@@ -30,7 +33,7 @@ export default function BuyerOrdersPage() {
         if (!c.signal.aborted) setLoading(false);
       });
     return () => c.abort();
-  }, [user, retry]);
+  }, [user, canViewBuyerHistory, retry]);
   return (
     <>
       <StoreHeader />
@@ -43,14 +46,20 @@ export default function BuyerOrdersPage() {
             <p className="text-xs font-bold uppercase tracking-widest text-brand-dark">
               TÀI KHOẢN / GIAO DỊCH
             </p>
-            <h1 className="mt-2 text-3xl font-bold">Đơn hàng của tôi</h1>
-            <p className="mt-2 text-sm text-muted">Theo dõi trạng thái các đơn mua của bạn.</p>
+            <h1 className="mt-2 text-3xl font-bold">
+              {user?.role === 'SELLER' ? 'Lịch sử đơn mua trước đây' : 'Đơn hàng của tôi'}
+            </h1>
+            <p className="mt-2 text-sm text-muted">
+              {user?.role === 'SELLER'
+                ? 'Tra cứu các đơn hàng bạn đã mua trước khi kích hoạt tài khoản Seller.'
+                : 'Theo dõi trạng thái các đơn mua của bạn.'}
+            </p>
           </div>
           <Link
             href="/products"
             className="inline-flex min-h-11 items-center rounded-xl border border-line px-4 text-sm font-semibold"
           >
-            Tiếp tục mua sắm
+            Xem sản phẩm trên sàn
           </Link>
         </div>
         <section className="mt-6 overflow-hidden rounded-2xl border border-line bg-white">
@@ -68,8 +77,10 @@ export default function BuyerOrdersPage() {
                 Đăng nhập
               </Link>
             </div>
-          ) : user.role !== 'BUYER' ? (
-            <div className="p-8 text-sm text-muted">Trang đơn mua dành cho tài khoản Buyer.</div>
+          ) : !canViewBuyerHistory ? (
+            <div className="p-8 text-sm text-muted">
+              Trang đơn mua dành cho tài khoản Buyer hoặc tra cứu lịch sử mua trước đây của Seller.
+            </div>
           ) : error ? (
             <div className="p-8" role="alert">
               <p>{error}</p>
@@ -109,27 +120,42 @@ export default function BuyerOrdersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {orders.map((o) => (
-                    <tr key={o.id} className="border-t border-line">
-                      <td className="px-5 py-4 font-semibold">{o.id}</td>
-                      <td className="px-5 py-4">{o.product}</td>
-                      <td className="px-5 py-4">{o.date}</td>
-                      <td className="px-5 py-4 font-semibold">{money(o.totalAmount ?? o.total)}</td>
-                      <td className="px-5 py-4">
-                        <span className="rounded-full bg-brand-soft px-3 py-1.5 text-xs font-medium">
-                          {o.status}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4">
-                        <Link
-                          className="font-semibold text-brand-dark underline-offset-4 hover:underline"
-                          href={`/account/orders/${encodeURIComponent(o.id)}`}
-                        >
-                          Chi tiết
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
+                  {orders.map((o) => {
+                    const isCancelled = o.status === 'CANCELLED';
+                    const isPaid = !isCancelled && (o.status === 'PAID' || isOrderMarkedPaid(o.id));
+                    const badgeClass = getOrderStatusBadgeClass(o.status, isCancelled, isPaid);
+                    const statusText = isCancelled
+                      ? 'ĐÃ HỦY'
+                      : isPaid
+                        ? 'ĐÃ THANH TOÁN'
+                        : formatOrderStatus(o.status);
+                    const statusBadge = (
+                      <span
+                        className={`rounded-full px-3 py-1.5 text-xs font-semibold ${badgeClass}`}
+                      >
+                        {statusText}
+                      </span>
+                    );
+                    return (
+                      <tr key={o.id} className="border-t border-line">
+                        <td className="px-5 py-4 font-semibold">{o.id}</td>
+                        <td className="px-5 py-4">{o.product}</td>
+                        <td className="px-5 py-4">{o.date}</td>
+                        <td className="px-5 py-4 font-semibold">
+                          {money(o.totalAmount ?? o.total)}
+                        </td>
+                        <td className="px-5 py-4">{statusBadge}</td>
+                        <td className="px-5 py-4">
+                          <Link
+                            className="font-semibold text-brand-dark underline-offset-4 hover:underline"
+                            href={`/account/orders/${encodeURIComponent(o.id)}`}
+                          >
+                            Chi tiết
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

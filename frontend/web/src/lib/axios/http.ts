@@ -13,6 +13,7 @@ export class ApiError extends Error {
 export type RequestOptions = {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   body?: unknown;
+  headers?: Record<string, string>;
   signal?: AbortSignal;
 };
 export type RequestApi = <T>(path: string, options?: RequestOptions) => Promise<T>;

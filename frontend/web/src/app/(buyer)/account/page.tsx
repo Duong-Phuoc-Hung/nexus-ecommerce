@@ -1,13 +1,20 @@
 'use client';
+
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { useSession } from '@/modules/auth/hooks/use-session';
+import { Store } from 'lucide-react';
 import { StoreHeader } from '@/components/layout/store-header';
+import { useSession } from '@/modules/auth/hooks/use-session';
 import { readContactPhone } from '@/modules/user/utils/address-book';
+
 export default function AccountPage() {
   const { user, phase, error, retry } = useSession();
   const [phone, setPhone] = useState('');
-  useEffect(() => setPhone(user ? readContactPhone(user.id) : ''), [user?.id]);
+
+  useEffect(() => {
+    setPhone(user ? readContactPhone(user.id) : '');
+  }, [user?.id]);
+
   return (
     <>
       <StoreHeader />
@@ -69,10 +76,65 @@ export default function AccountPage() {
                   </div>
                 ))}
               </dl>
-              <p className="mt-7 rounded-xl bg-stone-50 p-4 text-sm leading-6 text-muted">
-                Thông tin được xác minh từ phiên hiện tại. Chức năng chỉnh sửa hồ sơ sẽ được mở sau
-                khi hệ thống hỗ trợ.
+
+              {user.role === 'BUYER' && (
+                <div className="mt-7 rounded-2xl border border-brand-dark/20 bg-brand-soft/40 p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <p className="flex items-center gap-2 text-sm font-bold text-brand-dark">
+                        <Store className="size-4" aria-hidden="true" />
+                        <span>Trở thành Người bán trên Nexus</span>
+                      </p>
+                      <p className="text-xs leading-relaxed text-muted">
+                        Gửi hồ sơ đăng ký mở gian hàng để Admin xét duyệt và kích hoạt kênh bán hàng
+                        chuyên nghiệp.
+                      </p>
+                    </div>
+                    <Link
+                      href="/account/seller-registration"
+                      className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-dark px-4 text-xs font-semibold text-white hover:bg-brand"
+                    >
+                      <span>Đăng ký bán hàng</span>
+                    </Link>
+                  </div>
+                </div>
+              )}
+
+              {user.role === 'SELLER' && (
+                <div className="mt-7 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <p className="flex items-center gap-2 text-sm font-bold text-emerald-900">
+                        <Store className="size-4" aria-hidden="true" />
+                        <span>Tài khoản Người bán (Seller) đang hoạt động</span>
+                      </p>
+                      <p className="text-xs leading-relaxed text-emerald-800">
+                        Bạn có thể truy cập Kênh người bán hoặc xem lại hồ sơ đăng ký gian hàng của
+                        mình.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Link
+                        href="/seller"
+                        className="inline-flex min-h-11 items-center rounded-xl bg-brand-dark px-4 text-xs font-semibold text-white"
+                      >
+                        Kênh người bán
+                      </Link>
+                      <Link
+                        href="/account/seller-registration"
+                        className="inline-flex min-h-11 items-center rounded-xl border border-line bg-white px-4 text-xs font-semibold text-ink"
+                      >
+                        Xem hồ sơ bán hàng
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <p className="mt-6 rounded-xl bg-stone-50 p-4 text-sm leading-6 text-muted">
+                Thông tin được xác minh từ phiên hiện tại.
               </p>
+
               <div className="mt-5 flex flex-wrap gap-3">
                 {user.role === 'BUYER' && (
                   <Link
@@ -86,8 +148,16 @@ export default function AccountPage() {
                   href="/account/orders"
                   className="inline-flex min-h-11 items-center rounded-xl border border-line px-5 text-sm font-semibold"
                 >
-                  Xem đơn hàng của tôi
+                  {user.role === 'SELLER' ? 'Lịch sử đơn mua trước đây' : 'Xem đơn hàng của tôi'}
                 </Link>
+                {user.role === 'BUYER' && (
+                  <Link
+                    href="/account/seller-registration"
+                    className="inline-flex min-h-11 items-center rounded-xl border border-line px-5 text-sm font-semibold text-brand-dark hover:bg-brand-soft"
+                  >
+                    Đăng ký bán hàng
+                  </Link>
+                )}
               </div>
             </>
           )}
