@@ -9,7 +9,12 @@ import {
   type BackendProduct,
 } from '../api/seller-products.api';
 import { userMessage } from '@/lib/axios/http';
-import { products as mockProducts, PageHeading, DemoNote } from '../components/seller-shared';
+import {
+  products as mockProducts,
+  PageHeading,
+  DemoNote,
+  optimizeImageFile,
+} from '../components/seller-shared';
 import {
   Select,
   SelectContent,
@@ -29,6 +34,7 @@ export function SellerProductForm({ productId }: { productId?: string }) {
 
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('ACTIVE');
+  const [imageUrl, setImageUrl] = useState<string>('');
 
   const [submitting, setSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
@@ -89,6 +95,20 @@ export function SellerProductForm({ productId }: { productId?: string }) {
           setProductData(detail);
           if (detail.categoryId) setSelectedCategory(String(detail.categoryId));
           if (detail.status) setSelectedStatus(detail.status);
+          const isRemoved =
+            typeof window !== 'undefined' &&
+            localStorage.getItem(`nexus_prod_img_removed_${productId}`) === 'true';
+
+          if (!isRemoved) {
+            const cachedImg =
+              typeof window !== 'undefined'
+                ? localStorage.getItem(`nexus_prod_img_${productId}`) || ''
+                : '';
+            const initialImg = cachedImg || detail.primaryImage || detail.images?.[0] || '';
+            if (initialImg) setImageUrl(initialImg);
+          } else {
+            setImageUrl('');
+          }
         }
       })
       .catch((err) => {
@@ -107,6 +127,20 @@ export function SellerProductForm({ productId }: { productId?: string }) {
             });
             if (fallback.category) setSelectedCategory(fallback.category);
             if (fallback.status) setSelectedStatus(fallback.status);
+            const isRemoved =
+              typeof window !== 'undefined' &&
+              localStorage.getItem(`nexus_prod_img_removed_${productId}`) === 'true';
+
+            if (!isRemoved) {
+              const cachedImg =
+                typeof window !== 'undefined'
+                  ? localStorage.getItem(`nexus_prod_img_${productId}`) || ''
+                  : '';
+              const initialImg = cachedImg || '';
+              if (initialImg) setImageUrl(initialImg);
+            } else {
+              setImageUrl('');
+            }
           } else {
             setProductError(userMessage(err));
           }
@@ -123,6 +157,22 @@ export function SellerProductForm({ productId }: { productId?: string }) {
 
   const isEditMode = Boolean(productId);
   const title = isEditMode ? 'Chỉnh sửa sản phẩm' : 'Thêm sản phẩm mới';
+
+  async function handleImageFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setErrors(['Vui lòng chọn tệp định dạng hình ảnh (JPG, PNG, WebP,...).']);
+      return;
+    }
+    try {
+      const optimized = await optimizeImageFile(file);
+      setImageUrl(optimized);
+      setErrors([]);
+    } catch {
+      setErrors(['Không thể xử lý tệp ảnh. Vui lòng thử lại với tệp ảnh khác.']);
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -154,6 +204,12 @@ export function SellerProductForm({ productId }: { productId?: string }) {
     setSuccessMessage('');
 
     try {
+      // Backend PostgreSQL catalog_product_images giới hạn image_url VARCHAR(500) và Express json 100KB.
+      // Chỉ gửi mảng images lên BE nếu là link URL hợp lệ (http/https) <= 500 ký tự.
+      // Đối với ảnh tải từ máy tính, ảnh đã được canvas nén siêu nhẹ và lưu vào LocalStorage để hiển thị tức thì.
+      const isHttpUrl = imageUrl.startsWith('http://') || imageUrl.startsWith('https://');
+      const backendImages = isHttpUrl && imageUrl.length <= 500 ? [imageUrl] : undefined;
+
       if (isEditMode && productId) {
         // API 7: PUT /api/v1/products/:id
         await sellerProductsApi.update(productId, {
@@ -163,18 +219,44 @@ export function SellerProductForm({ productId }: { productId?: string }) {
           price,
           stockQuantity: stock,
           status,
+          images: backendImages,
         });
+
+        if (typeof window !== 'undefined') {
+          if (imageUrl) {
+            localStorage.removeItem(`nexus_prod_img_removed_${productId}`);
+            localStorage.setItem(`nexus_prod_img_${productId}`, imageUrl);
+            localStorage.setItem(`nexus_prod_img_${sku}`, imageUrl);
+            localStorage.setItem(`nexus_prod_img_${name}`, imageUrl);
+          } else {
+            // Đánh dấu ảnh đã bị xóa để trang danh sách và form không hiển thị lại ảnh cũ
+            localStorage.setItem(`nexus_prod_img_removed_${productId}`, 'true');
+            localStorage.removeItem(`nexus_prod_img_${productId}`);
+            localStorage.removeItem(`nexus_prod_img_${sku}`);
+            localStorage.removeItem(`nexus_prod_img_${name}`);
+          }
+        }
         setSuccessMessage('Cập nhật sản phẩm thành công!');
       } else {
         // API 6: POST /api/v1/products
-        await sellerProductsApi.create({
+        const created = await sellerProductsApi.create({
           title: name,
           description,
           categoryId: category,
           price,
           stockQuantity: stock,
           condition: 'NEW',
+          images: backendImages,
         });
+
+        if (typeof window !== 'undefined' && imageUrl) {
+          if (created?.id) {
+            localStorage.removeItem(`nexus_prod_img_removed_${created.id}`);
+            localStorage.setItem(`nexus_prod_img_${created.id}`, imageUrl);
+          }
+          localStorage.setItem(`nexus_prod_img_${sku}`, imageUrl);
+          localStorage.setItem(`nexus_prod_img_${name}`, imageUrl);
+        }
         // Tự động chuyển hướng về trang danh sách sản phẩm theo yêu cầu
         router.push('/seller/products');
         return;
@@ -293,6 +375,93 @@ export function SellerProductForm({ productId }: { productId?: string }) {
                 placeholder="0"
               />
             </label>
+
+            <div className="seller-form-full">
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }}>
+                Hình ảnh sản phẩm
+              </label>
+              <div className="seller-image-upload-zone">
+                {imageUrl ? (
+                  <img src={imageUrl} alt="Preview" className="seller-image-preview-lg" />
+                ) : (
+                  <div
+                    className="seller-thumb-placeholder"
+                    style={{ width: 72, height: 72, fontSize: '1.75rem' }}
+                  >
+                    📷
+                  </div>
+                )}
+                <div style={{ flex: 1 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: '10px',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <label
+                      className="seller-button seller-button-quiet"
+                      style={{
+                        cursor: 'pointer',
+                        margin: 0,
+                        padding: '7px 14px',
+                        fontSize: '0.75rem',
+                      }}
+                    >
+                      📁 Chọn ảnh từ máy tính
+                      <input
+                        type="file"
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        onChange={handleImageFileChange}
+                      />
+                    </label>
+                    {imageUrl && (
+                      <button
+                        type="button"
+                        className="seller-button seller-button-quiet"
+                        style={{
+                          color: '#d9383a',
+                          borderColor: '#fca5a5',
+                          padding: '7px 12px',
+                          fontSize: '0.75rem',
+                        }}
+                        onClick={() => setImageUrl('')}
+                      >
+                        ✕ Xóa ảnh
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ marginTop: '8px' }}>
+                    <input
+                      type="url"
+                      value={imageUrl.startsWith('data:') ? '' : imageUrl}
+                      onChange={(e) => setImageUrl(e.target.value.trim())}
+                      placeholder="Hoặc dán URL ảnh trực tiếp (https://...)"
+                      style={{
+                        width: '100%',
+                        padding: '6px 10px',
+                        fontSize: '0.72rem',
+                        borderRadius: '6px',
+                        border: '1px solid #d1d5db',
+                      }}
+                    />
+                  </div>
+                  <small
+                    style={{
+                      display: 'block',
+                      marginTop: '6px',
+                      color: '#8892a0',
+                      fontSize: '0.67rem',
+                    }}
+                  >
+                    Hỗ trợ tải tệp ảnh từ máy (JPG, PNG, WebP) hoặc nhập URL ảnh trực tiếp. Ảnh sẽ
+                    hiển thị ngay tại cột Hình ảnh trên danh sách sản phẩm.
+                  </small>
+                </div>
+              </div>
+            </div>
 
             <label className="seller-form-full">
               Mô tả *

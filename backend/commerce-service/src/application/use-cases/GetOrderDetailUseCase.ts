@@ -32,6 +32,7 @@ export class GetOrderDetailUseCase {
       totalAmount: order.totalAmount,
       status: order.status,
       tracking: order.trackingCode || '—',
+      trackingCode: order.trackingCode || undefined,
       itemsCount: order.items.length,
       items: order.items.map((i) => ({
         productId: i.productId,

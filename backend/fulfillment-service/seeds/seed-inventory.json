@@ -1,0 +1,42 @@
+[
+  {
+    "id": "inv_01hqz_iphone15",
+    "sku": "NX-IPHONE-15-BLUE",
+    "productName": "iPhone 15 128GB Xanh Lam",
+    "onHand": 150,
+    "reserved": 25,
+    "unavailableQuantity": 2
+  },
+  {
+    "id": "inv_01hqz_airpods",
+    "sku": "NX-AIRPODS-PRO-2",
+    "productName": "Tai nghe không dây AirPods Pro 2",
+    "onHand": 80,
+    "reserved": 10,
+    "unavailableQuantity": 0
+  },
+  {
+    "id": "inv_01hqz_retrocam",
+    "sku": "NX-RETRO-35-CAM",
+    "productName": "Máy ảnh Film Retro 35mm Classic",
+    "onHand": 40,
+    "reserved": 5,
+    "unavailableQuantity": 1
+  },
+  {
+    "id": "inv_01hqz_sportwatch",
+    "sku": "NX-SPORT-WATCH-S2",
+    "productName": "Đồng hồ thông minh Nexus Sport S2",
+    "onHand": 120,
+    "reserved": 20,
+    "unavailableQuantity": 0
+  },
+  {
+    "id": "inv_01hqz_macbook",
+    "sku": "NX-MACBOOK-AIR-M2",
+    "productName": "MacBook Air M2 13.6 inch Midnight",
+    "onHand": 50,
+    "reserved": 8,
+    "unavailableQuantity": 0
+  }
+]

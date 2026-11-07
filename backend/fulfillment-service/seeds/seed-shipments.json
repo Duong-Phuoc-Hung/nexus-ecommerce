@@ -1,0 +1,63 @@
+[
+  {
+    "id": "shp_01hqz222trk",
+    "orderId": "NX-ORD-8021",
+    "carrier": "GHN",
+    "trackingCode": "GHN8829103VN",
+    "status": "PICKED",
+    "shippingAddress": "12 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh",
+    "recipientName": "Minh Anh",
+    "recipientPhone": "0901234567",
+    "city": "TP. Hồ Chí Minh",
+    "currentLocation": "TP. Hồ Chí Minh · Trung tâm phân loại Tân Bình",
+    "estimatedDaysAhead": 2,
+    "createdAt": "2026-10-18T09:12:00.000Z",
+    "updatedAt": "2026-10-18T14:30:00.000Z"
+  },
+  {
+    "id": "shp_02ghtk5908112",
+    "orderId": "NX-ORD-8017",
+    "carrier": "GHTK",
+    "trackingCode": "GHTK5908112",
+    "status": "IN_TRANSIT",
+    "shippingAddress": "45 Tràng Tiền, Hoàn Kiếm, Hà Nội",
+    "recipientName": "Quốc Bảo",
+    "recipientPhone": "0912345678",
+    "city": "Hà Nội",
+    "currentLocation": "Hà Nội · Bưu cục Cầu Giấy",
+    "estimatedDaysAhead": 1,
+    "createdAt": "2026-10-17T10:00:00.000Z",
+    "updatedAt": "2026-10-18T11:05:00.000Z"
+  },
+  {
+    "id": "shp_03vtp22100831",
+    "orderId": "NX-ORD-8009",
+    "carrier": "VIETTEL_POST",
+    "trackingCode": "VTP22100831",
+    "status": "DELIVERED",
+    "shippingAddress": "78 Bạch Đằng, Hải Châu, Đà Nẵng",
+    "recipientName": "Thu Hà",
+    "recipientPhone": "0923456789",
+    "city": "Đà Nẵng",
+    "currentLocation": "Đà Nẵng · Đã giao thành công cho khách hàng",
+    "estimatedDeliveryDate": "2026-10-17T16:00:00.000Z",
+    "actualDeliveryDate": "2026-10-17T16:40:00.000Z",
+    "createdAt": "2026-10-16T08:30:00.000Z",
+    "updatedAt": "2026-10-17T16:40:00.000Z"
+  },
+  {
+    "id": "shp_04ghn112233vn",
+    "orderId": "ord_01hqz555abc",
+    "carrier": "GHN",
+    "trackingCode": "GHN112233VN",
+    "status": "READY_TO_PICK",
+    "shippingAddress": "Số 1 Đại Cồ Việt, Hai Bà Trưng, Hà Nội",
+    "recipientName": "Nguyen Van Buyer",
+    "recipientPhone": "0901234567",
+    "city": "Hà Nội",
+    "currentLocation": "Kho tổng Nexus Hà Nội · Chờ bưu tá GHN lấy hàng",
+    "estimatedDaysAhead": 3,
+    "createdAt": "2026-10-20T08:00:00.000Z",
+    "updatedAt": "2026-10-20T08:30:00.000Z"
+  }
+]

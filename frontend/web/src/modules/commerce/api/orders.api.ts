@@ -132,6 +132,26 @@ export function createOrdersApi(request: RequestApi) {
         }),
       );
     },
+    async dispatch(id: string, carrierCode?: string, trackingCode?: string) {
+      const raw = await request<{ success: boolean; message?: string; data: OrderDetail }>(
+        `/orders/${encodeURIComponent(id)}/dispatch`,
+        {
+          method: 'POST',
+          body: { carrierCode, trackingCode },
+        },
+      );
+      return unwrap<OrderDetail>(raw);
+    },
+    async requestRefund(id: string, reason: string, evidenceUrls?: string[]) {
+      const raw = await request<{ success: boolean; message?: string; data: OrderDetail }>(
+        `/orders/${encodeURIComponent(id)}/refund/request`,
+        {
+          method: 'POST',
+          body: { reason, evidenceUrls },
+        },
+      );
+      return unwrap<OrderDetail>(raw);
+    },
     async getQuote(input: {
       items: { productId: string; quantity: number }[];
       shippingAddress: {

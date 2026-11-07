@@ -41,6 +41,10 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
     order?.status === 'DELIVERED' ||
     order?.status === 'ĐÃ_GIAO_HÀNG' ||
     order?.status === 'ĐÃ_GIAO';
+  const isDisputed =
+    order?.status === 'REFUND_REQUESTED' ||
+    order?.status === 'YÊU_CẦU_HOÀN_TIỀN' ||
+    order?.status === 'TRANH_CHẤP';
 
   // Hủy đơn hàng chỉ được thực hiện 1 lần, không cho phép hủy khi đã hủy, đã hoàn tiền hoặc đã giao
   const canCancel = !acting && !isCancelled && !isRefunded && !isDelivered;
@@ -223,6 +227,43 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
               </div>
             </section>
           )}
+
+          {/* Cảnh báo khiếu nại Trả hàng / Hoàn tiền (Dispute Alert) */}
+          {isDisputed && (
+            <section
+              className="support-panel"
+              style={{
+                border: '1.5px solid #f87171',
+                background: '#fef2f2',
+                padding: '16px 20px',
+                borderRadius: '8px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                <span style={{ fontSize: '1.3rem' }}>⚠️</span>
+                <div>
+                  <h3
+                    style={{
+                      margin: '0 0 4px',
+                      fontSize: '0.85rem',
+                      color: '#991b1b',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Đơn hàng đang có khiếu nại Trả hàng / Hoàn tiền từ Người mua
+                  </h3>
+                  <p style={{ margin: 0, fontSize: '0.72rem', color: '#7f1d1d', lineHeight: 1.5 }}>
+                    Người mua đã gửi yêu cầu khiếu nại. Nhân viên Hỗ trợ cần xem xét bằng chứng và
+                    lịch sử vận chuyển trước khi đưa ra phán quyết:{' '}
+                    <strong>Chấp thuận hoàn tiền</strong> (qua nút &ldquo;Xử lý hoàn tiền&rdquo;)
+                    hoặc <strong>Bác bỏ khiếu nại</strong> (qua nút &ldquo;Hủy yêu cầu hoàn
+                    tiền&rdquo;).
+                  </p>
+                </div>
+              </div>
+            </section>
+          )}
+
           <section className="support-panel support-actions-panel">
             <div>
               <p className="support-eyebrow">THAO TÁC HỖ TRỢ · HỆ THỐNG</p>

@@ -10,3 +10,5 @@ pnpm-lock.yaml
 devops/k8s/
 *.min.js
 *.min.css
+**/generated/
+**/generated/**

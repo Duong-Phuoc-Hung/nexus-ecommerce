@@ -114,7 +114,9 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   });
 }
 
-export function requireOrderPermission(action: 'VIEW' | 'LIST' | 'CANCEL' | 'REFUND') {
+export function requireOrderPermission(
+  action: 'VIEW' | 'LIST' | 'CANCEL' | 'REFUND' | 'DISPATCH' | 'REQUEST_REFUND',
+) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const user = (req as AuthenticatedRequest).user;
     if (!user) {
@@ -127,21 +129,21 @@ export function requireOrderPermission(action: 'VIEW' | 'LIST' | 'CANCEL' | 'REF
 
     const normalizedRole = (user.role || '').toUpperCase();
 
-    // 1. ADMIN và SUPPORT_STAFF có toàn quyền xem, tìm kiếm, hủy đơn và hoàn tiền khiếu nại
+    // 1. ADMIN và SUPPORT_STAFF có toàn quyền xem, tìm kiếm, hủy đơn, bàn giao và hoàn tiền khiếu nại
     if (normalizedRole === 'ADMIN' || normalizedRole === 'SUPPORT_STAFF') {
       return next();
     }
 
-    // 2. SELLER có quyền VIEW và LIST đơn hàng của gian hàng mình
+    // 2. SELLER có quyền VIEW, LIST và DISPATCH đơn hàng của gian hàng mình
     if (normalizedRole === 'SELLER') {
-      if (action === 'VIEW' || action === 'LIST') {
+      if (action === 'VIEW' || action === 'LIST' || action === 'DISPATCH') {
         return next();
       }
     }
 
-    // 3. BUYER có quyền VIEW đơn hàng của chính mình
+    // 3. BUYER có quyền VIEW và REQUEST_REFUND đơn hàng của chính mình
     if (normalizedRole === 'BUYER') {
-      if (action === 'VIEW') {
+      if (action === 'VIEW' || action === 'REQUEST_REFUND') {
         return next();
       }
     }

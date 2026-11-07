@@ -10,6 +10,11 @@ export function createShipmentRoutes(controller: ShipmentController): Router {
     controller.getDashboardSummary(req, res),
   );
 
+  // 1.1 Khởi tạo hoặc đăng ký vận đơn sandbox (hỗ trợ tạo đơn từ Commerce Service)
+  router.post('/shipments', requireAuth, requireShipmentPermission('CREATE'), (req, res) =>
+    controller.createShipment(req, res),
+  );
+
   // 2. Tra cứu danh sách vận đơn (Search / Filter / Pagination)
   router.get('/shipments', requireAuth, requireShipmentPermission('LIST'), (req, res) =>
     controller.listShipments(req, res),
@@ -19,6 +24,18 @@ export function createShipmentRoutes(controller: ShipmentController): Router {
   router.get('/shipments/:id', requireAuth, requireShipmentPermission('VIEW'), (req, res) =>
     controller.getById(req, res),
   );
+
+  // 3.1. Chi tiết vận đơn theo mã đơn hàng phục vụ In phiếu gửi hàng & Tracking
+  router.get(
+    '/shipments/by-order/:orderId',
+    requireAuth,
+    requireShipmentPermission('VIEW'),
+    (req, res) => controller.getByOrderId(req, res),
+  );
+
+  // 3.2. Webhook nhận biến động trạng thái từ 3PL (GHN/GHTK) hoặc Simulator
+  router.post('/carriers/webhook', (req, res) => controller.carrierWebhook(req, res));
+  router.post('/carrier/webhook', (req, res) => controller.carrierWebhook(req, res));
 
   // 4. Cập nhật trạng thái vận đơn
   router.patch(

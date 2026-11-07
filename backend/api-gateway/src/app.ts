@@ -167,6 +167,7 @@ export function createApplication(): Application {
     '/api/v1/fulfillments',
     createProxy('Fulfillment Service', SERVICE_ENDPOINTS.fulfillment),
   );
+  app.use('/api/v1/fulfillment', createProxy('Fulfillment Service', SERVICE_ENDPOINTS.fulfillment));
   app.use(
     '/api/v1/support',
     createProxy('Support / Fulfillment Service', SERVICE_ENDPOINTS.fulfillment),

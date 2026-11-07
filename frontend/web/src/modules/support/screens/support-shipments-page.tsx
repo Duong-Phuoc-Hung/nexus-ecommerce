@@ -95,14 +95,29 @@ export function SupportShipmentsPage() {
     setActing(true);
     setNotice('');
     try {
-      const updated = await supportShipmentsApi.updateStatus(selected.id, {
-        status: nextStatus,
-        location: selected.currentLocation,
-        note: 'Cập nhật từ Support Staff.',
-      });
+      // 1. Thử gọi API Webhook 3PL Carrier mới của Backend: POST /api/v1/fulfillment/carriers/webhook
+      try {
+        await supportShipmentsApi.triggerCarrierWebhook({
+          carrier: selected.carrier || 'GHN',
+          tracking_code: selected.trackingCode || selected.code,
+          order_id: selected.orderId || selected.order,
+          status: nextStatus,
+          current_location: selected.currentLocation,
+          timestamp: new Date().toISOString(),
+        });
+      } catch {
+        // 2. Fallback sang PATCH /api/v1/support/shipments/:id/status
+        await supportShipmentsApi.updateStatus(selected.id, {
+          status: nextStatus,
+          location: selected.currentLocation,
+          note: 'Cập nhật từ Support Staff.',
+        });
+      }
+
+      const updated = await supportShipmentsApi.getById(selected.id);
       setSelected(updated);
       setShipments((items) => items.map((item) => (item.id === updated.id ? updated : item)));
-      setNotice('Đã cập nhật trạng thái vận đơn thành công.');
+      setNotice('Đã cập nhật trạng thái vận đơn qua Backend Carrier API thành công.');
     } catch (err) {
       setNotice(userMessage(err));
     } finally {
@@ -592,69 +607,126 @@ export function SupportShipmentsPage() {
               ))}
             </ol>
 
-            <div className="support-action-buttons">
-              <div style={{ minWidth: 200 }}>
-                <Select value={nextStatus} onValueChange={setNextStatus}>
-                  <SelectTrigger aria-label="Trạng thái vận đơn">
-                    <SelectValue placeholder="Chọn trạng thái" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SHIPMENT_STATUSES.map((status) => (
-                      <SelectItem key={status.value} value={status.value}>
-                        {status.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <button type="button" disabled={acting} onClick={updateStatus}>
-                {acting ? 'Đang cập nhật…' : 'Cập nhật trạng thái'}
-              </button>
-              <button
-                type="button"
-                className="support-secondary-button"
-                disabled={acting}
-                onClick={handleOpenOverride}
+            {/* Cụm công cụ mô phỏng 3PL Webhook & Shipper (Carrier Webhook Simulator Sandbox) */}
+            <div
+              style={{
+                marginTop: '24px',
+                padding: '16px 18px',
+                borderRadius: '10px',
+                border: '1.5px dashed #93c5fd',
+                background: '#f0f9ff',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: '10px',
+                  flexWrap: 'wrap',
+                  gap: '8px',
+                }}
               >
-                Điều chỉnh khu vực
-              </button>
-              {selected.statusCode === 'FAILED' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '1rem' }}>🛠️</span>
+                  <strong style={{ fontSize: '0.8rem', color: '#1e40af' }}>
+                    BỘ GIẢ LẬP VẬN CHUYỂN 3PL (CARRIER WEBHOOK SIMULATOR)
+                  </strong>
+                  <span
+                    style={{
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      background: '#dbeafe',
+                      color: '#1d4ed8',
+                      border: '1px solid #bfdbfe',
+                    }}
+                  >
+                    SANDBOX / TEST TOOLS
+                  </span>
+                </div>
+              </div>
+              <p
+                style={{
+                  fontSize: '0.7rem',
+                  color: '#475569',
+                  lineHeight: '1.45',
+                  margin: '0 0 14px',
+                }}
+              >
+                💡 <strong>Nguyên tắc vận hành:</strong> Trong môi trường Production thực tế, tiến
+                trình vận chuyển được cập nhật <strong>tự động 100% qua Webhook</strong> từ đối tác
+                giao nhận (GHN / GHTK API). Cụm công cụ này dành cho môi trường phát triển & kiểm
+                thử đồ án nhằm mô phỏng các sự kiện Shipper bưu cục cập nhật hành trình.
+              </p>
+
+              <div className="support-action-buttons">
+                <div style={{ minWidth: 200 }}>
+                  <Select value={nextStatus} onValueChange={setNextStatus}>
+                    <SelectTrigger aria-label="Trạng thái vận đơn">
+                      <SelectValue placeholder="Chọn trạng thái" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SHIPMENT_STATUSES.map((status) => (
+                        <SelectItem key={status.value} value={status.value}>
+                          {status.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <button type="button" disabled={acting} onClick={updateStatus}>
+                  {acting ? 'Đang cập nhật…' : 'Cập nhật trạng thái'}
+                </button>
                 <button
                   type="button"
-                  className="support-button-return"
+                  className="support-secondary-button"
                   disabled={acting}
-                  onClick={() =>
-                    handleTriggerReturn(
-                      'Kích hoạt chuyển hoàn kiện hàng về kho người bán do giao thất bại.',
-                    )
-                  }
+                  onClick={handleOpenOverride}
                 >
-                  ↻ Yêu cầu hoàn hàng / Chuyển hoàn
+                  Điều chỉnh khu vực
                 </button>
-              )}
-              {selected.statusCode === 'OUT_FOR_DELIVERY' && (
-                <button
-                  type="button"
-                  className="support-button-danger"
-                  disabled={acting}
-                  onClick={handleTriggerFailed}
-                >
-                  ✕ Báo giao hàng thất bại
-                </button>
-              )}
-              {selected.statusCode === 'DELIVERED' && (
-                <button
-                  type="button"
-                  className="support-button-return"
-                  disabled={acting}
-                  onClick={() =>
-                    handleTriggerReturn('Xử lý yêu cầu trả hàng / hoàn tiền sau khi đã nhận hàng.')
-                  }
-                >
-                  ↻ Xử lý yêu cầu trả hàng
-                </button>
-              )}
+                {selected.statusCode === 'FAILED' && (
+                  <button
+                    type="button"
+                    className="support-button-return"
+                    disabled={acting}
+                    onClick={() =>
+                      handleTriggerReturn(
+                        'Kích hoạt chuyển hoàn kiện hàng về kho người bán do giao thất bại.',
+                      )
+                    }
+                  >
+                    ↻ Yêu cầu hoàn hàng / Chuyển hoàn
+                  </button>
+                )}
+                {selected.statusCode === 'OUT_FOR_DELIVERY' && (
+                  <button
+                    type="button"
+                    className="support-button-danger"
+                    disabled={acting}
+                    onClick={handleTriggerFailed}
+                  >
+                    ✕ Báo giao hàng thất bại
+                  </button>
+                )}
+                {selected.statusCode === 'DELIVERED' && (
+                  <button
+                    type="button"
+                    className="support-button-return"
+                    disabled={acting}
+                    onClick={() =>
+                      handleTriggerReturn(
+                        'Xử lý yêu cầu trả hàng / hoàn tiền sau khi đã nhận hàng.',
+                      )
+                    }
+                  >
+                    ↻ Xử lý yêu cầu trả hàng
+                  </button>
+                )}
+              </div>
             </div>
 
             {notice && (
