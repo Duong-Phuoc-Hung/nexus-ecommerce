@@ -66,7 +66,7 @@ export class SupportCase {
     this._type = props.type;
     this._orderId = props.orderId;
     this._orderCode = props.orderCode || props.orderId;
-    this._userId = props.userId || 'usr_buyer_default';
+    this._userId = props.userId || '01a15822-43b8-78c3-a246-16bff78bc6e8';
     this._customer = props.customer;
     this._reason = props.reason;
     this._priority = props.priority;

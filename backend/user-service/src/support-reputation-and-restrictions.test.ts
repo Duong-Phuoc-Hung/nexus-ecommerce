@@ -35,7 +35,7 @@ async function login(baseUrl: string, email: string, password: string): Promise<
 
 test('Support Staff Task 4: POST /api/v1/support/users/:userId/adjust-reputation', async () => {
   await withUserServer(async (baseUrl) => {
-    const targetUserId = 'usr_01hqz789abc'; // buyer.test@nexus-ecommerce.com (initial score: 98)
+    const targetUserId = '01a15822-43b8-78c3-a246-16bff78bc6e8'; // buyer.test@nexus-ecommerce.com (initial score: 98)
 
     // 1. Unauthenticated -> 401
     const unauthRes = await fetch(
@@ -122,7 +122,7 @@ test('Support Staff Task 4: POST /api/v1/support/users/:userId/adjust-reputation
 
 test('Support Staff Task 4: POST /api/v1/support/users/:userId/restrict-features', async () => {
   await withUserServer(async (baseUrl) => {
-    const targetUserId = 'usr_seller_001'; // seller.test@nexus-ecommerce.com
+    const targetUserId = '01a15822-3fd0-7b39-ad01-f11da72d5b80'; // seller.test@nexus-ecommerce.com
 
     // 1. Unauthenticated -> 401
     const unauthRes = await fetch(

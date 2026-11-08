@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { IShipmentRepository } from '../../domain/repositories/IShipmentRepository';
 import { CarrierCode, Shipment, ShipmentStatus } from '../../domain/entities/Shipment';
 import { mapShipmentToDto, ShipmentDetailDto } from '../dtos/ShipmentDetailDto';
@@ -57,9 +58,7 @@ export class CreateShipmentUseCase {
           .slice(-8)
           .toUpperCase() || Math.floor(10000000 + Math.random() * 90000000)
       }`;
-    const id =
-      (input.id || '').trim() ||
-      `shp_${rawOrderId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || Date.now()}`;
+    const id = (input.id || '').trim() || crypto.randomUUID();
     const status = this.mapStatus(input.status);
 
     const defaultLocation =

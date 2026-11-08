@@ -102,10 +102,10 @@ export function loadSeedOrders(): Order[] {
   return [
     new Order({
       id: 'ord_01hqz555abc',
-      buyerId: 'usr_01hqz789abc',
+      buyerId: '01a15822-43b8-78c3-a246-16bff78bc6e8',
       buyerName: 'Nguyen Van Buyer',
       buyerEmail: 'buyer.test@nexus-ecommerce.com',
-      sellerId: 'usr_01hqz333sel',
+      sellerId: '01a15822-3fd0-7b39-ad01-f11da72d5b80',
       sellerName: 'Nexus Official Store',
       items: [
         {

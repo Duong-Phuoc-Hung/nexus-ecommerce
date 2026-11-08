@@ -539,7 +539,7 @@ export const userSpec = {
             success: true,
             data: [
               {
-                id: 'usr_01hqz789abc',
+                id: '01a15822-43b8-78c3-a246-16bff78bc6e8',
                 fullName: 'Nguyen Van Buyer',
                 name: 'Nguyen Van Buyer',
                 email: 'buyer.test@nexus-ecommerce.com',
@@ -653,7 +653,7 @@ export const userSpec = {
             in: 'path',
             required: true,
             description: 'ID của người dùng cần khóa / mở khóa',
-            schema: { type: 'string', example: 'usr_01hqz789abc' },
+            schema: { type: 'string', example: '01a15822-43b8-78c3-a246-16bff78bc6e8' },
           },
         ],
         requestBody: {
@@ -683,7 +683,7 @@ export const userSpec = {
             success: true,
             message: "Đã cập nhật trạng thái người dùng thành 'SUSPENDED'.",
             data: {
-              id: 'usr_01hqz789abc',
+              id: '01a15822-43b8-78c3-a246-16bff78bc6e8',
               email: 'buyer.test@nexus-ecommerce.com',
               fullName: 'Nguyen Van Buyer',
               status: 'SUSPENDED',
@@ -2427,7 +2427,7 @@ export const fulfillmentSpec = {
             in: 'query',
             required: false,
             description: 'Lọc theo mã người dùng',
-            schema: { type: 'string', example: 'usr_01hqz789abc' },
+            schema: { type: 'string', example: '01a15822-43b8-78c3-a246-16bff78bc6e8' },
           },
           {
             name: 'status',

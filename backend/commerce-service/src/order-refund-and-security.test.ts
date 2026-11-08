@@ -185,7 +185,7 @@ test('Auto-Seed & Persistence Environment Control: GET /health reports persisten
 test('Seller Dispatch API: POST /api/v1/orders/:id/dispatch enforces RBAC, anti-IDOR, and updates trackingCode & status', async () => {
   await withCommerceServer(async (baseUrl) => {
     const matchingSellerToken = createTestToken({
-      sub: 'usr_01hqz333sel',
+      sub: '01a15822-3fd0-7b39-ad01-f11da72d5b80',
       email: 'seller@nexus.vn',
       role: 'SELLER',
     });
@@ -232,7 +232,7 @@ test('Seller Dispatch API: POST /api/v1/orders/:id/dispatch enforces RBAC, anti-
 test('Buyer Request Refund API: POST /api/v1/orders/:id/refund/request allows buyer to submit refund dispute', async () => {
   await withCommerceServer(async (baseUrl) => {
     const buyerToken = createTestToken({
-      sub: 'usr_01hqz789abc',
+      sub: '01a15822-43b8-78c3-a246-16bff78bc6e8',
       email: 'buyer@nexus.vn',
       role: 'BUYER',
     });
