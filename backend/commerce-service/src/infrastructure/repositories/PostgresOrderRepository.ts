@@ -383,6 +383,13 @@ export class PostgresOrderRepository implements IOrderRepository {
       sellerId: orderRow.seller_id,
       sellerName: orderRow.seller_name || 'Gian hàng đối tác',
       items,
+      subtotal:
+        Number(orderRow.total_amount) -
+        Number(orderRow.shipping_fee || 0) +
+        Number(orderRow.discount_amount || 0),
+      shippingFee: Number(orderRow.shipping_fee || 0),
+      discountAmount: Number(orderRow.discount_amount || 0),
+      shippingAddress,
       totalAmount: Number(orderRow.total_amount),
       status: (orderRow.status as OrderStatus) || OrderStatus.PENDING,
       trackingCode: orderRow.tracking_code || undefined,

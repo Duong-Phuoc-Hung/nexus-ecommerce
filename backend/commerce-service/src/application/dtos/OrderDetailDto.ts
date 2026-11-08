@@ -24,6 +24,19 @@ export interface OrderDetailDto {
   date: string; // Tương thích FE: order.date
   total: number; // Tương thích FE: order.total
   totalAmount: number;
+  subtotal?: number;
+  shippingFee?: number;
+  discountAmount?: number;
+  paymentMethod?: string;
+  shippingAddress?: {
+    fullName?: string;
+    phone?: string;
+    province?: string;
+    district?: string;
+    ward?: string;
+    addressLine?: string;
+    country?: string;
+  };
   status: string;
   tracking: string; // Tương thích FE: order.tracking
   trackingCode?: string; // Tương thích API contract
