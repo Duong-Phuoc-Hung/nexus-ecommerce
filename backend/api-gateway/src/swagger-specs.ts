@@ -2043,6 +2043,91 @@ export const commerceSpec = {
         },
       },
     },
+
+    '/api/v1/orders/{id}/refund/execute': {
+      post: {
+        tags: ['Support Staff / Thao tác xử lý'],
+        summary: 'Thực hiện hoàn tiền tự động qua cổng thanh toán PayOS',
+        description: `${PRIVATE} Dành cho SUPPORT_STAFF và ADMIN. Kích hoạt giao dịch hoàn tiền tự động về tài khoản ngân hàng của Buyer theo đúng số tiền khiếu nại được phê duyệt.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã đơn hàng hoặc UUID',
+            schema: { type: 'string', example: 'NX-ORD-8021' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['amount'],
+                properties: {
+                  amount: { type: 'number', example: 1290000 },
+                  reason: {
+                    type: 'string',
+                    example: 'Hoàn tiền khiếu nại sản phẩm lỗi theo phán quyết trọng tài.',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Hoàn tiền thành công', {
+            success: true,
+            message: 'Đã hoàn tiền thành công qua cổng thanh toán PayOS.',
+            data: {
+              id: 'NX-ORD-8021',
+              status: 'REFUNDED',
+              refundTransactionId: 'ref_payos_8021_demo',
+              refundAmount: 1290000,
+            },
+          }),
+          400: errorResponse('Dữ liệu không hợp lệ', 'Không thể hoàn tiền cho đơn hàng.'),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy đơn hàng', 'Order was not found.'),
+        },
+      },
+    },
+
+    '/api/v1/orders/{id}/refund/status': {
+      get: {
+        tags: ['Support Staff / Thao tác xử lý'],
+        summary: 'Kiểm tra trạng thái đối soát hoàn tiền PayOS',
+        description: `${PRIVATE} Dành cho SUPPORT_STAFF và ADMIN. Truy vấn trạng thái đối soát hoàn tiền từ cổng thanh toán PayOS.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã đơn hàng hoặc UUID',
+            schema: { type: 'string', example: 'NX-ORD-8021' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Lấy trạng thái hoàn tiền thành công', {
+            success: true,
+            data: {
+              orderId: 'NX-ORD-8021',
+              status: 'REFUNDED',
+              refundStatus: 'SUCCESS',
+              refundTransactionId: 'ref_payos_8021_demo',
+              refundAmount: 1290000,
+            },
+          }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy đơn hàng', 'Order was not found.'),
+        },
+      },
+    },
   },
 };
 
@@ -2633,6 +2718,196 @@ export const fulfillmentSpec = {
           401: unauthorized,
           403: forbidden,
           404: errorResponse('Không tìm thấy vận đơn', 'Vận đơn cho đơn hàng này không tồn tại.'),
+        },
+      },
+    },
+
+    '/api/v1/support/disputes': {
+      get: {
+        tags: ['Support Staff / Quản lý khiếu nại'],
+        summary: 'Hàng đợi phân xử tranh chấp trọng tài kẹp SLA (SRS 2.3 & 3.1.2)',
+        description: `${PRIVATE} Dành cho SUPPORT_STAFF và ADMIN. Danh sách hồ sơ tranh chấp Buyer - Seller chờ phán quyết, tính toán thời hạn SLA và đối soát bằng chứng ảnh mở hộp.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'status',
+            in: 'query',
+            description: 'Trạng thái tranh chấp (PENDING, RESOLVED, REJECTED)',
+            schema: { type: 'string', example: 'PENDING' },
+          },
+          {
+            name: 'q',
+            in: 'query',
+            description: 'Từ khóa tìm kiếm theo mã đơn hoặc lý do tranh chấp',
+            schema: { type: 'string' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Lấy danh sách tranh chấp thành công', {
+            success: true,
+            data: [
+              {
+                id: '01a15822-43b8-78c3-a246-16bff78bc6e8',
+                orderCode: 'NX-ORD-8021',
+                customer: 'Minh Anh',
+                reason: 'Hàng vỡ hỏng màn hình khi nhận',
+                priority: 'URGENT',
+                status: 'PENDING',
+                slaDeadline: '2026-11-10T10:00:00Z',
+                slaRemainingHours: 3,
+                isSlaOverdue: false,
+              },
+            ],
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+    },
+
+    '/api/v1/support/disputes/{caseId}/verdict': {
+      post: {
+        tags: ['Support Staff / Quản lý khiếu nại'],
+        summary: 'Ban hành phán quyết trọng tài & trừ điểm uy tín (SRS 2.3)',
+        description: `${PRIVATE} Dành cho SUPPORT_STAFF và ADMIN. Đưa ra phán quyết cuối cùng: Hoàn tiền cho Người mua (REFUND_BUYER), Bác bỏ khiếu nại (REJECT_BUYER), hoặc Yêu cầu gửi trả hàng về kho trước (REQUIRE_RETURN_FIRST). Gán bên chịu trách nhiệm (SELLER bị trừ 5 điểm uy tín).`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'caseId',
+            in: 'path',
+            required: true,
+            description: 'Mã hồ sơ tranh chấp',
+            schema: { type: 'string', example: '01a15822-43b8-78c3-a246-16bff78bc6e8' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['decision', 'note'],
+                properties: {
+                  decision: {
+                    type: 'string',
+                    enum: ['REFUND_BUYER', 'REJECT_BUYER', 'REQUIRE_RETURN_FIRST'],
+                    example: 'REFUND_BUYER',
+                  },
+                  liableParty: {
+                    type: 'string',
+                    enum: ['SELLER', 'BUYER', 'CARRIER', 'PLATFORM'],
+                    example: 'SELLER',
+                  },
+                  refundAmount: { type: 'number', example: 1290000 },
+                  note: {
+                    type: 'string',
+                    example:
+                      'Bằng chứng ảnh mở hộp cho thấy hàng bể vỡ trước khi nhận, chấp thuận hoàn tiền.',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Ban hành phán quyết thành công', {
+            success: true,
+            message: 'Đã ban hành phán quyết trọng tài thành công.',
+            data: {
+              caseId: '01a15822-43b8-78c3-a246-16bff78bc6e8',
+              status: 'RESOLVED',
+              decision: 'REFUND_BUYER',
+              penaltyPoints: -5,
+            },
+          }),
+          400: errorResponse('Dữ liệu không hợp lệ', 'Trường decision và note là bắt buộc.'),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy ca tranh chấp', 'Dispute case not found.'),
+        },
+      },
+    },
+
+    '/api/v1/fulfillments/shipments/{id}/request-redelivery': {
+      post: {
+        tags: ['Support Staff / Thao tác xử lý'],
+        summary: 'Yêu cầu đơn vị vận chuyển phát lại hàng khi giao thất bại (Redelivery)',
+        description: `${PRIVATE} Dành cho SUPPORT_STAFF và ADMIN. Kích hoạt phát lại đơn hàng sau khi liên lạc thành công với người nhận.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã vận đơn hoặc Tracking code',
+            schema: { type: 'string', example: 'shp_01hqz222trk' },
+          },
+        ],
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  reason: { type: 'string', example: 'Người mua hẹn giao lại vào ngày mai.' },
+                  scheduledDate: { type: 'string', example: '2026-11-10' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Yêu cầu phát lại thành công', {
+            success: true,
+            message: 'Đã gửi yêu cầu phát lại hàng tới đơn vị vận chuyển.',
+            data: { id: 'shp_01hqz222trk', status: 'IN_TRANSIT' },
+          }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy vận đơn', 'Shipment not found.'),
+        },
+      },
+    },
+
+    '/api/v1/fulfillments/shipments/{id}/confirm-return': {
+      post: {
+        tags: ['Support Staff / Thao tác xử lý'],
+        summary: 'Xác nhận hàng chuyển hoàn (RTO) đã về kho Người bán thành công',
+        description: `${PRIVATE} Dành cho SUPPORT_STAFF và ADMIN. Nghiệm thu hàng hoàn về kho Seller, đóng hồ sơ vận đơn và giải phóng tồn kho.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã vận đơn hoặc Tracking code',
+            schema: { type: 'string', example: 'shp_01hqz222trk' },
+          },
+        ],
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  returnCondition: { type: 'string', example: 'Hàng nguyên seal, không móp méo.' },
+                  note: { type: 'string', example: 'Đã kiểm đếm nhập kho hoàn tất.' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Xác nhận hoàn hàng thành công', {
+            success: true,
+            message: 'Đã xác nhận hoàn hàng về kho người bán thành công.',
+            data: { id: 'shp_01hqz222trk', status: 'RETURNED' },
+          }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy vận đơn', 'Shipment not found.'),
         },
       },
     },
