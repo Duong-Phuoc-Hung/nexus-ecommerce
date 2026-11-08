@@ -77,7 +77,7 @@ export const orders = [
 
 export const users = [
   {
-    id: '01a15822-43b8-78c3-a246-16bff78bc6e8',
+    id: 'USR-2104',
     name: 'Minh Anh',
     email: 'minhanh@example.com',
     role: 'BUYER',
@@ -86,7 +86,7 @@ export const users = [
     orders: 12,
   },
   {
-    id: '01a15822-43b8-78c3-a246-16bff78bc6e9',
+    id: 'USR-1872',
     name: 'Quốc Bảo',
     email: 'quocbao@example.com',
     role: 'BUYER',
@@ -95,7 +95,7 @@ export const users = [
     orders: 7,
   },
   {
-    id: '01a15822-3fd0-7b39-ad01-f11da72d5b80',
+    id: 'USR-1209',
     name: 'Retro Lab',
     email: 'seller@retrolab.vn',
     role: 'SELLER',
