@@ -64,7 +64,7 @@ CREATE INDEX IF NOT EXISTS idx_auction_winner ON auction_rooms (winner_id);
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS auction_bids (
     -- Khóa chính: Số tự tăng (1, 2, 3...)
-    id BIGSERIAL PRIMARY KEY,
+    id VARCHAR(36) PRIMARY KEY,
 
     -- Thuộc phòng đấu giá nào (Khóa ngoại nối với auction_rooms)
     auction_id VARCHAR(36) NOT NULL,
@@ -96,7 +96,7 @@ CREATE INDEX IF NOT EXISTS idx_bid_time ON auction_bids (bid_time DESC);
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS auction_settlements (
     -- Khóa chính: Số tự tăng (1, 2, 3...)
-    id BIGSERIAL PRIMARY KEY,
+    id VARCHAR(36) PRIMARY KEY,
 
     -- Thuộc phòng đấu giá nào (Nối 1-1 với auction_rooms)
     auction_id VARCHAR(36) NOT NULL UNIQUE,

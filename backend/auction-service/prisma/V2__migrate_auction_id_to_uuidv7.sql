@@ -12,6 +12,19 @@ ALTER TABLE auction_extensions DROP CONSTRAINT IF EXISTS fk_extension_auction;
 ALTER TABLE auction_rooms ALTER COLUMN id DROP DEFAULT;
 DROP SEQUENCE IF EXISTS auction_rooms_id_seq CASCADE;
 
+
+-- 2.1 Xóa default sequence auto-increment và đổi id của auction_bids và auction_settlements sang UUIDv7
+ALTER TABLE auction_bids ALTER COLUMN id DROP DEFAULT;
+DROP SEQUENCE IF EXISTS auction_bids_id_seq CASCADE;
+ALTER TABLE auction_bids ALTER COLUMN id TYPE VARCHAR(36) USING id::VARCHAR(36);
+
+ALTER TABLE auction_settlements ALTER COLUMN id DROP DEFAULT;
+DROP SEQUENCE IF EXISTS auction_settlements_id_seq CASCADE;
+ALTER TABLE auction_settlements ALTER COLUMN id TYPE VARCHAR(36) USING id::VARCHAR(36);
+
+UPDATE auction_bids SET id = '01932f01-0201-7000-8000-000000000001' WHERE id = '1';
+UPDATE auction_bids SET id = '01932f01-0202-7000-8000-000000000002' WHERE id = '2';
+
 -- 3. Đổi kiểu dữ liệu sang VARCHAR(36)
 ALTER TABLE auction_rooms ALTER COLUMN id TYPE VARCHAR(36) USING id::VARCHAR(36);
 ALTER TABLE auction_rooms ALTER COLUMN product_id TYPE VARCHAR(36) USING product_id::VARCHAR(36);

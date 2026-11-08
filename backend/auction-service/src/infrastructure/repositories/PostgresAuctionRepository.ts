@@ -156,8 +156,10 @@ export class PostgresAuctionRepository implements IAuctionRepository {
   // Lưu lịch sử đặt giá mới qua Prisma ORM
   public async saveBid(bid: BidRecord): Promise<void> {
     try {
+      const bidId = bid.id || bid.bidId || generateUuidV7();
       await this.prisma.auctionBid.create({
         data: {
+          id: bidId,
           auctionId: bid.auctionId,
           bidderId: bid.bidderId,
           bidAmount: bid.amount,
