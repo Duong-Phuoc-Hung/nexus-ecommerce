@@ -45,6 +45,16 @@ export function createApplication(): Application {
       boundedContexts: [
         { name: 'Auth', prefix: '/api/v1/auth', target: SERVICE_ENDPOINTS.user },
         { name: 'User & IAM', prefix: '/api/v1/users', target: SERVICE_ENDPOINTS.user },
+        {
+          name: 'Seller Applications',
+          prefix: '/api/v1/seller-applications',
+          target: SERVICE_ENDPOINTS.user,
+        },
+        {
+          name: 'Admin Seller Applications',
+          prefix: '/api/v1/admin/seller-applications',
+          target: SERVICE_ENDPOINTS.user,
+        },
         { name: 'Catalog', prefix: '/api/v1/products', target: SERVICE_ENDPOINTS.catalog },
         { name: 'Categories', prefix: '/api/v1/categories', target: SERVICE_ENDPOINTS.catalog },
         { name: 'Commerce & Orders', prefix: '/api/v1/orders', target: SERVICE_ENDPOINTS.commerce },
@@ -157,6 +167,8 @@ export function createApplication(): Application {
 
   app.use('/api/v1/auth', createProxy('User Service', SERVICE_ENDPOINTS.user));
   app.use('/api/v1/users', createProxy('User Service', SERVICE_ENDPOINTS.user));
+  app.use('/api/v1/seller-applications', createProxy('User Service', SERVICE_ENDPOINTS.user));
+  app.use('/api/v1/admin/seller-applications', createProxy('User Service', SERVICE_ENDPOINTS.user));
   app.use('/api/v1/products', createProxy('Catalog Service', SERVICE_ENDPOINTS.catalog));
   app.use('/api/v1/categories', createProxy('Catalog Service', SERVICE_ENDPOINTS.catalog));
   app.use('/api/v1/auctions', createProxy('Auction Service', SERVICE_ENDPOINTS.auction));

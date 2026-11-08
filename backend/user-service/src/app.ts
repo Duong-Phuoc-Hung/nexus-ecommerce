@@ -21,9 +21,19 @@ import { DeleteAddressUseCase } from './application/use-cases/DeleteAddressUseCa
 import { SetDefaultAddressUseCase } from './application/use-cases/SetDefaultAddressUseCase';
 import { InMemoryAddressRepository } from './infrastructure/repositories/InMemoryAddressRepository';
 import { PostgresAddressRepository } from './infrastructure/repositories/PostgresAddressRepository';
+import { InMemorySellerApplicationRepository } from './infrastructure/repositories/InMemorySellerApplicationRepository';
+import { PostgresSellerApplicationRepository } from './infrastructure/repositories/PostgresSellerApplicationRepository';
+import { HttpSellerEligibilityChecker } from './infrastructure/clients/HttpSellerEligibilityChecker';
+import { SellerApplicationService } from './application/use-cases/SellerApplicationUseCases';
 import { UserController } from './interfaces/http/controllers/UserController';
+import { SellerApplicationController } from './interfaces/http/controllers/SellerApplicationController';
 import { createAuthRoutes, createUserRoutes } from './interfaces/http/routes/UserRoutes';
+import {
+  createAdminSellerApplicationRoutes,
+  createBuyerSellerApplicationRoutes,
+} from './interfaces/http/routes/SellerApplicationRoutes';
 import { authTokenStore } from './infrastructure/security/AuthTokenStore';
+import { getRolePermissions } from './infrastructure/security/authorization';
 import { passwordResetTokenStore } from './infrastructure/security/PasswordResetTokenStore';
 import { BcryptPasswordHasher } from './infrastructure/security/BcryptPasswordHasher';
 import { JwtTokenService } from './infrastructure/security/JwtTokenService';
@@ -33,7 +43,11 @@ import { defaultNotificationClient } from './infrastructure/notifications/Notifi
 import swaggerUi from 'swagger-ui-express';
 import { swaggerDocument } from './interfaces/http/swagger';
 
-export function createApplication(): Application {
+export interface CreateApplicationOptions {
+  eligibilityChecker?: HttpSellerEligibilityChecker;
+}
+
+export function createApplication(options?: CreateApplicationOptions): Application {
   const app = express();
 
   app.use(cors());
@@ -99,6 +113,44 @@ export function createApplication(): Application {
       ? new InMemoryAddressRepository()
       : new PostgresAddressRepository();
 
+  const sellerApplicationRepository =
+    process.env.USE_IN_MEMORY_DB === 'true'
+      ? new InMemorySellerApplicationRepository()
+      : new PostgresSellerApplicationRepository();
+
+  const eligibilityChecker = options?.eligibilityChecker || new HttpSellerEligibilityChecker();
+
+  const sellerApplicationService = new SellerApplicationService(
+    userRepository,
+    sellerApplicationRepository,
+    eligibilityChecker,
+    (user) => {
+      authTokenStore.revokeUserTokens(user.id);
+      const permissions = getRolePermissions(user.role);
+      const tokens = tokenService.generateTokens({
+        userId: user.id,
+        email: user.email,
+        roles: user.roles,
+        privileges: permissions,
+      });
+      authTokenStore.track(tokens.accessToken, user.id);
+      return {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        permissions,
+      };
+    },
+    {
+      notifyApplicationEvent: async (params) => {
+        try {
+          await eventPublisher.publish('user.seller_application.updated', params);
+        } catch {
+          // Non-blocking notification
+        }
+      },
+    },
+  );
+
   const updateUserProfileUseCase = new UpdateUserProfileUseCase(userRepository);
   const getUserAddressesUseCase = new GetUserAddressesUseCase(addressRepository);
   const createAddressUseCase = new CreateAddressUseCase(addressRepository);
@@ -126,8 +178,18 @@ export function createApplication(): Application {
     sendRegistrationOtpUseCase,
   );
 
+  const sellerApplicationController = new SellerApplicationController(sellerApplicationService);
+
   app.use('/api/v1/auth', createAuthRoutes(userController));
   app.use('/api/v1/users', createUserRoutes(userController));
+  app.use(
+    '/api/v1/seller-applications',
+    createBuyerSellerApplicationRoutes(sellerApplicationController),
+  );
+  app.use(
+    '/api/v1/admin/seller-applications',
+    createAdminSellerApplicationRoutes(sellerApplicationController),
+  );
 
   // Swagger UI độc lập cho User Service
   app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
