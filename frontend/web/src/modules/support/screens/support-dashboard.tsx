@@ -68,12 +68,6 @@ export function SupportDashboard() {
         )}
       </section>
       <section className="support-quick-links">
-        <Link href="/support/disputes">
-          <span>⚖</span>
-          <strong>Trọng tài tranh chấp</strong>
-          <small>Xử lý khiếu nại SLA, phán quyết bồi hoàn & trừ điểm uy tín</small>
-          <b>→</b>
-        </Link>
         <Link href="/support/orders">
           <span>▤</span>
           <strong>Tra cứu đơn</strong>
