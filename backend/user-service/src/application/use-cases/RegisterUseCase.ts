@@ -7,6 +7,7 @@ import { UserAlreadyExistsException } from '../../domain/exceptions/UserAlreadyE
 import { UserRegisteredEvent } from '../../domain/events/UserRegisteredEvent';
 import { RedisOtpStore } from '../../infrastructure/cache/RedisOtpStore';
 import { NotificationClient } from '../../infrastructure/notifications/NotificationClient';
+import { generateUuidV7 } from '../../infrastructure/security/auth';
 
 /**
  * Application Use Case: RegisterUseCase
@@ -86,7 +87,7 @@ export class RegisterUseCase {
 
     // 6. Tạo thực thể User mới (luôn là BUYER, không nhận role từ client)
     const now = new Date();
-    const generatedId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const generatedId = generateUuidV7();
     const role = UserRole.BUYER;
 
     const newUser = new User({
