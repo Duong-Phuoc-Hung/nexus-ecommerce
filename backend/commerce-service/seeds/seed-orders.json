@@ -1,10 +1,10 @@
 [
   {
     "id": "NX-ORD-8021",
-    "buyerId": "usr_01hqz789abc",
+    "buyerId": "01a15822-43b8-78c3-a246-16bff78bc6e8",
     "buyerName": "Minh Anh",
     "buyerEmail": "minhanh@example.com",
-    "sellerId": "usr_seller_001",
+    "sellerId": "01a15822-3fd0-7b39-ad01-f11da72d5b80",
     "sellerName": "Nexus Audio",
     "items": [
       {
@@ -41,10 +41,10 @@
   },
   {
     "id": "NX-ORD-8017",
-    "buyerId": "usr_01hqz789def",
+    "buyerId": "01a15822-43b8-78c3-a246-16bff78bc6e8",
     "buyerName": "Quốc Bảo",
     "buyerEmail": "quocbao@example.com",
-    "sellerId": "usr_seller_002",
+    "sellerId": "01a15822-3fd0-7b39-ad01-f11da72d5b80",
     "sellerName": "Retro Lab",
     "items": [
       {
@@ -81,10 +81,10 @@
   },
   {
     "id": "NX-ORD-8009",
-    "buyerId": "usr_01hqz789ghi",
+    "buyerId": "01a15822-43b8-78c3-a246-16bff78bc6e8",
     "buyerName": "Thu Hà",
     "buyerEmail": "thuha@example.com",
-    "sellerId": "usr_seller_003",
+    "sellerId": "01a15822-3fd0-7b39-ad01-f11da72d5b80",
     "sellerName": "Nexus Sport",
     "items": [
       {
@@ -121,10 +121,10 @@
   },
   {
     "id": "NX-ORD-7998",
-    "buyerId": "usr_01hqz789jkl",
+    "buyerId": "01a15822-43b8-78c3-a246-16bff78bc6e8",
     "buyerName": "Gia Huy",
     "buyerEmail": "giahuy@example.com",
-    "sellerId": "usr_seller_004",
+    "sellerId": "01a15822-3fd0-7b39-ad01-f11da72d5b80",
     "sellerName": "Home & Co.",
     "items": [
       {
@@ -155,10 +155,10 @@
   },
   {
     "id": "ord_01hqz555abc",
-    "buyerId": "usr_01hqz789abc",
+    "buyerId": "01a15822-43b8-78c3-a246-16bff78bc6e8",
     "buyerName": "Nguyen Van Buyer",
     "buyerEmail": "buyer.test@nexus-ecommerce.com",
-    "sellerId": "usr_01hqz333sel",
+    "sellerId": "01a15822-3fd0-7b39-ad01-f11da72d5b80",
     "sellerName": "Nexus Official Store",
     "items": [
       {

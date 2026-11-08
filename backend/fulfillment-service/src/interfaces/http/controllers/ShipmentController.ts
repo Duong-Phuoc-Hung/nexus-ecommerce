@@ -6,6 +6,8 @@ import { ManualOverrideShipmentUseCase } from '../../../application/use-cases/Ma
 import { GetFulfillmentSummaryUseCase } from '../../../application/use-cases/GetFulfillmentSummaryUseCase';
 import { ProcessCarrierWebhookUseCase } from '../../../application/use-cases/ProcessCarrierWebhookUseCase';
 import { CreateShipmentUseCase } from '../../../application/use-cases/CreateShipmentUseCase';
+import { RequestRedeliveryUseCase } from '../../../application/use-cases/RequestRedeliveryUseCase';
+import { ConfirmReturnUseCase } from '../../../application/use-cases/ConfirmReturnUseCase';
 import { ShipmentNotFoundException } from '../../../domain/exceptions/ShipmentNotFoundException';
 import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
 
@@ -18,6 +20,8 @@ export class ShipmentController {
     private readonly getFulfillmentSummaryUseCase: GetFulfillmentSummaryUseCase,
     private readonly processCarrierWebhookUseCase?: ProcessCarrierWebhookUseCase,
     private readonly createShipmentUseCase?: CreateShipmentUseCase,
+    private readonly requestRedeliveryUseCase?: RequestRedeliveryUseCase,
+    private readonly confirmReturnUseCase?: ConfirmReturnUseCase,
   ) {}
 
   public async listShipments(req: Request, res: Response): Promise<void> {
@@ -339,6 +343,93 @@ export class ShipmentController {
       res.status(500).json({
         success: false,
         error: 'Không thể tổng hợp báo cáo tổng quan ca trực.',
+      });
+    }
+  }
+
+  /**
+   * POST /api/v1/support/shipments/:id/request-redelivery
+   * Yêu cầu đơn vị vận chuyển phát lại đơn giao không thành công (Failed Delivery & RTO)
+   */
+  public async requestRedelivery(req: Request, res: Response): Promise<void> {
+    try {
+      if (!this.requestRedeliveryUseCase) {
+        res.status(500).json({
+          success: false,
+          error: 'RequestRedeliveryUseCase not configured.',
+        });
+        return;
+      }
+
+      const shipmentId = req.params.id as string;
+      const { carrierCode, rescheduledDate, note } = req.body || {};
+
+      const result = await this.requestRedeliveryUseCase.execute({
+        shipmentId,
+        carrierCode,
+        rescheduledDate,
+        note,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Yêu cầu phát lại đơn hàng đã được gửi tới đơn vị vận chuyển.',
+        data: result,
+      });
+    } catch (error: any) {
+      if (error instanceof ShipmentNotFoundException) {
+        res.status(404).json({
+          success: false,
+          error: error.message,
+        });
+        return;
+      }
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Không thể yêu cầu phát lại đơn hàng.',
+      });
+    }
+  }
+
+  /**
+   * POST /api/v1/support/shipments/:id/confirm-return
+   * Xác nhận đơn giao thất bại đã hoàn về kho Seller thành công để đóng hồ sơ vận đơn
+   */
+  public async confirmReturn(req: Request, res: Response): Promise<void> {
+    try {
+      if (!this.confirmReturnUseCase) {
+        res.status(500).json({
+          success: false,
+          error: 'ConfirmReturnUseCase not configured.',
+        });
+        return;
+      }
+
+      const shipmentId = req.params.id as string;
+      const { returnedToSellerAt, condition } = req.body || {};
+
+      const result = await this.confirmReturnUseCase.execute({
+        shipmentId,
+        returnedToSellerAt,
+        condition: condition || 'INTACT',
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Đã xác nhận đơn hàng chuyển hoàn về kho người bán thành công.',
+        data: result,
+      });
+    } catch (error: any) {
+      if (error instanceof ShipmentNotFoundException) {
+        res.status(404).json({
+          success: false,
+          error: error.message,
+        });
+        return;
+      }
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Không thể xác nhận hoàn trả đơn hàng.',
       });
     }
   }

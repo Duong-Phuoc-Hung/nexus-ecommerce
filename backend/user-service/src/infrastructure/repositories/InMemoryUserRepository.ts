@@ -11,8 +11,9 @@ export class InMemoryUserRepository implements IUserRepository {
 
   constructor() {
     const now = new Date();
+    const buyerUuid = '01a15822-43b8-78c3-a246-16bff78bc6e8';
     const buyer = new User({
-      id: 'usr_01hqz789abc',
+      id: buyerUuid,
       email: 'buyer.test@nexus-ecommerce.com',
       fullName: 'Nguyen Van Buyer',
       phone: '0901234567',
@@ -24,9 +25,11 @@ export class InMemoryUserRepository implements IUserRepository {
       updatedAt: new Date(now.getTime() - 86400000 * 3),
     });
     this.users.set(buyer.id, buyer);
+    this.users.set('usr_01hqz789abc', buyer);
 
+    const sellerUuid = '01a15822-3fd0-7b39-ad01-f11da72d5b80';
     const seller = new User({
-      id: 'usr_seller_001',
+      id: sellerUuid,
       email: 'seller.test@nexus-ecommerce.com',
       fullName: 'Retro Lab Store',
       phone: '0909888999',
@@ -38,9 +41,11 @@ export class InMemoryUserRepository implements IUserRepository {
       updatedAt: new Date(now.getTime() - 86400000 * 2),
     });
     this.users.set(seller.id, seller);
+    this.users.set('usr_seller_001', seller);
 
+    const staffUuid = '01a15822-47a0-78fd-83de-477ceaa393a7';
     const staff = new User({
-      id: 'usr_staff_001',
+      id: staffUuid,
       email: 'staff.test@nexus-ecommerce.com',
       fullName: 'Nguyen Support Staff',
       phone: '0912345678',
@@ -52,6 +57,7 @@ export class InMemoryUserRepository implements IUserRepository {
       updatedAt: new Date(now.getTime() - 86400000),
     });
     this.users.set(staff.id, staff);
+    this.users.set('usr_staff_001', staff);
 
     const suspended = new User({
       id: 'usr_suspended_001',

@@ -4,6 +4,7 @@ export interface SupportCaseSearchCriteria {
   userId?: string;
   status?: string;
   priority?: string;
+  query?: string;
   page?: number;
   limit?: number;
 }

@@ -1,4 +1,6 @@
 import { Pool } from 'pg';
+import { PrismaClient } from '../database/generated/client';
+import { PrismaClientWrapper } from '../database/PrismaClient';
 import {
   FulfillmentDashboardSummary,
   IShipmentRepository,
@@ -7,34 +9,24 @@ import {
   SupportCaseItem,
 } from '../../domain/repositories/IShipmentRepository';
 import { CarrierCode, Shipment, ShipmentStatus } from '../../domain/entities/Shipment';
-import { mapShipmentStatusToVietnamese } from '../../application/dtos/ShipmentDetailDto';
 import { loadSeedShipments } from '../seeds/fulfillmentSeedLoader';
-
-interface ShipmentRow {
-  id: string;
-  order_id: string;
-  warehouse_id?: number | string | null;
-  carrier_code: string;
-  tracking_code: string;
-  shipping_fee: number | string;
-  status: string;
-  receiver_name?: string | null;
-  receiver_phone?: string | null;
-  shipping_address: string;
-  shipped_at?: Date | string | null;
-  delivered_at?: Date | string | null;
-  created_at: Date | string;
-  updated_at: Date | string;
-  city?: string | null;
-  current_location?: string | null;
-  estimated_delivery_date?: Date | string | null;
-  actual_delivery_date?: Date | string | null;
-}
 
 export class PostgresShipmentRepository implements IShipmentRepository {
   private isInitialized = false;
+  private _prisma?: PrismaClient;
 
-  constructor(private readonly pool: Pool) {}
+  constructor(prismaOrPool?: PrismaClient | Pool) {
+    if (prismaOrPool && 'shipment' in prismaOrPool) {
+      this._prisma = prismaOrPool as PrismaClient;
+    }
+  }
+
+  private get prisma(): PrismaClient {
+    if (!this._prisma) {
+      this._prisma = PrismaClientWrapper.getInstance();
+    }
+    return this._prisma;
+  }
 
   /**
    * Nạp dữ liệu mẫu ban đầu nếu bảng rỗng.
@@ -44,11 +36,7 @@ export class PostgresShipmentRepository implements IShipmentRepository {
     this.isInitialized = true;
 
     try {
-      const countRes = await this.pool.query(
-        'SELECT COUNT(*)::int AS count FROM fulfillment_shipments',
-      );
-      const count = countRes.rows[0]?.count ?? 0;
-
+      const count = await this.prisma.shipment.count();
       if (count === 0) {
         await this.seedInitialShipments();
       }
@@ -60,216 +48,241 @@ export class PostgresShipmentRepository implements IShipmentRepository {
   public async findById(id: string): Promise<Shipment | null> {
     const cleanId = id.trim();
 
-    const { rows } = await this.pool.query<ShipmentRow>(
-      `SELECT * FROM fulfillment_shipments 
-       WHERE id = $1 OR UPPER(tracking_code) = UPPER($1) 
-       LIMIT 1`,
-      [cleanId],
-    );
+    try {
+      const row = await this.prisma.shipment.findFirst({
+        where: {
+          OR: [
+            { id: cleanId },
+            {
+              trackingCode: {
+                equals: cleanId,
+                mode: 'insensitive',
+              },
+            },
+          ],
+        },
+      });
 
-    if (rows.length === 0) {
+      if (!row) {
+        return null;
+      }
+
+      return this.mapToDomain(row);
+    } catch (err) {
+      console.error('[PostgresShipmentRepository] findById error:', (err as Error).message);
       return null;
     }
-
-    return this.mapToDomain(rows[0]);
   }
 
   public async findByTrackingCode(trackingCode: string): Promise<Shipment | null> {
     const cleanCode = trackingCode.trim();
 
-    const { rows } = await this.pool.query<ShipmentRow>(
-      `SELECT * FROM fulfillment_shipments 
-       WHERE UPPER(tracking_code) = UPPER($1) 
-       LIMIT 1`,
-      [cleanCode],
-    );
+    try {
+      const row = await this.prisma.shipment.findFirst({
+        where: {
+          trackingCode: {
+            equals: cleanCode,
+            mode: 'insensitive',
+          },
+        },
+      });
 
-    if (rows.length === 0) {
+      if (!row) {
+        return null;
+      }
+
+      return this.mapToDomain(row);
+    } catch (err) {
+      console.error(
+        '[PostgresShipmentRepository] findByTrackingCode error:',
+        (err as Error).message,
+      );
       return null;
     }
-
-    return this.mapToDomain(rows[0]);
   }
 
   public async findByOrderId(orderId: string): Promise<Shipment | null> {
     const cleanOrderId = orderId.trim();
 
-    const { rows } = await this.pool.query<ShipmentRow>(
-      `SELECT * FROM fulfillment_shipments 
-       WHERE UPPER(order_id) = UPPER($1) 
-          OR (UPPER($1) = 'ORD_01HQZ555ABC' AND id = 'shp_01hqz222trk')
-       LIMIT 1`,
-      [cleanOrderId],
-    );
+    try {
+      const row = await this.prisma.shipment.findFirst({
+        where: {
+          OR: [
+            {
+              orderId: {
+                equals: cleanOrderId,
+                mode: 'insensitive',
+              },
+            },
+            ...(cleanOrderId.toUpperCase() === 'ORD_01HQZ555ABC'
+              ? [{ id: 'shp_01hqz222trk' }]
+              : []),
+          ],
+        },
+      });
 
-    if (rows.length === 0) {
+      if (!row) {
+        return null;
+      }
+
+      return this.mapToDomain(row);
+    } catch (err) {
+      console.error('[PostgresShipmentRepository] findByOrderId error:', (err as Error).message);
       return null;
     }
-
-    return this.mapToDomain(rows[0]);
   }
 
   public async search(criteria: ShipmentSearchCriteria): Promise<ShipmentSearchPage> {
-    const conditions: string[] = [];
-    const params: any[] = [];
-    let paramIdx = 1;
+    const where: any = {};
 
     // 1. Tìm kiếm từ khóa tổng hợp
     if (criteria.query && criteria.query.trim().length > 0) {
-      const q = `%${criteria.query.trim().toLowerCase()}%`;
-      conditions.push(`(
-        LOWER(id) LIKE $${paramIdx} OR
-        LOWER(tracking_code) LIKE $${paramIdx} OR
-        LOWER(order_id) LIKE $${paramIdx} OR
-        LOWER(carrier_code) LIKE $${paramIdx} OR
-        COALESCE(LOWER(receiver_name), '') LIKE $${paramIdx} OR
-        COALESCE(LOWER(city), '') LIKE $${paramIdx} OR
-        COALESCE(LOWER(current_location), '') LIKE $${paramIdx} OR
-        COALESCE(LOWER(shipping_address), '') LIKE $${paramIdx}
-      )`);
-      params.push(q);
-      paramIdx++;
+      const q = criteria.query.trim();
+      where.OR = [
+        { id: { contains: q, mode: 'insensitive' } },
+        { trackingCode: { contains: q, mode: 'insensitive' } },
+        { orderId: { contains: q, mode: 'insensitive' } },
+        { carrierCode: { contains: q, mode: 'insensitive' } },
+        { receiverName: { contains: q, mode: 'insensitive' } },
+        { city: { contains: q, mode: 'insensitive' } },
+        { currentLocation: { contains: q, mode: 'insensitive' } },
+        { shippingAddress: { contains: q, mode: 'insensitive' } },
+      ];
     }
 
     // 2. Lọc theo hãng vận chuyển
     if (criteria.carrier && criteria.carrier.trim().length > 0) {
-      conditions.push(`LOWER(carrier_code) LIKE $${paramIdx}`);
-      params.push(`%${criteria.carrier.trim().toLowerCase()}%`);
-      paramIdx++;
+      where.carrierCode = {
+        contains: criteria.carrier.trim(),
+        mode: 'insensitive',
+      };
     }
 
     // 3. Lọc theo trạng thái
     if (criteria.status && criteria.status.trim().length > 0) {
-      conditions.push(`UPPER(status) = UPPER($${paramIdx})`);
-      params.push(criteria.status.trim());
-      paramIdx++;
+      where.status = {
+        equals: criteria.status.trim(),
+        mode: 'insensitive',
+      };
     }
 
     // 4. Lọc theo mã đơn hàng
     if (criteria.orderId && criteria.orderId.trim().length > 0) {
-      conditions.push(`LOWER(order_id) LIKE $${paramIdx}`);
-      params.push(`%${criteria.orderId.trim().toLowerCase()}%`);
-      paramIdx++;
+      where.orderId = {
+        contains: criteria.orderId.trim(),
+        mode: 'insensitive',
+      };
     }
 
-    // 5. Lọc theo mã vận đơn
-    if (criteria.trackingCode && criteria.trackingCode.trim().length > 0) {
-      conditions.push(`LOWER(tracking_code) LIKE $${paramIdx}`);
-      params.push(`%${criteria.trackingCode.trim().toLowerCase()}%`);
-      paramIdx++;
-    }
-
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-    // 6. Phân trang
+    // Phân trang
     const page = Math.max(1, criteria.page || 1);
     const limit = Math.max(1, Math.min(100, criteria.limit || 10));
     const offset = (page - 1) * limit;
 
-    const countSql = `SELECT COUNT(*)::int AS total FROM fulfillment_shipments ${whereClause}`;
-    const countRes = await this.pool.query(countSql, params);
-    const total = countRes.rows[0]?.total ?? 0;
-    const totalPages = Math.ceil(total / limit) || 1;
+    try {
+      const [total, rows] = await Promise.all([
+        this.prisma.shipment.count({ where }),
+        this.prisma.shipment.findMany({
+          where,
+          skip: offset,
+          take: limit,
+          orderBy: {
+            createdAt: 'desc',
+          },
+        }),
+      ]);
 
-    const selectSql = `
-      SELECT * FROM fulfillment_shipments
-      ${whereClause}
-      ORDER BY updated_at DESC
-      LIMIT $${paramIdx} OFFSET $${paramIdx + 1}
-    `;
+      const totalPages = Math.ceil(total / limit) || 1;
 
-    const { rows } = await this.pool.query<ShipmentRow>(selectSql, [...params, limit, offset]);
-
-    return {
-      items: rows.map((r) => this.mapToDomain(r)),
-      total,
-      page,
-      limit,
-      totalPages,
-    };
+      return {
+        items: rows.map((r) => this.mapToDomain(r)),
+        total,
+        page,
+        limit,
+        totalPages,
+      };
+    } catch (err) {
+      console.error('[PostgresShipmentRepository] search error:', (err as Error).message);
+      return {
+        items: [],
+        total: 0,
+        page,
+        limit,
+        totalPages: 1,
+      };
+    }
   }
 
   public async save(shipment: Shipment): Promise<void> {
-    const upsertSql = `
-      INSERT INTO fulfillment_shipments (
-        id, order_id, warehouse_id, carrier_code, tracking_code, shipping_fee,
-        status, receiver_name, receiver_phone, shipping_address, city,
-        current_location, estimated_delivery_date, actual_delivery_date,
-        created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
-      ON CONFLICT (id) DO UPDATE SET
-        order_id = EXCLUDED.order_id,
-        carrier_code = EXCLUDED.carrier_code,
-        tracking_code = EXCLUDED.tracking_code,
-        status = EXCLUDED.status,
-        receiver_name = EXCLUDED.receiver_name,
-        receiver_phone = EXCLUDED.receiver_phone,
-        shipping_address = EXCLUDED.shipping_address,
-        city = EXCLUDED.city,
-        current_location = EXCLUDED.current_location,
-        estimated_delivery_date = EXCLUDED.estimated_delivery_date,
-        actual_delivery_date = EXCLUDED.actual_delivery_date,
-        updated_at = EXCLUDED.updated_at
-    `;
-
-    await this.pool.query(upsertSql, [
-      shipment.id,
-      shipment.orderId,
-      1, // default warehouse WH_001
-      shipment.carrier,
-      shipment.trackingCode,
-      0,
-      shipment.status,
-      shipment.recipientName,
-      shipment.recipientPhone,
-      shipment.shippingAddress,
-      shipment.city,
-      shipment.currentLocation,
-      shipment.estimatedDeliveryDate || null,
-      shipment.actualDeliveryDate || null,
-      shipment.createdAt,
-      shipment.updatedAt,
-    ]);
+    await this.prisma.shipment.upsert({
+      where: { id: shipment.id },
+      create: {
+        id: shipment.id,
+        orderId: shipment.orderId,
+        carrierCode: shipment.carrier,
+        trackingCode: shipment.trackingCode || null,
+        shippingFee: 0,
+        status: shipment.status,
+        shippingAddress: shipment.shippingAddress,
+        receiverName: shipment.recipientName || null,
+        receiverPhone: shipment.recipientPhone || null,
+        city: shipment.city || null,
+        currentLocation: shipment.currentLocation || null,
+        estimatedDeliveryDate: shipment.estimatedDeliveryDate || null,
+        actualDeliveryDate: shipment.actualDeliveryDate || null,
+        createdAt: shipment.createdAt,
+        updatedAt: shipment.updatedAt,
+      },
+      update: {
+        orderId: shipment.orderId,
+        carrierCode: shipment.carrier,
+        trackingCode: shipment.trackingCode || null,
+        shippingFee: 0,
+        status: shipment.status,
+        shippingAddress: shipment.shippingAddress,
+        receiverName: shipment.recipientName || null,
+        receiverPhone: shipment.recipientPhone || null,
+        city: shipment.city || null,
+        currentLocation: shipment.currentLocation || null,
+        estimatedDeliveryDate: shipment.estimatedDeliveryDate || null,
+        actualDeliveryDate: shipment.actualDeliveryDate || null,
+        updatedAt: shipment.updatedAt,
+      },
+    });
   }
 
   public async update(shipment: Shipment): Promise<void> {
-    const updateSql = `
-      UPDATE fulfillment_shipments SET
-        carrier_code = $1,
-        tracking_code = $2,
-        status = $3,
-        shipping_address = $4,
-        city = $5,
-        current_location = $6,
-        estimated_delivery_date = $7,
-        actual_delivery_date = $8,
-        updated_at = $9
-      WHERE id = $10
-    `;
-
-    await this.pool.query(updateSql, [
-      shipment.carrier,
-      shipment.trackingCode,
-      shipment.status,
-      shipment.shippingAddress,
-      shipment.city,
-      shipment.currentLocation,
-      shipment.estimatedDeliveryDate || null,
-      shipment.actualDeliveryDate || null,
-      shipment.updatedAt,
-      shipment.id,
-    ]);
+    await this.prisma.shipment.update({
+      where: { id: shipment.id },
+      data: {
+        carrierCode: shipment.carrier,
+        trackingCode: shipment.trackingCode || null,
+        status: shipment.status,
+        shippingAddress: shipment.shippingAddress,
+        city: shipment.city || null,
+        currentLocation: shipment.currentLocation || null,
+        estimatedDeliveryDate: shipment.estimatedDeliveryDate || null,
+        actualDeliveryDate: shipment.actualDeliveryDate || null,
+        updatedAt: shipment.updatedAt,
+      },
+    });
   }
 
   public async getDashboardSummary(): Promise<FulfillmentDashboardSummary> {
     // 1. Thống kê vận đơn có vấn đề
-    const flaggedRes = await this.pool.query(`
-      SELECT COUNT(*)::int AS count 
-      FROM fulfillment_shipments 
-      WHERE status IN ('FAILED', 'RETURNED')
-    `);
-    let flaggedShipments = flaggedRes.rows[0]?.count ?? 0;
-    if (flaggedShipments < 4) flaggedShipments = 4; // Giữ giá trị trực quan tối thiểu cho dashboard
+    let flaggedShipments = 4;
+    try {
+      const flaggedCount = await this.prisma.shipment.count({
+        where: {
+          status: {
+            in: ['FAILED', 'RETURNED'],
+          },
+        },
+      });
+      flaggedShipments = Math.max(flaggedCount, 4);
+    } catch {
+      flaggedShipments = 4;
+    }
 
     // 2. Thống kê hồ sơ khiếu nại từ fulfillment_support_cases
     let pendingCases = 8;
@@ -279,34 +292,30 @@ export class PostgresShipmentRepository implements IShipmentRepository {
     let recentCases: SupportCaseItem[] = [];
 
     try {
-      const casesStatsRes = await this.pool.query(`
-        SELECT 
-          COUNT(*) FILTER (WHERE status = 'PENDING')::int AS pending,
-          COUNT(*) FILTER (WHERE status = 'IN_PROGRESS')::int AS in_progress,
-          COUNT(*) FILTER (WHERE status IN ('RESOLVED', 'REJECTED'))::int AS resolved,
-          COUNT(*) FILTER (WHERE priority IN ('Cao', 'HIGH'))::int AS high_priority
-        FROM fulfillment_support_cases
-      `);
+      const [pendingCount, inProgressCount, resolvedCount, highPriCount] = await Promise.all([
+        this.prisma.supportCase.count({ where: { status: 'PENDING' } }),
+        this.prisma.supportCase.count({ where: { status: 'IN_PROGRESS' } }),
+        this.prisma.supportCase.count({ where: { status: { in: ['RESOLVED', 'REJECTED'] } } }),
+        this.prisma.supportCase.count({ where: { priority: { in: ['Cao', 'HIGH'] } } }),
+      ]);
 
-      const stats = casesStatsRes.rows[0];
-      if (stats) {
-        pendingCases = Math.max(stats.pending, 3);
-        processingCases = Math.max(stats.in_progress, 2);
-        resolvedToday = Math.max(stats.resolved, 5);
-        highPriorityCount = Math.max(stats.high_priority, 1);
-      }
+      pendingCases = Math.max(pendingCount, 3);
+      processingCases = Math.max(inProgressCount, 2);
+      resolvedToday = Math.max(resolvedCount, 5);
+      highPriorityCount = Math.max(highPriCount, 1);
 
       // Lấy 5 khiếu nại gần nhất
-      const recentRes = await this.pool.query(`
-        SELECT * FROM fulfillment_support_cases 
-        ORDER BY created_at DESC 
-        LIMIT 5
-      `);
+      const recent = await this.prisma.supportCase.findMany({
+        take: 5,
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
 
-      recentCases = recentRes.rows.map((row) => {
+      recentCases = recent.map((row) => {
         const elapsedMinutes = Math.max(
           1,
-          Math.floor((Date.now() - new Date(row.created_at).getTime()) / 60000),
+          Math.floor((Date.now() - new Date(row.createdAt).getTime()) / 60000),
         );
         let age = `${elapsedMinutes} phút`;
         if (elapsedMinutes >= 60) {
@@ -317,8 +326,8 @@ export class PostgresShipmentRepository implements IShipmentRepository {
         return {
           id: row.id,
           type: row.type,
-          order: row.order_code,
-          orderId: row.order_id,
+          order: row.orderCode,
+          orderId: row.orderId,
           customer: row.customer,
           reason: row.reason,
           priority: row.priority,
@@ -347,24 +356,40 @@ export class PostgresShipmentRepository implements IShipmentRepository {
     };
   }
 
-  private mapToDomain(row: ShipmentRow): Shipment {
+  private mapToDomain(row: {
+    id: string;
+    orderId: string;
+    carrierCode: string;
+    trackingCode: string | null;
+    shippingFee: any;
+    status: string;
+    shippingAddress: string;
+    receiverName?: string | null;
+    receiverPhone?: string | null;
+    city?: string | null;
+    currentLocation?: string | null;
+    estimatedDeliveryDate?: Date | null;
+    actualDeliveryDate?: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }): Shipment {
     return new Shipment({
       id: row.id,
-      orderId: row.order_id,
-      carrier: row.carrier_code as CarrierCode,
-      trackingCode: row.tracking_code,
+      orderId: row.orderId,
+      carrier: row.carrierCode as CarrierCode,
+      trackingCode: row.trackingCode || '',
       status: row.status as ShipmentStatus,
-      shippingAddress: row.shipping_address,
-      recipientName: row.receiver_name || undefined,
-      recipientPhone: row.receiver_phone || undefined,
+      shippingAddress: row.shippingAddress,
+      recipientName: row.receiverName || undefined,
+      recipientPhone: row.receiverPhone || undefined,
       city: row.city || undefined,
-      currentLocation: row.current_location || undefined,
-      estimatedDeliveryDate: row.estimated_delivery_date
-        ? new Date(row.estimated_delivery_date)
+      currentLocation: row.currentLocation || undefined,
+      estimatedDeliveryDate: row.estimatedDeliveryDate
+        ? new Date(row.estimatedDeliveryDate)
         : undefined,
-      actualDeliveryDate: row.actual_delivery_date ? new Date(row.actual_delivery_date) : undefined,
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.updated_at),
+      actualDeliveryDate: row.actualDeliveryDate ? new Date(row.actualDeliveryDate) : undefined,
+      createdAt: new Date(row.createdAt),
+      updatedAt: new Date(row.updatedAt),
     });
   }
 
@@ -376,7 +401,7 @@ export class PostgresShipmentRepository implements IShipmentRepository {
     }
 
     console.log(
-      `[PostgresShipmentRepository] Đã khởi tạo ${samples.length} shipments mẫu từ seed JSON vào PostgreSQL thành công.`,
+      `[PostgresShipmentRepository] Đã khởi tạo ${samples.length} shipments mẫu từ seed JSON vào PostgreSQL (Prisma ORM) thành công.`,
     );
   }
 }

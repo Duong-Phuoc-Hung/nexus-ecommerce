@@ -4,7 +4,9 @@
 // =============================================================================
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  output        = "../src/infrastructure/database/generated/client"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -93,16 +95,16 @@ model InventoryLedger {
   // Khóa chính: Số tự tăng (1, 2, 3...)
   id              BigInt       @id @default(autoincrement())
 
-  // Thuộc dòng tồn kho nào (Khóa ngoại nối với fulfillment_sku_inventories)
+  // Biến động trên bản ghi tồn kho nào
   inventoryId     BigInt       @map("inventory_id")
 
-  // Loại biến động: INTAKE (Nhập kho), RESERVE (Giữ chỗ 30p), RELEASE (Nhả hàng hủy), COMMIT (Trừ thật), ADJUST (Kiểm kê)
+  // Loại biến động: INBOUND, OUTBOUND, RESERVE, RELEASE_RESERVED, ADJUST, RETURN
   transactionType String       @map("transaction_type") @db.VarChar(30)
 
-  // Số lượng biến động (+10 nhập kho, -2 xuất bán,...)
-  quantityChange  Int          @map("quantity_change")
+  // Số lượng thay đổi (Số âm: -5 là giảm; Số dương: +10 là tăng)
+  quantityDelta   Int          @map("quantity_delta")
 
-  // Mã chứng từ liên quan (Lấy 'order_id' từ commerce_orders hoặc mã phiếu nhập kho)
+  // Tham chiếu tới nghiệp vụ sinh ra biến động (VD: Mã đơn hàng ORD-123456 hoặc mã phiếu nhập kho)
   referenceId     String?      @map("reference_id") @db.VarChar(100)
 
   // Diễn giải lý do biến động số lượng
@@ -123,47 +125,59 @@ model InventoryLedger {
 // 4. BẢNG ĐƠN VẬN CHUYỂN / GIAO HÀNG (Theo dõi lộ trình giao đơn tới tay khách)
 // -----------------------------------------------------------------------------
 model Shipment {
-  // Khóa chính: Số tự tăng (1, 2, 3...)
-  id              BigInt    @id @default(autoincrement())
+  // Khóa chính: Mã vận đơn nội bộ hoặc UUID (SRS V3: VARCHAR(100))
+  id                    String     @id @db.VarChar(100)
 
-  // Tham chiếu đơn hàng cần giao (Lấy 'id' từ commerce_orders bên commerce-service)
-  orderId         BigInt    @map("order_id")
+  // Tham chiếu đơn hàng cần giao (SRS V3: VARCHAR(100))
+  orderId               String     @map("order_id") @db.VarChar(100)
 
   // Xuất hàng đi từ kho nào (Khóa ngoại nối với fulfillment_warehouses)
-  warehouseId     BigInt    @map("warehouse_id")
+  warehouseId           BigInt?    @default(1) @map("warehouse_id")
 
   // Hãng giao hàng được chọn (GHN hoặc GHTK)
-  carrierCode     String    @map("carrier_code") @db.VarChar(50)
+  carrierCode           String     @map("carrier_code") @db.VarChar(50)
 
   // Mã vận đơn do GHN/GHTK cấp để khách tra cứu hành trình (VD: "GHN123456789VN")
-  trackingCode    String?   @map("tracking_code") @db.VarChar(100)
+  trackingCode          String?    @map("tracking_code") @db.VarChar(100)
 
   // Cước phí vận chuyển thực tế
-  shippingFee     Decimal   @default(0.00) @map("shipping_fee") @db.Decimal(12, 2)
+  shippingFee           Decimal    @default(0.00) @map("shipping_fee") @db.Decimal(12, 2)
 
-  // Trạng thái: PENDING (Chờ lấy), PICKED_UP (Đã lấy hàng), IN_TRANSIT (Đang giao), DELIVERED (Thành công), FAILED, RETURNED
-  status          String    @default("PENDING") @db.VarChar(30)
+  // Trạng thái: PENDING, PICKED_UP, IN_TRANSIT, DELIVERED, FAILED, RETURNED
+  status                String     @default("PENDING") @db.VarChar(30)
 
   // Họ tên người nhận hàng
-  receiverName    String    @map("receiver_name") @db.VarChar(100)
+  receiverName          String?    @map("receiver_name") @db.VarChar(100)
 
   // Số điện thoại người nhận hàng
-  receiverPhone   String    @map("receiver_phone") @db.VarChar(20)
+  receiverPhone         String?    @map("receiver_phone") @db.VarChar(20)
 
-  // Địa chỉ giao hàng đầy đủ (Lưu JSON để hiển thị nguyên vẹn)
-  shippingAddress Json      @map("shipping_address")
+  // Địa chỉ giao hàng đầy đủ
+  shippingAddress       String     @map("shipping_address") @db.Text
 
   // Thời điểm tài xế lấy hàng đi giao
-  shippedAt       DateTime? @map("shipped_at") @db.Timestamptz()
+  shippedAt             DateTime?  @map("shipped_at") @db.Timestamptz()
 
   // Thời điểm khách ký nhận hàng thành công
-  deliveredAt     DateTime? @map("delivered_at") @db.Timestamptz()
+  deliveredAt           DateTime?  @map("delivered_at") @db.Timestamptz()
+
+  // Tỉnh / Thành phố
+  city                  String?    @db.VarChar(100)
+
+  // Vị trí hiện tại của bưu kiện
+  currentLocation       String?    @map("current_location") @db.VarChar(255)
+
+  // Thời gian giao hàng dự kiến
+  estimatedDeliveryDate DateTime?  @map("estimated_delivery_date") @db.Timestamptz()
+
+  // Thời gian giao hàng thực tế
+  actualDeliveryDate    DateTime?  @map("actual_delivery_date") @db.Timestamptz()
 
   // Thời gian tạo và cập nhật đơn vận chuyển
-  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
-  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+  createdAt             DateTime   @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt             DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 
-  warehouse       Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  warehouse             Warehouse? @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
 
   @@index([orderId], map: "idx_shipment_order")
   @@index([warehouseId], map: "idx_shipment_warehouse")
@@ -195,4 +209,52 @@ model Carrier {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   @@map("fulfillment_carriers")
+}
+
+// -----------------------------------------------------------------------------
+// 6. BẢNG HỒ SƠ KHIẾU NẠI & TRANH CHẤP TRỌNG TÀI (SRS 2.3, 2.6 - Support Cases)
+// -----------------------------------------------------------------------------
+model SupportCase {
+  // Khóa chính: Mã khiếu nại (VD: "CAS_01HQZ999ABC")
+  id             String    @id @db.VarChar(50)
+
+  // Loại khiếu nại (VD: "Đơn trễ", "Hàng hỏng", "Tranh chấp thanh toán")
+  type           String    @db.VarChar(100)
+
+  // Mã định danh đơn hàng liên quan
+  orderId        String    @map("order_id") @db.VarChar(100)
+
+  // Mã hiển thị đơn hàng (VD: "ORD-2026-001")
+  orderCode      String    @map("order_code") @db.VarChar(100)
+
+  // ID người dùng tạo khiếu nại
+  userId         String    @map("user_id") @db.VarChar(50)
+
+  // Tên khách hàng / người khiếu nại
+  customer       String    @db.VarChar(100)
+
+  // Chi tiết lý do khiếu nại
+  reason         String    @db.Text
+
+  // Mức độ ưu tiên: "Cao" / "HIGH", "Trung bình" / "MEDIUM", "Thấp" / "LOW"
+  priority       String    @default("Trung bình") @db.VarChar(30)
+
+  // Trạng thái hồ sơ: "PENDING", "IN_PROGRESS", "RESOLVED", "REJECTED"
+  status         String    @default("PENDING") @db.VarChar(30)
+
+  // Ghi chú phán quyết / giải quyết khiếu nại
+  resolutionNote String?   @map("resolution_note") @db.Text
+
+  // ID nhân viên Support / Trọng tài viên xử lý vụ việc
+  resolvedBy     String?   @map("resolved_by") @db.VarChar(50)
+
+  // Thời gian tạo và cập nhật khiếu nại
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@index([userId], map: "idx_support_case_user")
+  @@index([orderId], map: "idx_support_case_order")
+  @@index([status], map: "idx_support_case_status")
+  @@index([priority], map: "idx_support_case_priority")
+  @@map("fulfillment_support_cases")
 }

@@ -401,3 +401,109 @@ test('Sandbox Shipping Lifecycle: POST /shipments, Auto-provisioning on by-order
     assert.equal(unseededWebhookJson.data.status, 'IN_TRANSIT');
   });
 });
+
+test('Task 1 - Dispute Resolution & Arbitration: GET /disputes and POST /disputes/:caseId/verdict', async () => {
+  await withFulfillmentServer(async (baseUrl) => {
+    const staffToken = createTestToken({
+      sub: 'usr_staff_arbitrator',
+      email: 'staff@nexus.vn',
+      role: 'SUPPORT_STAFF',
+    });
+
+    // 1. GET /api/v1/support/disputes?status=PENDING
+    const disputesRes = await fetch(`${baseUrl}/api/v1/support/disputes?status=PENDING`, {
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+    assert.equal(disputesRes.status, 200);
+    const disputesJson = (await disputesRes.json()) as any;
+    assert.equal(disputesJson.success, true);
+    assert.ok(Array.isArray(disputesJson.data));
+    assert.ok(disputesJson.data.length >= 1);
+
+    const firstDispute = disputesJson.data[0];
+    assert.ok(firstDispute.caseId);
+    assert.ok(firstDispute.orderId);
+    assert.ok(firstDispute.slaDeadline);
+    assert.ok(typeof firstDispute.slaRemainingHours === 'number');
+    assert.ok(firstDispute.buyerEvidence);
+    assert.ok(firstDispute.sellerEvidence);
+
+    // 2. POST /api/v1/support/disputes/:caseId/verdict ra phán quyết
+    const verdictRes = await fetch(
+      `${baseUrl}/api/v1/support/disputes/${firstDispute.caseId}/verdict`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${staffToken}`,
+        },
+        body: JSON.stringify({
+          decision: 'REFUND_BUYER',
+          refundAmount: 550000,
+          liableParty: 'SELLER',
+          note: 'Xác nhận hàng bể vỡ do đóng gói không đúng quy cách của sàn.',
+        }),
+      },
+    );
+    assert.equal(verdictRes.status, 200);
+    const verdictJson = (await verdictRes.json()) as any;
+    assert.equal(verdictJson.success, true);
+    assert.equal(verdictJson.data.status, 'RESOLVED');
+    assert.equal(verdictJson.data.verdict.decision, 'REFUND_BUYER');
+    assert.equal(verdictJson.data.verdict.refundAmount, 550000);
+    assert.equal(verdictJson.data.verdict.liableParty, 'SELLER');
+  });
+});
+
+test('Task 3 - Failed Delivery & RTO: POST request-redelivery and confirm-return', async () => {
+  await withFulfillmentServer(async (baseUrl) => {
+    const staffToken = createTestToken({
+      sub: 'usr_staff_logistics',
+      email: 'staff@nexus.vn',
+      role: 'SUPPORT_STAFF',
+    });
+
+    // 1. POST /api/v1/support/shipments/:id/request-redelivery yêu cầu bưu tá phát lại
+    const redeliveryRes = await fetch(
+      `${baseUrl}/api/v1/support/shipments/GHN8829103VN/request-redelivery`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${staffToken}`,
+        },
+        body: JSON.stringify({
+          carrierCode: 'GHN',
+          rescheduledDate: '2026-11-08',
+          note: 'Khách đi công tác về, hẹn giao ca sáng',
+        }),
+      },
+    );
+    assert.equal(redeliveryRes.status, 200);
+    const redeliveryJson = (await redeliveryRes.json()) as any;
+    assert.equal(redeliveryJson.success, true);
+    assert.equal(redeliveryJson.data.statusCode, 'OUT_FOR_DELIVERY');
+    assert.match(redeliveryJson.data.currentLocation, /phát lại lần 1/);
+
+    // 2. POST /api/v1/support/shipments/:id/confirm-return xác nhận chuyển hoàn về kho shop
+    const returnRes = await fetch(
+      `${baseUrl}/api/v1/support/shipments/GHN8829103VN/confirm-return`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${staffToken}`,
+        },
+        body: JSON.stringify({
+          returnedToSellerAt: '2026-11-06T10:00:00Z',
+          condition: 'INTACT',
+        }),
+      },
+    );
+    assert.equal(returnRes.status, 200);
+    const returnJson = (await returnRes.json()) as any;
+    assert.equal(returnJson.success, true);
+    assert.equal(returnJson.data.statusCode, 'RETURNED');
+    assert.match(returnJson.data.currentLocation, /kho người bán/);
+  });
+});

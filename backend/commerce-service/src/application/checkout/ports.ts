@@ -66,10 +66,25 @@ export interface PaymentWebhook {
   raw: unknown;
 }
 
+export interface RefundRequest {
+  orderId: string;
+  orderCode?: number | string;
+  amount: number;
+  reason?: string;
+}
+
+export interface RefundResponse {
+  refundTransactionId: string;
+  status: 'PENDING' | 'SUCCESS' | 'FAILED';
+  amount: number;
+  completedAt: Date;
+}
+
 export interface IPaymentGateway {
   isConfigured(): boolean;
   createPaymentLink(request: PaymentLinkRequest): Promise<PaymentLink>;
   verifyWebhook(body: unknown): PaymentWebhook | null;
+  executeRefund?(request: RefundRequest): Promise<RefundResponse>;
 }
 
 export interface PricedLine {

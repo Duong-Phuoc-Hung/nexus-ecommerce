@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { IShipmentRepository } from '../../domain/repositories/IShipmentRepository';
 import { CarrierCode, Shipment, ShipmentStatus } from '../../domain/entities/Shipment';
 import { ShipmentNotFoundException } from '../../domain/exceptions/ShipmentNotFoundException';
@@ -49,7 +50,7 @@ export class ProcessCarrierWebhookUseCase {
             .toUpperCase()}`;
 
         shipment = new Shipment({
-          id: `shp_${autoOrderId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || Date.now()}`,
+          id: crypto.randomUUID(),
           orderId: autoOrderId,
           carrier: carrierCode,
           trackingCode: autoTracking,

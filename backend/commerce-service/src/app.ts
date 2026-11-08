@@ -12,7 +12,10 @@ import { RefundOrderUseCase } from './application/use-cases/RefundOrderUseCase';
 import { RejectRefundUseCase } from './application/use-cases/RejectRefundUseCase';
 import { DispatchOrderUseCase } from './application/use-cases/DispatchOrderUseCase';
 import { RequestRefundUseCase } from './application/use-cases/RequestRefundUseCase';
+import { ExecuteRefundUseCase } from './application/use-cases/ExecuteRefundUseCase';
+import { GetRefundStatusUseCase } from './application/use-cases/GetRefundStatusUseCase';
 import { GhnCarrierClient } from './infrastructure/clients/GhnCarrierClient';
+import { PayOsGateway } from './infrastructure/clients/PayOsGateway';
 
 import { OrderController } from './interfaces/http/controllers/OrderController';
 import { createOrderRoutes } from './interfaces/http/routes/OrderRoutes';
@@ -80,6 +83,9 @@ export function createApplication(): Application {
     ghnCarrierClient,
   );
   const requestRefundUseCase = new RequestRefundUseCase(orderRepository, getOrderDetailUseCase);
+  const payOsGateway = new PayOsGateway();
+  const executeRefundUseCase = new ExecuteRefundUseCase(orderRepository, payOsGateway);
+  const getRefundStatusUseCase = new GetRefundStatusUseCase(orderRepository);
 
   const orderController = new OrderController(
     getOrderDetailUseCase,
@@ -89,6 +95,8 @@ export function createApplication(): Application {
     rejectRefundUseCase,
     dispatchOrderUseCase,
     requestRefundUseCase,
+    executeRefundUseCase,
+    getRefundStatusUseCase,
   );
 
   app.use('/api/v1', createCheckoutRoutes(pool));

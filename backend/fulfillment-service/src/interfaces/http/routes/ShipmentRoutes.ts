@@ -53,5 +53,21 @@ export function createShipmentRoutes(controller: ShipmentController): Router {
     (req, res) => controller.manualOverride(req, res),
   );
 
+  // 6. Yêu cầu hãng vận chuyển phát lại đơn giao không thành công (Failed Delivery & RTO)
+  router.post(
+    '/shipments/:id/request-redelivery',
+    requireAuth,
+    requireShipmentPermission('UPDATE_STATUS'),
+    (req, res) => controller.requestRedelivery(req, res),
+  );
+
+  // 7. Xác nhận đơn đã hoàn về kho Seller thành công để đóng hồ sơ vận đơn
+  router.post(
+    '/shipments/:id/confirm-return',
+    requireAuth,
+    requireShipmentPermission('UPDATE_STATUS'),
+    (req, res) => controller.confirmReturn(req, res),
+  );
+
   return router;
 }

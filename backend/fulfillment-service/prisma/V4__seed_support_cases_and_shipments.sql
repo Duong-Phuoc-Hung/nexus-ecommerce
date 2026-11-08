@@ -6,15 +6,15 @@ INSERT INTO fulfillment_support_cases (
     id, type, order_id, order_code, user_id, customer, reason, priority, status, created_at, updated_at
 ) VALUES
 (
-    'CS-4021', 'Yêu cầu hoàn tiền', 'ord_01hqz555abc', 'NX-ORD-8021', 'usr_01hqz789abc', 'Minh Anh',
+    'CS-4021', 'Yêu cầu hoàn tiền', 'ord_01hqz555abc', 'NX-ORD-8021', '01a15822-43b8-78c3-a246-16bff78bc6e8', 'Minh Anh',
     'Sản phẩm chưa đúng mô tả', 'Cao', 'PENDING', NOW() - INTERVAL '12 minutes', NOW() - INTERVAL '12 minutes'
 ),
 (
-    'CS-4018', 'Khiếu nại giao hàng', 'ord_01hqz888def', 'NX-ORD-8017', 'usr_buyer_02', 'Quốc Bảo',
+    'CS-4018', 'Khiếu nại giao hàng', 'ord_01hqz888def', 'NX-ORD-8017', '01a15822-43b8-78c3-a246-16bff78bc6e8', 'Quốc Bảo',
     'Đơn hàng giao chậm', 'Trung bình', 'PENDING', NOW() - INTERVAL '46 minutes', NOW() - INTERVAL '46 minutes'
 ),
 (
-    'CS-4012', 'Tranh chấp giao dịch', 'ord_01hqz999ghi', 'NX-ORD-8009', 'usr_buyer_03', 'Thu Hà',
+    'CS-4012', 'Tranh chấp giao dịch', 'ord_01hqz999ghi', 'NX-ORD-8009', '01a15822-43b8-78c3-a246-16bff78bc6e8', 'Thu Hà',
     'Cần xác nhận trạng thái đơn', 'Thấp', 'PENDING', NOW() - INTERVAL '2 hours', NOW() - INTERVAL '2 hours'
 )
 ON CONFLICT (id) DO NOTHING;

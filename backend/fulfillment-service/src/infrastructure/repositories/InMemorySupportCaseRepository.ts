@@ -41,6 +41,18 @@ export class InMemorySupportCaseRepository implements ISupportCaseRepository {
       );
     }
 
+    if (criteria.query && criteria.query.trim()) {
+      const q = criteria.query.trim().toLowerCase();
+      items = items.filter(
+        (c) =>
+          c.id.toLowerCase().includes(q) ||
+          c.orderId.toLowerCase().includes(q) ||
+          c.orderCode.toLowerCase().includes(q) ||
+          c.customer.toLowerCase().includes(q) ||
+          c.reason.toLowerCase().includes(q),
+      );
+    }
+
     // Sắp xếp ưu tiên: Cao trước, sau đó mới nhất lên đầu
     items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 

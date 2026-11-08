@@ -82,7 +82,7 @@ export function loadSeedSupportCases(): SupportCase[] {
       type: 'Yêu cầu hoàn tiền',
       orderId: 'ord_01hqz555abc',
       orderCode: 'NX-ORD-8021',
-      userId: 'usr_01hqz789abc',
+      userId: '01a15822-43b8-78c3-a246-16bff78bc6e8',
       customer: 'Minh Anh',
       reason: 'Sản phẩm chưa đúng mô tả',
       priority: 'Cao',

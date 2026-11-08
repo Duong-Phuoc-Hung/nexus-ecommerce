@@ -11,6 +11,8 @@ import { AssignUserRoleUseCase } from '../../../application/use-cases/AssignUser
 import { SendRegistrationOtpUseCase } from '../../../application/use-cases/SendRegistrationOtpUseCase';
 import { UpdateUserProfileUseCase } from '../../../application/use-cases/UpdateUserProfileUseCase';
 import { UpdateUserStatusUseCase } from '../../../application/use-cases/UpdateUserStatusUseCase';
+import { AdjustUserReputationUseCase } from '../../../application/use-cases/AdjustUserReputationUseCase';
+import { RestrictUserFeaturesUseCase } from '../../../application/use-cases/RestrictUserFeaturesUseCase';
 import { GetUserAddressesUseCase } from '../../../application/use-cases/GetUserAddressesUseCase';
 import {
   CreateAddressUseCase,
@@ -51,6 +53,8 @@ export class UserController {
     private readonly setDefaultAddressUseCase?: SetDefaultAddressUseCase,
     private readonly updateUserStatusUseCase?: UpdateUserStatusUseCase,
     private readonly sendRegistrationOtpUseCase?: SendRegistrationOtpUseCase,
+    private readonly adjustUserReputationUseCase?: AdjustUserReputationUseCase,
+    private readonly restrictUserFeaturesUseCase?: RestrictUserFeaturesUseCase,
   ) {}
 
   public async listUsers(req: Request, res: Response): Promise<void> {
@@ -566,6 +570,107 @@ export class UserController {
       res.status(400).json({
         success: false,
         error: error.message || 'Không thể cập nhật trạng thái người dùng.',
+      });
+    }
+  }
+
+  /**
+   * POST /api/v1/support/users/:userId/adjust-reputation
+   * Trừ hoặc cộng điểm uy tín người dùng kèm lý do vi phạm (SRS 2.7, Support Staff Task 4)
+   * Role: SUPPORT_STAFF, ADMIN
+   */
+  public async adjustReputation(req: Request, res: Response): Promise<void> {
+    try {
+      if (!this.adjustUserReputationUseCase) {
+        res.status(500).json({
+          success: false,
+          error: 'AdjustUserReputationUseCase chưa được cấu hình.',
+        });
+        return;
+      }
+
+      const rawId = req.params.userId || req.params.id;
+      const userId = Array.isArray(rawId) ? rawId[0] : String(rawId);
+      const points =
+        typeof req.body.points === 'number' ? req.body.points : Number(req.body.points);
+      const reason = req.body.reason;
+      const operatorId = this.getAuthenticatedUserId(req) || 'system';
+
+      const result = await this.adjustUserReputationUseCase.execute({
+        userId,
+        points,
+        reason,
+        operatorId,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: `Đã điều chỉnh ${points > 0 ? '+' : ''}${points} điểm uy tín cho người dùng ${userId}.`,
+        data: result,
+      });
+    } catch (error: any) {
+      if (error instanceof UserNotFoundException) {
+        res.status(404).json({
+          success: false,
+          error: error.message,
+        });
+        return;
+      }
+
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Không thể điều chỉnh điểm uy tín.',
+      });
+    }
+  }
+
+  /**
+   * POST /api/v1/support/users/:userId/restrict-features
+   * Tạm khóa tính năng cụ thể (BAN_AUCTION_CREATION, BAN_BIDDING, BAN_PRODUCT_LISTING...)
+   * Role: SUPPORT_STAFF, ADMIN
+   */
+  public async restrictFeatures(req: Request, res: Response): Promise<void> {
+    try {
+      if (!this.restrictUserFeaturesUseCase) {
+        res.status(500).json({
+          success: false,
+          error: 'RestrictUserFeaturesUseCase chưa được cấu hình.',
+        });
+        return;
+      }
+
+      const rawId = req.params.userId || req.params.id;
+      const userId = Array.isArray(rawId) ? rawId[0] : String(rawId);
+      const restriction = req.body.restriction;
+      const durationDays = Number(req.body.durationDays);
+      const reason = req.body.reason;
+      const operatorId = this.getAuthenticatedUserId(req) || 'system';
+
+      const result = await this.restrictUserFeaturesUseCase.execute({
+        userId,
+        restriction,
+        durationDays,
+        reason,
+        operatorId,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: `Đã kích hoạt chế tài ${restriction} (${durationDays} ngày) cho người dùng ${userId}.`,
+        data: result,
+      });
+    } catch (error: any) {
+      if (error instanceof UserNotFoundException) {
+        res.status(404).json({
+          success: false,
+          error: error.message,
+        });
+        return;
+      }
+
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Không thể áp dụng chế tài tính năng.',
       });
     }
   }

@@ -28,6 +28,10 @@ export interface ShipmentProps {
   currentLocation?: string;
   estimatedDeliveryDate?: Date;
   actualDeliveryDate?: Date;
+  redeliveryAttempts?: number;
+  rescheduledDate?: Date;
+  returnedToSellerAt?: Date;
+  returnCondition?: 'INTACT' | 'DAMAGED' | 'LOST';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -49,6 +53,10 @@ export class Shipment {
   private _currentLocation: string;
   private _estimatedDeliveryDate?: Date;
   private _actualDeliveryDate?: Date;
+  private _redeliveryAttempts: number;
+  private _rescheduledDate?: Date;
+  private _returnedToSellerAt?: Date;
+  private _returnCondition?: 'INTACT' | 'DAMAGED' | 'LOST';
   private readonly _createdAt: Date;
   private _updatedAt: Date;
 
@@ -65,6 +73,10 @@ export class Shipment {
     this._currentLocation = props.currentLocation || `${this._city} · Trung tâm phân loại`;
     this._estimatedDeliveryDate = props.estimatedDeliveryDate;
     this._actualDeliveryDate = props.actualDeliveryDate;
+    this._redeliveryAttempts = props.redeliveryAttempts || 0;
+    this._rescheduledDate = props.rescheduledDate;
+    this._returnedToSellerAt = props.returnedToSellerAt;
+    this._returnCondition = props.returnCondition;
     this._createdAt = props.createdAt;
     this._updatedAt = props.updatedAt;
   }
@@ -117,6 +129,22 @@ export class Shipment {
     return this._actualDeliveryDate;
   }
 
+  public get redeliveryAttempts(): number {
+    return this._redeliveryAttempts;
+  }
+
+  public get rescheduledDate(): Date | undefined {
+    return this._rescheduledDate;
+  }
+
+  public get returnedToSellerAt(): Date | undefined {
+    return this._returnedToSellerAt;
+  }
+
+  public get returnCondition(): 'INTACT' | 'DAMAGED' | 'LOST' | undefined {
+    return this._returnCondition;
+  }
+
   public get createdAt(): Date {
     return this._createdAt;
   }
@@ -133,6 +161,56 @@ export class Shipment {
     if (location) {
       this._currentLocation = location;
     }
+    this._updatedAt = new Date();
+  }
+
+  /**
+   * Yêu cầu đơn vị vận chuyển phát lại lần nữa khi đơn giao thất bại (SRS 3.6 - Failed Delivery & RTO)
+   */
+  public requestRedelivery(params: {
+    carrierCode?: CarrierCode;
+    rescheduledDate: Date;
+    note?: string;
+  }): void {
+    if (this._redeliveryAttempts >= 3) {
+      throw new Error(
+        `Đơn hàng đã phát lại tối đa 3 lần (${this._redeliveryAttempts}/3). Vui lòng chuyển hoàn về người bán.`,
+      );
+    }
+
+    if (params.carrierCode) {
+      this._carrier = params.carrierCode;
+    }
+    this._redeliveryAttempts += 1;
+    this._rescheduledDate = params.rescheduledDate;
+    this._status = ShipmentStatus.OUT_FOR_DELIVERY;
+
+    const formattedDate = params.rescheduledDate.toISOString().split('T')[0];
+    this._currentLocation = `Bưu cục ${this._city} · Đã lên lịch phát lại lần ${this._redeliveryAttempts} vào ngày ${formattedDate}${
+      params.note ? ` (Ghi chú: ${params.note})` : ''
+    }`;
+    this._updatedAt = new Date();
+  }
+
+  /**
+   * Xác nhận đơn giao thất bại đã hoàn về kho Người bán thành công để đóng hồ sơ vận đơn
+   */
+  public confirmReturn(params: {
+    returnedToSellerAt: Date;
+    condition: 'INTACT' | 'DAMAGED' | 'LOST';
+  }): void {
+    this._status = ShipmentStatus.RETURNED;
+    this._returnedToSellerAt = params.returnedToSellerAt;
+    this._returnCondition = params.condition;
+
+    const conditionText =
+      params.condition === 'INTACT'
+        ? 'Hàng nguyên vẹn'
+        : params.condition === 'DAMAGED'
+          ? 'Hàng bị hư hỏng bể vỡ'
+          : 'Hàng bị thất lạc';
+
+    this._currentLocation = `Đã hoàn trả thành công về kho người bán · Hiện trạng: ${conditionText}`;
     this._updatedAt = new Date();
   }
 

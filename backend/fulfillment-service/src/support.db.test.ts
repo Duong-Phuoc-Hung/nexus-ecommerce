@@ -1,18 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getFulfillmentDbPool } from './infrastructure/database/pgPool';
+import { PrismaClientWrapper } from './infrastructure/database/PrismaClient';
 import { PostgresSupportCaseRepository } from './infrastructure/repositories/PostgresSupportCaseRepository';
 import { PostgresShipmentRepository } from './infrastructure/repositories/PostgresShipmentRepository';
-import { CarrierCode, Shipment, ShipmentStatus } from './domain/entities/Shipment';
-import { SupportCase } from './domain/entities/SupportCase';
+import { CarrierCode, ShipmentStatus } from './domain/entities/Shipment';
 
 test('Fulfillment Persistence Integration Test Suite', async (t) => {
-  const pool = getFulfillmentDbPool();
-  const supportRepo = new PostgresSupportCaseRepository(pool);
-  const shipmentRepo = new PostgresShipmentRepository(pool);
+  const prisma = PrismaClientWrapper.getInstance();
+
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+  } catch {
+    t.skip('Bỏ qua integration test do Fulfillment PostgreSQL chưa khởi chạy');
+    return;
+  }
+
+  const supportRepo = new PostgresSupportCaseRepository(prisma);
+  const shipmentRepo = new PostgresShipmentRepository(prisma);
 
   t.after(async () => {
-    await pool.end();
+    await prisma.$disconnect();
   });
 
   await t.test('1. PostgresSupportCaseRepository: nạp dữ liệu mẫu và tìm kiếm', async () => {
