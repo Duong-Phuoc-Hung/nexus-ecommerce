@@ -1,4 +1,6 @@
 import { Pool } from 'pg';
+import { PrismaClient } from '../database/generated/client';
+import { PrismaClientWrapper } from '../database/PrismaClient';
 import {
   SupportCase,
   SupportCasePriority,
@@ -11,26 +13,22 @@ import {
 } from '../../domain/repositories/ISupportCaseRepository';
 import { loadSeedSupportCases } from '../seeds/fulfillmentSeedLoader';
 
-interface SupportCaseRow {
-  id: string;
-  type: string;
-  order_id: string;
-  order_code: string;
-  user_id: string;
-  customer: string;
-  reason: string;
-  priority: string;
-  status: string;
-  resolution_note?: string | null;
-  resolved_by?: string | null;
-  created_at: Date | string;
-  updated_at: Date | string;
-}
-
 export class PostgresSupportCaseRepository implements ISupportCaseRepository {
   private isInitialized = false;
+  private _prisma?: PrismaClient;
 
-  constructor(private readonly pool: Pool) {}
+  constructor(prismaOrPool?: PrismaClient | Pool) {
+    if (prismaOrPool && 'supportCase' in prismaOrPool) {
+      this._prisma = prismaOrPool as PrismaClient;
+    }
+  }
+
+  private get prisma(): PrismaClient {
+    if (!this._prisma) {
+      this._prisma = PrismaClientWrapper.getInstance();
+    }
+    return this._prisma;
+  }
 
   /**
    * Nạp 3 ticket mẫu nếu bảng rỗng.
@@ -40,11 +38,7 @@ export class PostgresSupportCaseRepository implements ISupportCaseRepository {
     this.isInitialized = true;
 
     try {
-      const countRes = await this.pool.query(
-        'SELECT COUNT(*)::int AS count FROM fulfillment_support_cases',
-      );
-      const count = countRes.rows[0]?.count ?? 0;
-
+      const count = await this.prisma.supportCase.count();
       if (count === 0) {
         await this.seedInitialCases();
       }
@@ -56,150 +50,185 @@ export class PostgresSupportCaseRepository implements ISupportCaseRepository {
   public async findById(id: string): Promise<SupportCase | null> {
     const cleanId = id.trim();
 
-    const { rows } = await this.pool.query<SupportCaseRow>(
-      `SELECT * FROM fulfillment_support_cases 
-       WHERE UPPER(id) = UPPER($1) 
-       LIMIT 1`,
-      [cleanId],
-    );
+    try {
+      const row = await this.prisma.supportCase.findFirst({
+        where: {
+          id: {
+            equals: cleanId,
+            mode: 'insensitive',
+          },
+        },
+      });
 
-    if (rows.length === 0) {
+      if (!row) {
+        return null;
+      }
+
+      return this.mapToDomain(row);
+    } catch (err) {
+      console.error('[PostgresSupportCaseRepository] findById error:', (err as Error).message);
       return null;
     }
-
-    return this.mapToDomain(rows[0]);
   }
 
   public async search(criteria: SupportCaseSearchCriteria): Promise<SupportCaseSearchPage> {
-    const conditions: string[] = [];
-    const params: any[] = [];
-    let paramIdx = 1;
+    const where: any = {};
 
     // 1. Lọc theo userId
     if (criteria.userId && criteria.userId.trim().length > 0) {
-      conditions.push(`LOWER(user_id) = LOWER($${paramIdx})`);
-      params.push(criteria.userId.trim());
-      paramIdx++;
+      where.userId = {
+        equals: criteria.userId.trim(),
+        mode: 'insensitive',
+      };
     }
 
     // 2. Lọc theo status
     if (criteria.status && criteria.status.trim().length > 0) {
-      conditions.push(`LOWER(status) = LOWER($${paramIdx})`);
-      params.push(criteria.status.trim());
-      paramIdx++;
+      where.status = {
+        equals: criteria.status.trim(),
+        mode: 'insensitive',
+      };
     }
 
     // 3. Lọc theo priority
     if (criteria.priority && criteria.priority.trim().length > 0) {
-      conditions.push(`LOWER(priority) = LOWER($${paramIdx})`);
-      params.push(criteria.priority.trim());
-      paramIdx++;
+      where.priority = {
+        equals: criteria.priority.trim(),
+        mode: 'insensitive',
+      };
     }
 
     // 4. Lọc theo từ khóa tìm kiếm (query)
     if (criteria.query && criteria.query.trim().length > 0) {
-      const q = `%${criteria.query.trim().toLowerCase()}%`;
-      conditions.push(`(
-        LOWER(id) LIKE $${paramIdx} OR
-        LOWER(order_id) LIKE $${paramIdx} OR
-        LOWER(order_code) LIKE $${paramIdx} OR
-        LOWER(customer) LIKE $${paramIdx} OR
-        LOWER(reason) LIKE $${paramIdx}
-      )`);
-      params.push(q);
-      paramIdx++;
+      const q = criteria.query.trim();
+      where.OR = [
+        { id: { contains: q, mode: 'insensitive' } },
+        { orderId: { contains: q, mode: 'insensitive' } },
+        { orderCode: { contains: q, mode: 'insensitive' } },
+        { customer: { contains: q, mode: 'insensitive' } },
+        { reason: { contains: q, mode: 'insensitive' } },
+      ];
     }
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-    // 4. Phân trang
+    // Phân trang
     const page = Math.max(1, criteria.page || 1);
     const limit = Math.max(1, Math.min(100, criteria.limit || 10));
     const offset = (page - 1) * limit;
 
-    // Đếm tổng số bản ghi
-    const countSql = `SELECT COUNT(*)::int AS total FROM fulfillment_support_cases ${whereClause}`;
-    const countRes = await this.pool.query(countSql, params);
-    const total = countRes.rows[0]?.total ?? 0;
-    const totalPages = Math.ceil(total / limit) || 1;
+    try {
+      const [total, rows] = await Promise.all([
+        this.prisma.supportCase.count({ where }),
+        this.prisma.supportCase.findMany({
+          where,
+          skip: offset,
+          take: limit,
+          orderBy: {
+            createdAt: 'desc',
+          },
+        }),
+      ]);
 
-    // Sắp xếp ưu tiên: Cao trước, sau đó sắp xếp theo thời gian mới nhất lên đầu
-    const selectSql = `
-      SELECT * FROM fulfillment_support_cases
-      ${whereClause}
-      ORDER BY 
-        CASE 
-          WHEN priority IN ('Cao', 'HIGH') THEN 1 
-          WHEN priority IN ('Trung bình', 'MEDIUM') THEN 2 
-          ELSE 3 
-        END ASC,
-        created_at DESC
-      LIMIT $${paramIdx} OFFSET $${paramIdx + 1}
-    `;
+      // Sắp xếp ưu tiên: Cao trước, sau đó mới nhất lên đầu
+      const priorityWeight: Record<string, number> = {
+        CAO: 1,
+        HIGH: 1,
+        'TRUNG BÌNH': 2,
+        MEDIUM: 2,
+        THẤP: 3,
+        LOW: 3,
+      };
 
-    const { rows } = await this.pool.query<SupportCaseRow>(selectSql, [...params, limit, offset]);
+      rows.sort((a, b) => {
+        const wA = priorityWeight[(a.priority || '').toUpperCase()] || 3;
+        const wB = priorityWeight[(b.priority || '').toUpperCase()] || 3;
+        if (wA !== wB) return wA - wB;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
 
-    return {
-      items: rows.map((r) => this.mapToDomain(r)),
-      total,
-      page,
-      limit,
-      totalPages,
-    };
+      const totalPages = Math.ceil(total / limit) || 1;
+
+      return {
+        items: rows.map((r) => this.mapToDomain(r)),
+        total,
+        page,
+        limit,
+        totalPages,
+      };
+    } catch (err) {
+      console.error('[PostgresSupportCaseRepository] search error:', (err as Error).message);
+      return {
+        items: [],
+        total: 0,
+        page,
+        limit,
+        totalPages: 1,
+      };
+    }
   }
 
   public async save(caseItem: SupportCase): Promise<void> {
-    const upsertSql = `
-      INSERT INTO fulfillment_support_cases (
-        id, type, order_id, order_code, user_id, customer, reason,
-        priority, status, resolution_note, resolved_by, created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-      ON CONFLICT (id) DO UPDATE SET
-        type = EXCLUDED.type,
-        order_id = EXCLUDED.order_id,
-        order_code = EXCLUDED.order_code,
-        user_id = EXCLUDED.user_id,
-        customer = EXCLUDED.customer,
-        reason = EXCLUDED.reason,
-        priority = EXCLUDED.priority,
-        status = EXCLUDED.status,
-        resolution_note = EXCLUDED.resolution_note,
-        resolved_by = EXCLUDED.resolved_by,
-        updated_at = EXCLUDED.updated_at
-    `;
-
-    await this.pool.query(upsertSql, [
-      caseItem.id,
-      caseItem.type,
-      caseItem.orderId,
-      caseItem.orderCode,
-      caseItem.userId,
-      caseItem.customer,
-      caseItem.reason,
-      caseItem.priority,
-      caseItem.status,
-      caseItem.resolutionNote || null,
-      caseItem.resolvedBy || null,
-      caseItem.createdAt,
-      caseItem.updatedAt,
-    ]);
+    await this.prisma.supportCase.upsert({
+      where: { id: caseItem.id },
+      create: {
+        id: caseItem.id,
+        type: caseItem.type,
+        orderId: caseItem.orderId,
+        orderCode: caseItem.orderCode,
+        userId: caseItem.userId,
+        customer: caseItem.customer,
+        reason: caseItem.reason,
+        priority: caseItem.priority,
+        status: caseItem.status,
+        resolutionNote: caseItem.resolutionNote || null,
+        resolvedBy: caseItem.resolvedBy || null,
+        createdAt: caseItem.createdAt,
+        updatedAt: caseItem.updatedAt,
+      },
+      update: {
+        type: caseItem.type,
+        orderId: caseItem.orderId,
+        orderCode: caseItem.orderCode,
+        userId: caseItem.userId,
+        customer: caseItem.customer,
+        reason: caseItem.reason,
+        priority: caseItem.priority,
+        status: caseItem.status,
+        resolutionNote: caseItem.resolutionNote || null,
+        resolvedBy: caseItem.resolvedBy || null,
+        updatedAt: caseItem.updatedAt,
+      },
+    });
   }
 
-  private mapToDomain(row: SupportCaseRow): SupportCase {
+  private mapToDomain(row: {
+    id: string;
+    type: string;
+    orderId: string;
+    orderCode: string;
+    userId: string;
+    customer: string;
+    reason: string;
+    priority: string;
+    status: string;
+    resolutionNote?: string | null;
+    resolvedBy?: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }): SupportCase {
     return new SupportCase({
       id: row.id,
       type: row.type,
-      orderId: row.order_id,
-      orderCode: row.order_code,
-      userId: row.user_id,
+      orderId: row.orderId,
+      orderCode: row.orderCode,
+      userId: row.userId,
       customer: row.customer,
       reason: row.reason,
       priority: row.priority as SupportCasePriority,
       status: row.status as SupportCaseStatus,
-      resolutionNote: row.resolution_note || undefined,
-      resolvedBy: row.resolved_by || undefined,
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.updated_at),
+      resolutionNote: row.resolutionNote || undefined,
+      resolvedBy: row.resolvedBy || undefined,
+      createdAt: new Date(row.createdAt),
+      updatedAt: new Date(row.updatedAt),
     });
   }
 
@@ -211,7 +240,7 @@ export class PostgresSupportCaseRepository implements ISupportCaseRepository {
     }
 
     console.log(
-      `[PostgresSupportCaseRepository] Đã khởi tạo ${samples.length} support cases mẫu từ seed JSON vào PostgreSQL thành công.`,
+      `[PostgresSupportCaseRepository] Đã khởi tạo ${samples.length} support cases mẫu từ seed JSON vào PostgreSQL (Prisma ORM) thành công.`,
     );
   }
 }

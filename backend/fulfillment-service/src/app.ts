@@ -7,7 +7,7 @@ import { InMemoryInventoryRepository } from './infrastructure/repositories/InMem
 import { InMemorySupportCaseRepository } from './infrastructure/repositories/InMemorySupportCaseRepository';
 import { PostgresShipmentRepository } from './infrastructure/repositories/PostgresShipmentRepository';
 import { PostgresSupportCaseRepository } from './infrastructure/repositories/PostgresSupportCaseRepository';
-import { getFulfillmentDbPool } from './infrastructure/database/pgPool';
+import { PrismaClientWrapper } from './infrastructure/database/PrismaClient';
 
 import { GetShipmentDetailUseCase } from './application/use-cases/GetShipmentDetailUseCase';
 import { SearchShipmentsUseCase } from './application/use-cases/SearchShipmentsUseCase';
@@ -67,9 +67,9 @@ export function createApplication(): Application {
     shipmentRepository = new InMemoryShipmentRepository();
     supportCaseRepository = new InMemorySupportCaseRepository();
   } else {
-    const pool = getFulfillmentDbPool();
-    const pgShipmentRepo = new PostgresShipmentRepository(pool);
-    const pgSupportCaseRepo = new PostgresSupportCaseRepository(pool);
+    const prisma = PrismaClientWrapper.getInstance();
+    const pgShipmentRepo = new PostgresShipmentRepository(prisma);
+    const pgSupportCaseRepo = new PostgresSupportCaseRepository(prisma);
 
     // Kiểm soát nạp dữ liệu mẫu (Auto-Seeding):
     // - Vô hiệu hóa hoàn toàn khi chạy Production hoặc khi đặt ENABLE_AUTO_SEED=false.

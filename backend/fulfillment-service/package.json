@@ -5,11 +5,14 @@
   "description": "Project Nexus - Shipping & Carrier Fulfillment Bounded Context (SRS 3.6)",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "predev": "node ../../scripts/free-port.js 4005",
+    "build": "prisma generate --schema=./prisma/schema.prisma && tsc && node -e \"const fs=require('fs'); if(fs.existsSync('src/infrastructure/database/generated')) fs.cpSync('src/infrastructure/database/generated', 'dist/infrastructure/database/generated', { recursive: true });\"",
     "start": "node dist/index.js",
-    "dev": "tsx watch src/index.ts"
+    "dev": "tsx watch src/index.ts",
+    "test": "node --import tsx --test \"src/**/*.test.ts\""
   },
   "dependencies": {
+    "@prisma/client": "^5.22.0",
     "cors": "^2.8.6",
     "dotenv": "^18.0.5",
     "express": "^5.2.1",
@@ -20,6 +23,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.4",
     "@types/pg": "^8.23.1",
+    "prisma": "^5.22.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
