@@ -50,6 +50,9 @@ export interface OrderProps {
   status: OrderStatus;
   paymentTransactionId?: string;
   trackingCode?: string;
+  refundTransactionId?: string;
+  refundAmount?: number;
+  refundStatus?: 'PENDING' | 'SUCCESS' | 'FAILED';
   timeline?: OrderTimelineItem[];
   createdAt: Date;
   updatedAt: Date;
@@ -76,6 +79,9 @@ export class Order {
   private _status: OrderStatus;
   private _paymentTransactionId?: string;
   private _trackingCode?: string;
+  private _refundTransactionId?: string;
+  private _refundAmount?: number;
+  private _refundStatus?: 'PENDING' | 'SUCCESS' | 'FAILED';
   private _timeline: OrderTimelineItem[];
   private readonly _createdAt: Date;
   private _updatedAt: Date;
@@ -97,6 +103,9 @@ export class Order {
     this._status = props.status;
     this._paymentTransactionId = props.paymentTransactionId;
     this._trackingCode = props.trackingCode;
+    this._refundTransactionId = props.refundTransactionId;
+    this._refundAmount = props.refundAmount;
+    this._refundStatus = props.refundStatus;
     this._timeline = props.timeline || [
       {
         status: 'CREATED',
@@ -172,6 +181,18 @@ export class Order {
     return this._trackingCode;
   }
 
+  public get refundTransactionId(): string | undefined {
+    return this._refundTransactionId;
+  }
+
+  public get refundAmount(): number | undefined {
+    return this._refundAmount;
+  }
+
+  public get refundStatus(): 'PENDING' | 'SUCCESS' | 'FAILED' | undefined {
+    return this._refundStatus;
+  }
+
   public get timeline(): OrderTimelineItem[] {
     return [...this._timeline];
   }
@@ -237,6 +258,42 @@ export class Order {
       title: 'Đã kích hoạt hoàn tiền cho khách hàng',
       timestamp: new Date(),
       note: reason || 'Xử lý hoàn tiền theo khiếu nại',
+    });
+    this._updatedAt = new Date();
+  }
+
+  /**
+   * Kích hoạt hoàn tiền thật qua Cổng thanh toán (PayOS Refund Integration)
+   */
+  public executeRefund(params: {
+    refundTransactionId: string;
+    amount: number;
+    reason?: string;
+  }): void {
+    if (
+      this._status !== OrderStatus.PAID &&
+      this._status !== OrderStatus.CANCELLED &&
+      this._status !== OrderStatus.DELIVERED &&
+      this._status !== OrderStatus.PROCESSING &&
+      this._status !== OrderStatus.SHIPPED &&
+      this._status !== OrderStatus.REFUND_REQUESTED &&
+      this._status !== OrderStatus.REFUNDED
+    ) {
+      throw new Error(`Không thể hoàn tiền cho đơn hàng ở trạng thái "${this._status}".`);
+    }
+
+    this._status = OrderStatus.REFUNDED;
+    this._refundTransactionId = params.refundTransactionId;
+    this._refundAmount = params.amount;
+    this._refundStatus = 'SUCCESS';
+
+    this._timeline.push({
+      status: 'REFUNDED',
+      title: 'Hoàn tiền thành công qua cổng thanh toán PayOS',
+      timestamp: new Date(),
+      note: `Mã hoàn tiền (Refund Txn): ${params.refundTransactionId} · Số tiền: ${params.amount.toLocaleString(
+        'vi-VN',
+      )} VND${params.reason ? ` · ${params.reason}` : ''}`,
     });
     this._updatedAt = new Date();
   }

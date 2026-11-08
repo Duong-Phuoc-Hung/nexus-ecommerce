@@ -16,11 +16,15 @@ import { ManualOverrideShipmentUseCase } from './application/use-cases/ManualOve
 import { GetFulfillmentSummaryUseCase } from './application/use-cases/GetFulfillmentSummaryUseCase';
 import { ProcessCarrierWebhookUseCase } from './application/use-cases/ProcessCarrierWebhookUseCase';
 import { CreateShipmentUseCase } from './application/use-cases/CreateShipmentUseCase';
+import { RequestRedeliveryUseCase } from './application/use-cases/RequestRedeliveryUseCase';
+import { ConfirmReturnUseCase } from './application/use-cases/ConfirmReturnUseCase';
 
 import { GetSkuInventoryUseCase } from './application/use-cases/GetSkuInventoryUseCase';
 import { AdjustInventoryUseCase } from './application/use-cases/AdjustInventoryUseCase';
 import { ListSupportCasesUseCase } from './application/use-cases/ListSupportCasesUseCase';
 import { ResolveSupportCaseUseCase } from './application/use-cases/ResolveSupportCaseUseCase';
+import { GetDisputesUseCase } from './application/use-cases/GetDisputesUseCase';
+import { IssueDisputeVerdictUseCase } from './application/use-cases/IssueDisputeVerdictUseCase';
 
 import { ShipmentController } from './interfaces/http/controllers/ShipmentController';
 import { InventoryController } from './interfaces/http/controllers/InventoryController';
@@ -97,6 +101,8 @@ export function createApplication(): Application {
   const getFulfillmentSummaryUseCase = new GetFulfillmentSummaryUseCase(shipmentRepository);
   const processCarrierWebhookUseCase = new ProcessCarrierWebhookUseCase(shipmentRepository);
   const createShipmentUseCase = new CreateShipmentUseCase(shipmentRepository);
+  const requestRedeliveryUseCase = new RequestRedeliveryUseCase(shipmentRepository);
+  const confirmReturnUseCase = new ConfirmReturnUseCase(shipmentRepository);
 
   // 3. Use Cases - Tồn kho (Inventory)
   const getSkuInventoryUseCase = new GetSkuInventoryUseCase(inventoryRepository);
@@ -105,6 +111,8 @@ export function createApplication(): Application {
   // 4. Use Cases - Hồ sơ khiếu nại (Support Cases)
   const listSupportCasesUseCase = new ListSupportCasesUseCase(supportCaseRepository);
   const resolveSupportCaseUseCase = new ResolveSupportCaseUseCase(supportCaseRepository);
+  const getDisputesUseCase = new GetDisputesUseCase(supportCaseRepository);
+  const issueDisputeVerdictUseCase = new IssueDisputeVerdictUseCase(supportCaseRepository);
 
   // 5. Controllers
   const shipmentController = new ShipmentController(
@@ -115,6 +123,8 @@ export function createApplication(): Application {
     getFulfillmentSummaryUseCase,
     processCarrierWebhookUseCase,
     createShipmentUseCase,
+    requestRedeliveryUseCase,
+    confirmReturnUseCase,
   );
   const inventoryController = new InventoryController(
     getSkuInventoryUseCase,
@@ -123,6 +133,8 @@ export function createApplication(): Application {
   const supportCaseController = new SupportCaseController(
     listSupportCasesUseCase,
     resolveSupportCaseUseCase,
+    getDisputesUseCase,
+    issueDisputeVerdictUseCase,
   );
 
   // 6. Routes

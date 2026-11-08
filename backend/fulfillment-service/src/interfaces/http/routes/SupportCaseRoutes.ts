@@ -18,5 +18,18 @@ export function createSupportCaseRoutes(controller: SupportCaseController): Rout
     (req, res) => controller.resolveCase(req, res),
   );
 
+  // 3. GET /api/v1/support/disputes - Hàng đợi phân xử tranh chấp trọng tài (SRS 2.3)
+  router.get('/disputes', requireAuth, requireSupportCasePermission('VIEW'), (req, res) =>
+    controller.listDisputes(req, res),
+  );
+
+  // 4. POST /api/v1/support/disputes/:caseId/verdict - Ban hành phán quyết trọng tài
+  router.post(
+    '/disputes/:caseId/verdict',
+    requireAuth,
+    requireSupportCasePermission('RESOLVE'),
+    (req, res) => controller.issueVerdict(req, res),
+  );
+
   return router;
 }

@@ -11,6 +11,22 @@ export enum UserStatus {
   PENDING_VERIFICATION = 'PENDING_VERIFICATION',
 }
 
+export interface ReputationAuditEntry {
+  points: number;
+  reason: string;
+  adjustedBy: string;
+  createdAt: Date;
+}
+
+export interface UserFeatureRestriction {
+  restriction: string;
+  durationDays: number;
+  reason: string;
+  appliedBy: string;
+  expiresAt: Date;
+  createdAt: Date;
+}
+
 export interface UserProps {
   id: string;
   email: string;
@@ -22,6 +38,8 @@ export interface UserProps {
   reputationScore: number;
   failedLoginAttempts?: number;
   lockedUntil?: Date | null;
+  reputationHistory?: ReputationAuditEntry[];
+  restrictions?: UserFeatureRestriction[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -45,6 +63,8 @@ export class User {
   private _reputationScore: number;
   private _failedLoginAttempts: number;
   private _lockedUntil: Date | null;
+  private _reputationHistory: ReputationAuditEntry[];
+  private _restrictions: UserFeatureRestriction[];
   private readonly _createdAt: Date;
   private _updatedAt: Date;
 
@@ -59,6 +79,8 @@ export class User {
     this._reputationScore = props.reputationScore;
     this._failedLoginAttempts = props.failedLoginAttempts ?? 0;
     this._lockedUntil = props.lockedUntil ?? null;
+    this._reputationHistory = props.reputationHistory || [];
+    this._restrictions = props.restrictions || [];
     this._createdAt = props.createdAt;
     this._updatedAt = props.updatedAt;
   }
@@ -97,6 +119,14 @@ export class User {
 
   public get reputationScore(): number {
     return this._reputationScore;
+  }
+
+  public get reputationHistory(): ReputationAuditEntry[] {
+    return [...this._reputationHistory];
+  }
+
+  public get restrictions(): UserFeatureRestriction[] {
+    return [...this._restrictions];
   }
 
   public get failedLoginAttempts(): number {
@@ -152,6 +182,48 @@ export class User {
   public updateReputation(delta: number): void {
     this._reputationScore = Math.max(0, this._reputationScore + delta);
     this._updatedAt = new Date();
+  }
+
+  public adjustReputation(points: number, reason: string, operatorId: string): void {
+    this._reputationScore = Math.max(0, this._reputationScore + points);
+    this._reputationHistory.push({
+      points,
+      reason,
+      adjustedBy: operatorId,
+      createdAt: new Date(),
+    });
+    this._updatedAt = new Date();
+  }
+
+  public addRestriction(
+    restriction: string,
+    durationDays: number,
+    reason: string,
+    operatorId: string,
+  ): UserFeatureRestriction {
+    const expiresAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000);
+    const entry: UserFeatureRestriction = {
+      restriction,
+      durationDays,
+      reason,
+      appliedBy: operatorId,
+      expiresAt,
+      createdAt: new Date(),
+    };
+    this._restrictions = this._restrictions.filter((r) => r.restriction !== restriction);
+    this._restrictions.push(entry);
+    this._updatedAt = new Date();
+    return entry;
+  }
+
+  public isFeatureRestricted(restriction: string, now: Date = new Date()): boolean {
+    return this._restrictions.some(
+      (r) => r.restriction === restriction && r.expiresAt.getTime() > now.getTime(),
+    );
+  }
+
+  public getActiveRestrictions(now: Date = new Date()): UserFeatureRestriction[] {
+    return this._restrictions.filter((r) => r.expiresAt.getTime() > now.getTime());
   }
   public setPasswordHash(passwordHash: string): void {
     this._passwordHash = passwordHash;
