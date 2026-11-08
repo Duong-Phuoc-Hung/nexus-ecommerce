@@ -96,6 +96,20 @@ export class PostgresSupportCaseRepository implements ISupportCaseRepository {
       paramIdx++;
     }
 
+    // 4. Lọc theo từ khóa tìm kiếm (query)
+    if (criteria.query && criteria.query.trim().length > 0) {
+      const q = `%${criteria.query.trim().toLowerCase()}%`;
+      conditions.push(`(
+        LOWER(id) LIKE $${paramIdx} OR
+        LOWER(order_id) LIKE $${paramIdx} OR
+        LOWER(order_code) LIKE $${paramIdx} OR
+        LOWER(customer) LIKE $${paramIdx} OR
+        LOWER(reason) LIKE $${paramIdx}
+      )`);
+      params.push(q);
+      paramIdx++;
+    }
+
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     // 4. Phân trang
