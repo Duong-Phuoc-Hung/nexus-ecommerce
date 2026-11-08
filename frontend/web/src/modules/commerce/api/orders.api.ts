@@ -52,6 +52,8 @@ export type OrderDetail = {
   status: string;
   tracking: string;
   paymentTransactionId?: string;
+  refundTransactionId?: string;
+  refundAmount?: number;
   createdAt: string;
   updatedAt: string;
   timeline: { status: string; title: string; timestamp: string; note?: string }[];
@@ -131,6 +133,42 @@ export function createOrdersApi(request: RequestApi) {
           body: { reason },
         }),
       );
+    },
+    async executeRefund(id: string, input?: { refundAmount?: number; reason?: string }) {
+      const raw = await request<{
+        success: boolean;
+        message?: string;
+        data: {
+          orderId: string;
+          refundTransactionId: string;
+          amount: number;
+          status: 'PENDING' | 'SUCCESS' | 'FAILED';
+          completedAt: string;
+          message: string;
+        };
+      }>(`/orders/${encodeURIComponent(id)}/refund/execute`, {
+        method: 'POST',
+        body: input,
+      });
+      return unwrap<{
+        orderId: string;
+        refundTransactionId: string;
+        amount: number;
+        status: 'PENDING' | 'SUCCESS' | 'FAILED';
+        completedAt: string;
+        message: string;
+      }>(raw);
+    },
+    async getRefundStatus(id: string) {
+      return unwrap<{
+        orderId: string;
+        orderStatus: string;
+        refundStatus: 'PENDING' | 'SUCCESS' | 'FAILED' | 'NONE';
+        refundTransactionId?: string;
+        refundAmount?: number;
+        completedAt?: string;
+        canRefund: boolean;
+      }>(await request(`/orders/${encodeURIComponent(id)}/refund/status`));
     },
     async dispatch(id: string, carrierCode?: string, trackingCode?: string) {
       const raw = await request<{ success: boolean; message?: string; data: OrderDetail }>(
