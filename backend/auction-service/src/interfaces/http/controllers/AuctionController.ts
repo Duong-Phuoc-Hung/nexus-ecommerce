@@ -57,7 +57,64 @@ export class AuctionController {
     }
   }
 
-  // Lấy chi tiết phiên đấu giá theo ID
+  public async getUserObligations(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = Array.isArray(req.params.userId)
+        ? req.params.userId[0]
+        : String(req.params.userId || '');
+      if (!userId) {
+        res.status(400).json({ success: false, error: 'userId is required.' });
+        return;
+      }
+
+      const activeAuctions = await this.auctionRepository.findActiveAuctions();
+      const obligations: Array<{
+        auctionId: string;
+        title?: string;
+        bidderId: string;
+        type: 'LEADING_ACTIVE_AUCTION' | 'PARTICIPATING_ACTIVE_AUCTION' | 'UNSETTLED_WON_AUCTION';
+      }> = [];
+
+      for (const auction of activeAuctions) {
+        if (auction.highestBidderId === userId) {
+          obligations.push({
+            auctionId: auction.id,
+            title: `Phiên đấu giá #${auction.id}`,
+            bidderId: userId,
+            type: 'LEADING_ACTIVE_AUCTION',
+          });
+          continue;
+        }
+
+        const bids = this.auctionRepository.findBidsByAuctionId
+          ? await this.auctionRepository.findBidsByAuctionId(auction.id)
+          : [];
+        const participated = bids.some((b) => b.bidderId === userId);
+        if (participated) {
+          obligations.push({
+            auctionId: auction.id,
+            title: `Phiên đấu giá #${auction.id}`,
+            bidderId: userId,
+            type: 'PARTICIPATING_ACTIVE_AUCTION',
+          });
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          userId,
+          obligations,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal Server Error',
+      });
+    }
+  }
+
   public async getById(req: Request, res: Response): Promise<void> {
     try {
       const auctionId = (req.params.id || 'auc_01hqz777live') as string;
@@ -161,6 +218,14 @@ export class AuctionController {
   public async placeBid(req: Request, res: Response): Promise<void> {
     try {
       const authUser = (req as AuthenticatedRequest).user;
+      if (authUser && authUser.role !== 'BUYER') {
+        res.status(403).json({
+          success: false,
+          code: 'AUCTION_BID_FORBIDDEN_ROLE',
+          error: 'Chỉ tài khoản BUYER mới có quyền đặt giá đấu giá (AUCTION.BID).',
+        });
+        return;
+      }
       const auctionId = req.params.id as string;
       const { bidAmount, bidderId } = req.body;
 
