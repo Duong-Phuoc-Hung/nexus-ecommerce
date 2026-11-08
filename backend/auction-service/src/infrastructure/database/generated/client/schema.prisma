@@ -19,10 +19,10 @@ datasource db {
 // -----------------------------------------------------------------------------
 model AuctionRoom {
   // Khóa chính: Số tự tăng (1, 2, 3...)
-  id BigInt @id @default(autoincrement())
+  id String @id @db.VarChar(36)
 
   // Tham chiếu sản phẩm đấu giá (Lấy 'id' từ catalog_products bên catalog-service)
-  productId BigInt @map("product_id")
+  productId String @map("product_id") @db.VarChar(36)
 
   // Tham chiếu người bán / chủ phòng (Lấy 'id' từ user_users bên user-service - UUID)
   sellerId String @map("seller_id") @db.VarChar(36)
@@ -77,11 +77,11 @@ model AuctionRoom {
 // 2. BẢNG LỊCH SỬ ĐẶT GIÁ (Lưu vết từng lượt trả giá, yêu cầu phản hồi <= 300ms)
 // -----------------------------------------------------------------------------
 model AuctionBid {
-  // Khóa chính: Số tự tăng (1, 2, 3...)
-  id BigInt @id @default(autoincrement())
+  // Khóa chính: Chuỗi định danh UUIDv7 (RFC 9562)
+  id String @id @db.VarChar(36)
 
   // Thuộc phòng đấu giá nào (Khóa ngoại nối với bảng auction_rooms)
-  auctionId BigInt @map("auction_id")
+  auctionId String @map("auction_id") @db.VarChar(36)
 
   // Tham chiếu người bấm nút trả giá (Lấy 'id' từ user_users bên user-service - UUID)
   bidderId String @map("bidder_id") @db.VarChar(36)
@@ -110,11 +110,11 @@ model AuctionBid {
 // 3. BẢNG CHỐT NGƯỜI THẮNG & HẠN NỘP TIỀN 24H (Quản lý thanh toán sau đấu giá)
 // -----------------------------------------------------------------------------
 model AuctionSettlement {
-  // Khóa chính: Số tự tăng (1, 2, 3...)
-  id BigInt @id @default(autoincrement())
+  // Khóa chính: Chuỗi định danh UUIDv7 (RFC 9562)
+  id String @id @db.VarChar(36)
 
   // Thuộc phiên đấu giá nào (Nối 1-1 với auction_rooms)
-  auctionId BigInt @unique @map("auction_id")
+  auctionId String @unique @map("auction_id") @db.VarChar(36)
 
   // Tham chiếu người chiến thắng (Lấy 'id' từ user_users bên user-service - UUID)
   winnerId String @map("winner_id") @db.VarChar(36)
@@ -126,7 +126,7 @@ model AuctionSettlement {
   paymentDeadline DateTime @map("payment_deadline") @db.Timestamptz()
 
   // Tham chiếu đơn hàng tạo bên commerce_orders của commerce-service khi người thắng bấm thanh toán
-  orderId BigInt? @map("order_id")
+  orderId String? @map("order_id") @db.VarChar(36)
 
   // Trạng thái nộp tiền: PENDING_PAYMENT (Chờ trả), PAID (Đã trả), TIMEOUT_PENALIZED (Bùng kèo quá 24h)
   status String @default("PENDING_PAYMENT") @db.VarChar(20)
@@ -152,7 +152,7 @@ model AuctionExtension {
   id BigInt @id @default(autoincrement())
 
   // Thuộc phòng đấu giá nào (Nối với auction_rooms)
-  auctionId BigInt @map("auction_id")
+  auctionId String @map("auction_id") @db.VarChar(36)
 
   // Số phút được cộng thêm (SRS: Mặc định cộng thêm 5 phút nếu có bid ở 5 phút cuối)
   extendedMinutes Int @default(5) @map("extended_minutes")
