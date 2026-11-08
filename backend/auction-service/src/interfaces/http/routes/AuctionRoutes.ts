@@ -10,6 +10,7 @@ export function createAuctionRoutes(controller: AuctionController): Router {
   const router = Router();
 
   router.get('/', (req, res) => controller.getActive(req, res));
+  router.get('/obligations/:userId', (req, res) => controller.getUserObligations(req, res));
   router.get('/:id', (req, res) => controller.getById(req, res));
   router.post('/', requireAuth, requireSellerOrAdmin, (req, res) => controller.create(req, res));
   router.get('/:id/bids', (req, res) => controller.getBidHistory(req, res));

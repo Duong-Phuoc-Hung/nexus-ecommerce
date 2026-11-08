@@ -26,6 +26,9 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'AUCTION.VIEW',
     'AUCTION.BID',
     'NOTIFICATION.VIEW',
+    'SELLER_APPLICATION.SUBMIT',
+    'SELLER_APPLICATION.VIEW_OWN',
+    'SELLER_APPLICATION.ACTIVATE',
   ],
   SELLER: [
     'AUTH.LOGIN',
@@ -41,6 +44,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'ORDER.VIEW',
     'ORDER.LIST',
     'NOTIFICATION.VIEW',
+    'SELLER_APPLICATION.VIEW_OWN',
   ],
   ADMIN: [
     'AUTH.LOGIN',
@@ -58,6 +62,9 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'ROLE.DELETE',
     'ROLE.VIEW',
     'ROLE.LIST',
+    'SELLER_APPLICATION.VIEW',
+    'SELLER_APPLICATION.REVIEW',
+    'SELLER_APPLICATION.REVOKE',
     'SYSTEM.CONFIG.VIEW',
     'SYSTEM.CONFIG.UPDATE',
     'SYSTEM.HEALTH.VIEW',

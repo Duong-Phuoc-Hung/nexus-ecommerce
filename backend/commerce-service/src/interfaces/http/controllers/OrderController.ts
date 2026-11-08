@@ -32,15 +32,23 @@ export class OrderController {
       let buyerId = typeof req.query.buyerId === 'string' ? req.query.buyerId : undefined;
       let sellerId = typeof req.query.sellerId === 'string' ? req.query.sellerId : undefined;
 
-      // BẢO MẬT PHÂN QUYỀN (CHỐNG LỖ HỔNG IDOR):
-      // - Khi người gọi có vai trò là BUYER: Bắt buộc chỉ xem đơn của chính mình (buyerId = authenticatedUser.sub).
-      // - Khi người gọi có vai trò là SELLER: Bắt buộc trích xuất sellerId trực tiếp từ JWT Payload đã qua xác thực (req.user.sub),
-      //   ngăn chặn hoàn toàn việc người bán này tự ý truyền sellerId của shop khác để xem trộm đơn hàng.
-      // - Quyền của ADMIN và SUPPORT_STAFF giữ nguyên 100% (xem toàn bộ sàn).
+      // BẢO MẬT PHÂN QUYỀN (CHỐNG LỖ HỔNG IDOR - SRS 3.1 & 3.6):
+      // - BUYER chỉ được xem đơn hàng của chính mình (buộc buyerId = user.sub, chặn xem trộm đơn khách khác).
+      // - SELLER:
+      //   + Khi truy vấn lịch sử mua trước đây của chính mình (?buyerId=<user.sub> và không truyền sellerId): cho phép xem lịch sử mua thuộc sở hữu của mình.
+      //   + Mặc định hoặc khi quản lý đơn bán của shop: buộc sellerId = user.sub, chặn xem trộm đơn shop khác.
+      // - ADMIN và SUPPORT_STAFF giữ nguyên 100% quyền xem/lọc toàn bộ đơn hàng trên sàn.
       if (authenticatedUser?.role === 'BUYER') {
         buyerId = authenticatedUser.sub;
+        sellerId = undefined;
       } else if (authenticatedUser?.role === 'SELLER') {
-        sellerId = authenticatedUser.sub;
+        if (buyerId === authenticatedUser.sub && !sellerId) {
+          buyerId = authenticatedUser.sub;
+          sellerId = undefined;
+        } else {
+          buyerId = undefined;
+          sellerId = authenticatedUser.sub;
+        }
       }
       const status = typeof req.query.status === 'string' ? req.query.status : undefined;
       const page = req.query.page ? Number(req.query.page) : undefined;
@@ -79,8 +87,35 @@ export class OrderController {
 
   public async getById(req: Request, res: Response): Promise<void> {
     try {
+      const authenticatedUser = (req as AuthenticatedRequest).user;
       const orderId = (req.params.id || 'ord_01hqz555abc') as string;
       const order = await this.getOrderDetailUseCase.execute(orderId);
+
+      // Kiểm tra quyền sở hữu đơn hàng (chống lỗ hổng IDOR)
+      if (
+        authenticatedUser &&
+        authenticatedUser.role === 'BUYER' &&
+        order.buyerId !== authenticatedUser.sub
+      ) {
+        res.status(403).json({
+          success: false,
+          error: 'Bạn không có quyền truy cập đơn hàng này.',
+        });
+        return;
+      }
+      if (
+        authenticatedUser &&
+        authenticatedUser.role === 'SELLER' &&
+        order.sellerId !== authenticatedUser.sub &&
+        order.buyerId !== authenticatedUser.sub
+      ) {
+        res.status(403).json({
+          success: false,
+          error: 'Bạn không có quyền truy cập đơn hàng này.',
+        });
+        return;
+      }
+
       res.status(200).json({
         success: true,
         data: order,

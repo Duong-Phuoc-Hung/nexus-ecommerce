@@ -215,13 +215,18 @@ export class UserController {
       const result = await this.assignUserRoleUseCase.execute(
         Array.isArray(req.params.id) ? req.params.id[0] : req.params.id,
         req.body?.role,
+        { source: req.body?.source },
       );
       res.status(200).json({ success: true, data: result });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Role assignment failed.';
-      res
-        .status(message === 'User not found.' ? 404 : 400)
-        .json({ success: false, error: message });
+      const status =
+        message === 'User not found.' ? 404 : message.startsWith('Policy violation:') ? 422 : 400;
+      res.status(status).json({
+        success: false,
+        code: message.startsWith('Policy violation:') ? 'ROLE_POLICY_VIOLATION' : undefined,
+        error: message,
+      });
     }
   }
 

@@ -33,6 +33,19 @@ export interface OrderProps {
   sellerId: string;
   sellerName?: string;
   items: OrderItem[];
+  subtotal?: number;
+  shippingFee?: number;
+  discountAmount?: number;
+  shippingAddress?: {
+    fullName?: string;
+    phone?: string;
+    province?: string;
+    district?: string;
+    ward?: string;
+    addressLine?: string;
+    country?: string;
+  };
+  paymentMethod?: string;
   totalAmount: number;
   status: OrderStatus;
   paymentTransactionId?: string;
@@ -54,6 +67,11 @@ export class Order {
   private readonly _sellerId: string;
   private readonly _sellerName: string;
   private _items: OrderItem[];
+  private _subtotal: number;
+  private _shippingFee: number;
+  private _discountAmount: number;
+  private _shippingAddress?: OrderProps['shippingAddress'];
+  private _paymentMethod?: string;
   private _totalAmount: number;
   private _status: OrderStatus;
   private _paymentTransactionId?: string;
@@ -70,6 +88,11 @@ export class Order {
     this._sellerId = props.sellerId;
     this._sellerName = props.sellerName || 'Gian hàng đối tác';
     this._items = props.items;
+    this._shippingFee = props.shippingFee ?? 0;
+    this._discountAmount = props.discountAmount ?? 0;
+    this._subtotal = props.subtotal ?? props.totalAmount - this._shippingFee + this._discountAmount;
+    this._shippingAddress = props.shippingAddress;
+    this._paymentMethod = props.paymentMethod;
     this._totalAmount = props.totalAmount;
     this._status = props.status;
     this._paymentTransactionId = props.paymentTransactionId;
@@ -111,6 +134,26 @@ export class Order {
 
   public get items(): OrderItem[] {
     return [...this._items];
+  }
+
+  public get subtotal(): number {
+    return this._subtotal;
+  }
+
+  public get shippingFee(): number {
+    return this._shippingFee;
+  }
+
+  public get discountAmount(): number {
+    return this._discountAmount;
+  }
+
+  public get shippingAddress(): OrderProps['shippingAddress'] {
+    return this._shippingAddress;
+  }
+
+  public get paymentMethod(): string | undefined {
+    return this._paymentMethod;
   }
 
   public get totalAmount(): number {
