@@ -1153,8 +1153,6 @@ export namespace Prisma {
   }
 
   export type AuctionRoomAvgAggregateOutputType = {
-    id: number | null
-    productId: number | null
     startPrice: Decimal | null
     currentPrice: Decimal | null
     bidStep: Decimal | null
@@ -1162,8 +1160,6 @@ export namespace Prisma {
   }
 
   export type AuctionRoomSumAggregateOutputType = {
-    id: bigint | null
-    productId: bigint | null
     startPrice: Decimal | null
     currentPrice: Decimal | null
     bidStep: Decimal | null
@@ -1171,8 +1167,8 @@ export namespace Prisma {
   }
 
   export type AuctionRoomMinAggregateOutputType = {
-    id: bigint | null
-    productId: bigint | null
+    id: string | null
+    productId: string | null
     sellerId: string | null
     title: string | null
     startPrice: Decimal | null
@@ -1189,8 +1185,8 @@ export namespace Prisma {
   }
 
   export type AuctionRoomMaxAggregateOutputType = {
-    id: bigint | null
-    productId: bigint | null
+    id: string | null
+    productId: string | null
     sellerId: string | null
     title: string | null
     startPrice: Decimal | null
@@ -1227,8 +1223,6 @@ export namespace Prisma {
 
 
   export type AuctionRoomAvgAggregateInputType = {
-    id?: true
-    productId?: true
     startPrice?: true
     currentPrice?: true
     bidStep?: true
@@ -1236,8 +1230,6 @@ export namespace Prisma {
   }
 
   export type AuctionRoomSumAggregateInputType = {
-    id?: true
-    productId?: true
     startPrice?: true
     currentPrice?: true
     bidStep?: true
@@ -1386,8 +1378,8 @@ export namespace Prisma {
   }
 
   export type AuctionRoomGroupByOutputType = {
-    id: bigint
-    productId: bigint
+    id: string
+    productId: string
     sellerId: string
     title: string
     startPrice: Decimal
@@ -1496,8 +1488,8 @@ export namespace Prisma {
       extensions: Prisma.$AuctionExtensionPayload<ExtArgs>[]
     }
     scalars: $Extensions.GetPayloadResult<{
-      id: bigint
-      productId: bigint
+      id: string
+      productId: string
       sellerId: string
       title: string
       startPrice: Prisma.Decimal
@@ -1907,8 +1899,8 @@ export namespace Prisma {
    * Fields of the AuctionRoom model
    */ 
   interface AuctionRoomFieldRefs {
-    readonly id: FieldRef<"AuctionRoom", 'BigInt'>
-    readonly productId: FieldRef<"AuctionRoom", 'BigInt'>
+    readonly id: FieldRef<"AuctionRoom", 'String'>
+    readonly productId: FieldRef<"AuctionRoom", 'String'>
     readonly sellerId: FieldRef<"AuctionRoom", 'String'>
     readonly title: FieldRef<"AuctionRoom", 'String'>
     readonly startPrice: FieldRef<"AuctionRoom", 'Decimal'>
@@ -2319,19 +2311,17 @@ export namespace Prisma {
 
   export type AuctionBidAvgAggregateOutputType = {
     id: number | null
-    auctionId: number | null
     bidAmount: Decimal | null
   }
 
   export type AuctionBidSumAggregateOutputType = {
     id: bigint | null
-    auctionId: bigint | null
     bidAmount: Decimal | null
   }
 
   export type AuctionBidMinAggregateOutputType = {
     id: bigint | null
-    auctionId: bigint | null
+    auctionId: string | null
     bidderId: string | null
     bidAmount: Decimal | null
     bidTime: Date | null
@@ -2341,7 +2331,7 @@ export namespace Prisma {
 
   export type AuctionBidMaxAggregateOutputType = {
     id: bigint | null
-    auctionId: bigint | null
+    auctionId: string | null
     bidderId: string | null
     bidAmount: Decimal | null
     bidTime: Date | null
@@ -2363,13 +2353,11 @@ export namespace Prisma {
 
   export type AuctionBidAvgAggregateInputType = {
     id?: true
-    auctionId?: true
     bidAmount?: true
   }
 
   export type AuctionBidSumAggregateInputType = {
     id?: true
-    auctionId?: true
     bidAmount?: true
   }
 
@@ -2492,7 +2480,7 @@ export namespace Prisma {
 
   export type AuctionBidGroupByOutputType = {
     id: bigint
-    auctionId: bigint
+    auctionId: string
     bidderId: string
     bidAmount: Decimal
     bidTime: Date
@@ -2565,7 +2553,7 @@ export namespace Prisma {
     }
     scalars: $Extensions.GetPayloadResult<{
       id: bigint
-      auctionId: bigint
+      auctionId: string
       bidderId: string
       bidAmount: Prisma.Decimal
       bidTime: Date
@@ -2966,7 +2954,7 @@ export namespace Prisma {
    */ 
   interface AuctionBidFieldRefs {
     readonly id: FieldRef<"AuctionBid", 'BigInt'>
-    readonly auctionId: FieldRef<"AuctionBid", 'BigInt'>
+    readonly auctionId: FieldRef<"AuctionBid", 'String'>
     readonly bidderId: FieldRef<"AuctionBid", 'String'>
     readonly bidAmount: FieldRef<"AuctionBid", 'Decimal'>
     readonly bidTime: FieldRef<"AuctionBid", 'DateTime'>
@@ -3318,25 +3306,21 @@ export namespace Prisma {
 
   export type AuctionSettlementAvgAggregateOutputType = {
     id: number | null
-    auctionId: number | null
     winningBidAmount: Decimal | null
-    orderId: number | null
   }
 
   export type AuctionSettlementSumAggregateOutputType = {
     id: bigint | null
-    auctionId: bigint | null
     winningBidAmount: Decimal | null
-    orderId: bigint | null
   }
 
   export type AuctionSettlementMinAggregateOutputType = {
     id: bigint | null
-    auctionId: bigint | null
+    auctionId: string | null
     winnerId: string | null
     winningBidAmount: Decimal | null
     paymentDeadline: Date | null
-    orderId: bigint | null
+    orderId: string | null
     status: string | null
     settledAt: Date | null
     createdAt: Date | null
@@ -3344,11 +3328,11 @@ export namespace Prisma {
 
   export type AuctionSettlementMaxAggregateOutputType = {
     id: bigint | null
-    auctionId: bigint | null
+    auctionId: string | null
     winnerId: string | null
     winningBidAmount: Decimal | null
     paymentDeadline: Date | null
-    orderId: bigint | null
+    orderId: string | null
     status: string | null
     settledAt: Date | null
     createdAt: Date | null
@@ -3370,16 +3354,12 @@ export namespace Prisma {
 
   export type AuctionSettlementAvgAggregateInputType = {
     id?: true
-    auctionId?: true
     winningBidAmount?: true
-    orderId?: true
   }
 
   export type AuctionSettlementSumAggregateInputType = {
     id?: true
-    auctionId?: true
     winningBidAmount?: true
-    orderId?: true
   }
 
   export type AuctionSettlementMinAggregateInputType = {
@@ -3507,11 +3487,11 @@ export namespace Prisma {
 
   export type AuctionSettlementGroupByOutputType = {
     id: bigint
-    auctionId: bigint
+    auctionId: string
     winnerId: string
     winningBidAmount: Decimal
     paymentDeadline: Date
-    orderId: bigint | null
+    orderId: string | null
     status: string
     settledAt: Date
     createdAt: Date
@@ -3588,11 +3568,11 @@ export namespace Prisma {
     }
     scalars: $Extensions.GetPayloadResult<{
       id: bigint
-      auctionId: bigint
+      auctionId: string
       winnerId: string
       winningBidAmount: Prisma.Decimal
       paymentDeadline: Date
-      orderId: bigint | null
+      orderId: string | null
       status: string
       settledAt: Date
       createdAt: Date
@@ -3991,11 +3971,11 @@ export namespace Prisma {
    */ 
   interface AuctionSettlementFieldRefs {
     readonly id: FieldRef<"AuctionSettlement", 'BigInt'>
-    readonly auctionId: FieldRef<"AuctionSettlement", 'BigInt'>
+    readonly auctionId: FieldRef<"AuctionSettlement", 'String'>
     readonly winnerId: FieldRef<"AuctionSettlement", 'String'>
     readonly winningBidAmount: FieldRef<"AuctionSettlement", 'Decimal'>
     readonly paymentDeadline: FieldRef<"AuctionSettlement", 'DateTime'>
-    readonly orderId: FieldRef<"AuctionSettlement", 'BigInt'>
+    readonly orderId: FieldRef<"AuctionSettlement", 'String'>
     readonly status: FieldRef<"AuctionSettlement", 'String'>
     readonly settledAt: FieldRef<"AuctionSettlement", 'DateTime'>
     readonly createdAt: FieldRef<"AuctionSettlement", 'DateTime'>
@@ -4345,19 +4325,17 @@ export namespace Prisma {
 
   export type AuctionExtensionAvgAggregateOutputType = {
     id: number | null
-    auctionId: number | null
     extendedMinutes: number | null
   }
 
   export type AuctionExtensionSumAggregateOutputType = {
     id: bigint | null
-    auctionId: bigint | null
     extendedMinutes: number | null
   }
 
   export type AuctionExtensionMinAggregateOutputType = {
     id: bigint | null
-    auctionId: bigint | null
+    auctionId: string | null
     extendedMinutes: number | null
     previousEndTime: Date | null
     newEndTime: Date | null
@@ -4367,7 +4345,7 @@ export namespace Prisma {
 
   export type AuctionExtensionMaxAggregateOutputType = {
     id: bigint | null
-    auctionId: bigint | null
+    auctionId: string | null
     extendedMinutes: number | null
     previousEndTime: Date | null
     newEndTime: Date | null
@@ -4389,13 +4367,11 @@ export namespace Prisma {
 
   export type AuctionExtensionAvgAggregateInputType = {
     id?: true
-    auctionId?: true
     extendedMinutes?: true
   }
 
   export type AuctionExtensionSumAggregateInputType = {
     id?: true
-    auctionId?: true
     extendedMinutes?: true
   }
 
@@ -4518,7 +4494,7 @@ export namespace Prisma {
 
   export type AuctionExtensionGroupByOutputType = {
     id: bigint
-    auctionId: bigint
+    auctionId: string
     extendedMinutes: number
     previousEndTime: Date
     newEndTime: Date
@@ -4591,7 +4567,7 @@ export namespace Prisma {
     }
     scalars: $Extensions.GetPayloadResult<{
       id: bigint
-      auctionId: bigint
+      auctionId: string
       extendedMinutes: number
       previousEndTime: Date
       newEndTime: Date
@@ -4992,7 +4968,7 @@ export namespace Prisma {
    */ 
   interface AuctionExtensionFieldRefs {
     readonly id: FieldRef<"AuctionExtension", 'BigInt'>
-    readonly auctionId: FieldRef<"AuctionExtension", 'BigInt'>
+    readonly auctionId: FieldRef<"AuctionExtension", 'String'>
     readonly extendedMinutes: FieldRef<"AuctionExtension", 'Int'>
     readonly previousEndTime: FieldRef<"AuctionExtension", 'DateTime'>
     readonly newEndTime: FieldRef<"AuctionExtension", 'DateTime'>
@@ -5436,20 +5412,6 @@ export namespace Prisma {
 
 
   /**
-   * Reference to a field of type 'BigInt'
-   */
-  export type BigIntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'BigInt'>
-    
-
-
-  /**
-   * Reference to a field of type 'BigInt[]'
-   */
-  export type ListBigIntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'BigInt[]'>
-    
-
-
-  /**
    * Reference to a field of type 'String'
    */
   export type StringFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'String'>
@@ -5488,6 +5450,20 @@ export namespace Prisma {
    * Reference to a field of type 'DateTime[]'
    */
   export type ListDateTimeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DateTime[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'BigInt'
+   */
+  export type BigIntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'BigInt'>
+    
+
+
+  /**
+   * Reference to a field of type 'BigInt[]'
+   */
+  export type ListBigIntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'BigInt[]'>
     
 
 
@@ -5533,8 +5509,8 @@ export namespace Prisma {
     AND?: AuctionRoomWhereInput | AuctionRoomWhereInput[]
     OR?: AuctionRoomWhereInput[]
     NOT?: AuctionRoomWhereInput | AuctionRoomWhereInput[]
-    id?: BigIntFilter<"AuctionRoom"> | bigint | number
-    productId?: BigIntFilter<"AuctionRoom"> | bigint | number
+    id?: StringFilter<"AuctionRoom"> | string
+    productId?: StringFilter<"AuctionRoom"> | string
     sellerId?: StringFilter<"AuctionRoom"> | string
     title?: StringFilter<"AuctionRoom"> | string
     startPrice?: DecimalFilter<"AuctionRoom"> | Decimal | DecimalJsLike | number | string
@@ -5575,11 +5551,11 @@ export namespace Prisma {
   }
 
   export type AuctionRoomWhereUniqueInput = Prisma.AtLeast<{
-    id?: bigint | number
+    id?: string
     AND?: AuctionRoomWhereInput | AuctionRoomWhereInput[]
     OR?: AuctionRoomWhereInput[]
     NOT?: AuctionRoomWhereInput | AuctionRoomWhereInput[]
-    productId?: BigIntFilter<"AuctionRoom"> | bigint | number
+    productId?: StringFilter<"AuctionRoom"> | string
     sellerId?: StringFilter<"AuctionRoom"> | string
     title?: StringFilter<"AuctionRoom"> | string
     startPrice?: DecimalFilter<"AuctionRoom"> | Decimal | DecimalJsLike | number | string
@@ -5625,8 +5601,8 @@ export namespace Prisma {
     AND?: AuctionRoomScalarWhereWithAggregatesInput | AuctionRoomScalarWhereWithAggregatesInput[]
     OR?: AuctionRoomScalarWhereWithAggregatesInput[]
     NOT?: AuctionRoomScalarWhereWithAggregatesInput | AuctionRoomScalarWhereWithAggregatesInput[]
-    id?: BigIntWithAggregatesFilter<"AuctionRoom"> | bigint | number
-    productId?: BigIntWithAggregatesFilter<"AuctionRoom"> | bigint | number
+    id?: StringWithAggregatesFilter<"AuctionRoom"> | string
+    productId?: StringWithAggregatesFilter<"AuctionRoom"> | string
     sellerId?: StringWithAggregatesFilter<"AuctionRoom"> | string
     title?: StringWithAggregatesFilter<"AuctionRoom"> | string
     startPrice?: DecimalWithAggregatesFilter<"AuctionRoom"> | Decimal | DecimalJsLike | number | string
@@ -5647,7 +5623,7 @@ export namespace Prisma {
     OR?: AuctionBidWhereInput[]
     NOT?: AuctionBidWhereInput | AuctionBidWhereInput[]
     id?: BigIntFilter<"AuctionBid"> | bigint | number
-    auctionId?: BigIntFilter<"AuctionBid"> | bigint | number
+    auctionId?: StringFilter<"AuctionBid"> | string
     bidderId?: StringFilter<"AuctionBid"> | string
     bidAmount?: DecimalFilter<"AuctionBid"> | Decimal | DecimalJsLike | number | string
     bidTime?: DateTimeFilter<"AuctionBid"> | Date | string
@@ -5672,7 +5648,7 @@ export namespace Prisma {
     AND?: AuctionBidWhereInput | AuctionBidWhereInput[]
     OR?: AuctionBidWhereInput[]
     NOT?: AuctionBidWhereInput | AuctionBidWhereInput[]
-    auctionId?: BigIntFilter<"AuctionBid"> | bigint | number
+    auctionId?: StringFilter<"AuctionBid"> | string
     bidderId?: StringFilter<"AuctionBid"> | string
     bidAmount?: DecimalFilter<"AuctionBid"> | Decimal | DecimalJsLike | number | string
     bidTime?: DateTimeFilter<"AuctionBid"> | Date | string
@@ -5701,7 +5677,7 @@ export namespace Prisma {
     OR?: AuctionBidScalarWhereWithAggregatesInput[]
     NOT?: AuctionBidScalarWhereWithAggregatesInput | AuctionBidScalarWhereWithAggregatesInput[]
     id?: BigIntWithAggregatesFilter<"AuctionBid"> | bigint | number
-    auctionId?: BigIntWithAggregatesFilter<"AuctionBid"> | bigint | number
+    auctionId?: StringWithAggregatesFilter<"AuctionBid"> | string
     bidderId?: StringWithAggregatesFilter<"AuctionBid"> | string
     bidAmount?: DecimalWithAggregatesFilter<"AuctionBid"> | Decimal | DecimalJsLike | number | string
     bidTime?: DateTimeWithAggregatesFilter<"AuctionBid"> | Date | string
@@ -5714,11 +5690,11 @@ export namespace Prisma {
     OR?: AuctionSettlementWhereInput[]
     NOT?: AuctionSettlementWhereInput | AuctionSettlementWhereInput[]
     id?: BigIntFilter<"AuctionSettlement"> | bigint | number
-    auctionId?: BigIntFilter<"AuctionSettlement"> | bigint | number
+    auctionId?: StringFilter<"AuctionSettlement"> | string
     winnerId?: StringFilter<"AuctionSettlement"> | string
     winningBidAmount?: DecimalFilter<"AuctionSettlement"> | Decimal | DecimalJsLike | number | string
     paymentDeadline?: DateTimeFilter<"AuctionSettlement"> | Date | string
-    orderId?: BigIntNullableFilter<"AuctionSettlement"> | bigint | number | null
+    orderId?: StringNullableFilter<"AuctionSettlement"> | string | null
     status?: StringFilter<"AuctionSettlement"> | string
     settledAt?: DateTimeFilter<"AuctionSettlement"> | Date | string
     createdAt?: DateTimeFilter<"AuctionSettlement"> | Date | string
@@ -5740,14 +5716,14 @@ export namespace Prisma {
 
   export type AuctionSettlementWhereUniqueInput = Prisma.AtLeast<{
     id?: bigint | number
-    auctionId?: bigint | number
+    auctionId?: string
     AND?: AuctionSettlementWhereInput | AuctionSettlementWhereInput[]
     OR?: AuctionSettlementWhereInput[]
     NOT?: AuctionSettlementWhereInput | AuctionSettlementWhereInput[]
     winnerId?: StringFilter<"AuctionSettlement"> | string
     winningBidAmount?: DecimalFilter<"AuctionSettlement"> | Decimal | DecimalJsLike | number | string
     paymentDeadline?: DateTimeFilter<"AuctionSettlement"> | Date | string
-    orderId?: BigIntNullableFilter<"AuctionSettlement"> | bigint | number | null
+    orderId?: StringNullableFilter<"AuctionSettlement"> | string | null
     status?: StringFilter<"AuctionSettlement"> | string
     settledAt?: DateTimeFilter<"AuctionSettlement"> | Date | string
     createdAt?: DateTimeFilter<"AuctionSettlement"> | Date | string
@@ -5776,11 +5752,11 @@ export namespace Prisma {
     OR?: AuctionSettlementScalarWhereWithAggregatesInput[]
     NOT?: AuctionSettlementScalarWhereWithAggregatesInput | AuctionSettlementScalarWhereWithAggregatesInput[]
     id?: BigIntWithAggregatesFilter<"AuctionSettlement"> | bigint | number
-    auctionId?: BigIntWithAggregatesFilter<"AuctionSettlement"> | bigint | number
+    auctionId?: StringWithAggregatesFilter<"AuctionSettlement"> | string
     winnerId?: StringWithAggregatesFilter<"AuctionSettlement"> | string
     winningBidAmount?: DecimalWithAggregatesFilter<"AuctionSettlement"> | Decimal | DecimalJsLike | number | string
     paymentDeadline?: DateTimeWithAggregatesFilter<"AuctionSettlement"> | Date | string
-    orderId?: BigIntNullableWithAggregatesFilter<"AuctionSettlement"> | bigint | number | null
+    orderId?: StringNullableWithAggregatesFilter<"AuctionSettlement"> | string | null
     status?: StringWithAggregatesFilter<"AuctionSettlement"> | string
     settledAt?: DateTimeWithAggregatesFilter<"AuctionSettlement"> | Date | string
     createdAt?: DateTimeWithAggregatesFilter<"AuctionSettlement"> | Date | string
@@ -5791,7 +5767,7 @@ export namespace Prisma {
     OR?: AuctionExtensionWhereInput[]
     NOT?: AuctionExtensionWhereInput | AuctionExtensionWhereInput[]
     id?: BigIntFilter<"AuctionExtension"> | bigint | number
-    auctionId?: BigIntFilter<"AuctionExtension"> | bigint | number
+    auctionId?: StringFilter<"AuctionExtension"> | string
     extendedMinutes?: IntFilter<"AuctionExtension"> | number
     previousEndTime?: DateTimeFilter<"AuctionExtension"> | Date | string
     newEndTime?: DateTimeFilter<"AuctionExtension"> | Date | string
@@ -5816,7 +5792,7 @@ export namespace Prisma {
     AND?: AuctionExtensionWhereInput | AuctionExtensionWhereInput[]
     OR?: AuctionExtensionWhereInput[]
     NOT?: AuctionExtensionWhereInput | AuctionExtensionWhereInput[]
-    auctionId?: BigIntFilter<"AuctionExtension"> | bigint | number
+    auctionId?: StringFilter<"AuctionExtension"> | string
     extendedMinutes?: IntFilter<"AuctionExtension"> | number
     previousEndTime?: DateTimeFilter<"AuctionExtension"> | Date | string
     newEndTime?: DateTimeFilter<"AuctionExtension"> | Date | string
@@ -5845,7 +5821,7 @@ export namespace Prisma {
     OR?: AuctionExtensionScalarWhereWithAggregatesInput[]
     NOT?: AuctionExtensionScalarWhereWithAggregatesInput | AuctionExtensionScalarWhereWithAggregatesInput[]
     id?: BigIntWithAggregatesFilter<"AuctionExtension"> | bigint | number
-    auctionId?: BigIntWithAggregatesFilter<"AuctionExtension"> | bigint | number
+    auctionId?: StringWithAggregatesFilter<"AuctionExtension"> | string
     extendedMinutes?: IntWithAggregatesFilter<"AuctionExtension"> | number
     previousEndTime?: DateTimeWithAggregatesFilter<"AuctionExtension"> | Date | string
     newEndTime?: DateTimeWithAggregatesFilter<"AuctionExtension"> | Date | string
@@ -5854,8 +5830,8 @@ export namespace Prisma {
   }
 
   export type AuctionRoomCreateInput = {
-    id?: bigint | number
-    productId: bigint | number
+    id: string
+    productId: string
     sellerId: string
     title: string
     startPrice: Decimal | DecimalJsLike | number | string
@@ -5875,8 +5851,8 @@ export namespace Prisma {
   }
 
   export type AuctionRoomUncheckedCreateInput = {
-    id?: bigint | number
-    productId: bigint | number
+    id: string
+    productId: string
     sellerId: string
     title: string
     startPrice: Decimal | DecimalJsLike | number | string
@@ -5896,8 +5872,8 @@ export namespace Prisma {
   }
 
   export type AuctionRoomUpdateInput = {
-    id?: BigIntFieldUpdateOperationsInput | bigint | number
-    productId?: BigIntFieldUpdateOperationsInput | bigint | number
+    id?: StringFieldUpdateOperationsInput | string
+    productId?: StringFieldUpdateOperationsInput | string
     sellerId?: StringFieldUpdateOperationsInput | string
     title?: StringFieldUpdateOperationsInput | string
     startPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -5917,8 +5893,8 @@ export namespace Prisma {
   }
 
   export type AuctionRoomUncheckedUpdateInput = {
-    id?: BigIntFieldUpdateOperationsInput | bigint | number
-    productId?: BigIntFieldUpdateOperationsInput | bigint | number
+    id?: StringFieldUpdateOperationsInput | string
+    productId?: StringFieldUpdateOperationsInput | string
     sellerId?: StringFieldUpdateOperationsInput | string
     title?: StringFieldUpdateOperationsInput | string
     startPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -5938,8 +5914,8 @@ export namespace Prisma {
   }
 
   export type AuctionRoomCreateManyInput = {
-    id?: bigint | number
-    productId: bigint | number
+    id: string
+    productId: string
     sellerId: string
     title: string
     startPrice: Decimal | DecimalJsLike | number | string
@@ -5956,8 +5932,8 @@ export namespace Prisma {
   }
 
   export type AuctionRoomUpdateManyMutationInput = {
-    id?: BigIntFieldUpdateOperationsInput | bigint | number
-    productId?: BigIntFieldUpdateOperationsInput | bigint | number
+    id?: StringFieldUpdateOperationsInput | string
+    productId?: StringFieldUpdateOperationsInput | string
     sellerId?: StringFieldUpdateOperationsInput | string
     title?: StringFieldUpdateOperationsInput | string
     startPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -5974,8 +5950,8 @@ export namespace Prisma {
   }
 
   export type AuctionRoomUncheckedUpdateManyInput = {
-    id?: BigIntFieldUpdateOperationsInput | bigint | number
-    productId?: BigIntFieldUpdateOperationsInput | bigint | number
+    id?: StringFieldUpdateOperationsInput | string
+    productId?: StringFieldUpdateOperationsInput | string
     sellerId?: StringFieldUpdateOperationsInput | string
     title?: StringFieldUpdateOperationsInput | string
     startPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -6003,7 +5979,7 @@ export namespace Prisma {
 
   export type AuctionBidUncheckedCreateInput = {
     id?: bigint | number
-    auctionId: bigint | number
+    auctionId: string
     bidderId: string
     bidAmount: Decimal | DecimalJsLike | number | string
     bidTime?: Date | string
@@ -6023,7 +5999,7 @@ export namespace Prisma {
 
   export type AuctionBidUncheckedUpdateInput = {
     id?: BigIntFieldUpdateOperationsInput | bigint | number
-    auctionId?: BigIntFieldUpdateOperationsInput | bigint | number
+    auctionId?: StringFieldUpdateOperationsInput | string
     bidderId?: StringFieldUpdateOperationsInput | string
     bidAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     bidTime?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -6033,7 +6009,7 @@ export namespace Prisma {
 
   export type AuctionBidCreateManyInput = {
     id?: bigint | number
-    auctionId: bigint | number
+    auctionId: string
     bidderId: string
     bidAmount: Decimal | DecimalJsLike | number | string
     bidTime?: Date | string
@@ -6052,7 +6028,7 @@ export namespace Prisma {
 
   export type AuctionBidUncheckedUpdateManyInput = {
     id?: BigIntFieldUpdateOperationsInput | bigint | number
-    auctionId?: BigIntFieldUpdateOperationsInput | bigint | number
+    auctionId?: StringFieldUpdateOperationsInput | string
     bidderId?: StringFieldUpdateOperationsInput | string
     bidAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     bidTime?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -6065,7 +6041,7 @@ export namespace Prisma {
     winnerId: string
     winningBidAmount: Decimal | DecimalJsLike | number | string
     paymentDeadline: Date | string
-    orderId?: bigint | number | null
+    orderId?: string | null
     status?: string
     settledAt?: Date | string
     createdAt?: Date | string
@@ -6074,11 +6050,11 @@ export namespace Prisma {
 
   export type AuctionSettlementUncheckedCreateInput = {
     id?: bigint | number
-    auctionId: bigint | number
+    auctionId: string
     winnerId: string
     winningBidAmount: Decimal | DecimalJsLike | number | string
     paymentDeadline: Date | string
-    orderId?: bigint | number | null
+    orderId?: string | null
     status?: string
     settledAt?: Date | string
     createdAt?: Date | string
@@ -6089,7 +6065,7 @@ export namespace Prisma {
     winnerId?: StringFieldUpdateOperationsInput | string
     winningBidAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     paymentDeadline?: DateTimeFieldUpdateOperationsInput | Date | string
-    orderId?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
+    orderId?: NullableStringFieldUpdateOperationsInput | string | null
     status?: StringFieldUpdateOperationsInput | string
     settledAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -6098,11 +6074,11 @@ export namespace Prisma {
 
   export type AuctionSettlementUncheckedUpdateInput = {
     id?: BigIntFieldUpdateOperationsInput | bigint | number
-    auctionId?: BigIntFieldUpdateOperationsInput | bigint | number
+    auctionId?: StringFieldUpdateOperationsInput | string
     winnerId?: StringFieldUpdateOperationsInput | string
     winningBidAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     paymentDeadline?: DateTimeFieldUpdateOperationsInput | Date | string
-    orderId?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
+    orderId?: NullableStringFieldUpdateOperationsInput | string | null
     status?: StringFieldUpdateOperationsInput | string
     settledAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -6110,11 +6086,11 @@ export namespace Prisma {
 
   export type AuctionSettlementCreateManyInput = {
     id?: bigint | number
-    auctionId: bigint | number
+    auctionId: string
     winnerId: string
     winningBidAmount: Decimal | DecimalJsLike | number | string
     paymentDeadline: Date | string
-    orderId?: bigint | number | null
+    orderId?: string | null
     status?: string
     settledAt?: Date | string
     createdAt?: Date | string
@@ -6125,7 +6101,7 @@ export namespace Prisma {
     winnerId?: StringFieldUpdateOperationsInput | string
     winningBidAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     paymentDeadline?: DateTimeFieldUpdateOperationsInput | Date | string
-    orderId?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
+    orderId?: NullableStringFieldUpdateOperationsInput | string | null
     status?: StringFieldUpdateOperationsInput | string
     settledAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -6133,11 +6109,11 @@ export namespace Prisma {
 
   export type AuctionSettlementUncheckedUpdateManyInput = {
     id?: BigIntFieldUpdateOperationsInput | bigint | number
-    auctionId?: BigIntFieldUpdateOperationsInput | bigint | number
+    auctionId?: StringFieldUpdateOperationsInput | string
     winnerId?: StringFieldUpdateOperationsInput | string
     winningBidAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     paymentDeadline?: DateTimeFieldUpdateOperationsInput | Date | string
-    orderId?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
+    orderId?: NullableStringFieldUpdateOperationsInput | string | null
     status?: StringFieldUpdateOperationsInput | string
     settledAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -6155,7 +6131,7 @@ export namespace Prisma {
 
   export type AuctionExtensionUncheckedCreateInput = {
     id?: bigint | number
-    auctionId: bigint | number
+    auctionId: string
     extendedMinutes?: number
     previousEndTime: Date | string
     newEndTime: Date | string
@@ -6175,7 +6151,7 @@ export namespace Prisma {
 
   export type AuctionExtensionUncheckedUpdateInput = {
     id?: BigIntFieldUpdateOperationsInput | bigint | number
-    auctionId?: BigIntFieldUpdateOperationsInput | bigint | number
+    auctionId?: StringFieldUpdateOperationsInput | string
     extendedMinutes?: IntFieldUpdateOperationsInput | number
     previousEndTime?: DateTimeFieldUpdateOperationsInput | Date | string
     newEndTime?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -6185,7 +6161,7 @@ export namespace Prisma {
 
   export type AuctionExtensionCreateManyInput = {
     id?: bigint | number
-    auctionId: bigint | number
+    auctionId: string
     extendedMinutes?: number
     previousEndTime: Date | string
     newEndTime: Date | string
@@ -6204,23 +6180,12 @@ export namespace Prisma {
 
   export type AuctionExtensionUncheckedUpdateManyInput = {
     id?: BigIntFieldUpdateOperationsInput | bigint | number
-    auctionId?: BigIntFieldUpdateOperationsInput | bigint | number
+    auctionId?: StringFieldUpdateOperationsInput | string
     extendedMinutes?: IntFieldUpdateOperationsInput | number
     previousEndTime?: DateTimeFieldUpdateOperationsInput | Date | string
     newEndTime?: DateTimeFieldUpdateOperationsInput | Date | string
     reason?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
-  }
-
-  export type BigIntFilter<$PrismaModel = never> = {
-    equals?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    in?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel>
-    notIn?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel>
-    lt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    lte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    gt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    gte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    not?: NestedBigIntFilter<$PrismaModel> | bigint | number
   }
 
   export type StringFilter<$PrismaModel = never> = {
@@ -6346,8 +6311,6 @@ export namespace Prisma {
   }
 
   export type AuctionRoomAvgOrderByAggregateInput = {
-    id?: SortOrder
-    productId?: SortOrder
     startPrice?: SortOrder
     currentPrice?: SortOrder
     bidStep?: SortOrder
@@ -6391,28 +6354,10 @@ export namespace Prisma {
   }
 
   export type AuctionRoomSumOrderByAggregateInput = {
-    id?: SortOrder
-    productId?: SortOrder
     startPrice?: SortOrder
     currentPrice?: SortOrder
     bidStep?: SortOrder
     buyNowPrice?: SortOrder
-  }
-
-  export type BigIntWithAggregatesFilter<$PrismaModel = never> = {
-    equals?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    in?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel>
-    notIn?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel>
-    lt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    lte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    gt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    gte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    not?: NestedBigIntWithAggregatesFilter<$PrismaModel> | bigint | number
-    _count?: NestedIntFilter<$PrismaModel>
-    _avg?: NestedFloatFilter<$PrismaModel>
-    _sum?: NestedBigIntFilter<$PrismaModel>
-    _min?: NestedBigIntFilter<$PrismaModel>
-    _max?: NestedBigIntFilter<$PrismaModel>
   }
 
   export type StringWithAggregatesFilter<$PrismaModel = never> = {
@@ -6511,6 +6456,17 @@ export namespace Prisma {
     _max?: NestedStringNullableFilter<$PrismaModel>
   }
 
+  export type BigIntFilter<$PrismaModel = never> = {
+    equals?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    in?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel>
+    notIn?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel>
+    lt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    lte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    gt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    gte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    not?: NestedBigIntFilter<$PrismaModel> | bigint | number
+  }
+
   export type BoolFilter<$PrismaModel = never> = {
     equals?: boolean | BooleanFieldRefInput<$PrismaModel>
     not?: NestedBoolFilter<$PrismaModel> | boolean
@@ -6533,7 +6489,6 @@ export namespace Prisma {
 
   export type AuctionBidAvgOrderByAggregateInput = {
     id?: SortOrder
-    auctionId?: SortOrder
     bidAmount?: SortOrder
   }
 
@@ -6559,8 +6514,23 @@ export namespace Prisma {
 
   export type AuctionBidSumOrderByAggregateInput = {
     id?: SortOrder
-    auctionId?: SortOrder
     bidAmount?: SortOrder
+  }
+
+  export type BigIntWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    in?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel>
+    notIn?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel>
+    lt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    lte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    gt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    gte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    not?: NestedBigIntWithAggregatesFilter<$PrismaModel> | bigint | number
+    _count?: NestedIntFilter<$PrismaModel>
+    _avg?: NestedFloatFilter<$PrismaModel>
+    _sum?: NestedBigIntFilter<$PrismaModel>
+    _min?: NestedBigIntFilter<$PrismaModel>
+    _max?: NestedBigIntFilter<$PrismaModel>
   }
 
   export type BoolWithAggregatesFilter<$PrismaModel = never> = {
@@ -6569,17 +6539,6 @@ export namespace Prisma {
     _count?: NestedIntFilter<$PrismaModel>
     _min?: NestedBoolFilter<$PrismaModel>
     _max?: NestedBoolFilter<$PrismaModel>
-  }
-
-  export type BigIntNullableFilter<$PrismaModel = never> = {
-    equals?: bigint | number | BigIntFieldRefInput<$PrismaModel> | null
-    in?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel> | null
-    notIn?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel> | null
-    lt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    lte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    gt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    gte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    not?: NestedBigIntNullableFilter<$PrismaModel> | bigint | number | null
   }
 
   export type AuctionSettlementCountOrderByAggregateInput = {
@@ -6596,9 +6555,7 @@ export namespace Prisma {
 
   export type AuctionSettlementAvgOrderByAggregateInput = {
     id?: SortOrder
-    auctionId?: SortOrder
     winningBidAmount?: SortOrder
-    orderId?: SortOrder
   }
 
   export type AuctionSettlementMaxOrderByAggregateInput = {
@@ -6627,25 +6584,7 @@ export namespace Prisma {
 
   export type AuctionSettlementSumOrderByAggregateInput = {
     id?: SortOrder
-    auctionId?: SortOrder
     winningBidAmount?: SortOrder
-    orderId?: SortOrder
-  }
-
-  export type BigIntNullableWithAggregatesFilter<$PrismaModel = never> = {
-    equals?: bigint | number | BigIntFieldRefInput<$PrismaModel> | null
-    in?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel> | null
-    notIn?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel> | null
-    lt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    lte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    gt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    gte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    not?: NestedBigIntNullableWithAggregatesFilter<$PrismaModel> | bigint | number | null
-    _count?: NestedIntNullableFilter<$PrismaModel>
-    _avg?: NestedFloatNullableFilter<$PrismaModel>
-    _sum?: NestedBigIntNullableFilter<$PrismaModel>
-    _min?: NestedBigIntNullableFilter<$PrismaModel>
-    _max?: NestedBigIntNullableFilter<$PrismaModel>
   }
 
   export type IntFilter<$PrismaModel = never> = {
@@ -6671,7 +6610,6 @@ export namespace Prisma {
 
   export type AuctionExtensionAvgOrderByAggregateInput = {
     id?: SortOrder
-    auctionId?: SortOrder
     extendedMinutes?: SortOrder
   }
 
@@ -6697,7 +6635,6 @@ export namespace Prisma {
 
   export type AuctionExtensionSumOrderByAggregateInput = {
     id?: SortOrder
-    auctionId?: SortOrder
     extendedMinutes?: SortOrder
   }
 
@@ -6755,14 +6692,6 @@ export namespace Prisma {
     connectOrCreate?: AuctionExtensionCreateOrConnectWithoutAuctionInput | AuctionExtensionCreateOrConnectWithoutAuctionInput[]
     createMany?: AuctionExtensionCreateManyAuctionInputEnvelope
     connect?: AuctionExtensionWhereUniqueInput | AuctionExtensionWhereUniqueInput[]
-  }
-
-  export type BigIntFieldUpdateOperationsInput = {
-    set?: bigint | number
-    increment?: bigint | number
-    decrement?: bigint | number
-    multiply?: bigint | number
-    divide?: bigint | number
   }
 
   export type StringFieldUpdateOperationsInput = {
@@ -6879,6 +6808,14 @@ export namespace Prisma {
     connect?: AuctionRoomWhereUniqueInput
   }
 
+  export type BigIntFieldUpdateOperationsInput = {
+    set?: bigint | number
+    increment?: bigint | number
+    decrement?: bigint | number
+    multiply?: bigint | number
+    divide?: bigint | number
+  }
+
   export type BoolFieldUpdateOperationsInput = {
     set?: boolean
   }
@@ -6895,14 +6832,6 @@ export namespace Prisma {
     create?: XOR<AuctionRoomCreateWithoutSettlementInput, AuctionRoomUncheckedCreateWithoutSettlementInput>
     connectOrCreate?: AuctionRoomCreateOrConnectWithoutSettlementInput
     connect?: AuctionRoomWhereUniqueInput
-  }
-
-  export type NullableBigIntFieldUpdateOperationsInput = {
-    set?: bigint | number | null
-    increment?: bigint | number
-    decrement?: bigint | number
-    multiply?: bigint | number
-    divide?: bigint | number
   }
 
   export type AuctionRoomUpdateOneRequiredWithoutSettlementNestedInput = {
@@ -6933,17 +6862,6 @@ export namespace Prisma {
     upsert?: AuctionRoomUpsertWithoutExtensionsInput
     connect?: AuctionRoomWhereUniqueInput
     update?: XOR<XOR<AuctionRoomUpdateToOneWithWhereWithoutExtensionsInput, AuctionRoomUpdateWithoutExtensionsInput>, AuctionRoomUncheckedUpdateWithoutExtensionsInput>
-  }
-
-  export type NestedBigIntFilter<$PrismaModel = never> = {
-    equals?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    in?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel>
-    notIn?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel>
-    lt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    lte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    gt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    gte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    not?: NestedBigIntFilter<$PrismaModel> | bigint | number
   }
 
   export type NestedStringFilter<$PrismaModel = never> = {
@@ -7018,44 +6936,6 @@ export namespace Prisma {
     not?: NestedStringNullableFilter<$PrismaModel> | string | null
   }
 
-  export type NestedBigIntWithAggregatesFilter<$PrismaModel = never> = {
-    equals?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    in?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel>
-    notIn?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel>
-    lt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    lte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    gt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    gte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    not?: NestedBigIntWithAggregatesFilter<$PrismaModel> | bigint | number
-    _count?: NestedIntFilter<$PrismaModel>
-    _avg?: NestedFloatFilter<$PrismaModel>
-    _sum?: NestedBigIntFilter<$PrismaModel>
-    _min?: NestedBigIntFilter<$PrismaModel>
-    _max?: NestedBigIntFilter<$PrismaModel>
-  }
-
-  export type NestedIntFilter<$PrismaModel = never> = {
-    equals?: number | IntFieldRefInput<$PrismaModel>
-    in?: number[] | ListIntFieldRefInput<$PrismaModel>
-    notIn?: number[] | ListIntFieldRefInput<$PrismaModel>
-    lt?: number | IntFieldRefInput<$PrismaModel>
-    lte?: number | IntFieldRefInput<$PrismaModel>
-    gt?: number | IntFieldRefInput<$PrismaModel>
-    gte?: number | IntFieldRefInput<$PrismaModel>
-    not?: NestedIntFilter<$PrismaModel> | number
-  }
-
-  export type NestedFloatFilter<$PrismaModel = never> = {
-    equals?: number | FloatFieldRefInput<$PrismaModel>
-    in?: number[] | ListFloatFieldRefInput<$PrismaModel>
-    notIn?: number[] | ListFloatFieldRefInput<$PrismaModel>
-    lt?: number | FloatFieldRefInput<$PrismaModel>
-    lte?: number | FloatFieldRefInput<$PrismaModel>
-    gt?: number | FloatFieldRefInput<$PrismaModel>
-    gte?: number | FloatFieldRefInput<$PrismaModel>
-    not?: NestedFloatFilter<$PrismaModel> | number
-  }
-
   export type NestedStringWithAggregatesFilter<$PrismaModel = never> = {
     equals?: string | StringFieldRefInput<$PrismaModel>
     in?: string[] | ListStringFieldRefInput<$PrismaModel>
@@ -7071,6 +6951,17 @@ export namespace Prisma {
     _count?: NestedIntFilter<$PrismaModel>
     _min?: NestedStringFilter<$PrismaModel>
     _max?: NestedStringFilter<$PrismaModel>
+  }
+
+  export type NestedIntFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel>
+    in?: number[] | ListIntFieldRefInput<$PrismaModel>
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel>
+    lt?: number | IntFieldRefInput<$PrismaModel>
+    lte?: number | IntFieldRefInput<$PrismaModel>
+    gt?: number | IntFieldRefInput<$PrismaModel>
+    gte?: number | IntFieldRefInput<$PrismaModel>
+    not?: NestedIntFilter<$PrismaModel> | number
   }
 
   export type NestedDecimalWithAggregatesFilter<$PrismaModel = never> = {
@@ -7161,9 +7052,47 @@ export namespace Prisma {
     _max?: NestedStringNullableFilter<$PrismaModel>
   }
 
+  export type NestedBigIntFilter<$PrismaModel = never> = {
+    equals?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    in?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel>
+    notIn?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel>
+    lt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    lte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    gt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    gte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    not?: NestedBigIntFilter<$PrismaModel> | bigint | number
+  }
+
   export type NestedBoolFilter<$PrismaModel = never> = {
     equals?: boolean | BooleanFieldRefInput<$PrismaModel>
     not?: NestedBoolFilter<$PrismaModel> | boolean
+  }
+
+  export type NestedBigIntWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    in?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel>
+    notIn?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel>
+    lt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    lte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    gt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    gte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
+    not?: NestedBigIntWithAggregatesFilter<$PrismaModel> | bigint | number
+    _count?: NestedIntFilter<$PrismaModel>
+    _avg?: NestedFloatFilter<$PrismaModel>
+    _sum?: NestedBigIntFilter<$PrismaModel>
+    _min?: NestedBigIntFilter<$PrismaModel>
+    _max?: NestedBigIntFilter<$PrismaModel>
+  }
+
+  export type NestedFloatFilter<$PrismaModel = never> = {
+    equals?: number | FloatFieldRefInput<$PrismaModel>
+    in?: number[] | ListFloatFieldRefInput<$PrismaModel>
+    notIn?: number[] | ListFloatFieldRefInput<$PrismaModel>
+    lt?: number | FloatFieldRefInput<$PrismaModel>
+    lte?: number | FloatFieldRefInput<$PrismaModel>
+    gt?: number | FloatFieldRefInput<$PrismaModel>
+    gte?: number | FloatFieldRefInput<$PrismaModel>
+    not?: NestedFloatFilter<$PrismaModel> | number
   }
 
   export type NestedBoolWithAggregatesFilter<$PrismaModel = never> = {
@@ -7172,44 +7101,6 @@ export namespace Prisma {
     _count?: NestedIntFilter<$PrismaModel>
     _min?: NestedBoolFilter<$PrismaModel>
     _max?: NestedBoolFilter<$PrismaModel>
-  }
-
-  export type NestedBigIntNullableFilter<$PrismaModel = never> = {
-    equals?: bigint | number | BigIntFieldRefInput<$PrismaModel> | null
-    in?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel> | null
-    notIn?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel> | null
-    lt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    lte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    gt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    gte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    not?: NestedBigIntNullableFilter<$PrismaModel> | bigint | number | null
-  }
-
-  export type NestedBigIntNullableWithAggregatesFilter<$PrismaModel = never> = {
-    equals?: bigint | number | BigIntFieldRefInput<$PrismaModel> | null
-    in?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel> | null
-    notIn?: bigint[] | number[] | ListBigIntFieldRefInput<$PrismaModel> | null
-    lt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    lte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    gt?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    gte?: bigint | number | BigIntFieldRefInput<$PrismaModel>
-    not?: NestedBigIntNullableWithAggregatesFilter<$PrismaModel> | bigint | number | null
-    _count?: NestedIntNullableFilter<$PrismaModel>
-    _avg?: NestedFloatNullableFilter<$PrismaModel>
-    _sum?: NestedBigIntNullableFilter<$PrismaModel>
-    _min?: NestedBigIntNullableFilter<$PrismaModel>
-    _max?: NestedBigIntNullableFilter<$PrismaModel>
-  }
-
-  export type NestedFloatNullableFilter<$PrismaModel = never> = {
-    equals?: number | FloatFieldRefInput<$PrismaModel> | null
-    in?: number[] | ListFloatFieldRefInput<$PrismaModel> | null
-    notIn?: number[] | ListFloatFieldRefInput<$PrismaModel> | null
-    lt?: number | FloatFieldRefInput<$PrismaModel>
-    lte?: number | FloatFieldRefInput<$PrismaModel>
-    gt?: number | FloatFieldRefInput<$PrismaModel>
-    gte?: number | FloatFieldRefInput<$PrismaModel>
-    not?: NestedFloatNullableFilter<$PrismaModel> | number | null
   }
 
   export type NestedIntWithAggregatesFilter<$PrismaModel = never> = {
@@ -7261,7 +7152,7 @@ export namespace Prisma {
     winnerId: string
     winningBidAmount: Decimal | DecimalJsLike | number | string
     paymentDeadline: Date | string
-    orderId?: bigint | number | null
+    orderId?: string | null
     status?: string
     settledAt?: Date | string
     createdAt?: Date | string
@@ -7272,7 +7163,7 @@ export namespace Prisma {
     winnerId: string
     winningBidAmount: Decimal | DecimalJsLike | number | string
     paymentDeadline: Date | string
-    orderId?: bigint | number | null
+    orderId?: string | null
     status?: string
     settledAt?: Date | string
     createdAt?: Date | string
@@ -7332,7 +7223,7 @@ export namespace Prisma {
     OR?: AuctionBidScalarWhereInput[]
     NOT?: AuctionBidScalarWhereInput | AuctionBidScalarWhereInput[]
     id?: BigIntFilter<"AuctionBid"> | bigint | number
-    auctionId?: BigIntFilter<"AuctionBid"> | bigint | number
+    auctionId?: StringFilter<"AuctionBid"> | string
     bidderId?: StringFilter<"AuctionBid"> | string
     bidAmount?: DecimalFilter<"AuctionBid"> | Decimal | DecimalJsLike | number | string
     bidTime?: DateTimeFilter<"AuctionBid"> | Date | string
@@ -7356,7 +7247,7 @@ export namespace Prisma {
     winnerId?: StringFieldUpdateOperationsInput | string
     winningBidAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     paymentDeadline?: DateTimeFieldUpdateOperationsInput | Date | string
-    orderId?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
+    orderId?: NullableStringFieldUpdateOperationsInput | string | null
     status?: StringFieldUpdateOperationsInput | string
     settledAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -7367,7 +7258,7 @@ export namespace Prisma {
     winnerId?: StringFieldUpdateOperationsInput | string
     winningBidAmount?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     paymentDeadline?: DateTimeFieldUpdateOperationsInput | Date | string
-    orderId?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
+    orderId?: NullableStringFieldUpdateOperationsInput | string | null
     status?: StringFieldUpdateOperationsInput | string
     settledAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -7394,7 +7285,7 @@ export namespace Prisma {
     OR?: AuctionExtensionScalarWhereInput[]
     NOT?: AuctionExtensionScalarWhereInput | AuctionExtensionScalarWhereInput[]
     id?: BigIntFilter<"AuctionExtension"> | bigint | number
-    auctionId?: BigIntFilter<"AuctionExtension"> | bigint | number
+    auctionId?: StringFilter<"AuctionExtension"> | string
     extendedMinutes?: IntFilter<"AuctionExtension"> | number
     previousEndTime?: DateTimeFilter<"AuctionExtension"> | Date | string
     newEndTime?: DateTimeFilter<"AuctionExtension"> | Date | string
@@ -7403,8 +7294,8 @@ export namespace Prisma {
   }
 
   export type AuctionRoomCreateWithoutBidsInput = {
-    id?: bigint | number
-    productId: bigint | number
+    id: string
+    productId: string
     sellerId: string
     title: string
     startPrice: Decimal | DecimalJsLike | number | string
@@ -7423,8 +7314,8 @@ export namespace Prisma {
   }
 
   export type AuctionRoomUncheckedCreateWithoutBidsInput = {
-    id?: bigint | number
-    productId: bigint | number
+    id: string
+    productId: string
     sellerId: string
     title: string
     startPrice: Decimal | DecimalJsLike | number | string
@@ -7459,8 +7350,8 @@ export namespace Prisma {
   }
 
   export type AuctionRoomUpdateWithoutBidsInput = {
-    id?: BigIntFieldUpdateOperationsInput | bigint | number
-    productId?: BigIntFieldUpdateOperationsInput | bigint | number
+    id?: StringFieldUpdateOperationsInput | string
+    productId?: StringFieldUpdateOperationsInput | string
     sellerId?: StringFieldUpdateOperationsInput | string
     title?: StringFieldUpdateOperationsInput | string
     startPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -7479,8 +7370,8 @@ export namespace Prisma {
   }
 
   export type AuctionRoomUncheckedUpdateWithoutBidsInput = {
-    id?: BigIntFieldUpdateOperationsInput | bigint | number
-    productId?: BigIntFieldUpdateOperationsInput | bigint | number
+    id?: StringFieldUpdateOperationsInput | string
+    productId?: StringFieldUpdateOperationsInput | string
     sellerId?: StringFieldUpdateOperationsInput | string
     title?: StringFieldUpdateOperationsInput | string
     startPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -7499,8 +7390,8 @@ export namespace Prisma {
   }
 
   export type AuctionRoomCreateWithoutSettlementInput = {
-    id?: bigint | number
-    productId: bigint | number
+    id: string
+    productId: string
     sellerId: string
     title: string
     startPrice: Decimal | DecimalJsLike | number | string
@@ -7519,8 +7410,8 @@ export namespace Prisma {
   }
 
   export type AuctionRoomUncheckedCreateWithoutSettlementInput = {
-    id?: bigint | number
-    productId: bigint | number
+    id: string
+    productId: string
     sellerId: string
     title: string
     startPrice: Decimal | DecimalJsLike | number | string
@@ -7555,8 +7446,8 @@ export namespace Prisma {
   }
 
   export type AuctionRoomUpdateWithoutSettlementInput = {
-    id?: BigIntFieldUpdateOperationsInput | bigint | number
-    productId?: BigIntFieldUpdateOperationsInput | bigint | number
+    id?: StringFieldUpdateOperationsInput | string
+    productId?: StringFieldUpdateOperationsInput | string
     sellerId?: StringFieldUpdateOperationsInput | string
     title?: StringFieldUpdateOperationsInput | string
     startPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -7575,8 +7466,8 @@ export namespace Prisma {
   }
 
   export type AuctionRoomUncheckedUpdateWithoutSettlementInput = {
-    id?: BigIntFieldUpdateOperationsInput | bigint | number
-    productId?: BigIntFieldUpdateOperationsInput | bigint | number
+    id?: StringFieldUpdateOperationsInput | string
+    productId?: StringFieldUpdateOperationsInput | string
     sellerId?: StringFieldUpdateOperationsInput | string
     title?: StringFieldUpdateOperationsInput | string
     startPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -7595,8 +7486,8 @@ export namespace Prisma {
   }
 
   export type AuctionRoomCreateWithoutExtensionsInput = {
-    id?: bigint | number
-    productId: bigint | number
+    id: string
+    productId: string
     sellerId: string
     title: string
     startPrice: Decimal | DecimalJsLike | number | string
@@ -7615,8 +7506,8 @@ export namespace Prisma {
   }
 
   export type AuctionRoomUncheckedCreateWithoutExtensionsInput = {
-    id?: bigint | number
-    productId: bigint | number
+    id: string
+    productId: string
     sellerId: string
     title: string
     startPrice: Decimal | DecimalJsLike | number | string
@@ -7651,8 +7542,8 @@ export namespace Prisma {
   }
 
   export type AuctionRoomUpdateWithoutExtensionsInput = {
-    id?: BigIntFieldUpdateOperationsInput | bigint | number
-    productId?: BigIntFieldUpdateOperationsInput | bigint | number
+    id?: StringFieldUpdateOperationsInput | string
+    productId?: StringFieldUpdateOperationsInput | string
     sellerId?: StringFieldUpdateOperationsInput | string
     title?: StringFieldUpdateOperationsInput | string
     startPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -7671,8 +7562,8 @@ export namespace Prisma {
   }
 
   export type AuctionRoomUncheckedUpdateWithoutExtensionsInput = {
-    id?: BigIntFieldUpdateOperationsInput | bigint | number
-    productId?: BigIntFieldUpdateOperationsInput | bigint | number
+    id?: StringFieldUpdateOperationsInput | string
+    productId?: StringFieldUpdateOperationsInput | string
     sellerId?: StringFieldUpdateOperationsInput | string
     title?: StringFieldUpdateOperationsInput | string
     startPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string

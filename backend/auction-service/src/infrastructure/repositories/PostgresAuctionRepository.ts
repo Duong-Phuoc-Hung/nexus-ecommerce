@@ -2,6 +2,7 @@ import { PrismaClient } from '../database/generated/client';
 import { PrismaClientWrapper } from '../database/PrismaClient';
 import { IAuctionRepository } from '../../domain/repositories/IAuctionRepository';
 import { Auction, AuctionStatus, BidRecord } from '../../domain/entities/Auction';
+import { generateUuidV7 } from '../utils/uuid';
 
 export class PostgresAuctionRepository implements IAuctionRepository {
   private _prisma?: PrismaClient;
@@ -44,14 +45,10 @@ export class PostgresAuctionRepository implements IAuctionRepository {
   // Tìm phòng đấu giá theo ID qua Prisma ORM
   public async findById(id: string): Promise<Auction | null> {
     try {
-      const isNumeric = /^\d+$/.test(id);
-      if (!isNumeric) {
-        return this.fallbackMemory.get(id) || null;
-      }
       const record = await this.prisma.auctionRoom.findUnique({
-        where: { id: BigInt(id) },
+        where: { id },
       });
-      if (!record) return null;
+      if (!record) return this.fallbackMemory.get(id) || null;
       return this.mapModelToAuction(record);
     } catch {
       return this.fallbackMemory.get(id) || null;
@@ -103,9 +100,12 @@ export class PostgresAuctionRepository implements IAuctionRepository {
   // Tạo mới phòng đấu giá qua Prisma ORM
   public async create(auction: Auction): Promise<Auction> {
     try {
+      const auctionId =
+        auction.id && !auction.id.startsWith('auc_') ? auction.id : generateUuidV7();
       const record = await this.prisma.auctionRoom.create({
         data: {
-          productId: BigInt(auction.productId || '1'),
+          id: auctionId,
+          productId: auction.productId || '1',
           sellerId: auction.sellerId,
           title: auction.title,
           startPrice: auction.startingPrice,
@@ -133,23 +133,20 @@ export class PostgresAuctionRepository implements IAuctionRepository {
   // Cập nhật thông tin và trạng thái phòng đấu giá qua Prisma ORM
   public async update(auction: Auction): Promise<void> {
     try {
-      const isNumeric = /^\d+$/.test(auction.id);
-      if (isNumeric) {
-        await this.prisma.auctionRoom.update({
-          where: { id: BigInt(auction.id) },
-          data: {
-            title: auction.title,
-            currentPrice: auction.currentHighestBid,
-            bidStep: auction.bidIncrement,
-            buyNowPrice: auction.buyNowPrice || null,
-            status: auction.status,
-            winnerId: auction.highestBidderId || null,
-            endTime: auction.endTime,
-            actualEndTime: auction.actualEndTime || null,
-            updatedAt: auction.updatedAt,
-          },
-        });
-      }
+      await this.prisma.auctionRoom.update({
+        where: { id: auction.id },
+        data: {
+          title: auction.title,
+          currentPrice: auction.currentHighestBid,
+          bidStep: auction.bidIncrement,
+          buyNowPrice: auction.buyNowPrice || null,
+          status: auction.status,
+          winnerId: auction.highestBidderId || null,
+          endTime: auction.endTime,
+          actualEndTime: auction.actualEndTime || null,
+          updatedAt: auction.updatedAt,
+        },
+      });
       this.fallbackMemory.set(auction.id, auction);
     } catch {
       this.fallbackMemory.set(auction.id, auction);
@@ -159,18 +156,15 @@ export class PostgresAuctionRepository implements IAuctionRepository {
   // Lưu lịch sử đặt giá mới qua Prisma ORM
   public async saveBid(bid: BidRecord): Promise<void> {
     try {
-      const isNumeric = /^\d+$/.test(bid.auctionId);
-      if (isNumeric) {
-        await this.prisma.auctionBid.create({
-          data: {
-            auctionId: BigInt(bid.auctionId),
-            bidderId: bid.bidderId,
-            bidAmount: bid.amount,
-            bidTime: bid.bidTime,
-            isWinning: bid.isWinning ?? true,
-          },
-        });
-      }
+      await this.prisma.auctionBid.create({
+        data: {
+          auctionId: bid.auctionId,
+          bidderId: bid.bidderId,
+          bidAmount: bid.amount,
+          bidTime: bid.bidTime,
+          isWinning: bid.isWinning ?? true,
+        },
+      });
       const list = this.fallbackBids.get(bid.auctionId) || [];
       list.unshift(bid);
       this.fallbackBids.set(bid.auctionId, list);
@@ -184,12 +178,8 @@ export class PostgresAuctionRepository implements IAuctionRepository {
   // Lấy lịch sử các lượt đặt giá qua Prisma ORM
   public async findBidsByAuctionId(auctionId: string): Promise<BidRecord[]> {
     try {
-      const isNumeric = /^\d+$/.test(auctionId);
-      if (!isNumeric) {
-        return this.fallbackBids.get(auctionId) || [];
-      }
       const records = await this.prisma.auctionBid.findMany({
-        where: { auctionId: BigInt(auctionId) },
+        where: { auctionId },
         orderBy: { bidTime: 'desc' },
       });
       return records.map((r: any) => ({

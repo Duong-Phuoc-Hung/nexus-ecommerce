@@ -6,6 +6,7 @@ import {
   ProductSearchPage,
 } from '../../domain/repositories/IProductRepository';
 import { Product, ProductStatus } from '../../domain/entities/Product';
+import { generateUuidV7 } from '../utils/uuid';
 import {
   ListCatalogProductsQuery,
   ListCatalogProductsResult,
@@ -27,16 +28,16 @@ export class PostgresProductRepository implements IProductRepository {
 
   // 1. Xem chi tiết sản phẩm theo ID hoặc Slug
   public async findById(id: string): Promise<Product | null> {
-    const isNumeric = /^\d+$/.test(id);
-    const row = isNumeric
-      ? await this.prisma.product.findFirst({
-          where: { id: BigInt(id), deletedAt: null },
-          include: { images: { orderBy: { displayOrder: 'asc' } }, attributes: true },
-        })
-      : await this.prisma.product.findFirst({
-          where: { slug: id, deletedAt: null },
-          include: { images: { orderBy: { displayOrder: 'asc' } }, attributes: true },
-        });
+    let row = await this.prisma.product.findFirst({
+      where: { id, deletedAt: null },
+      include: { images: { orderBy: { displayOrder: 'asc' } }, attributes: true },
+    });
+    if (!row) {
+      row = await this.prisma.product.findFirst({
+        where: { slug: id, deletedAt: null },
+        include: { images: { orderBy: { displayOrder: 'asc' } }, attributes: true },
+      });
+    }
 
     if (!row) return null;
     return this.mapRowToProduct(row);
@@ -178,6 +179,7 @@ export class PostgresProductRepository implements IProductRepository {
   public async save(product: Product): Promise<string> {
     const created = await this.prisma.product.create({
       data: {
+        id: product.id && product.id !== '0' ? product.id : generateUuidV7(),
         sellerId: product.sellerId,
         categoryId: BigInt(product.categoryId),
         title: product.title,
@@ -215,7 +217,7 @@ export class PostgresProductRepository implements IProductRepository {
 
   // 8. Cập nhật sản phẩm (chạy trong transaction để cập nhật đồng bộ cả ảnh và thuộc tính)
   public async update(product: Product): Promise<void> {
-    const pId = BigInt(product.id);
+    const pId = product.id;
 
     await this.prisma.$transaction(async (tx: any) => {
       await tx.product.update({
@@ -259,7 +261,7 @@ export class PostgresProductRepository implements IProductRepository {
   // 9. Xóa mềm sản phẩm (chuyển trạng thái sang ARCHIVED và ghi nhận thời điểm xóa)
   public async delete(id: string): Promise<void> {
     await this.prisma.product.update({
-      where: { id: BigInt(id) },
+      where: { id },
       data: {
         deletedAt: new Date(),
         status: 'ARCHIVED',
@@ -269,7 +271,7 @@ export class PostgresProductRepository implements IProductRepository {
 
   // 10. Khôi phục sản phẩm đã xóa mềm (đặt lại deletedAt = null và status = ACTIVE)
   public async recover(id: string, sellerId?: string): Promise<void> {
-    const where: any = { id: BigInt(id) };
+    const where: any = { id };
     if (sellerId) where.sellerId = sellerId;
 
     await this.prisma.product.updateMany({

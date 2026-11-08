@@ -63,7 +63,7 @@ model Category {
 // -----------------------------------------------------------------------------
 model Product {
   // Khóa chính: Số tự tăng (1, 2, 3...)
-  id           BigInt             @id @default(autoincrement())
+  id           String             @id @db.VarChar(36)
 
   // Tham chiếu người bán / chủ sở hữu sản phẩm (Lấy 'id' từ user_users bên user-service - UUID)
   sellerId     String             @map("seller_id") @db.VarChar(36)
@@ -117,7 +117,7 @@ model ProductImage {
   id           BigInt   @id @default(autoincrement())
 
   // Thuộc sản phẩm nào (Khóa ngoại nối với catalog_products)
-  productId    BigInt   @map("product_id")
+  productId    String   @map("product_id") @db.VarChar(36)
 
   // Link ảnh lưu trên Cloud Storage / CDN
   imageUrl     String   @map("image_url") @db.VarChar(500)
@@ -145,7 +145,7 @@ model ProductAttribute {
   id             BigInt   @id @default(autoincrement())
 
   // Thuộc sản phẩm nào (Khóa ngoại nối với catalog_products)
-  productId      BigInt   @map("product_id")
+  productId      String   @map("product_id") @db.VarChar(36)
 
   // Tên thông số / Thuộc tính (VD: "Màu sắc", "Dung lượng RAM", "Bộ nhớ trong", "Kích thước màn hình")
   attributeKey   String   @map("attribute_key") @db.VarChar(100)

@@ -8,10 +8,10 @@
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS auction_rooms (
     -- Khóa chính: Số tự tăng (1, 2, 3...)
-    id BIGSERIAL PRIMARY KEY,
+    id VARCHAR(36) PRIMARY KEY,
 
     -- Tham chiếu sản phẩm đấu giá (Lấy 'id' từ catalog_products bên catalog-service)
-    product_id BIGINT NOT NULL,
+    product_id VARCHAR(36) NOT NULL,
 
     -- Tham chiếu người tạo phiên / chủ món hàng (Lấy 'id' từ user_users bên user-service - UUID)
     seller_id VARCHAR(36) NOT NULL,
@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS auction_bids (
     id BIGSERIAL PRIMARY KEY,
 
     -- Thuộc phòng đấu giá nào (Khóa ngoại nối với auction_rooms)
-    auction_id BIGINT NOT NULL,
+    auction_id VARCHAR(36) NOT NULL,
 
     -- Tham chiếu người vừa bấm nút trả giá (Lấy 'id' từ user_users bên user-service - UUID)
     bidder_id VARCHAR(36) NOT NULL,
@@ -99,7 +99,7 @@ CREATE TABLE IF NOT EXISTS auction_settlements (
     id BIGSERIAL PRIMARY KEY,
 
     -- Thuộc phòng đấu giá nào (Nối 1-1 với auction_rooms)
-    auction_id BIGINT NOT NULL UNIQUE,
+    auction_id VARCHAR(36) NOT NULL UNIQUE,
 
     -- Tham chiếu người thắng cuộc (Lấy 'id' từ user_users bên user-service - UUID)
     winner_id VARCHAR(36) NOT NULL,
@@ -111,7 +111,7 @@ CREATE TABLE IF NOT EXISTS auction_settlements (
     payment_deadline TIMESTAMPTZ NOT NULL,
 
     -- Tham chiếu đơn hàng sinh ra bên commerce_orders của commerce-service khi thanh toán
-    order_id BIGINT,
+    order_id VARCHAR(36),
 
     -- Trạng thái: PENDING_PAYMENT (Chờ trả), PAID (Đã trả), TIMEOUT_PENALIZED (Bùng kèo quá 24h)
     status VARCHAR(20) NOT NULL DEFAULT 'PENDING_PAYMENT',
@@ -136,7 +136,7 @@ CREATE TABLE IF NOT EXISTS auction_extensions (
     id BIGSERIAL PRIMARY KEY,
 
     -- Thuộc phòng đấu giá nào (Nối với auction_rooms)
-    auction_id BIGINT NOT NULL,
+    auction_id VARCHAR(36) NOT NULL,
 
     -- Số phút cộng thêm (SRS: Mặc định cộng 5 phút nếu có bid ở 5 phút cuối)
     extended_minutes INT NOT NULL DEFAULT 5,

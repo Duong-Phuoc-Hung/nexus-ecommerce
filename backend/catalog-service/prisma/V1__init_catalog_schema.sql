@@ -50,7 +50,7 @@ CREATE INDEX IF NOT EXISTS idx_category_slug ON catalog_categories (slug);
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS catalog_products (
     -- Khóa chính: Số tự tăng (1, 2, 3...)
-    id BIGSERIAL PRIMARY KEY,
+    id VARCHAR(36) PRIMARY KEY,
 
     -- Tham chiếu người bán / chủ sở hữu sản phẩm (Lấy 'id' từ user_users bên user-service - UUID)
     seller_id VARCHAR(36) NOT NULL,
@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS catalog_product_images (
     id BIGSERIAL PRIMARY KEY,
 
     -- Thuộc sản phẩm nào (Khóa ngoại nối với catalog_products)
-    product_id BIGINT NOT NULL,
+    product_id VARCHAR(36) NOT NULL,
 
     -- Link ảnh lưu trên Cloud Storage / CDN
     image_url VARCHAR(500) NOT NULL,
@@ -132,7 +132,7 @@ CREATE TABLE IF NOT EXISTS catalog_product_attributes (
     id BIGSERIAL PRIMARY KEY,
 
     -- Thuộc sản phẩm nào (Khóa ngoại nối với catalog_products)
-    product_id BIGINT NOT NULL,
+    product_id VARCHAR(36) NOT NULL,
 
     -- Tên thông số / Thuộc tính (VD: "Màu sắc", "Dung lượng RAM", "Bộ nhớ trong")
     attribute_key VARCHAR(100) NOT NULL,

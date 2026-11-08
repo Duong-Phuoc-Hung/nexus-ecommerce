@@ -1,5 +1,6 @@
 import { IAuctionRepository } from '../../domain/repositories/IAuctionRepository';
 import { Auction, AuctionStatus } from '../../domain/entities/Auction';
+import { generateUuidV7 } from '../../infrastructure/utils/uuid';
 
 // DTO DÙNG RIÊNG: Định nghĩa ngay trên đầu file Use Case
 export interface CreateAuctionRoomInput {
@@ -58,7 +59,7 @@ export class CreateAuctionRoomUseCase {
     const status =
       startTime.getTime() <= now.getTime() ? AuctionStatus.ACTIVE : AuctionStatus.SCHEDULED;
     const antiSniping = input.antiSnipingExtensionSeconds ?? 120;
-    const tempId = `auc_${Date.now()}`;
+    const tempId = generateUuidV7();
 
     const auction = new Auction({
       id: tempId,
