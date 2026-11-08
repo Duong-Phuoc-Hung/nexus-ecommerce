@@ -4,6 +4,7 @@ import { IOrderRepository } from './domain/repositories/IOrderRepository';
 import { InMemoryOrderRepository } from './infrastructure/repositories/InMemoryOrderRepository';
 import { PostgresOrderRepository } from './infrastructure/repositories/PostgresOrderRepository';
 import { getCommerceDbPool } from './infrastructure/database/pgPool';
+import { PrismaClientWrapper } from './infrastructure/database/PrismaClient';
 
 import { GetOrderDetailUseCase } from './application/use-cases/GetOrderDetailUseCase';
 import { SearchOrdersUseCase } from './application/use-cases/SearchOrdersUseCase';
@@ -52,7 +53,8 @@ export function createApplication(): Application {
   if (process.env.USE_IN_MEMORY_DB === 'true') {
     orderRepository = new InMemoryOrderRepository();
   } else {
-    const pgOrderRepo = new PostgresOrderRepository(pool);
+    const prisma = PrismaClientWrapper.getInstance();
+    const pgOrderRepo = new PostgresOrderRepository(pool, prisma);
 
     // Kiểm soát nạp dữ liệu mẫu (Auto-Seeding):
     // - Vô hiệu hóa hoàn toàn khi chạy Production hoặc khi đặt ENABLE_AUTO_SEED=false.

@@ -1,4 +1,6 @@
-import { Pool, PoolClient } from 'pg';
+import { Pool } from 'pg';
+import { PrismaClient } from '../database/generated/client';
+import { PrismaClientWrapper } from '../database/PrismaClient';
 import {
   IOrderRepository,
   OrderSearchCriteria,
@@ -7,53 +9,35 @@ import {
 import { Order, OrderItem, OrderStatus, OrderTimelineItem } from '../../domain/entities/Order';
 import { loadSeedOrders } from '../seeds/orderSeedLoader';
 
-interface OrderRow {
-  id: string | number;
-  order_code: string;
-  buyer_id: string;
-  seller_id: string;
-  total_amount: string | number;
-  shipping_fee: string | number;
-  discount_amount: string | number;
-  status: string;
-  shipping_address: any;
-  checkout_session_expires_at?: Date | string | null;
-  created_at: Date | string;
-  updated_at: Date | string;
-  buyer_name?: string | null;
-  buyer_email?: string | null;
-  seller_name?: string | null;
-  tracking_code?: string | null;
-  timeline?: any;
-}
-
-interface OrderItemRow {
-  id: string | number;
-  order_id: string | number;
-  product_id: string | number;
-  product_title: string;
-  unit_price: string | number;
-  quantity: number;
-  subtotal: string | number;
-  created_at: Date | string;
-}
-
 export class PostgresOrderRepository implements IOrderRepository {
+  private _prisma?: PrismaClient;
   private isInitialized = false;
 
-  constructor(private readonly pool: Pool) {}
+  constructor(
+    private readonly pool?: Pool,
+    prisma?: PrismaClient,
+  ) {
+    if (prisma) {
+      this._prisma = prisma;
+    }
+  }
+
+  private get prisma(): PrismaClient {
+    if (!this._prisma) {
+      this._prisma = PrismaClientWrapper.getInstance();
+    }
+    return this._prisma;
+  }
 
   /**
-   * Nạp dữ liệu mẫu ban đầu nếu bảng rỗng.
+   * Nạp dữ liệu mẫu ban đầu nếu bảng rỗng qua Prisma ORM.
    */
   public async seedIfEmpty(): Promise<void> {
     if (this.isInitialized) return;
     this.isInitialized = true;
 
     try {
-      const countRes = await this.pool.query('SELECT COUNT(*)::int AS count FROM commerce_orders');
-      const orderCount = countRes.rows[0]?.count ?? 0;
-
+      const orderCount = await this.prisma.order.count();
       if (orderCount === 0) {
         await this.seedInitialOrders();
       }
@@ -65,170 +49,102 @@ export class PostgresOrderRepository implements IOrderRepository {
   public async findById(id: string): Promise<Order | null> {
     const cleanId = id.trim();
 
-    const { rows } = await this.pool.query<OrderRow>(
-      `SELECT * FROM commerce_orders 
-       WHERE order_code = $1 OR id = $1 
-       LIMIT 1`,
-      [cleanId],
-    );
+    const orderRow = await this.prisma.order.findFirst({
+      where: {
+        OR: [{ id: cleanId }, { orderCode: cleanId }],
+      },
+      include: {
+        items: {
+          orderBy: { id: 'asc' },
+        },
+      },
+    });
 
-    if (rows.length === 0) {
+    if (!orderRow) {
       return null;
     }
 
-    const orderRow = rows[0];
-    const itemsRes = await this.pool.query<OrderItemRow>(
-      `SELECT * FROM commerce_order_items 
-       WHERE order_id = $1 
-       ORDER BY id ASC`,
-      [orderRow.id],
-    );
-
-    return this.mapToDomain(orderRow, itemsRes.rows);
+    return this.mapPrismaToDomain(orderRow);
   }
 
   public async findByBuyerId(buyerId: string): Promise<Order[]> {
     const cleanBuyerId = buyerId.trim();
 
-    const { rows } = await this.pool.query<OrderRow>(
-      `SELECT * FROM commerce_orders 
-       WHERE buyer_id = $1 
-       ORDER BY created_at DESC`,
-      [cleanBuyerId],
-    );
+    const rows = await this.prisma.order.findMany({
+      where: { buyerId: cleanBuyerId },
+      include: {
+        items: {
+          orderBy: { id: 'asc' },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
 
-    if (rows.length === 0) {
-      return [];
-    }
-
-    const orderDbIds = rows.map((r) => r.id);
-    const itemsRes = await this.pool.query<OrderItemRow>(
-      `SELECT * FROM commerce_order_items 
-       WHERE order_id = ANY($1::bigint[]) 
-       ORDER BY id ASC`,
-      [orderDbIds],
-    );
-
-    const itemsByOrderId = new Map<string, OrderItemRow[]>();
-    for (const item of itemsRes.rows) {
-      const key = String(item.order_id);
-      const existing = itemsByOrderId.get(key) || [];
-      existing.push(item);
-      itemsByOrderId.set(key, existing);
-    }
-
-    return rows.map((orderRow) =>
-      this.mapToDomain(orderRow, itemsByOrderId.get(String(orderRow.id)) || []),
-    );
+    return rows.map((r) => this.mapPrismaToDomain(r));
   }
 
   public async search(criteria: OrderSearchCriteria): Promise<OrderSearchPage> {
-    const conditions: string[] = [];
-    const params: any[] = [];
-    let paramIdx = 1;
+    const where: any = {};
 
-    // 1. Lọc từ khóa tìm kiếm toàn diện (Mã đơn, người mua, email, shop, vận đơn, tên sản phẩm)
-    if (criteria.q && criteria.q.trim().length > 0) {
-      const searchTerm = `%${criteria.q.trim()}%`;
-      conditions.push(`(
-        o.order_code ILIKE $${paramIdx} OR
-        COALESCE(o.buyer_name, '') ILIKE $${paramIdx} OR
-        COALESCE(o.buyer_email, '') ILIKE $${paramIdx} OR
-        COALESCE(o.seller_name, '') ILIKE $${paramIdx} OR
-        COALESCE(o.tracking_code, '') ILIKE $${paramIdx} OR
-        EXISTS (
-          SELECT 1 FROM commerce_order_items oi 
-          WHERE oi.order_id = o.id AND oi.product_title ILIKE $${paramIdx}
-        )
-      )`);
-      params.push(searchTerm);
-      paramIdx++;
-    }
-
-    // 2. Lọc theo Buyer ID (IDOR-safe)
+    // 1. Lọc theo Buyer ID (IDOR-safe)
     if (criteria.buyerId && criteria.buyerId.trim().length > 0) {
-      conditions.push(`o.buyer_id = $${paramIdx}`);
-      params.push(criteria.buyerId.trim());
-      paramIdx++;
+      where.buyerId = criteria.buyerId.trim();
     }
 
-    // 3. Lọc theo Seller ID (IDOR-safe)
+    // 2. Lọc theo Seller ID (IDOR-safe)
     if (criteria.sellerId && criteria.sellerId.trim().length > 0) {
-      conditions.push(`o.seller_id = $${paramIdx}`);
-      params.push(criteria.sellerId.trim());
-      paramIdx++;
+      where.sellerId = criteria.sellerId.trim();
     }
 
-    // 4. Lọc theo Status
+    // 3. Lọc theo Status
     if (criteria.status && criteria.status.trim().length > 0) {
-      conditions.push(`UPPER(o.status) = UPPER($${paramIdx})`);
-      params.push(criteria.status.trim());
-      paramIdx++;
+      where.status = { equals: criteria.status.trim(), mode: 'insensitive' };
     }
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    // 4. Lọc từ khóa tìm kiếm toàn diện
+    if (criteria.q && criteria.q.trim().length > 0) {
+      const q = criteria.q.trim();
+      where.OR = [
+        { orderCode: { contains: q, mode: 'insensitive' } },
+        { id: { contains: q, mode: 'insensitive' } },
+        { trackingCode: { contains: q, mode: 'insensitive' } },
+        { items: { some: { productTitle: { contains: q, mode: 'insensitive' } } } },
+      ];
+    }
 
-    // 5. Sắp xếp với Whitelist chống SQL Injection
-    let sortColumn = 'o.created_at';
+    // 5. Sắp xếp
+    let orderBy: any = { createdAt: 'desc' };
+    const sortDirection = criteria.sortOrder === 'asc' ? 'asc' : 'desc';
     if (criteria.sortBy === 'totalAmount') {
-      sortColumn = 'o.total_amount';
+      orderBy = { totalAmount: sortDirection };
     } else if (criteria.sortBy === 'status') {
-      sortColumn = 'o.status';
+      orderBy = { status: sortDirection };
+    } else {
+      orderBy = { createdAt: sortDirection };
     }
-
-    const sortDirection = criteria.sortOrder === 'asc' ? 'ASC' : 'DESC';
 
     // 6. Phân trang
     const page = Math.max(1, criteria.page || 1);
     const limit = Math.max(1, Math.min(100, criteria.limit || 10));
     const offset = (page - 1) * limit;
 
-    // Đếm tổng số bản ghi
-    const countSql = `SELECT COUNT(*)::int AS total FROM commerce_orders o ${whereClause}`;
-    const countRes = await this.pool.query(countSql, params);
-    const total = countRes.rows[0]?.total ?? 0;
+    const [total, rows] = await Promise.all([
+      this.prisma.order.count({ where }),
+      this.prisma.order.findMany({
+        where,
+        include: {
+          items: {
+            orderBy: { id: 'asc' },
+          },
+        },
+        orderBy,
+        skip: offset,
+        take: limit,
+      }),
+    ]);
+
     const totalPages = Math.ceil(total / limit) || 1;
-
-    // Truy vấn trang dữ liệu
-    const selectSql = `
-      SELECT o.* 
-      FROM commerce_orders o 
-      ${whereClause} 
-      ORDER BY ${sortColumn} ${sortDirection} 
-      LIMIT $${paramIdx} OFFSET $${paramIdx + 1}
-    `;
-    const rowsRes = await this.pool.query<OrderRow>(selectSql, [...params, limit, offset]);
-
-    if (rowsRes.rows.length === 0) {
-      return {
-        orders: [],
-        total,
-        page,
-        limit,
-        totalPages,
-      };
-    }
-
-    // Nạp chi tiết Order Items cho các đơn trên trang này
-    const orderDbIds = rowsRes.rows.map((r) => r.id);
-    const itemsRes = await this.pool.query<OrderItemRow>(
-      `SELECT * FROM commerce_order_items 
-       WHERE order_id = ANY($1::bigint[]) 
-       ORDER BY id ASC`,
-      [orderDbIds],
-    );
-
-    const itemsByOrderId = new Map<string, OrderItemRow[]>();
-    for (const item of itemsRes.rows) {
-      const key = String(item.order_id);
-      const existing = itemsByOrderId.get(key) || [];
-      existing.push(item);
-      itemsByOrderId.set(key, existing);
-    }
-
-    const orders = rowsRes.rows.map((orderRow) =>
-      this.mapToDomain(orderRow, itemsByOrderId.get(String(orderRow.id)) || []),
-    );
+    const orders = rows.map((r) => this.mapPrismaToDomain(r));
 
     return {
       orders,
@@ -240,110 +156,83 @@ export class PostgresOrderRepository implements IOrderRepository {
   }
 
   public async save(order: Order): Promise<void> {
-    const client = await this.pool.connect();
+    await this.prisma.$transaction(async (tx) => {
+      const shippingAddressJson = JSON.stringify(order.shippingAddress || {});
+      const lookupCode = order.id.startsWith('NX-ORD') ? order.id : `NX-ORD-${order.id}`;
 
-    try {
-      await client.query('BEGIN');
-
-      const cleanId = order.id.trim();
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        cleanId,
-      );
-      const orderCode = isUuid ? `NX-ORD-${cleanId.slice(0, 8).toUpperCase()}` : cleanId;
-      const orderId = isUuid ? cleanId : null;
-
-      const upsertOrderSql = `
-        INSERT INTO commerce_orders (
-          id, order_code, buyer_id, buyer_name, buyer_email, seller_id, seller_name,
-          total_amount, shipping_fee, status, shipping_address, tracking_code,
-          timeline, created_at, updated_at
-        ) VALUES (COALESCE($1, gen_random_uuid()::text), $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-        ON CONFLICT (order_code) DO UPDATE SET
-          buyer_id = EXCLUDED.buyer_id,
-          buyer_name = EXCLUDED.buyer_name,
-          buyer_email = EXCLUDED.buyer_email,
-          seller_id = EXCLUDED.seller_id,
-          seller_name = EXCLUDED.seller_name,
-          total_amount = EXCLUDED.total_amount,
-          status = EXCLUDED.status,
-          tracking_code = EXCLUDED.tracking_code,
-          timeline = EXCLUDED.timeline,
-          updated_at = EXCLUDED.updated_at
-        RETURNING id
-      `;
-
-      const shippingAddressJson = JSON.stringify({
-        name: order.buyerName,
-        email: order.buyerEmail,
+      const upserted = await tx.order.upsert({
+        where: { orderCode: lookupCode },
+        update: {
+          buyerId: order.buyerId,
+          sellerId: order.sellerId,
+          totalAmount: order.totalAmount,
+          status: order.status,
+          shippingAddress: shippingAddressJson as any,
+          trackingCode: order.trackingCode || null,
+          timeline: order.timeline as any,
+          updatedAt: order.updatedAt,
+        },
+        create: {
+          id: order.id,
+          orderCode: order.id.startsWith('NX-ORD') ? order.id : `NX-ORD-${Date.now()}`,
+          buyerId: order.buyerId,
+          sellerId: order.sellerId,
+          totalAmount: order.totalAmount,
+          shippingFee: order.shippingFee || 0,
+          discountAmount: order.discountAmount || 0,
+          status: order.status,
+          shippingAddress: shippingAddressJson as any,
+          trackingCode: order.trackingCode || null,
+          timeline: order.timeline as any,
+          createdAt: order.createdAt,
+          updatedAt: order.updatedAt,
+        },
       });
 
-      const res = await client.query(upsertOrderSql, [
-        orderId,
-        orderCode,
-        order.buyerId,
-        order.buyerName,
-        order.buyerEmail,
-        order.sellerId,
-        order.sellerName,
-        order.totalAmount,
-        0,
-        order.status,
-        shippingAddressJson,
-        order.trackingCode || null,
-        JSON.stringify(order.timeline),
-        order.createdAt,
-        order.updatedAt,
-      ]);
-
-      const dbOrderId = res.rows[0].id;
-
       // Xóa và ghi lại danh sách Order Items
-      await client.query('DELETE FROM commerce_order_items WHERE order_id = $1', [dbOrderId]);
+      await tx.orderItem.deleteMany({
+        where: { orderId: upserted.id },
+      });
 
-      for (const item of order.items) {
-        await client.query(
-          `INSERT INTO commerce_order_items (
-            order_id, product_id, product_title, unit_price, quantity, subtotal
-          ) VALUES ($1, $2, $3, $4, $5, $6)`,
-          [
-            dbOrderId,
-            String(item.productId),
-            item.productName || 'Sản phẩm Nexus',
-            item.unitPrice,
-            item.quantity,
-            item.totalPrice,
-          ],
-        );
+      if (order.items.length > 0) {
+        await tx.orderItem.createMany({
+          data: order.items.map((item) => {
+            const rawId = String(item.productId || '').replace(/\D/g, '');
+            const parsedProductId = rawId.length > 0 ? BigInt(rawId) : BigInt(1);
+            return {
+              orderId: upserted.id,
+              productId: parsedProductId,
+              productTitle: item.productName || 'Sản phẩm Nexus',
+              unitPrice: item.unitPrice,
+              quantity: item.quantity,
+              subtotal: item.totalPrice,
+            };
+          }),
+        });
       }
-
-      await client.query('COMMIT');
-    } catch (error) {
-      await client.query('ROLLBACK').catch(() => undefined);
-      throw error;
-    } finally {
-      client.release();
-    }
+    });
   }
 
   public async update(order: Order): Promise<void> {
-    await this.pool.query(
-      `UPDATE commerce_orders 
-       SET status = $1, tracking_code = $2, timeline = $3, updated_at = $4
-       WHERE order_code = $5 OR id = $5`,
-      [
-        order.status,
-        order.trackingCode || null,
-        JSON.stringify(order.timeline),
-        order.updatedAt,
-        order.id,
-      ],
-    );
+    const cleanId = order.id.trim();
+
+    await this.prisma.order.updateMany({
+      where: {
+        OR: [{ id: cleanId }, { orderCode: cleanId }],
+      },
+      data: {
+        status: order.status,
+        trackingCode: order.trackingCode || null,
+        timeline: order.timeline as any,
+        updatedAt: order.updatedAt,
+      },
+    });
   }
 
   /**
-   * Ánh xạ dòng PostgreSQL sang Domain Entity Order.
+   * Ánh xạ bản ghi Prisma sang Domain Entity Order.
    */
-  private mapToDomain(orderRow: OrderRow, itemRows: OrderItemRow[]): Order {
+  private mapPrismaToDomain(orderRow: any): Order {
     const rawTimeline = orderRow.timeline;
     let timeline: OrderTimelineItem[] = [];
 
@@ -351,7 +240,7 @@ export class PostgresOrderRepository implements IOrderRepository {
       timeline = rawTimeline.map((t: any) => ({
         status: String(t.status || 'STATUS_UPDATE'),
         title: String(t.title || 'Cập nhật đơn hàng'),
-        timestamp: t.timestamp ? new Date(t.timestamp) : new Date(orderRow.updated_at),
+        timestamp: t.timestamp ? new Date(t.timestamp) : new Date(orderRow.updatedAt),
         note: t.note ? String(t.note) : undefined,
       }));
     } else {
@@ -359,51 +248,54 @@ export class PostgresOrderRepository implements IOrderRepository {
         {
           status: 'CREATED',
           title: 'Đơn hàng được tạo thành công',
-          timestamp: new Date(orderRow.created_at),
+          timestamp: new Date(orderRow.createdAt),
         },
       ];
     }
 
-    const items: OrderItem[] = itemRows.map((i) => ({
-      productId: String(i.product_id),
-      productName: i.product_title || 'Sản phẩm Nexus',
+    const itemRows = orderRow.items || [];
+    const items: OrderItem[] = itemRows.map((i: any) => ({
+      productId: String(i.productId),
+      productName: i.productTitle || 'Sản phẩm Nexus',
       quantity: Number(i.quantity),
-      unitPrice: Number(i.unit_price),
+      unitPrice: Number(i.unitPrice),
       totalPrice: Number(i.subtotal),
     }));
 
-    // Trích xuất tên và email người mua từ cột hoặc từ JSON shipping_address
     const shippingAddress =
-      typeof orderRow.shipping_address === 'string'
-        ? JSON.parse(orderRow.shipping_address)
-        : orderRow.shipping_address || {};
+      typeof orderRow.shippingAddress === 'string'
+        ? JSON.parse(orderRow.shippingAddress)
+        : orderRow.shippingAddress || {};
 
     const buyerName =
-      orderRow.buyer_name || shippingAddress.name || shippingAddress.recipientName || 'Khách hàng';
+      shippingAddress.fullName ||
+      shippingAddress.name ||
+      shippingAddress.recipientName ||
+      'Khách hàng';
 
-    const buyerEmail = orderRow.buyer_email || shippingAddress.email || '';
+    const buyerEmail = shippingAddress.email || '';
 
     return new Order({
-      id: orderRow.order_code || String(orderRow.id),
-      buyerId: orderRow.buyer_id,
+      id: orderRow.orderCode || String(orderRow.id),
+      buyerId: orderRow.buyerId,
       buyerName,
       buyerEmail,
-      sellerId: orderRow.seller_id,
-      sellerName: orderRow.seller_name || 'Gian hàng đối tác',
+      sellerId: orderRow.sellerId,
+      sellerName: 'Gian hàng đối tác',
       items,
       subtotal:
-        Number(orderRow.total_amount) -
-        Number(orderRow.shipping_fee || 0) +
-        Number(orderRow.discount_amount || 0),
-      shippingFee: Number(orderRow.shipping_fee || 0),
-      discountAmount: Number(orderRow.discount_amount || 0),
+        Number(orderRow.totalAmount) -
+        Number(orderRow.shippingFee || 0) +
+        Number(orderRow.discountAmount || 0),
+      shippingFee: Number(orderRow.shippingFee || 0),
+      discountAmount: Number(orderRow.discountAmount || 0),
       shippingAddress,
-      totalAmount: Number(orderRow.total_amount),
+      totalAmount: Number(orderRow.totalAmount),
       status: (orderRow.status as OrderStatus) || OrderStatus.PENDING,
-      trackingCode: orderRow.tracking_code || undefined,
+      trackingCode: orderRow.trackingCode || undefined,
       timeline,
-      createdAt: new Date(orderRow.created_at),
-      updatedAt: new Date(orderRow.updated_at),
+      createdAt: new Date(orderRow.createdAt),
+      updatedAt: new Date(orderRow.updatedAt),
     });
   }
 
@@ -418,7 +310,7 @@ export class PostgresOrderRepository implements IOrderRepository {
     }
 
     console.log(
-      `[PostgresOrderRepository] Đã khởi tạo ${sampleOrders.length} đơn hàng mẫu từ seed JSON vào PostgreSQL thành công.`,
+      `[PostgresOrderRepository] Đã khởi tạo ${sampleOrders.length} đơn hàng mẫu từ seed JSON vào PostgreSQL thành công qua Prisma ORM.`,
     );
   }
 }
