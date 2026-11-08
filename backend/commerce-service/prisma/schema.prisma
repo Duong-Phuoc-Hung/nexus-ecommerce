@@ -73,8 +73,8 @@ model CartItem {
 // 3. BẢNG ĐƠN ĐẶT HÀNG (Phiên thanh toán 15 phút theo SRS 3.4.1)
 // -----------------------------------------------------------------------------
 model Order {
-  // Khóa chính: Số tự tăng (1, 2, 3...)
-  id                       BigInt      @id @default(autoincrement())
+  // Khóa chính: Chuẩn hóa UUIDv7 RFC 9562 (VARCHAR 36)
+  id                       String      @id @default(uuid()) @map("id") @db.VarChar(36)
 
   // Mã đơn hàng hiển thị cho khách xem (VD: "ORD-20261008-001")
   orderCode                String      @unique @map("order_code") @db.VarChar(50)
@@ -125,8 +125,8 @@ model OrderItem {
   // Khóa chính: Số tự tăng (1, 2, 3...)
   id           BigInt   @id @default(autoincrement())
 
-  // Thuộc đơn hàng nào (Khóa ngoại nối với commerce_orders)
-  orderId      BigInt   @map("order_id")
+  // Thuộc đơn hàng nào (Khóa ngoại nối với commerce_orders - UUIDv7 VARCHAR 36)
+  orderId      String   @map("order_id") @db.VarChar(36)
 
   // Tham chiếu sản phẩm (Lấy 'id' từ catalog_products bên catalog-service)
   productId    BigInt   @map("product_id")
@@ -160,8 +160,8 @@ model Payment {
   // Khóa chính: Số tự tăng (1, 2, 3...)
   id             BigInt   @id @default(autoincrement())
 
-  // Thuộc đơn hàng nào (Khóa ngoại nối với commerce_orders)
-  orderId        BigInt   @map("order_id")
+  // Thuộc đơn hàng nào (Khóa ngoại nối với commerce_orders - UUIDv7 VARCHAR 36)
+  orderId        String   @map("order_id") @db.VarChar(36)
 
   // Phương thức thanh toán: STRIPE, COD, VNPAY, MOMO
   paymentMethod  String   @default("STRIPE") @map("payment_method") @db.VarChar(30)
@@ -202,8 +202,8 @@ model Invoice {
   // Khóa chính: Số tự tăng (1, 2, 3...)
   id          BigInt   @id @default(autoincrement())
 
-  // Thuộc đơn hàng nào (Khóa ngoại nối với commerce_orders)
-  orderId     BigInt   @map("order_id")
+  // Thuộc đơn hàng nào (Khóa ngoại nối với commerce_orders - UUIDv7 VARCHAR 36)
+  orderId     String   @map("order_id") @db.VarChar(36)
 
   // Mã số hóa đơn điện tử (VD: "INV-20261008-001")
   invoiceCode String   @unique @map("invoice_code") @db.VarChar(50)

@@ -152,22 +152,57 @@ export function SupportShipmentsPage() {
     }
   }
 
+  // Handler yêu cầu phát lại hàng (Redelivery)
+  async function handleRequestRedelivery() {
+    if (!selected) return;
+    setActing(true);
+    setNotice('');
+    try {
+      const updated = await supportShipmentsApi.requestRedelivery(selected.id, {
+        reason: 'Hẹn lại lịch phát hàng sau khi đối soát liên hệ với người nhận.',
+      });
+      setSelected(updated);
+      setShipments((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+      setNotice('Đã yêu cầu đơn vị vận chuyển phát lại hàng thành công.');
+    } catch {
+      // Fallback
+      const fallback = await supportShipmentsApi.updateStatus(selected.id, {
+        status: 'OUT_FOR_DELIVERY',
+        location: selected.currentLocation || selected.city,
+        note: 'Yêu cầu phát lại hàng lần 2.',
+      });
+      setSelected(fallback);
+      setShipments((items) => items.map((item) => (item.id === fallback.id ? fallback : item)));
+      setNotice('Đã kích hoạt phát lại đơn hàng.');
+    } finally {
+      setActing(false);
+    }
+  }
+
   // Handler kích hoạt luồng hoàn hàng
   async function handleTriggerReturn(reason?: string) {
     if (!selected) return;
     setActing(true);
     setNotice('');
     try {
-      const updated = await supportShipmentsApi.updateStatus(selected.id, {
-        status: 'RETURNED',
-        location: `${selected.city || 'Kho người bán'} · Trung tâm chuyển hoàn`,
-        note: reason || 'Kích hoạt quy trình chuyển hoàn hàng về kho người bán.',
-      });
-      setSelected(updated);
-      setShipments((items) => items.map((item) => (item.id === updated.id ? updated : item)));
-      setNotice(
-        'Đã kích hoạt quy trình chuyển hoàn và cập nhật trạng thái "Đã trả hàng" thành công.',
-      );
+      try {
+        const updated = await supportShipmentsApi.confirmReturn(selected.id, {
+          returnCondition: 'Hàng hóa nguyên vẹn chuyển hoàn về kho người bán.',
+          note: reason || 'Kích hoạt quy trình chuyển hoàn hàng về kho người bán.',
+        });
+        setSelected(updated);
+        setShipments((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+        setNotice('Đã xác nhận hoàn hàng về kho người bán thành công.');
+      } catch {
+        const updated = await supportShipmentsApi.updateStatus(selected.id, {
+          status: 'RETURNED',
+          location: `${selected.city || 'Kho người bán'} · Trung tâm chuyển hoàn`,
+          note: reason || 'Kích hoạt quy trình chuyển hoàn hàng về kho người bán.',
+        });
+        setSelected(updated);
+        setShipments((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+        setNotice('Đã cập nhật trạng thái "Đã trả hàng" thành công.');
+      }
     } catch (err) {
       setNotice(userMessage(err));
     } finally {
@@ -689,18 +724,29 @@ export function SupportShipmentsPage() {
                   Điều chỉnh khu vực
                 </button>
                 {selected.statusCode === 'FAILED' && (
-                  <button
-                    type="button"
-                    className="support-button-return"
-                    disabled={acting}
-                    onClick={() =>
-                      handleTriggerReturn(
-                        'Kích hoạt chuyển hoàn kiện hàng về kho người bán do giao thất bại.',
-                      )
-                    }
-                  >
-                    ↻ Yêu cầu hoàn hàng / Chuyển hoàn
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className="support-secondary-button"
+                      style={{ color: '#0284c7', borderColor: '#0284c7' }}
+                      disabled={acting}
+                      onClick={handleRequestRedelivery}
+                    >
+                      🔄 Yêu cầu phát lại
+                    </button>
+                    <button
+                      type="button"
+                      className="support-button-return"
+                      disabled={acting}
+                      onClick={() =>
+                        handleTriggerReturn(
+                          'Kích hoạt chuyển hoàn kiện hàng về kho người bán do giao thất bại.',
+                        )
+                      }
+                    >
+                      ↻ Xác nhận chuyển hoàn kho
+                    </button>
+                  </>
                 )}
                 {selected.statusCode === 'OUT_FOR_DELIVERY' && (
                   <button

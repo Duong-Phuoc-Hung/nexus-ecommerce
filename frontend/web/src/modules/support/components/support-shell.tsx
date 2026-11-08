@@ -8,6 +8,7 @@ import { SupportRouteGuard } from './support-route-guard';
 
 const items = [
   { href: '/support', label: 'Tổng quan', icon: '⌂' },
+  { href: '/support/disputes', label: 'Trọng tài tranh chấp', icon: '⚖' },
   { href: '/support/orders', label: 'Tra cứu đơn hàng', icon: '▤' },
   { href: '/support/users', label: 'Tra cứu người dùng', icon: '◎' },
   { href: '/support/shipments', label: 'Vận đơn', icon: '⇢' },

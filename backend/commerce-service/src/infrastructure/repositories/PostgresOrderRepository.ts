@@ -67,7 +67,7 @@ export class PostgresOrderRepository implements IOrderRepository {
 
     const { rows } = await this.pool.query<OrderRow>(
       `SELECT * FROM commerce_orders 
-       WHERE order_code = $1 OR id::text = $1 
+       WHERE order_code = $1 OR id = $1 
        LIMIT 1`,
       [cleanId],
     );
@@ -245,12 +245,19 @@ export class PostgresOrderRepository implements IOrderRepository {
     try {
       await client.query('BEGIN');
 
+      const cleanId = order.id.trim();
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        cleanId,
+      );
+      const orderCode = isUuid ? `NX-ORD-${cleanId.slice(0, 8).toUpperCase()}` : cleanId;
+      const orderId = isUuid ? cleanId : null;
+
       const upsertOrderSql = `
         INSERT INTO commerce_orders (
-          order_code, buyer_id, buyer_name, buyer_email, seller_id, seller_name,
+          id, order_code, buyer_id, buyer_name, buyer_email, seller_id, seller_name,
           total_amount, shipping_fee, status, shipping_address, tracking_code,
           timeline, created_at, updated_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        ) VALUES (COALESCE($1, gen_random_uuid()::text), $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
         ON CONFLICT (order_code) DO UPDATE SET
           buyer_id = EXCLUDED.buyer_id,
           buyer_name = EXCLUDED.buyer_name,
@@ -271,7 +278,8 @@ export class PostgresOrderRepository implements IOrderRepository {
       });
 
       const res = await client.query(upsertOrderSql, [
-        order.id,
+        orderId,
+        orderCode,
         order.buyerId,
         order.buyerName,
         order.buyerEmail,
@@ -321,7 +329,7 @@ export class PostgresOrderRepository implements IOrderRepository {
     await this.pool.query(
       `UPDATE commerce_orders 
        SET status = $1, tracking_code = $2, timeline = $3, updated_at = $4
-       WHERE order_code = $5 OR id::text = $5`,
+       WHERE order_code = $5 OR id = $5`,
       [
         order.status,
         order.trackingCode || null,

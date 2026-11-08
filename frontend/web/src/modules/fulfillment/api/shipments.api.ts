@@ -116,6 +116,28 @@ export function createShipmentsApi(request: RequestApi, prefix = '/support') {
         }),
       );
     },
+    async requestRedelivery(
+      id: string,
+      input: { reason?: string; scheduledDate?: string } = {},
+    ): Promise<Shipment> {
+      return unwrap<Shipment>(
+        await request(`/fulfillments/shipments/${encodeURIComponent(id)}/request-redelivery`, {
+          method: 'POST',
+          body: input,
+        }),
+      );
+    },
+    async confirmReturn(
+      id: string,
+      input: { returnCondition?: string; note?: string } = {},
+    ): Promise<Shipment> {
+      return unwrap<Shipment>(
+        await request(`/fulfillments/shipments/${encodeURIComponent(id)}/confirm-return`, {
+          method: 'POST',
+          body: input,
+        }),
+      );
+    },
     async triggerCarrierWebhook(input: {
       carrier?: string;
       tracking_code?: string;
