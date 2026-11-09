@@ -148,6 +148,28 @@ export function createShipmentsApi(request: RequestApi, prefix = '/support') {
       });
       return unwrap(raw);
     },
+    async requestRedelivery(
+      id: string,
+      input: { carrierCode?: string; rescheduledDate: string; note?: string },
+    ): Promise<Shipment> {
+      return unwrap<Shipment>(
+        await request(`${prefix}/shipments/${encodeURIComponent(id)}/request-redelivery`, {
+          method: 'POST',
+          body: input,
+        }),
+      );
+    },
+    async confirmReturn(
+      id: string,
+      input: { returnedToSellerAt?: string; condition: 'INTACT' | 'DAMAGED' | 'LOST' },
+    ): Promise<Shipment> {
+      return unwrap<Shipment>(
+        await request(`${prefix}/shipments/${encodeURIComponent(id)}/confirm-return`, {
+          method: 'POST',
+          body: input,
+        }),
+      );
+    },
   };
 }
 

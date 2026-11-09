@@ -76,6 +76,40 @@ export function createUserApi(request: RequestApi) {
         }),
       );
     },
+    async adjustReputation(
+      id: string,
+      payload: { points: number; reason: string },
+    ): Promise<{
+      userId: string;
+      newReputationScore: number;
+      adjustedPoints: number;
+      reason: string;
+      adjustedBy: string;
+    }> {
+      return unwrap(
+        await request(`/users/${encodeURIComponent(id)}/adjust-reputation`, {
+          method: 'POST',
+          body: payload,
+        }),
+      );
+    },
+    async restrictFeatures(
+      id: string,
+      payload: { restriction: string; durationDays: number; reason: string },
+    ): Promise<{
+      userId: string;
+      restriction: string;
+      durationDays: number;
+      reason: string;
+      expiresAt: string;
+    }> {
+      return unwrap(
+        await request(`/users/${encodeURIComponent(id)}/restrict-features`, {
+          method: 'POST',
+          body: payload,
+        }),
+      );
+    },
   };
 }
 

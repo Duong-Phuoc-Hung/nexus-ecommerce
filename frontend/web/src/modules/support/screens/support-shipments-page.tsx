@@ -68,6 +68,17 @@ export function SupportShipmentsPage() {
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideCity, setOverrideCity] = useState('');
 
+  // Dialog state for Redelivery (Hẹn phát lại đơn thất bại)
+  const [redeliveryOpen, setRedeliveryOpen] = useState(false);
+  const [rescheduledDate, setRescheduledDate] = useState('');
+  const [redeliveryCarrier, setRedeliveryCarrier] = useState('GHN');
+  const [redeliveryNote, setRedeliveryNote] = useState('Khách hẹn phát lại đơn hàng.');
+
+  // Dialog state for Confirm Return (Nghiệm thu hàng hoàn về kho)
+  const [confirmReturnOpen, setConfirmReturnOpen] = useState(false);
+  const [returnCondition, setReturnCondition] = useState<'INTACT' | 'DAMAGED' | 'LOST'>('INTACT');
+  const [returnedAt, setReturnedAt] = useState('');
+
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -145,6 +156,72 @@ export function SupportShipmentsPage() {
       setShipments((items) => items.map((item) => (item.id === updated.id ? updated : item)));
       setNotice('Đã điều chỉnh khu vực vận đơn thành công.');
       setOverrideOpen(false);
+    } catch (err) {
+      setNotice(userMessage(err));
+    } finally {
+      setActing(false);
+    }
+  }
+
+  function handleOpenRedelivery() {
+    if (!selected) return;
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    setRescheduledDate(tomorrow.toISOString().split('T')[0]);
+    setRedeliveryCarrier(selected.carrier || 'GHN');
+    setRedeliveryNote('Khách hẹn phát lại đơn hàng.');
+    setRedeliveryOpen(true);
+  }
+
+  async function handleConfirmRedelivery(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selected || !rescheduledDate) return;
+    setActing(true);
+    setNotice('');
+    try {
+      const updated = await supportShipmentsApi.requestRedelivery(selected.id, {
+        rescheduledDate,
+        carrierCode: redeliveryCarrier,
+        note: redeliveryNote.trim() || undefined,
+      });
+      setSelected(updated);
+      setShipments((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+      setNotice(
+        `✓ Đã gửi yêu cầu hẹn phát lại cho hãng ${redeliveryCarrier} vào ngày ${rescheduledDate} thành công.`,
+      );
+      setRedeliveryOpen(false);
+    } catch (err) {
+      setNotice(userMessage(err));
+    } finally {
+      setActing(false);
+    }
+  }
+
+  function handleOpenConfirmReturn() {
+    if (!selected) return;
+    setReturnCondition('INTACT');
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    setReturnedAt(now.toISOString().slice(0, 16));
+    setConfirmReturnOpen(true);
+  }
+
+  async function handleConfirmReturn(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selected) return;
+    setActing(true);
+    setNotice('');
+    try {
+      const updated = await supportShipmentsApi.confirmReturn(selected.id, {
+        condition: returnCondition,
+        returnedToSellerAt: returnedAt || undefined,
+      });
+      setSelected(updated);
+      setShipments((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+      setNotice(
+        `✓ Đã xác nhận nghiệm thu kiện hàng hoàn về kho Seller (${returnCondition}) và đóng hồ sơ vận đơn.`,
+      );
+      setConfirmReturnOpen(false);
     } catch (err) {
       setNotice(userMessage(err));
     } finally {
@@ -689,17 +766,36 @@ export function SupportShipmentsPage() {
                   Điều chỉnh khu vực
                 </button>
                 {selected.statusCode === 'FAILED' && (
+                  <>
+                    <button
+                      type="button"
+                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold transition"
+                      disabled={acting}
+                      onClick={handleOpenRedelivery}
+                      title="Gửi yêu cầu hẹn giao lại cho đơn vị vận chuyển (tối đa 3 lần)"
+                    >
+                      ↻ Hẹn phát lại hàng
+                    </button>
+                    <button
+                      type="button"
+                      className="support-button-return"
+                      disabled={acting}
+                      onClick={handleOpenConfirmReturn}
+                      title="Nghiệm thu kiện hàng chuyển hoàn về kho người bán (RTO)"
+                    >
+                      📦 Nghiệm thu hàng hoàn (RTO)
+                    </button>
+                  </>
+                )}
+                {(selected.statusCode === 'RETURNED' || selected.statusCode === 'RETURNING') && (
                   <button
                     type="button"
                     className="support-button-return"
                     disabled={acting}
-                    onClick={() =>
-                      handleTriggerReturn(
-                        'Kích hoạt chuyển hoàn kiện hàng về kho người bán do giao thất bại.',
-                      )
-                    }
+                    onClick={handleOpenConfirmReturn}
+                    title="Nghiệm thu kiện hàng chuyển hoàn về kho người bán (RTO)"
                   >
-                    ↻ Yêu cầu hoàn hàng / Chuyển hoàn
+                    📦 Nghiệm thu hàng hoàn (RTO)
                   </button>
                 )}
                 {selected.statusCode === 'OUT_FOR_DELIVERY' && (
@@ -776,6 +872,143 @@ export function SupportShipmentsPage() {
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 transition"
               >
                 {acting ? 'Đang lưu…' : 'Xác nhận cập nhật'}
+              </button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Form Dialog Hẹn phát lại đơn hàng (Redelivery) */}
+      <Dialog open={redeliveryOpen} onOpenChange={setRedeliveryOpen}>
+        <DialogContent className="p-6 bg-white rounded-2xl shadow-2xl max-w-md w-full">
+          <DialogTitle className="text-lg font-bold text-slate-800">
+            Hẹn phát lại đơn giao không thành công
+          </DialogTitle>
+          <DialogDescription className="text-xs text-slate-500 mt-1">
+            Yêu cầu đơn vị vận chuyển phát lại lần tiếp theo cho vận đơn{' '}
+            <strong className="text-slate-700">{selected?.code}</strong> (Đơn: {selected?.order}).
+            Giới hạn tối đa 3 lần theo quy định SRS 3.6.
+          </DialogDescription>
+          <form onSubmit={handleConfirmRedelivery} className="mt-4 space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Đơn vị vận chuyển (Carrier):
+              </label>
+              <Select value={redeliveryCarrier} onValueChange={setRedeliveryCarrier}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Chọn hãng vận chuyển" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="GHN">Giao Hàng Nhanh (GHN)</SelectItem>
+                  <SelectItem value="GHTK">Giao Hàng Tiết Kiệm (GHTK)</SelectItem>
+                  <SelectItem value="VNPOST">VNPost</SelectItem>
+                  <SelectItem value="VIETTEL_POST">Viettel Post</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Ngày hẹn giao lại:
+              </label>
+              <input
+                type="date"
+                value={rescheduledDate}
+                onChange={(e) => setRescheduledDate(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 outline-none focus:border-sky-400"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Ghi chú thỏa thuận với khách hàng:
+              </label>
+              <textarea
+                value={redeliveryNote}
+                onChange={(e) => setRedeliveryNote(e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 outline-none focus:border-sky-400 resize-none"
+                placeholder="Ví dụ: Khách đi công tác về, hẹn giao lại vào buổi chiều"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setRedeliveryOpen(false)}
+                className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="submit"
+                disabled={acting || !rescheduledDate}
+                className="px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-semibold hover:bg-amber-700 disabled:opacity-50 transition"
+              >
+                {acting ? 'Đang gửi yêu cầu…' : 'Xác nhận hẹn phát lại'}
+              </button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Form Dialog Nghiệm thu hàng hoàn về kho (RTO) */}
+      <Dialog open={confirmReturnOpen} onOpenChange={setConfirmReturnOpen}>
+        <DialogContent className="p-6 bg-white rounded-2xl shadow-2xl max-w-md w-full">
+          <DialogTitle className="text-lg font-bold text-slate-800">
+            Nghiệm thu hàng chuyển hoàn về kho (RTO)
+          </DialogTitle>
+          <DialogDescription className="text-xs text-slate-500 mt-1">
+            Xác nhận kiện hàng <strong className="text-slate-700">{selected?.code}</strong> đã hoàn
+            về kho Người bán thành công để đóng hồ sơ vận đơn.
+          </DialogDescription>
+          <form onSubmit={handleConfirmReturn} className="mt-4 space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Tình trạng hàng hóa khi nhận lại:
+              </label>
+              <Select
+                value={returnCondition}
+                onValueChange={(v) => setReturnCondition(v as 'INTACT' | 'DAMAGED' | 'LOST')}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Chọn tình trạng kiện hàng" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="INTACT">
+                    INTACT — Hàng còn nguyên vẹn, nguyên đai nguyên kiện
+                  </SelectItem>
+                  <SelectItem value="DAMAGED">
+                    DAMAGED — Hàng bị bể vỡ / hư hại vỏ hộp do vận chuyển
+                  </SelectItem>
+                  <SelectItem value="LOST">LOST — Hàng bị thất lạc / thiếu phụ kiện</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Thời điểm nhận lại tại kho:
+              </label>
+              <input
+                type="datetime-local"
+                value={returnedAt}
+                onChange={(e) => setReturnedAt(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 outline-none focus:border-sky-400"
+                required
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmReturnOpen(false)}
+                className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="submit"
+                disabled={acting}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 transition"
+              >
+                {acting ? 'Đang nghiệm thu…' : 'Xác nhận đóng hồ sơ hoàn hàng'}
               </button>
             </div>
           </form>

@@ -81,6 +81,19 @@ export function SupportUsersPage() {
   const [isLocking, setIsLocking] = useState(false);
   const [lockError, setLockError] = useState<string | null>(null);
 
+  // Modal Chế tài xử phạt & Điều chỉnh uy tín (Task 3)
+  const [penaltyOpen, setPenaltyOpen] = useState(false);
+  const [penaltyTab, setPenaltyTab] = useState<'REPUTATION' | 'RESTRICTION'>('REPUTATION');
+  const [reputationPoints, setReputationPoints] = useState<number>(-10);
+  const [reputationReason, setReputationReason] = useState('Vi phạm quy chuẩn giao dịch sàn Nexus');
+  const [restrictionType, setRestrictionType] = useState('BIDDING_LOCK');
+  const [restrictionDuration, setRestrictionDuration] = useState<number>(7);
+  const [restrictionReason, setRestrictionReason] = useState(
+    'Hạn chế tính năng do vi phạm chính sách giao dịch',
+  );
+  const [isSubmittingPenalty, setIsSubmittingPenalty] = useState(false);
+  const [penaltyError, setPenaltyError] = useState<string | null>(null);
+
   // Trạng thái xử lý khiếu nại
   const [resolvingTicketId, setResolvingTicketId] = useState<string | null>(null);
 
@@ -197,6 +210,73 @@ export function SupportUsersPage() {
       showToast(`❌ Lỗi: ${message}`);
     } finally {
       setIsLocking(false);
+    }
+  }
+
+  function openPenaltyModal() {
+    if (!selectedUser) return;
+    setPenaltyTab('REPUTATION');
+    setReputationPoints(-10);
+    setReputationReason('Vi phạm quy chuẩn giao dịch sàn Nexus');
+    setRestrictionType('BIDDING_LOCK');
+    setRestrictionDuration(7);
+    setRestrictionReason('Hạn chế tính năng do vi phạm chính sách giao dịch');
+    setPenaltyError(null);
+    setPenaltyOpen(true);
+  }
+
+  async function handleAdjustReputation(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedUser || isSubmittingPenalty) return;
+    setIsSubmittingPenalty(true);
+    setPenaltyError(null);
+    try {
+      const result = await userApi.adjustReputation(selectedUser.id, {
+        points: Number(reputationPoints),
+        reason: reputationReason.trim(),
+      });
+      setSelectedUser((prev) =>
+        prev ? { ...prev, reputationScore: result.newReputationScore } : null,
+      );
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === selectedUser.id ? { ...u, reputationScore: result.newReputationScore } : u,
+        ),
+      );
+      showToast(
+        `✓ Đã điều chỉnh điểm uy tín (${result.adjustedPoints > 0 ? '+' : ''}${result.adjustedPoints} điểm). Điểm mới: ${result.newReputationScore}/100`,
+      );
+      setPenaltyOpen(false);
+    } catch (err: any) {
+      const msg = userMessage(err) || 'Không thể điều chỉnh điểm uy tín.';
+      setPenaltyError(msg);
+      showToast(`❌ Lỗi: ${msg}`);
+    } finally {
+      setIsSubmittingPenalty(false);
+    }
+  }
+
+  async function handleRestrictFeatures(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedUser || isSubmittingPenalty) return;
+    setIsSubmittingPenalty(true);
+    setPenaltyError(null);
+    try {
+      const result = await userApi.restrictFeatures(selectedUser.id, {
+        restriction: restrictionType,
+        durationDays: Number(restrictionDuration),
+        reason: restrictionReason.trim(),
+      });
+      showToast(
+        `✓ Đã áp dụng hạn chế [${result.restriction}] trong ${result.durationDays} ngày cho người dùng.`,
+      );
+      setPenaltyOpen(false);
+    } catch (err: any) {
+      const msg = userMessage(err) || 'Không thể áp dụng hạn chế tính năng.';
+      setPenaltyError(msg);
+      showToast(`❌ Lỗi: ${msg}`);
+    } finally {
+      setIsSubmittingPenalty(false);
     }
   }
 
@@ -455,6 +535,23 @@ export function SupportUsersPage() {
                 onClick={openLockConfirmModal}
               >
                 {selectedUser.status === 'SUSPENDED' ? '🔓 Mở khóa tài khoản' : '🔒 Khóa tài khoản'}
+              </button>
+
+              <button
+                type="button"
+                style={{
+                  padding: '7px 14px',
+                  borderRadius: '7px',
+                  border: '1px solid #fed7aa',
+                  background: '#fff7ed',
+                  color: '#c2410c',
+                  fontSize: '0.72rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+                onClick={openPenaltyModal}
+              >
+                ⚖️ Chế tài / Xử phạt
               </button>
 
               <Link
@@ -766,6 +863,182 @@ export function SupportUsersPage() {
               )}
             </button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Dialog Chế tài vi phạm & Điều chỉnh Uy tín (Task 3) */}
+      <Dialog
+        open={penaltyOpen}
+        onOpenChange={(open) => !isSubmittingPenalty && setPenaltyOpen(open)}
+      >
+        <DialogContent className="p-6 bg-white rounded-2xl shadow-2xl max-w-lg w-full">
+          <DialogTitle className="text-lg font-bold text-slate-800">
+            Chế tài vi phạm & Quản lý Uy tín người dùng
+          </DialogTitle>
+          <DialogDescription className="text-xs text-slate-500 mt-1">
+            Áp dụng chế tài đối với tài khoản{' '}
+            <strong className="text-slate-700">
+              {selectedUser?.fullName || selectedUser?.email}
+            </strong>{' '}
+            (ID: {selectedUser?.id}) theo quy chuẩn SRS 2.7 & 3.1.2.
+          </DialogDescription>
+
+          {penaltyError && (
+            <div className="mt-3 p-2.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 font-medium">
+              ⚠️ {penaltyError}
+            </div>
+          )}
+
+          {/* Tab chọn hình thức chế tài */}
+          <div className="flex border-b border-slate-200 mt-4 mb-4">
+            <button
+              type="button"
+              className={`pb-2 px-3 text-xs font-semibold border-b-2 transition ${
+                penaltyTab === 'REPUTATION'
+                  ? 'border-orange-600 text-orange-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+              onClick={() => setPenaltyTab('REPUTATION')}
+            >
+              1. Điều chỉnh Điểm uy tín
+            </button>
+            <button
+              type="button"
+              className={`pb-2 px-3 text-xs font-semibold border-b-2 transition ${
+                penaltyTab === 'RESTRICTION'
+                  ? 'border-red-600 text-red-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+              onClick={() => setPenaltyTab('RESTRICTION')}
+            >
+              2. Khóa tính năng vi phạm
+            </button>
+          </div>
+
+          {penaltyTab === 'REPUTATION' ? (
+            <form onSubmit={handleAdjustReputation} className="space-y-4">
+              <div className="bg-orange-50 border border-orange-200 p-3 rounded-lg text-xs text-orange-900">
+                Điểm uy tín hiện tại: <strong>{selectedUser?.reputationScore ?? 100} / 100</strong>.
+                Điểm dưới 50 sẽ tự động bị khóa quyền tạo phiên đấu giá.
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Số điểm điều chỉnh (Điểm âm để trừ phạt, điểm dương để thưởng):
+                </label>
+                <input
+                  type="number"
+                  value={reputationPoints}
+                  onChange={(e) => setReputationPoints(Number(e.target.value))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 outline-none focus:border-sky-400"
+                  required
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Ví dụ: -5 điểm (hủy đơn khi hết hàng), -10 điểm (giao hàng sai mô tả).
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Lý do điều chỉnh (bắt buộc):
+                </label>
+                <textarea
+                  value={reputationReason}
+                  onChange={(e) => setReputationReason(e.target.value)}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 outline-none focus:border-sky-400 resize-none"
+                  placeholder="Nhập chi tiết căn cứ và lý do vi phạm..."
+                  required
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={isSubmittingPenalty}
+                  onClick={() => setPenaltyOpen(false)}
+                  className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingPenalty || !reputationReason.trim()}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-lg text-xs font-semibold hover:bg-orange-700 disabled:opacity-50 transition"
+                >
+                  {isSubmittingPenalty ? 'Đang lưu…' : 'Xác nhận điều chỉnh điểm'}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleRestrictFeatures} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Loại tính năng cần hạn chế / khóa:
+                </label>
+                <Select value={restrictionType} onValueChange={setRestrictionType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Chọn loại hạn chế" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="BIDDING_LOCK">
+                      BIDDING_LOCK — Chặn tham gia đấu giá (Chống bom hàng)
+                    </SelectItem>
+                    <SelectItem value="LISTING_LOCK">
+                      LISTING_LOCK — Chặn đăng bán sản phẩm mới (Phạt người bán)
+                    </SelectItem>
+                    <SelectItem value="PAYMENT_RESTRICTION">
+                      PAYMENT_RESTRICTION — Chặn COD (Buộc thanh toán online)
+                    </SelectItem>
+                    <SelectItem value="FULL_RESTRICTION">
+                      FULL_RESTRICTION — Hạn chế toàn bộ giao dịch
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Thời hạn hạn chế (Số ngày):
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={restrictionDuration}
+                  onChange={(e) => setRestrictionDuration(Number(e.target.value))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 outline-none focus:border-sky-400"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Lý do áp dụng chế tài:
+                </label>
+                <textarea
+                  value={restrictionReason}
+                  onChange={(e) => setRestrictionReason(e.target.value)}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 outline-none focus:border-sky-400 resize-none"
+                  placeholder="Nhập căn cứ xử lý..."
+                  required
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={isSubmittingPenalty}
+                  onClick={() => setPenaltyOpen(false)}
+                  className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingPenalty || !restrictionReason.trim()}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 disabled:opacity-50 transition"
+                >
+                  {isSubmittingPenalty ? 'Đang lưu…' : 'Xác nhận áp dụng chế tài'}
+                </button>
+              </div>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
 

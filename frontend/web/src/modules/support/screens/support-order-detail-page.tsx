@@ -18,6 +18,8 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [actionKind, setActionKind] = useState<'cancel' | 'refund' | 'reject_refund' | null>(null);
   const [actionReason, setActionReason] = useState('');
+  const [isPayOsRefund, setIsPayOsRefund] = useState(true);
+  const [customRefundAmount, setCustomRefundAmount] = useState<number | string>('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   function showToast(msg: string) {
@@ -55,11 +57,15 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
     if (kind === 'refund' && !canRefund) return;
 
     setActionKind(kind);
+    if (kind === 'refund') {
+      setIsPayOsRefund(true);
+      setCustomRefundAmount(order?.totalAmount ?? 0);
+    }
     setActionReason(
       kind === 'cancel'
         ? 'Xử lý hủy đơn từ bộ phận Chăm sóc khách hàng.'
         : kind === 'refund'
-          ? 'Yêu cầu hoàn tiền được bộ phận CSKH phê duyệt.'
+          ? 'Yêu cầu hoàn tiền được bộ phận CSKH phê duyệt qua PayOS.'
           : 'Từ chối / Hủy bỏ yêu cầu hoàn tiền từ người mua do không đủ điều kiện chính sách sàn.',
     );
     setDialogOpen(true);
@@ -80,10 +86,44 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
         showToast('Đã hủy đơn hàng thành công');
         setNotice('Đơn hàng đã được hủy thành công.');
       } else if (actionKind === 'refund') {
-        const updated = await ordersApi.refund(orderId, actionReason.trim());
-        setOrder(updated);
-        showToast('Đã xử lý hoàn tiền thành công');
-        setNotice('Yêu cầu hoàn tiền cho đơn hàng đã được xử lý thành công.');
+        if (isPayOsRefund) {
+          const refundNum =
+            typeof customRefundAmount === 'number'
+              ? customRefundAmount
+              : Number(customRefundAmount) || order?.totalAmount;
+          const res = await ordersApi.executeRefund(orderId, {
+            refundAmount: refundNum,
+            reason: actionReason.trim(),
+          });
+          setOrder((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  status: 'REFUNDED',
+                  refundTransactionId: res.refundTransactionId,
+                  refundAmount: res.amount,
+                  timeline: [
+                    ...prev.timeline,
+                    {
+                      status: 'REFUNDED',
+                      title: 'Hoàn tiền tự động qua PayOS',
+                      timestamp: res.completedAt || new Date().toISOString(),
+                      note: `${res.message} (Mã GD: ${res.refundTransactionId})`,
+                    },
+                  ],
+                }
+              : prev,
+          );
+          showToast(`Đã kích hoạt hoàn tiền PayOS thành công (Mã GD: ${res.refundTransactionId})`);
+          setNotice(
+            `Đã hoàn tiền tự động qua PayOS thành công: ${money(res.amount)} (Mã GD: ${res.refundTransactionId})`,
+          );
+        } else {
+          const updated = await ordersApi.refund(orderId, actionReason.trim());
+          setOrder(updated);
+          showToast('Đã xử lý hoàn tiền thành công');
+          setNotice('Yêu cầu hoàn tiền cho đơn hàng đã được xử lý thành công.');
+        }
       } else if (actionKind === 'reject_refund') {
         // Hủy yêu cầu hoàn tiền (BUG-04) - Gọi trực tiếp API Backend POST /api/v1/orders/:id/refund/cancel
         const updated = await ordersApi.rejectRefund(orderId, actionReason.trim());
@@ -228,6 +268,54 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
             </section>
           )}
 
+          {/* Thông báo Hoàn tiền PayOS thành công */}
+          {isRefunded && (
+            <section
+              className="support-panel"
+              style={{
+                border: '1.5px solid #10b981',
+                background: '#ecfdf5',
+                padding: '16px 20px',
+                borderRadius: '8px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                <span style={{ fontSize: '1.3rem' }}>✓</span>
+                <div>
+                  <h3
+                    style={{
+                      margin: '0 0 4px',
+                      fontSize: '0.85rem',
+                      color: '#065f46',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Đơn hàng đã được xử lý hoàn tiền thành công
+                  </h3>
+                  <p style={{ margin: 0, fontSize: '0.78rem', color: '#047857', lineHeight: 1.5 }}>
+                    {order.refundTransactionId ? (
+                      <>
+                        Mã giao dịch hoàn tiền (PayOS):{' '}
+                        <strong className="font-mono text-emerald-900">
+                          {order.refundTransactionId}
+                        </strong>{' '}
+                        · Số tiền hoàn:{' '}
+                        <strong>{money(order.refundAmount || order.totalAmount)}</strong> · Cổng
+                        thanh toán: <strong>PayOS Gateway</strong>
+                      </>
+                    ) : (
+                      <>
+                        Số tiền hoàn:{' '}
+                        <strong>{money(order.refundAmount || order.totalAmount)}</strong> · Trạng
+                        thái: <strong>ĐÃ_HOÀN_TIỀN</strong>
+                      </>
+                    )}
+                  </p>
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* Cảnh báo khiếu nại Trả hàng / Hoàn tiền (Dispute Alert) */}
           {isDisputed && (
             <section
@@ -336,6 +424,41 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
                 : `Bạn đang hủy / từ chối yêu cầu hoàn tiền cho đơn ${order?.id}. Vui lòng nhập lý do từ chối:`}
           </DialogDescription>
           <form onSubmit={handleConfirmAction} className="mt-4 space-y-4">
+            {actionKind === 'refund' && (
+              <div className="space-y-3 rounded-lg border border-sky-100 bg-sky-50/70 p-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isPayOsRefund}
+                    onChange={(e) => setIsPayOsRefund(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-xs font-semibold text-slate-800">
+                    Kích hoạt hoàn tiền tự động qua cổng PayOS (VietQR)
+                  </span>
+                </label>
+                {isPayOsRefund && (
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                      Số tiền hoàn (₫):
+                    </label>
+                    <input
+                      type="number"
+                      min={1000}
+                      max={order?.totalAmount ?? undefined}
+                      value={customRefundAmount}
+                      onChange={(e) => setCustomRefundAmount(e.target.value)}
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold text-slate-900 outline-none focus:border-sky-500 bg-white"
+                      required
+                    />
+                    <p className="mt-1 text-[10px] text-slate-500">
+                      Mặc định hoàn toàn phần: {money(order?.totalAmount ?? 0)}. Bạn có thể điều
+                      chỉnh để hoàn tiền một phần (Partial Refund).
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Lý do thao tác:
