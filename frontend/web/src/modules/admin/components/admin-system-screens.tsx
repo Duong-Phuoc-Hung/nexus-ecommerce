@@ -130,6 +130,7 @@ export function AdminProfile() {
     [phone, setPhone] = useState(''),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
+    [invalidField, setInvalidField] = useState(''),
     [notice, setNotice] = useState('');
   useEffect(() => {
     const c = new AbortController();
@@ -149,12 +150,15 @@ export function AdminProfile() {
     e.preventDefault();
     if (busy) return;
     setError('');
+    setInvalidField('');
     setNotice('');
     if (!name.trim() || name.trim().length > 100) {
+      setInvalidField('name');
       setError('Họ tên cần từ 1 đến 100 ký tự.');
       return;
     }
-    if (phone && !/^[+0-9\s-]{8,15}$/.test(phone)) {
+    if (phone.trim() && !/^(?:0|\+84)\d{9}$/.test(phone.replace(/[\s.-]/g, ''))) {
+      setInvalidField('phone');
       setError('Vui lòng kiểm tra số điện thoại.');
       return;
     }
@@ -184,6 +188,7 @@ export function AdminProfile() {
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         <form
           onSubmit={save}
+          noValidate
           className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6"
         >
           <UserRound className="text-slate-500" />
@@ -194,8 +199,20 @@ export function AdminProfile() {
               required
               maxLength={100}
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (invalidField === 'name') setError('');
+              }}
+              aria-invalid={invalidField === 'name' && Boolean(error)}
+              aria-describedby={
+                invalidField === 'name' && error ? 'admin-profile-name-error' : undefined
+              }
             />
+            {invalidField === 'name' && error && (
+              <span id="admin-profile-name-error" role="alert" className="text-sm text-red-700">
+                {error}
+              </span>
+            )}
           </label>
           <label className="block space-y-2 text-sm font-medium">
             Email
@@ -203,9 +220,25 @@ export function AdminProfile() {
           </label>
           <label className="block space-y-2 text-sm font-medium">
             Điện thoại
-            <Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
+            <Input
+              type="tel"
+              value={phone}
+              onChange={(e) => {
+                setPhone(e.target.value);
+                if (invalidField === 'phone') setError('');
+              }}
+              aria-invalid={invalidField === 'phone' && Boolean(error)}
+              aria-describedby={
+                invalidField === 'phone' && error ? 'admin-profile-phone-error' : undefined
+              }
+            />
+            {invalidField === 'phone' && error && (
+              <span id="admin-profile-phone-error" role="alert" className="text-sm text-red-700">
+                {error}
+              </span>
+            )}
           </label>
-          {error && (
+          {error && !invalidField && (
             <p role="alert" className="text-sm text-red-700">
               {error}
             </p>

@@ -35,20 +35,23 @@ export function normalizeApiError(error: unknown): ApiError {
   if (raw && typeof raw === 'object')
     for (const [key, value] of Object.entries(raw))
       fields[key] = Array.isArray(value) ? value.join('. ') : String(value);
-  const message =
-    (e?.response?.status ?? 0) >= 500
-      ? 'Hệ thống tạm thời chưa xử lý được yêu cầu. Vui lòng thử lại sau.'
+  const explicitMessage =
+    typeof detail.message === 'string'
+      ? detail.message
       : typeof body.error === 'string'
         ? body.error
-        : typeof detail.message === 'string'
-          ? detail.message
-          : e?.code === 'ECONNABORTED' || e?.code === 'ETIMEDOUT'
-            ? 'Kết nối mất quá nhiều thời gian. Vui lòng thử lại.'
-            : !e?.response
-              ? 'Chưa kết nối được hệ thống. Vui lòng thử lại sau.'
-              : e.response.status === 404
-                ? 'Không tìm thấy dữ liệu hoặc chức năng này chưa được cung cấp.'
-                : 'Không thể hoàn tất yêu cầu. Vui lòng thử lại.';
+        : undefined;
+  const message =
+    explicitMessage ||
+    ((e?.response?.status ?? 0) >= 500
+      ? 'Hệ thống tạm thời chưa xử lý được yêu cầu. Vui lòng thử lại sau.'
+      : e?.code === 'ECONNABORTED' || e?.code === 'ETIMEDOUT'
+        ? 'Kết nối mất quá nhiều thời gian. Vui lòng thử lại.'
+        : !e?.response
+          ? 'Chưa kết nối được hệ thống. Vui lòng thử lại sau.'
+          : e.response.status === 404
+            ? 'Không tìm thấy dữ liệu hoặc chức năng này chưa được cung cấp.'
+            : 'Không thể hoàn tất yêu cầu. Vui lòng thử lại.');
   return new ApiError(
     message,
     e?.response?.status,

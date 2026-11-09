@@ -19,7 +19,8 @@ import { Button } from '@/components/ui/button';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import { commerceApi } from '../api/commerce.api';
 import { PaymentQrCard } from './payment-qr-card';
-import { isOrderMarkedPaid, markOrderAsPaid } from '../config/payment-qr';
+import { takePendingPayosCart } from '../utils/cart-selection';
+import { readCart, writeCart } from '../utils/cart';
 
 type PaymentStatusData = {
   orderId: string;
@@ -36,23 +37,18 @@ type PaymentStatusData = {
 export function CheckoutResultPage() {
   const { user, phase } = useSession();
   const params = useSearchParams();
-  const orderId = params?.get('orderId') || '';
+  const [pendingOrderId, setPendingOrderId] = useState('');
+  const orderId = params?.get('orderId') || pendingOrderId;
   const methodParam = params?.get('method') || '';
   const statusParam = params?.get('status') || '';
-  const codeParam = params?.get('code') || '';
   const cancelParam = params?.get('cancel') || params?.get('cancelled') || '';
-
-  const amountParam = params?.get('amount') ? Number(params.get('amount')) : null;
 
   const [loading, setLoading] = useState(false);
   const [statusData, setStatusData] = useState<PaymentStatusData | null>(null);
 
-  // Nếu URL truyền status=PAID hoặc PayOS trả về code=00 thì tự động lưu orderId vào danh sách đã thanh toán
   useEffect(() => {
-    if (orderId && (statusParam === 'PAID' || codeParam === '00')) {
-      markOrderAsPaid(orderId);
-    }
-  }, [orderId, statusParam, codeParam]);
+    setPendingOrderId(sessionStorage.getItem('nexus-pending-payos-order') || '');
+  }, []);
 
   const fetchStatus = async () => {
     if (!orderId || user?.role !== 'BUYER') return;
@@ -60,11 +56,8 @@ export function CheckoutResultPage() {
     try {
       const data = await commerceApi.getPaymentStatus(orderId);
       setStatusData(data);
-      if (data.paymentStatus === 'PAID' || data.orderStatus === 'PAID') {
-        markOrderAsPaid(orderId);
-      }
     } catch {
-      // Backend payment-status chưa cấu hình hoặc mạng chậm, giữ fallback từ local/params
+      // Giữ trạng thái xác nhận gần nhất; lỗi mạng tạm thời không đổi kết quả thanh toán.
     } finally {
       setLoading(false);
     }
@@ -75,51 +68,73 @@ export function CheckoutResultPage() {
   }, [orderId, user?.role]);
 
   const isCod = methodParam === 'COD' || statusData?.orderStatus === 'PLACED';
-  const isPaid =
-    statusParam === 'PAID' ||
-    codeParam === '00' ||
-    (orderId ? isOrderMarkedPaid(orderId) : false) ||
-    statusData?.paymentStatus === 'PAID' ||
-    statusData?.orderStatus === 'PAID';
+  const isPaid = statusData?.paymentStatus === 'PAID' || statusData?.orderStatus === 'PAID';
   const isExpired = !isPaid && (statusData?.expired || statusData?.orderStatus === 'EXPIRED');
+  // Trạng thái hủy phải lấy từ BE. Tham số cancel trên URL (PayOS redirect) chỉ là gợi ý khi
+  // chưa có dữ liệu BE; nếu BE vẫn báo chờ thanh toán thì Buyer vẫn được quét lại mã.
   const isCancelled =
     !isPaid &&
-    (statusData?.orderStatus === 'CANCELLED' ||
-      statusParam === 'CANCELLED' ||
-      cancelParam === 'true');
+    (statusData
+      ? statusData.orderStatus === 'CANCELLED'
+      : statusParam === 'CANCELLED' || cancelParam === 'true');
+  const isTerminal =
+    isPaid || isCod || Boolean(isExpired) || statusData?.orderStatus === 'CANCELLED';
 
-  const displayAmount = statusData?.amount ?? amountParam;
+  useEffect(() => {
+    if (!orderId || user?.role !== 'BUYER' || isTerminal) return;
+    const timer = window.setInterval(() => {
+      commerceApi
+        .getPaymentStatus(orderId)
+        .then(setStatusData)
+        .catch(() => {});
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [orderId, user?.role, isTerminal]);
+
+  useEffect(() => {
+    if (!isPaid || !orderId) return;
+    if (sessionStorage.getItem('nexus-pending-payos-order') === orderId) {
+      sessionStorage.removeItem('nexus-pending-payos-order');
+    }
+    const purchased = takePendingPayosCart(orderId);
+    if (!purchased.length) return;
+    const ids = new Set(purchased.map((line) => line.productId));
+    writeCart(readCart().filter((line) => !ids.has(line.productId)));
+  }, [isPaid, orderId]);
+
+  // Chỉ hiển thị số tiền do API trả về, không lấy từ tham số URL (có thể bị sửa tay).
+  const displayAmount = statusData?.amount ?? null;
 
   return (
     <>
       <StoreHeader />
-      <main className="nexus-container min-h-[calc(100vh-68px)] flex items-center justify-center py-4 px-3 sm:px-4">
-        {/* Khung duy nhất chứa toàn bộ thông tin kết quả thanh toán, tối ưu không scroll */}
-        <div className="w-full max-w-xl rounded-2xl sm:rounded-3xl border border-stone-200/90 bg-white p-5 sm:p-6 text-center shadow-lg relative overflow-hidden">
+      <main className="nexus-container min-h-[calc(100vh-68px)] flex items-center justify-center py-2 px-3 sm:px-4">
+        {/* Khung duy nhất chứa toàn bộ thông tin kết quả thanh toán, vừa vặn 1 màn hình không kéo cuộn */}
+        <div className="w-full max-w-3xl rounded-2xl sm:rounded-3xl border border-stone-200/90 bg-white p-4 sm:p-5 text-center shadow-lg relative overflow-hidden my-auto">
           {/* Biểu tượng trạng thái */}
           {isPaid ? (
-            <div className="relative mx-auto grid size-14 sm:size-16 place-items-center rounded-2xl bg-emerald-50 text-emerald-600 shadow-inner ring-4 sm:ring-8 ring-emerald-500/10">
-              <CheckCircle2 aria-hidden="true" className="size-8 sm:size-9" />
+            <div className="relative mx-auto grid size-12 sm:size-14 place-items-center rounded-2xl bg-emerald-50 text-emerald-600 shadow-inner ring-4 ring-emerald-500/10">
+              <CheckCircle2 aria-hidden="true" className="size-7 sm:size-8" />
             </div>
           ) : isCod ? (
-            <span className="mx-auto grid size-14 sm:size-16 place-items-center rounded-2xl bg-blue-50 text-blue-600">
-              <PackageCheck aria-hidden="true" className="size-7 sm:size-8" />
+            <span className="mx-auto grid size-12 sm:size-14 place-items-center rounded-2xl bg-blue-50 text-blue-600">
+              <PackageCheck aria-hidden="true" className="size-6 sm:size-7" />
             </span>
           ) : isCancelled || isExpired ? (
-            <span className="mx-auto grid size-14 sm:size-16 place-items-center rounded-2xl bg-red-50 text-red-600">
-              <XCircle aria-hidden="true" className="size-7 sm:size-8" />
+            <span className="mx-auto grid size-12 sm:size-14 place-items-center rounded-2xl bg-red-50 text-red-600">
+              <XCircle aria-hidden="true" className="size-6 sm:size-7" />
             </span>
           ) : (
-            <span className="mx-auto grid size-14 sm:size-16 place-items-center rounded-2xl bg-blue-50 text-blue-700">
-              <Clock3 aria-hidden="true" className="size-7 sm:size-8" />
+            <span className="mx-auto grid size-10 sm:size-12 place-items-center rounded-2xl bg-blue-50 text-blue-700">
+              <Clock3 aria-hidden="true" className="size-5 sm:size-6" />
             </span>
           )}
 
-          <p className="mt-3 text-[11px] font-bold uppercase tracking-widest text-brand-dark">
+          <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-brand-dark">
             NEXUS · KẾT QUẢ ĐẶT HÀNG
           </p>
 
-          <h1 className="mt-1 text-xl sm:text-2xl font-bold tracking-tight text-stone-900">
+          <h1 className="mt-0.5 text-lg sm:text-xl font-bold tracking-tight text-stone-900">
             {isPaid
               ? 'Thanh toán thành công qua PayOS!'
               : isCod
@@ -128,10 +143,10 @@ export function CheckoutResultPage() {
                   ? 'Đơn hàng đã hết hạn thanh toán'
                   : isCancelled
                     ? 'Đơn hàng đã bị hủy'
-                    : 'Đang chờ thanh toán qua PayOS'}
+                    : 'Đang chờ thanh toán qua PayOS (VietQR 24/7)'}
           </h1>
 
-          <p className="mx-auto mt-1 max-w-md text-xs sm:text-[13px] leading-relaxed text-muted">
+          <p className="mx-auto mt-0.5 max-w-md text-xs leading-relaxed text-muted">
             {phase === 'loading'
               ? 'Đang kiểm tra phiên đăng nhập.'
               : user?.role !== 'BUYER'
@@ -142,12 +157,14 @@ export function CheckoutResultPage() {
                     ? 'Đơn hàng đã được lưu trên hệ thống. Bạn sẽ kiểm tra và thanh toán tiền mặt trực tiếp cho bưu tá khi nhận hàng.'
                     : isExpired
                       ? 'Thời gian chờ thanh toán đã kết thúc. Vui lòng đặt lại đơn hàng mới.'
-                      : 'Đơn hàng đang chờ chuyển khoản. Vui lòng quét mã VietQR bên dưới bằng app Ngân hàng để hoàn tất qua cổng PayOS.'}
+                      : isCancelled
+                        ? 'Đơn hàng đã hủy và giải phóng tồn kho. Bạn có thể quay lại mua sắm.'
+                        : 'Mở app ngân hàng quét mã VietQR hoặc chuyển khoản theo thông tin bên dưới.'}
           </p>
 
           {/* Khung tóm tắt chi tiết giao dịch */}
           {isPaid && orderId && (
-            <div className="mt-3.5 space-y-2 rounded-xl border border-emerald-200/90 bg-emerald-50/60 p-3 sm:p-3.5 text-left text-xs sm:text-[13px]">
+            <div className="mt-3 space-y-2 rounded-xl border border-emerald-200/90 bg-emerald-50/60 p-3 sm:p-3.5 text-left text-xs sm:text-[13px]">
               <div className="flex items-center justify-between">
                 <span className="text-muted">Mã đơn hàng:</span>
                 <strong className="font-mono text-brand-dark font-bold text-sm sm:text-base">
@@ -180,32 +197,38 @@ export function CheckoutResultPage() {
 
           {/* Badge mã đơn & trạng thái khi chưa thanh toán */}
           {!isPaid && orderId && (
-            <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-              <div className="inline-flex items-center gap-2 rounded-xl bg-stone-50 px-3 py-1.5 text-xs font-medium text-stone-700">
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+              <div className="inline-flex items-center gap-1.5 rounded-xl bg-stone-50 px-2.5 py-1 text-xs font-medium text-stone-700">
                 <span>Mã đơn:</span>
                 <strong className="font-mono text-brand-dark">#{orderId}</strong>
               </div>
-              <div className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800">
+              <div className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">
                 <span className="size-1.5 rounded-full bg-amber-500 animate-pulse" />
                 {isExpired ? 'ĐÃ HẾT HẠN' : isCancelled ? 'ĐÃ HỦY' : 'CHỜ THANH TOÁN'}
               </div>
             </div>
           )}
 
-          {/* Hiển thị thẻ VietQR PayOS cho Buyer quét khi chưa thanh toán */}
+          {/* Hiển thị thẻ VietQR PayOS trực tiếp cho Buyer quét hoặc chuyển khoản */}
           {!isPaid && !isCod && !isExpired && !isCancelled && (
-            <PaymentQrCard orderId={orderId} amount={displayAmount || undefined} />
+            <div className="mt-3">
+              <PaymentQrCard
+                orderId={orderId}
+                amount={displayAmount || undefined}
+                onCancelOrder={fetchStatus}
+              />
+            </div>
           )}
 
           {/* Khu vực nút hành động - Bố trí gọn gàng trong cùng khung */}
-          <div className="mt-4 sm:mt-5 flex flex-wrap items-center justify-center gap-2 sm:gap-2.5">
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
             {!isPaid && !isCod && !isExpired && !isCancelled && (
               <Button
                 type="button"
                 variant="outline"
                 onClick={fetchStatus}
                 disabled={loading}
-                className="h-9 sm:h-10 rounded-xl px-4 text-xs sm:text-sm font-semibold"
+                className="h-8 sm:h-9 rounded-xl px-3.5 text-xs font-semibold"
               >
                 <RefreshCw
                   aria-hidden="true"
@@ -219,24 +242,24 @@ export function CheckoutResultPage() {
               <>
                 <Link
                   href="/account/orders"
-                  className="inline-flex h-9 sm:h-10 items-center justify-center rounded-xl bg-brand-dark px-3.5 sm:px-4 text-xs sm:text-sm font-semibold text-white shadow-sm hover:bg-brand-dark/90 transition"
+                  className="inline-flex h-8 sm:h-9 items-center justify-center rounded-xl bg-brand-dark px-3.5 text-xs font-semibold text-white shadow-xs hover:bg-brand-dark/90 transition"
                 >
-                  <Receipt className="mr-1.5 size-3.5 sm:size-4" />
+                  <Receipt className="mr-1.5 size-3.5" />
                   Xem danh sách đơn mua
                 </Link>
                 {orderId && isPaid && (
                   <Link
                     href={`/account/orders/${encodeURIComponent(orderId)}`}
-                    className="inline-flex h-9 sm:h-10 items-center justify-center rounded-xl border border-brand bg-white px-3.5 sm:px-4 text-xs sm:text-sm font-semibold text-brand-dark hover:bg-brand-soft/40 transition"
+                    className="inline-flex h-8 sm:h-9 items-center justify-center rounded-xl border border-brand bg-white px-3.5 text-xs font-semibold text-brand-dark hover:bg-brand-soft/40 transition"
                   >
-                    Xem chi tiết đơn này <ArrowRight className="ml-1 size-3.5 sm:size-4" />
+                    Xem chi tiết đơn này <ArrowRight className="ml-1 size-3.5" />
                   </Link>
                 )}
               </>
             ) : (
               <Link
                 href="/login?next=%2Faccount%2Forders"
-                className="inline-flex h-9 sm:h-10 items-center justify-center rounded-xl bg-brand-dark px-4 text-xs sm:text-sm font-semibold text-white hover:bg-brand-dark/90 transition"
+                className="inline-flex h-8 sm:h-9 items-center justify-center rounded-xl bg-brand-dark px-3.5 text-xs font-semibold text-white hover:bg-brand-dark/90 transition"
               >
                 Đăng nhập Buyer
               </Link>
@@ -244,22 +267,19 @@ export function CheckoutResultPage() {
 
             <Link
               href="/products"
-              className="inline-flex h-9 sm:h-10 items-center justify-center rounded-xl border border-line bg-white px-3 sm:px-3.5 text-xs sm:text-sm font-medium text-stone-700 hover:bg-stone-50 transition"
+              className="inline-flex h-8 sm:h-9 items-center justify-center rounded-xl border border-line bg-white px-3 text-xs font-medium text-stone-700 hover:bg-stone-50 transition"
             >
-              <ShoppingBag className="mr-1.5 size-3.5 sm:size-4" />
+              <ShoppingBag className="mr-1.5 size-3.5" />
               Tiếp tục mua sắm
             </Link>
           </div>
 
           {/* Dòng ghi chú bảo chứng hệ thống nằm trọn vẹn trong khung */}
-          <div className="mt-3.5 pt-3 border-t border-stone-100 flex items-center justify-center gap-1.5 text-center text-[11px] sm:text-xs text-muted leading-tight">
-            <ShieldCheck
-              aria-hidden="true"
-              className="size-3.5 sm:size-4 shrink-0 text-brand-dark"
-            />
+          <div className="mt-3 pt-2.5 border-t border-stone-100 flex items-center justify-center gap-1.5 text-center text-[11px] text-muted leading-tight">
+            <ShieldCheck aria-hidden="true" className="size-3.5 shrink-0 text-brand-dark" />
             <span>
-              Hệ thống đối soát thanh toán tự động qua cổng PayOS 24/7. Vui lòng lưu mã đơn hàng để
-              tra cứu khi cần hỗ trợ.
+              Hệ thống đối soát thanh toán tự động qua cổng PayOS 24/7. Trạng thái tự cập nhật khi
+              bạn chuyển khoản thành công.
             </span>
           </div>
         </div>
