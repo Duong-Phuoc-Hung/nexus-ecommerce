@@ -6,7 +6,7 @@ import {
 } from '../dtos/SearchOrdersDto';
 
 export class SearchOrdersUseCase {
-  constructor(private readonly orderRepository: IOrderRepository) {}
+  constructor(private readonly orderRepository: Pick<IOrderRepository, 'search'>) {}
 
   public async execute(query: SearchOrdersQueryDto): Promise<SearchOrdersResultDto> {
     const page = Math.max(1, Number(query.page) || 1);

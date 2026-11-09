@@ -106,7 +106,7 @@ export function requireSellerOrAdmin(req: Request, res: Response, next: NextFunc
     return;
   }
 
-  if (user.role === 'SELLER' || user.role === 'ADMIN' || user.role === 'SUPPORT_STAFF') {
+  if (user.role === 'SELLER' || user.role === 'ADMIN') {
     return next();
   }
 

@@ -8,17 +8,21 @@ import { PlaceBidUseCase } from '../../../application/use-cases/PlaceBidUseCase'
 import { GetBidHistoryUseCase } from '../../../application/use-cases/GetBidHistoryUseCase';
 import { UpdateAuctionUseCase } from '../../../application/use-cases/UpdateAuctionUseCase';
 import { BuyNowUseCase } from '../../../application/use-cases/BuyNowUseCase';
-import { CancelAuctionUseCase } from '../../../application/use-cases/CancelAuctionUseCase';
+import {
+  AuctionCancellationConflict,
+  AuctionCancellationForbidden,
+  CancelAuctionUseCase,
+} from '../../../application/use-cases/CancelAuctionUseCase';
 
 export class AuctionController {
   constructor(
     private readonly getAuctionDetailUseCase: GetAuctionDetailUseCase,
     private readonly createAuctionRoomUseCase: CreateAuctionRoomUseCase,
-    private readonly placeBidUseCase: PlaceBidUseCase,
+    private readonly placeBidUseCase: Pick<PlaceBidUseCase, 'execute'>,
     private readonly getBidHistoryUseCase: GetBidHistoryUseCase,
-    private readonly updateAuctionUseCase: UpdateAuctionUseCase,
-    private readonly buyNowUseCase: BuyNowUseCase,
-    private readonly cancelAuctionUseCase: CancelAuctionUseCase,
+    private readonly updateAuctionUseCase: Pick<UpdateAuctionUseCase, 'execute'>,
+    private readonly buyNowUseCase: Pick<BuyNowUseCase, 'execute'>,
+    private readonly cancelAuctionUseCase: Pick<CancelAuctionUseCase, 'execute'>,
     private readonly auctionRepository: IAuctionRepository,
   ) {}
 
@@ -29,11 +33,20 @@ export class AuctionController {
       const isAdminOrStaff = authUser?.role === 'ADMIN' || authUser?.role === 'SUPPORT_STAFF';
       const { status, sellerId, q } = req.query;
 
-      const shouldFindAll = Boolean(status || sellerId || q || isAdminOrStaff);
+      // Kiểm tra tham số truy vấn lặp lại (Array) -> 400 Bad Request
+      if (Array.isArray(sellerId) || Array.isArray(status) || Array.isArray(q)) {
+        res.status(400).json({
+          success: false,
+          error: 'Tham số truy vấn không hợp lệ (không hỗ trợ mảng lặp lại).',
+        });
+        return;
+      }
+
+      const shouldFindAll = Boolean(status || sellerId || isAdminOrStaff);
       let auctions = shouldFindAll
         ? await this.auctionRepository.findAll({
-            status: status as string,
-            sellerId: sellerId as string,
+            status: typeof status === 'string' ? status : undefined,
+            sellerId: typeof sellerId === 'string' ? sellerId : undefined,
           })
         : await this.auctionRepository.findActiveAuctions();
 
@@ -50,24 +63,37 @@ export class AuctionController {
 
       res.status(200).json({
         success: true,
-        data: auctions.map((a) => ({
-          id: a.id,
-          productId: a.productId,
-          sellerId: a.sellerId,
-          title: a.title,
-          startingPrice: a.startingPrice,
-          currentHighestBid: a.currentHighestBid,
-          highestBidderId: a.highestBidderId,
-          bidIncrement: a.bidIncrement,
-          buyNowPrice: a.buyNowPrice,
-          status: a.status,
-          startTime: a.startTime,
-          endTime: a.endTime,
-          actualEndTime: a.actualEndTime,
-          cancelReason: a.cancelReason,
-          createdAt: a.createdAt,
-          updatedAt: a.updatedAt,
-        })),
+        data: auctions.map((a) => {
+          // Kiểm soát quyền xem lý do hủy: chỉ Admin, Staff hoặc chính Seller sở hữu phòng mới được xem chi tiết
+          const canViewFullReason =
+            isAdminOrStaff || (authUser?.role === 'SELLER' && authUser?.id === a.sellerId);
+          const effectiveCancelReason = canViewFullReason
+            ? a.cancelReason
+            : a.cancelReason
+              ? 'Phiên đấu giá đã bị dừng hoặc hủy'
+              : undefined;
+
+          return {
+            id: a.id,
+            productId: a.productId,
+            sellerId: a.sellerId,
+            title: a.title,
+            startingPrice: a.startingPrice,
+            currentHighestBid: a.currentHighestBid,
+            highestBidderId: a.highestBidderId,
+            bidIncrement: a.bidIncrement,
+            buyNowPrice: a.buyNowPrice,
+            status: a.status,
+            startTime: a.startTime,
+            endTime: a.endTime,
+            actualEndTime: a.actualEndTime,
+            cancelReason: effectiveCancelReason,
+            cancelledBy: canViewFullReason ? a.cancelledBy : undefined,
+            cancelledAt: canViewFullReason ? a.cancelledAt : undefined,
+            createdAt: a.createdAt,
+            updatedAt: a.updatedAt,
+          };
+        }),
       });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message || 'Lỗi máy chủ nội bộ.' });
@@ -134,11 +160,29 @@ export class AuctionController {
 
   public async getById(req: Request, res: Response): Promise<void> {
     try {
-      const auctionId = (req.params.id || 'auc_01hqz777live') as string;
+      const authUser = (req as AuthenticatedRequest).user;
+      const isAdminOrStaff = authUser?.role === 'ADMIN' || authUser?.role === 'SUPPORT_STAFF';
+      const auctionId = req.params.id as string;
       const auction = await this.getAuctionDetailUseCase.execute(auctionId);
+
+      // Kiểm soát quyền xem lý do hủy phiên:
+      // Admin, Support Staff hoặc chính Seller chủ phòng được xem lý do chi tiết; Buyer/Khách xem thông báo chung
+      const canViewFullReason =
+        isAdminOrStaff || (authUser?.role === 'SELLER' && authUser?.id === auction.sellerId);
+      const effectiveCancelReason = canViewFullReason
+        ? auction.cancelReason
+        : auction.cancelReason
+          ? 'Phiên đấu giá đã bị dừng hoặc hủy'
+          : undefined;
+
       res.status(200).json({
         success: true,
-        data: auction,
+        data: {
+          ...auction,
+          cancelReason: effectiveCancelReason,
+          cancelledBy: canViewFullReason ? auction.cancelledBy : undefined,
+          cancelledAt: canViewFullReason ? auction.cancelledAt : undefined,
+        },
       });
     } catch (error) {
       if (error instanceof AuctionNotFoundException) {
@@ -317,43 +361,53 @@ export class AuctionController {
     }
   }
 
-  // Hủy/dừng khẩn cấp phiên đấu giá (dành cho chủ phiên hoặc Quản trị viên/Support Staff)
   public async cancel(req: Request, res: Response): Promise<void> {
+    const authUser = (req as AuthenticatedRequest).user;
+    if (!authUser) {
+      res.status(401).json({ success: false, error: 'Vui lòng đăng nhập.' });
+      return;
+    }
+
+    const rawReason = req.body?.reason;
+    const reason = typeof rawReason === 'string' ? rawReason.trim() : '';
+    const isAdminOrStaff = authUser.role === 'ADMIN' || authUser.role === 'SUPPORT_STAFF';
+    const defaultReason = isAdminOrStaff
+      ? 'Hủy theo yêu cầu của quản trị viên'
+      : 'Hủy theo yêu cầu của người bán';
+
+    if (
+      (rawReason != null && typeof rawReason !== 'string') ||
+      reason.length > 500 ||
+      (!reason && req.method !== 'DELETE')
+    ) {
+      res.status(400).json({
+        success: false,
+        error: 'Lý do hủy phải là chuỗi từ 1 đến 500 ký tự.',
+      });
+      return;
+    }
+
     try {
-      const authUser = (req as AuthenticatedRequest).user;
-      const auctionId = req.params.id as string;
-      const sellerId = authUser?.id || 'usr_seller_default';
-      const isAdmin = authUser?.role === 'ADMIN' || authUser?.role === 'SUPPORT_STAFF';
-      const { reason } = req.body || {};
-
-      if (!reason || typeof reason !== 'string' || !reason.trim()) {
-        res.status(400).json({
-          success: false,
-          error: 'Lý do hủy/dừng khẩn cấp phiên đấu giá là bắt buộc.',
-        });
-        return;
-      }
-
       const result = await this.cancelAuctionUseCase.execute({
-        auctionId,
-        sellerId,
-        isAdmin,
-        reason: reason.trim(),
+        auctionId: req.params.id as string,
+        sellerId: authUser.id,
+        isAdmin: isAdminOrStaff,
+        cancelledBy: authUser.id,
+        reason: reason || defaultReason,
       });
-
-      res.status(200).json({
-        success: true,
-        message: result.message,
-        data: result,
-      });
-    } catch (error: any) {
+      res.status(200).json({ success: true, message: result.message, data: result });
+    } catch (error) {
       if (error instanceof AuctionNotFoundException) {
         res.status(404).json({ success: false, error: error.message });
-        return;
+      } else if (error instanceof AuctionCancellationForbidden) {
+        res.status(403).json({ success: false, error: error.message });
+      } else if (error instanceof AuctionCancellationConflict) {
+        res.status(409).json({ success: false, error: error.message });
+      } else {
+        res
+          .status(500)
+          .json({ success: false, error: 'Không thể lưu trạng thái hủy phiên đấu giá.' });
       }
-      res
-        .status(400)
-        .json({ success: false, error: error.message || 'Không thể hủy phiên đấu giá.' });
     }
   }
 
@@ -383,7 +437,7 @@ export class AuctionController {
       const { title, bidIncrement, buyNowPrice, startTime, endTime } = req.body;
 
       const sellerId = authUser?.id || 'usr_seller_default';
-      const isAdmin = authUser?.role === 'ADMIN' || authUser?.role === 'SUPPORT_STAFF';
+      const isAdmin = authUser?.role === 'ADMIN';
 
       const updatedAuction = await this.updateAuctionUseCase.execute({
         auctionId,

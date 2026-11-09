@@ -48,6 +48,12 @@ export class GetAuctionDetailUseCase {
           : new Date(auction.actualEndTime).toISOString()
         : undefined,
       cancelReason: auction.cancelReason,
+      cancelledBy: auction.cancelledBy,
+      cancelledAt: auction.cancelledAt
+        ? auction.cancelledAt instanceof Date
+          ? auction.cancelledAt.toISOString()
+          : new Date(auction.cancelledAt).toISOString()
+        : undefined,
       bids,
       bidCount: bids.length,
       bidHistoryAvailable: true,

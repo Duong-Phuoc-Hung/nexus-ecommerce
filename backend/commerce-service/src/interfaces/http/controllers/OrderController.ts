@@ -22,6 +22,10 @@ export class OrderController {
     private readonly requestRefundUseCase?: RequestRefundUseCase,
     private readonly executeRefundUseCase?: ExecuteRefundUseCase,
     private readonly getRefundStatusUseCase?: GetRefundStatusUseCase,
+    private readonly adminReads?: {
+      search: SearchOrdersUseCase;
+      detail: GetOrderDetailUseCase;
+    },
   ) {}
 
   public async listOrders(req: Request, res: Response): Promise<void> {
@@ -31,15 +35,53 @@ export class OrderController {
         return;
       }
 
+      // Kiểm tra tham số mảng hoặc lặp lại -> 400 Bad Request
+      if (
+        Array.isArray(req.query.sellerId) ||
+        Array.isArray(req.query.buyerId) ||
+        Array.isArray(req.query.status) ||
+        Array.isArray(req.query.q) ||
+        Array.isArray(req.query.page) ||
+        Array.isArray(req.query.limit)
+      ) {
+        res.status(400).json({
+          success: false,
+          error: 'Tham số truy vấn không hợp lệ (không hỗ trợ mảng lặp lại).',
+        });
+        return;
+      }
+
+      if (
+        req.query.page !== undefined &&
+        (!Number.isSafeInteger(Number(req.query.page)) || Number(req.query.page) < 1)
+      ) {
+        res.status(400).json({
+          success: false,
+          error: 'Tham số page phải là số nguyên dương lớn hơn hoặc bằng 1.',
+        });
+        return;
+      }
+
+      if (
+        req.query.limit !== undefined &&
+        (!Number.isSafeInteger(Number(req.query.limit)) || Number(req.query.limit) < 1)
+      ) {
+        res.status(400).json({
+          success: false,
+          error: 'Tham số limit phải là số nguyên dương lớn hơn hoặc bằng 1.',
+        });
+        return;
+      }
+
       const authenticatedUser = (req as AuthenticatedRequest).user;
       const q = typeof req.query.q === 'string' ? req.query.q : undefined;
       let buyerId = typeof req.query.buyerId === 'string' ? req.query.buyerId.trim() : undefined;
       let sellerId = typeof req.query.sellerId === 'string' ? req.query.sellerId.trim() : undefined;
 
-      if (buyerId && (buyerId.toLowerCase() === 'all' || !buyerId)) {
+      if (!buyerId || buyerId.toLowerCase() === 'all') {
         buyerId = undefined;
       }
-      if (sellerId && (sellerId.toLowerCase() === 'all' || !sellerId)) {
+      if (!sellerId || sellerId.toLowerCase() === 'all') {
         sellerId = undefined;
       }
 
@@ -68,7 +110,11 @@ export class OrderController {
       const sortOrder =
         typeof req.query.sortOrder === 'string' ? (req.query.sortOrder as any) : undefined;
 
-      const result = await this.searchOrdersUseCase.execute({
+      const isAdminOrStaff =
+        authenticatedUser?.role === 'ADMIN' || authenticatedUser?.role === 'SUPPORT_STAFF';
+      const search =
+        (isAdminOrStaff ? this.adminReads?.search : undefined) ?? this.searchOrdersUseCase;
+      const result = await search.execute({
         q,
         buyerId,
         sellerId,
@@ -100,7 +146,11 @@ export class OrderController {
     try {
       const authenticatedUser = (req as AuthenticatedRequest).user;
       const orderId = (req.params.id || 'ord_01hqz555abc') as string;
-      const order = await this.getOrderDetailUseCase.execute(orderId);
+      const isAdminOrStaff =
+        authenticatedUser?.role === 'ADMIN' || authenticatedUser?.role === 'SUPPORT_STAFF';
+      const detail =
+        (isAdminOrStaff ? this.adminReads?.detail : undefined) ?? this.getOrderDetailUseCase;
+      const order = await detail.execute(orderId);
 
       // Kiểm tra quyền sở hữu đơn hàng (chống lỗ hổng IDOR)
       if (

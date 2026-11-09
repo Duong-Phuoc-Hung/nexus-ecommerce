@@ -32,6 +32,8 @@ export interface AuctionProps {
   actualEndTime?: Date;
   antiSnipingExtensionSeconds?: number;
   cancelReason?: string;
+  cancelledBy?: string;
+  cancelledAt?: Date;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -52,6 +54,8 @@ export class Auction {
   private _actualEndTime?: Date;
   private readonly _antiSnipingExtensionSeconds: number;
   private _cancelReason?: string;
+  private _cancelledBy?: string;
+  private _cancelledAt?: Date;
   private readonly _createdAt: Date;
   private _updatedAt: Date;
 
@@ -71,6 +75,8 @@ export class Auction {
     this._actualEndTime = props.actualEndTime;
     this._antiSnipingExtensionSeconds = props.antiSnipingExtensionSeconds ?? 120;
     this._cancelReason = props.cancelReason;
+    this._cancelledBy = props.cancelledBy;
+    this._cancelledAt = props.cancelledAt;
     this._createdAt = props.createdAt || new Date();
     this._updatedAt = props.updatedAt || new Date();
   }
@@ -119,6 +125,12 @@ export class Auction {
   }
   public get cancelReason(): string | undefined {
     return this._cancelReason;
+  }
+  public get cancelledBy(): string | undefined {
+    return this._cancelledBy;
+  }
+  public get cancelledAt(): Date | undefined {
+    return this._cancelledAt;
   }
   public get createdAt(): Date {
     return this._createdAt;
@@ -173,14 +185,17 @@ export class Auction {
   }
 
   // Nghiệp vụ hủy / dừng khẩn cấp phiên đấu giá
-  public cancel(reason?: string): void {
+  public cancel(reason?: string, cancelledBy?: string, cancelledAt?: Date): void {
     if (this._status === AuctionStatus.ENDED || this._status === AuctionStatus.CANCELLED) {
       throw new Error('Không thể hủy phiên đấu giá đã kết thúc.');
     }
+    const cancelTime = cancelledAt || new Date();
     this._status = AuctionStatus.CANCELLED;
     this._cancelReason = reason?.trim();
-    this._actualEndTime = new Date();
-    this._updatedAt = new Date();
+    this._cancelledBy = cancelledBy;
+    this._cancelledAt = cancelTime;
+    this._actualEndTime = cancelTime;
+    this._updatedAt = cancelTime;
   }
 
   // Nghiệp vụ cập nhật phiên (chỉ cho phép khi chưa bắt đầu)

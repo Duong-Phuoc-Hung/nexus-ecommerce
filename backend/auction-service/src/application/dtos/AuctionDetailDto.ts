@@ -20,6 +20,8 @@ export interface AuctionDetailDto {
   endTime: string;
   actualEndTime?: string;
   cancelReason?: string;
+  cancelledBy?: string;
+  cancelledAt?: string;
   bids: AuctionBidDetailDto[];
   bidCount: number;
   bidHistoryAvailable: boolean;

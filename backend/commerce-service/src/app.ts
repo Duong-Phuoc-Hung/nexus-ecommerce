@@ -4,6 +4,7 @@ import { IOrderRepository } from './domain/repositories/IOrderRepository';
 import { InMemoryOrderRepository } from './infrastructure/repositories/InMemoryOrderRepository';
 import { PostgresOrderRepository } from './infrastructure/repositories/PostgresOrderRepository';
 import { getCommerceDbPool } from './infrastructure/database/pgPool';
+import { PostgresAdminOrderReader } from './infrastructure/repositories/PostgresAdminOrderReader';
 import { PrismaClientWrapper } from './infrastructure/database/PrismaClient';
 
 import { GetOrderDetailUseCase } from './application/use-cases/GetOrderDetailUseCase';
@@ -22,7 +23,9 @@ import { OrderController } from './interfaces/http/controllers/OrderController';
 import { createOrderRoutes } from './interfaces/http/routes/OrderRoutes';
 import { createCheckoutRoutes } from './interfaces/http/routes/CheckoutRoutes';
 
-export function createApplication(): Application {
+type OrderReader = Pick<IOrderRepository, 'search' | 'findById'>;
+
+export function createApplication(adminOrderReader?: OrderReader): Application {
   const app = express();
 
   app.use(cors());
@@ -55,6 +58,7 @@ export function createApplication(): Application {
   } else {
     const prisma = PrismaClientWrapper.getInstance();
     const pgOrderRepo = new PostgresOrderRepository(pool, prisma);
+    adminOrderReader ??= new PostgresAdminOrderReader(prisma);
 
     // Kiểm soát nạp dữ liệu mẫu (Auto-Seeding):
     // - Vô hiệu hóa hoàn toàn khi chạy Production hoặc khi đặt ENABLE_AUTO_SEED=false.
@@ -99,6 +103,10 @@ export function createApplication(): Application {
     requestRefundUseCase,
     executeRefundUseCase,
     getRefundStatusUseCase,
+    adminOrderReader && {
+      search: new SearchOrdersUseCase(adminOrderReader),
+      detail: new GetOrderDetailUseCase(adminOrderReader),
+    },
   );
 
   app.use('/api/v1', createCheckoutRoutes(pool));

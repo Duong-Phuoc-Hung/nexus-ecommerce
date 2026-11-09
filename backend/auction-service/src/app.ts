@@ -1,17 +1,21 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
-import { PostgresAuctionRepository } from './infrastructure/repositories/PostgresAuctionRepository';
+import {
+  createPostgresAuctionTransaction,
+  TransactionalAuctionRepository,
+} from './infrastructure/repositories/TransactionalAuctionRepository';
 import { InMemoryAuctionRepository } from './infrastructure/repositories/InMemoryAuctionRepository';
 import { GetAuctionDetailUseCase } from './application/use-cases/GetAuctionDetailUseCase';
 import { CreateAuctionRoomUseCase } from './application/use-cases/CreateAuctionRoomUseCase';
 import { AuctionController } from './interfaces/http/controllers/AuctionController';
 import { createAuctionRoutes } from './interfaces/http/routes/AuctionRoutes';
 import { checkRedisHealth, RedisHealthStatus } from './infrastructure/redis/RedisClient';
-import { PlaceBidUseCase } from './application/use-cases/PlaceBidUseCase';
 import { GetBidHistoryUseCase } from './application/use-cases/GetBidHistoryUseCase';
-import { UpdateAuctionUseCase } from './application/use-cases/UpdateAuctionUseCase';
-import { BuyNowUseCase } from './application/use-cases/BuyNowUseCase';
-import { CancelAuctionUseCase } from './application/use-cases/CancelAuctionUseCase';
+
+import {
+  createAuctionMutations,
+  createInMemoryAuctionTransaction,
+} from './application/auction-mutations';
 
 export function createApplication(
   healthChecker: () => Promise<RedisHealthStatus> = checkRedisHealth,
@@ -69,27 +73,28 @@ export function createApplication(
     });
   });
 
-  const auctionRepository =
-    process.env.USE_IN_MEMORY_DB === 'true'
-      ? new InMemoryAuctionRepository()
-      : new PostgresAuctionRepository();
+  const inMemory = process.env.USE_IN_MEMORY_DB === 'true';
+  const auctionRepository = inMemory
+    ? new InMemoryAuctionRepository()
+    : new TransactionalAuctionRepository();
+  const mutations = createAuctionMutations(
+    inMemory
+      ? createInMemoryAuctionTransaction(auctionRepository)
+      : createPostgresAuctionTransaction(),
+  );
 
   const getAuctionDetailUseCase = new GetAuctionDetailUseCase(auctionRepository);
   const createAuctionRoomUseCase = new CreateAuctionRoomUseCase(auctionRepository);
-  const placeBidUseCase = new PlaceBidUseCase(auctionRepository);
   const getBidHistoryUseCase = new GetBidHistoryUseCase(auctionRepository);
-  const updateAuctionUseCase = new UpdateAuctionUseCase(auctionRepository);
-  const buyNowUseCase = new BuyNowUseCase(auctionRepository);
-  const cancelAuctionUseCase = new CancelAuctionUseCase(auctionRepository);
 
   const auctionController = new AuctionController(
     getAuctionDetailUseCase,
     createAuctionRoomUseCase,
-    placeBidUseCase,
+    mutations.bid,
     getBidHistoryUseCase,
-    updateAuctionUseCase,
-    buyNowUseCase,
-    cancelAuctionUseCase,
+    mutations.update,
+    mutations.buy,
+    mutations.cancel,
     auctionRepository,
   );
 

@@ -1268,14 +1268,14 @@ export const auctionSpec = {
             in: 'query',
             required: false,
             description: 'Lọc các phiên của một người bán cụ thể',
-            schema: { type: 'string' },
+            schema: { type: 'string', example: '01a15822-3fd0-7b39-ad01-f11da72d5b80' },
           },
           {
             name: 'q',
             in: 'query',
             required: false,
             description: 'Từ khóa tìm kiếm (mã phiên, mã sản phẩm, tiêu đề, mã seller)',
-            schema: { type: 'string' },
+            schema: { type: 'string', example: 'iPhone' },
           },
         ],
         responses: {
@@ -1389,17 +1389,17 @@ export const auctionSpec = {
     '/api/v1/auctions/{id}/cancel': {
       post: {
         tags: ['Auctions'],
-        summary: 'Hủy/Dừng khẩn cấp phiên đấu giá bất thường (Admin / Seller)',
+        summary: 'Hủy/Dừng khẩn cấp phiên đấu giá bất thường (Admin / Support Staff / Seller)',
         description:
-          'Hủy hoặc dừng khẩn cấp phiên đấu giá bất thường (SRS 3.5, SCRUM-298). Bắt buộc phải có lý do hủy (reason) và xác nhận. Không cho sửa cấu hình phiên đang active.',
+          'Hủy hoặc dừng khẩn cấp phiên đấu giá bất thường (SRS 3.5, SCRUM-298). Admin và Support Staff có thể dừng khẩn cấp bất kỳ phiên nào (bắt buộc lý do). Seller chỉ có thể hủy phiên của chính mình.',
         security: [{ BearerAuth: [] }],
         parameters: [
           {
             name: 'id',
             in: 'path',
             required: true,
-            description: 'Mã phòng đấu giá (Auction ID)',
-            schema: { type: 'string', example: '1' },
+            description: 'Mã phòng đấu giá (Auction ID - UUIDv7)',
+            schema: { type: 'string', example: '01932f01-0001-7000-8000-000000000001' },
           },
         ],
         requestBody: {
@@ -1412,7 +1412,10 @@ export const auctionSpec = {
                 properties: {
                   reason: {
                     type: 'string',
-                    example: 'Phát hiện hành vi gian lận giá, dừng phiên khẩn cấp',
+                    minLength: 1,
+                    maxLength: 500,
+                    example:
+                      'Phát hiện hành vi gian lận thông thầu (Shill Bidding), dừng khẩn cấp để kiểm tra',
                   },
                 },
               },
@@ -1422,11 +1425,12 @@ export const auctionSpec = {
         responses: {
           200: jsonResponse('Dừng khẩn cấp phiên đấu giá thành công', {
             success: true,
-            message: 'Đã dừng khẩn cấp và hủy phiên đấu giá thành công.',
+            message: 'Quản trị viên đã hủy/dừng khẩn cấp phiên đấu giá thành công.',
             data: {
-              auctionId: '1',
+              auctionId: '01932f01-0001-7000-8000-000000000001',
               status: 'CANCELLED',
-              cancelReason: 'Phát hiện hành vi gian lận giá, dừng phiên khẩn cấp',
+              cancelReason:
+                'Phát hiện hành vi gian lận thông thầu (Shill Bidding), dừng khẩn cấp để kiểm tra',
               cancelledAt: '2026-11-09T09:00:00.000Z',
             },
           }),
@@ -1436,7 +1440,72 @@ export const auctionSpec = {
             'Không có quyền',
             'Chỉ người tạo phiên đấu giá hoặc Quản trị viên mới có quyền hủy.',
           ),
-          404: errorResponse('Không tìm thấy', 'Auction with ID "1" was not found.'),
+          404: errorResponse(
+            'Không tìm thấy',
+            'Auction with ID "01932f01-0001-7000-8000-000000000001" was not found.',
+          ),
+          409: errorResponse('Xung đột trạng thái', 'Không thể hủy phiên đấu giá đã kết thúc.'),
+        },
+      },
+    },
+    '/api/v1/auctions/{id}/emergency-stop': {
+      post: {
+        tags: ['Auctions'],
+        summary: 'Dừng khẩn cấp phiên đấu giá (Chỉ dành cho ADMIN và SUPPORT_STAFF)',
+        description:
+          'Dừng khẩn cấp phiên đấu giá bất thường/gian lận. Chỉ dành riêng cho ADMIN hoặc SUPPORT_STAFF. Bắt buộc body { reason: string } từ 1 đến 500 ký tự. Tài khoản SELLER bị từ chối 403.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã phòng đấu giá (Auction ID - UUIDv7)',
+            schema: { type: 'string', example: '01932f01-0001-7000-8000-000000000001' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['reason'],
+                properties: {
+                  reason: {
+                    type: 'string',
+                    minLength: 1,
+                    maxLength: 500,
+                    example: 'Khẩn cấp: Tranh chấp sở hữu sản phẩm',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Dừng khẩn cấp phiên đấu giá thành công', {
+            success: true,
+            message: 'Quản trị viên đã hủy/dừng khẩn cấp phiên đấu giá thành công.',
+            data: {
+              auctionId: '01932f01-0001-7000-8000-000000000001',
+              status: 'CANCELLED',
+              cancelReason: 'Khẩn cấp: Tranh chấp sở hữu sản phẩm',
+              cancelledBy: '01a15822-3be8-7505-a081-e0e45bd2e15e',
+              cancelledAt: '2026-11-09T09:00:00.000Z',
+            },
+          }),
+          400: errorResponse('Không hợp lệ', 'Lý do dừng khẩn cấp phiên đấu giá là bắt buộc.'),
+          401: errorResponse('Chưa đăng nhập', 'Vui lòng đăng nhập để thực hiện thao tác này.'),
+          403: errorResponse(
+            'Không có quyền',
+            "Tài khoản với vai trò 'SELLER' không có quyền dừng khẩn cấp phiên đấu giá. Chỉ ADMIN hoặc SUPPORT_STAFF mới có quyền thực hiện.",
+          ),
+          409: errorResponse('Xung đột trạng thái', 'Phiên đã kết thúc hoặc đã bị hủy.'),
+          404: errorResponse(
+            'Không tìm thấy',
+            'Auction with ID "01932f01-0001-7000-8000-000000000001" was not found.',
+          ),
         },
       },
     },
@@ -1713,10 +1782,11 @@ export const commerceSpec = {
         security: [{ BearerAuth: [] }],
         parameters: [
           {
-            name: 'query',
+            name: 'q',
             in: 'query',
             required: false,
-            description: 'Từ khóa tìm kiếm (mã đơn, tên/email khách hàng, gian hàng)',
+            description:
+              'Từ khóa tìm kiếm (mã đơn, tên/email khách hàng, tên gian hàng, mã sản phẩm)',
             schema: { type: 'string', example: 'NX-ORD-8021' },
           },
           {
@@ -1724,14 +1794,14 @@ export const commerceSpec = {
             in: 'query',
             required: false,
             description: 'Lọc đơn hàng theo từng Seller (SCRUM-298)',
-            schema: { type: 'string', example: 'a0000000-0000-0000-0000-000000000002' },
+            schema: { type: 'string', example: '01a15822-3fd0-7b39-ad01-f11da72d5b80' },
           },
           {
             name: 'buyerId',
             in: 'query',
             required: false,
             description: 'Lọc đơn hàng theo người mua (Buyer)',
-            schema: { type: 'string', example: 'a0000000-0000-0000-0000-000000000003' },
+            schema: { type: 'string', example: '01a15822-43b8-78c3-a246-16bff78bc6e8' },
           },
           {
             name: 'status',
