@@ -346,7 +346,14 @@ export function SupportDisputesPage() {
                         </Link>
                       </td>
                       <td>
-                        <strong>{item.customer}</strong>
+                        <Link
+                          href={`/support/users?q=${encodeURIComponent(item.customer || item.userId || '')}`}
+                          className="font-medium text-slate-800 hover:text-blue-600 hover:underline inline-flex items-center gap-1"
+                          title="Xem hồ sơ khách hàng"
+                        >
+                          <strong>{item.customer}</strong>
+                          <span className="text-[10px] text-slate-400">↗</span>
+                        </Link>
                       </td>
                       <td>
                         <p className="max-w-xs truncate text-xs text-slate-700" title={item.reason}>
@@ -429,10 +436,23 @@ export function SupportDisputesPage() {
           </DialogTitle>
           <DialogDescription className="mt-1 text-xs text-slate-500">
             Hồ sơ khiếu nại đơn hàng{' '}
-            <strong className="text-slate-800">
-              {selectedDispute?.orderCode || selectedDispute?.order}
-            </strong>{' '}
-            · Khách hàng: <strong>{selectedDispute?.customer}</strong>
+            <Link
+              href={`/support/orders/${encodeURIComponent(selectedDispute?.orderId || selectedDispute?.orderCode || selectedDispute?.order || '')}`}
+              className="font-bold text-blue-600 hover:underline"
+              target="_blank"
+              title="Mở hồ sơ đơn hàng ở tab mới"
+            >
+              {selectedDispute?.orderCode || selectedDispute?.order} ↗
+            </Link>{' '}
+            · Khách hàng:{' '}
+            <Link
+              href={`/support/users?q=${encodeURIComponent(selectedDispute?.customer || selectedDispute?.userId || '')}`}
+              className="font-bold text-slate-800 hover:text-blue-600 hover:underline"
+              target="_blank"
+              title="Xem hồ sơ khách hàng"
+            >
+              {selectedDispute?.customer} ↗
+            </Link>
           </DialogDescription>
 
           {/* Banner thời hạn SLA */}

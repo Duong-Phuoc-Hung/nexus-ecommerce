@@ -167,20 +167,70 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
                   <p className="support-eyebrow">MÃ ĐƠN HÀNG</p>
                   <h2>{order.id}</h2>
                 </div>
-                <span className={`support-status ${supportStatusClass(order.status)}`}>
-                  {getOrderStatusLabel(order.status)}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Link
+                    href={`/support/disputes?q=${encodeURIComponent(order.id)}`}
+                    className="support-secondary-button"
+                    style={{
+                      background: '#eff6ff',
+                      color: '#1d4ed8',
+                      borderColor: '#bfdbfe',
+                      fontSize: '0.75rem',
+                      padding: '4px 8px',
+                    }}
+                    title="Kiểm tra hàng đợi trọng tài khiếu nại"
+                  >
+                    ⚖ Tra cứu tranh chấp SLA
+                  </Link>
+                  <span className={`support-status ${supportStatusClass(order.status)}`}>
+                    {getOrderStatusLabel(order.status)}
+                  </span>
+                </div>
               </div>
               <div className="support-detail-content">
                 <div className="support-info-grid">
                   <div>
                     <small>Khách hàng (Người mua)</small>
-                    <strong>{order.buyer}</strong>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <strong>{order.buyer}</strong>
+                      <Link
+                        href={`/support/users?q=${encodeURIComponent(order.email || order.buyerId || order.buyer)}`}
+                        style={{
+                          fontSize: '0.68rem',
+                          color: '#2563eb',
+                          background: '#eff6ff',
+                          padding: '1px 5px',
+                          borderRadius: '4px',
+                          border: '1px solid #bfdbfe',
+                          textDecoration: 'none',
+                        }}
+                        title="Xem hồ sơ người dùng"
+                      >
+                        Hồ sơ ↗
+                      </Link>
+                    </div>
                     <span>{order.email}</span>
                   </div>
                   <div>
                     <small>Đối tác (Người bán)</small>
-                    <strong>{order.seller}</strong>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <strong>{order.seller}</strong>
+                      <Link
+                        href={`/support/users?q=${encodeURIComponent(order.sellerId || order.seller)}`}
+                        style={{
+                          fontSize: '0.68rem',
+                          color: '#b45309',
+                          background: '#fef3c7',
+                          padding: '1px 5px',
+                          borderRadius: '4px',
+                          border: '1px solid #fde68a',
+                          textDecoration: 'none',
+                        }}
+                        title="Xem hồ sơ và uy tín gian hàng"
+                      >
+                        Hồ sơ ↗
+                      </Link>
+                    </div>
                     <span>{order.sellerId}</span>
                   </div>
                   <div>
@@ -197,7 +247,27 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
                   </div>
                   <div>
                     <small>Mã vận đơn</small>
-                    <strong>{order.tracking}</strong>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <strong>{order.tracking || 'Chưa cấp'}</strong>
+                      {order.tracking && (
+                        <Link
+                          href={`/support/shipments?q=${encodeURIComponent(order.tracking)}`}
+                          style={{
+                            fontSize: '0.68rem',
+                            color: '#0284c7',
+                            background: '#f0f9ff',
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            border: '1px solid #bae6fd',
+                            fontWeight: 600,
+                            textDecoration: 'none',
+                          }}
+                          title="Tra cứu hành trình vận đơn tại mục Vận đơn"
+                        >
+                          Theo dõi vận đơn ↗
+                        </Link>
+                      )}
+                    </div>
                     <span>Kênh: Sàn thương mại điện tử Nexus</span>
                   </div>
                   <div>
