@@ -227,3 +227,66 @@ test('POST /api/v1/favorites/:productId toggles add and remove favorite', async 
     assert.equal(emptyListData.total, 0);
   });
 });
+
+test('POST & GET /api/v1/products/:id/reviews manages product reviews and average rating', async () => {
+  await withCatalogServer(async (baseUrl) => {
+    const token1 = makeBuyerToken('buyer_user_1');
+    const token2 = makeBuyerToken('buyer_user_2');
+
+    // 1. POST review without auth -> 401
+    const unauthRes = await fetch(`${baseUrl}/api/v1/products/prod_01hqz999xyz/reviews`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rating: 5, comment: 'Great product!' }),
+    });
+    assert.equal(unauthRes.status, 401);
+
+    // 2. POST review with invalid rating -> 400
+    const invalidRes = await fetch(`${baseUrl}/api/v1/products/prod_01hqz999xyz/reviews`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token1}`,
+      },
+      body: JSON.stringify({ rating: 10, comment: 'Too high!' }),
+    });
+    assert.equal(invalidRes.status, 400);
+
+    // 3. User 1 submits 5-star review
+    const post1 = await fetch(`${baseUrl}/api/v1/products/prod_01hqz999xyz/reviews`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token1}`,
+      },
+      body: JSON.stringify({ rating: 5, comment: 'Tai nghe xịn sò, chống ồn rất tốt!' }),
+    });
+    assert.equal(post1.status, 201);
+    const postData1 = (await post1.json()) as { success: boolean; data: { rating: number } };
+    assert.equal(postData1.success, true);
+    assert.equal(postData1.data.rating, 5);
+
+    // 4. User 2 submits 4-star review
+    const post2 = await fetch(`${baseUrl}/api/v1/products/prod_01hqz999xyz/reviews`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token2}`,
+      },
+      body: JSON.stringify({ rating: 4, comment: 'Khá hài lòng, đeo lâu hơi nóng tai một chút.' }),
+    });
+    assert.equal(post2.status, 201);
+
+    // 5. GET reviews -> Average should be (5 + 4) / 2 = 4.5
+    const getRes = await fetch(`${baseUrl}/api/v1/products/prod_01hqz999xyz/reviews`);
+    assert.equal(getRes.status, 200);
+    const getResult = (await getRes.json()) as {
+      success: boolean;
+      data: { totalReviews: number; averageRating: number; reviews: Array<{ rating: number }> };
+    };
+    assert.equal(getResult.success, true);
+    assert.equal(getResult.data.totalReviews, 2);
+    assert.equal(getResult.data.averageRating, 4.5);
+    assert.equal(getResult.data.reviews.length, 2);
+  });
+});

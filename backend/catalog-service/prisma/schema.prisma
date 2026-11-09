@@ -105,6 +105,7 @@ model Product {
   images       ProductImage[]
   attributes   ProductAttribute[]
   favorites    Favorite[]
+  reviews      Review[]
 
   @@index([sellerId], map: "idx_product_seller")
   @@index([categoryId], map: "idx_product_category")
@@ -180,5 +181,25 @@ model Favorite {
   @@index([userId], map: "idx_favorite_user")
   @@index([productId], map: "idx_favorite_product")
   @@map("catalog_favorites")
+}
+
+// -----------------------------------------------------------------------------
+// 6. BẢNG ĐÁNH GIÁ SẢN PHẨM (Reviews & Ratings)
+// -----------------------------------------------------------------------------
+model Review {
+  id        String   @id @db.VarChar(36)
+  productId String   @map("product_id") @db.VarChar(36)
+  userId    String   @map("user_id") @db.VarChar(36)
+  userName  String?  @map("user_name") @db.VarChar(100)
+  rating    Int      @default(5)
+  comment   String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId], map: "idx_review_product")
+  @@index([userId], map: "idx_review_user")
+  @@map("catalog_product_reviews")
 }
 

@@ -26,6 +26,10 @@ import { GetFavoritesUseCase } from './application/use-cases/GetFavoritesUseCase
 import { ToggleFavoriteUseCase } from './application/use-cases/ToggleFavoriteUseCase';
 import { FavoriteController } from './interfaces/http/controllers/FavoriteController';
 import { createFavoriteRoutes } from './interfaces/http/routes/FavoriteRoutes';
+import { PostgresReviewRepository } from './infrastructure/repositories/PostgresReviewRepository';
+import { InMemoryReviewRepository } from './infrastructure/repositories/InMemoryReviewRepository';
+import { CreateProductReviewUseCase } from './application/use-cases/CreateProductReviewUseCase';
+import { GetProductReviewsUseCase } from './application/use-cases/GetProductReviewsUseCase';
 
 export function createApplication(): Application {
   const app = express();
@@ -69,6 +73,17 @@ export function createApplication(): Application {
   const deductProductStockUseCase = new DeductProductStockUseCase(productRepository);
   const sellerDirectory = new HttpSellerDirectory();
 
+  // ĐÁNH GIÁ SẢN PHẨM (REVIEWS & RATINGS):
+  const reviewRepository = isTest ? new InMemoryReviewRepository() : new PostgresReviewRepository();
+  const createProductReviewUseCase = new CreateProductReviewUseCase(
+    reviewRepository,
+    productRepository,
+  );
+  const getProductReviewsUseCase = new GetProductReviewsUseCase(
+    reviewRepository,
+    productRepository,
+  );
+
   const productController = new ProductController(
     getProductDetailUseCase,
     productRepository,
@@ -81,6 +96,8 @@ export function createApplication(): Application {
     sellerDirectory,
     listCatalogProductsUseCase,
     deductProductStockUseCase,
+    createProductReviewUseCase,
+    getProductReviewsUseCase,
   );
 
   app.use('/api/v1/products', createProductRoutes(productController));

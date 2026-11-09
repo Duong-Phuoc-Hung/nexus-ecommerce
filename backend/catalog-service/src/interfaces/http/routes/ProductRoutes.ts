@@ -26,5 +26,7 @@ export function createProductRoutes(controller: ProductController): Router {
     controller.recover(req, res),
   );
   router.post('/:id/deduct-stock', controller.deductStock);
+  router.get('/:id/reviews', (req, res) => controller.getReviews(req, res));
+  router.post('/:id/reviews', requireAuth, (req, res) => controller.createReview(req, res));
   return router;
 }
