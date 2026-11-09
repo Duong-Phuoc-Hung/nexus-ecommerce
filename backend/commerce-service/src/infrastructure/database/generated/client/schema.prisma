@@ -51,8 +51,8 @@ model CartItem {
   // Thuộc giỏ hàng nào (Khóa ngoại nối với commerce_carts)
   cartId BigInt @map("cart_id")
 
-  // Tham chiếu sản phẩm được chọn (Lấy 'id' từ catalog_products bên catalog-service)
-  productId BigInt @map("product_id")
+  // Tham chiếu sản phẩm được chọn (Lấy 'id' từ catalog_products bên catalog-service - UUIDv7)
+  productId String @map("product_id") @db.VarChar(36)
 
   // Số lượng món hàng khách chọn mua (Tối thiểu 1)
   quantity Int @default(1)
@@ -87,6 +87,11 @@ model Order {
   // Tham chiếu người bán (Lấy 'id' từ user_users bên user-service - UUID)
   sellerId String @map("seller_id") @db.VarChar(36)
 
+  // Thông tin người mua và người bán hỗ trợ tra cứu
+  buyerName  String? @map("buyer_name") @db.VarChar(100)
+  buyerEmail String? @map("buyer_email") @db.VarChar(100)
+  sellerName String? @map("seller_name") @db.VarChar(100)
+
   // Tổng số tiền khách phải thanh toán (Tiền hàng + ship - giảm giá)
   totalAmount Decimal @map("total_amount") @db.Decimal(12, 2)
 
@@ -105,13 +110,18 @@ model Order {
   // Hạn chót 15 phút để hoàn tất thanh toán (SRS: Quá 15 phút tự động hủy đơn)
   checkoutSessionExpiresAt DateTime? @map("checkout_session_expires_at") @db.Timestamptz()
 
+  // Mã vận đơn và dòng thời gian xử lý đơn hàng
+  trackingCode String? @map("tracking_code") @db.VarChar(100)
+  timeline     Json?   @default("[]") @map("timeline")
+
   // Thời gian tạo và cập nhật đơn hàng
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 
-  items    OrderItem[]
-  payments Payment[]
-  invoices Invoice[]
+  items        OrderItem[]
+  payments     Payment[]
+  invoices     Invoice[]
+  reservations StockReservation[]
 
   @@index([buyerId], map: "idx_order_buyer")
   @@index([sellerId], map: "idx_order_seller")
@@ -130,8 +140,8 @@ model OrderItem {
   // Thuộc đơn hàng nào (Khóa ngoại nối với commerce_orders - UUIDv7 VARCHAR 36)
   orderId String @map("order_id") @db.VarChar(36)
 
-  // Tham chiếu sản phẩm (Lấy 'id' từ catalog_products bên catalog-service)
-  productId BigInt @map("product_id")
+  // Tham chiếu sản phẩm (Lấy 'id' từ catalog_products bên catalog-service - UUIDv7)
+  productId String @map("product_id") @db.VarChar(36)
 
   // Tên sản phẩm tại thời điểm mua (Snapshot chống seller đổi tên sau đó)
   productTitle String @map("product_title") @db.VarChar(255)
@@ -186,6 +196,13 @@ model Payment {
   // Dữ liệu gốc JSON trả về từ cổng thanh toán Stripe để lưu vết kiểm toán
   rawResponse Json? @map("raw_response")
 
+  // Hỗ trợ cổng thanh toán PayOS (V2)
+  payosOrderCode BigInt?   @unique @map("payos_order_code")
+  paymentLinkId  String?   @map("payment_link_id") @db.VarChar(100)
+  checkoutUrl    String?   @map("checkout_url") @db.Text
+  expiresAt      DateTime? @map("expires_at") @db.Timestamptz()
+  paidAt         DateTime? @map("paid_at") @db.Timestamptz()
+
   // Thời gian tạo và cập nhật giao dịch
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
@@ -223,4 +240,57 @@ model Invoice {
 
   @@index([orderId], map: "idx_invoice_order")
   @@map("commerce_invoices")
+}
+
+// -----------------------------------------------------------------------------
+// 7. BẢNG BÁO GIÁ CHECKOUT (Hiệu lực 15 phút theo V2)
+// -----------------------------------------------------------------------------
+model CheckoutQuote {
+  id              String   @id @db.VarChar(36)
+  buyerId         String   @map("buyer_id") @db.VarChar(36)
+  sellerId        String   @map("seller_id") @db.VarChar(36)
+  items           Json
+  shippingAddress Json     @map("shipping_address")
+  subtotal        Decimal  @db.Decimal(12, 2)
+  shippingFee     Decimal  @map("shipping_fee") @db.Decimal(12, 2)
+  totalAmount     Decimal  @map("total_amount") @db.Decimal(12, 2)
+  currency        String   @default("VND") @db.VarChar(10)
+  expiresAt       DateTime @map("expires_at") @db.Timestamptz()
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([buyerId], map: "idx_quote_buyer")
+  @@map("commerce_checkout_quotes")
+}
+
+// -----------------------------------------------------------------------------
+// 8. BẢNG KHÓA IDEMPOTENCY CHECKOUT (Chống duplicate submission theo V2)
+// -----------------------------------------------------------------------------
+model CheckoutIdempotency {
+  buyerId        String   @map("buyer_id") @db.VarChar(36)
+  idempotencyKey String   @map("idempotency_key") @db.VarChar(100)
+  requestHash    String   @map("request_hash") @db.VarChar(64)
+  orderId        String?  @map("order_id") @db.VarChar(36)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@id([buyerId, idempotencyKey])
+  @@map("commerce_checkout_idempotency")
+}
+
+// -----------------------------------------------------------------------------
+// 9. BẢNG GIỮ HÀNG TỒN KHO TẠM THỜI (ACTIVE | COMMITTED | RELEASED theo V2)
+// -----------------------------------------------------------------------------
+model StockReservation {
+  id        BigInt   @id @default(autoincrement())
+  orderId   String   @map("order_id") @db.VarChar(36)
+  productId String   @map("product_id") @db.VarChar(36)
+  quantity  Int
+  status    String   @default("ACTIVE") @db.VarChar(12)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz()
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([productId, status, expiresAt], map: "idx_reservation_product")
+  @@index([orderId], map: "idx_reservation_order")
+  @@map("commerce_stock_reservations")
 }
