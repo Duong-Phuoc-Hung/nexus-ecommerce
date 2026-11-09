@@ -1,6 +1,7 @@
 process.env.NODE_ENV = 'test';
 process.env.USE_IN_MEMORY = 'true';
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
 import { createServer } from 'node:http';
 import test from 'node:test';
 import { createApplication } from './app';
@@ -114,5 +115,115 @@ test('GET /api/v1/categories?tree=true returns active categories as a nested tre
       result.data[0].children[0].children && result.data[0].children[0].children.length > 0,
     );
     assert.equal(result.data[0].children[0].children[0].id, '100');
+  });
+});
+
+test('POST /api/v1/products/:id/deduct-stock reduces stock quantity successfully', async () => {
+  await withCatalogServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/v1/products/prod_01hqz999xyz/deduct-stock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quantity: 5, orderId: 'ord-123' }),
+    });
+    const result = (await response.json()) as {
+      success: boolean;
+      data: { remainingStock: number };
+    };
+
+    assert.equal(response.status, 200);
+    assert.equal(result.success, true);
+    assert.equal(result.data.remainingStock, 45);
+  });
+});
+
+test('POST /api/v1/products/:id/deduct-stock returns 409 when stock is insufficient', async () => {
+  await withCatalogServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/v1/products/prod_01hqz999xyz/deduct-stock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quantity: 9999 }),
+    });
+    const result = (await response.json()) as { success: boolean; error: string };
+
+    assert.equal(response.status, 409);
+    assert.equal(result.success, false);
+    assert.match(result.error, /Insufficient stock/i);
+  });
+});
+
+function makeBuyerToken(sub: string = 'usr_buyer_123'): string {
+  const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
+  const header = encode({ alg: 'HS256', typ: 'JWT' });
+  const payload = encode({
+    sub,
+    role: 'BUYER',
+    email: `${sub}@example.com`,
+    exp: Math.floor(Date.now() / 1000) + 3600,
+  });
+  const signature = createHmac('sha256', 'nexus-dev-secret')
+    .update(`${header}.${payload}`)
+    .digest('base64url');
+  return `${header}.${payload}.${signature}`;
+}
+
+test('Favorites API requires authentication', async () => {
+  await withCatalogServer(async (baseUrl) => {
+    const getRes = await fetch(`${baseUrl}/api/v1/favorites`);
+    assert.equal(getRes.status, 401);
+
+    const postRes = await fetch(`${baseUrl}/api/v1/favorites/prod_01hqz999xyz`, {
+      method: 'POST',
+    });
+    assert.equal(postRes.status, 401);
+  });
+});
+
+test('POST /api/v1/favorites/:productId toggles add and remove favorite', async () => {
+  await withCatalogServer(async (baseUrl) => {
+    const token = makeBuyerToken('usr_buyer_test1');
+
+    // 1. First toggle -> Adds to favorites
+    const addRes = await fetch(`${baseUrl}/api/v1/favorites/prod_01hqz999xyz`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    assert.equal(addRes.status, 200);
+    const addData = (await addRes.json()) as { success: boolean; data: { isFavorited: boolean } };
+    assert.equal(addData.success, true);
+    assert.equal(addData.data.isFavorited, true);
+
+    // 2. GET favorites -> Contains the favorited product
+    const getRes = await fetch(`${baseUrl}/api/v1/favorites`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    assert.equal(getRes.status, 200);
+    const listData = (await getRes.json()) as {
+      success: boolean;
+      data: Array<{ id: string }>;
+      total: number;
+    };
+    assert.equal(listData.success, true);
+    assert.equal(listData.total, 1);
+    assert.equal(listData.data[0].id, 'prod_01hqz999xyz');
+
+    // 3. Second toggle -> Removes from favorites
+    const removeRes = await fetch(`${baseUrl}/api/v1/favorites/prod_01hqz999xyz`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    assert.equal(removeRes.status, 200);
+    const removeData = (await removeRes.json()) as {
+      success: boolean;
+      data: { isFavorited: boolean };
+    };
+    assert.equal(removeData.success, true);
+    assert.equal(removeData.data.isFavorited, false);
+
+    // 4. GET favorites again -> Empty list
+    const getEmptyRes = await fetch(`${baseUrl}/api/v1/favorites`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const emptyListData = (await getEmptyRes.json()) as { success: boolean; total: number };
+    assert.equal(emptyListData.total, 0);
   });
 });

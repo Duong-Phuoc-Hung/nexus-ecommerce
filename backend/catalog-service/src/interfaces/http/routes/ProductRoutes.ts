@@ -25,5 +25,6 @@ export function createProductRoutes(controller: ProductController): Router {
   router.post('/:id/recover', requireAuth, requireSellerOrAdmin, (req, res) =>
     controller.recover(req, res),
   );
+  router.post('/:id/deduct-stock', controller.deductStock);
   return router;
 }

@@ -13,6 +13,7 @@ import { RecoverProductUseCase } from '../../../application/use-cases/RecoverPro
 import { ISellerDirectory } from '../../../infrastructure/clients/HttpSellerDirectory';
 import { ListCatalogProductsUseCase } from '../../../application/use-cases/ListCatalogProductsUseCase';
 import { ProductStatus } from '../../../domain/entities/Product';
+import { DeductProductStockUseCase } from '../../../application/use-cases/DeductProductStockUseCase';
 
 export class ProductController {
   constructor(
@@ -26,6 +27,7 @@ export class ProductController {
     private readonly recoverProductUseCase?: RecoverProductUseCase,
     private readonly sellerDirectory?: ISellerDirectory,
     private readonly listCatalogProductsUseCase?: ListCatalogProductsUseCase,
+    private readonly deductProductStockUseCase?: DeductProductStockUseCase,
   ) {}
 
   public async search(req: Request, res: Response): Promise<void> {
@@ -524,4 +526,41 @@ export class ProductController {
       res.status(400).json({ success: false, error: error?.message || 'Yêu cầu không hợp lệ.' });
     }
   }
+
+  public deductStock = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const productId = String(req.params.id);
+      if (!this.deductProductStockUseCase) {
+        res
+          .status(500)
+          .json({ success: false, error: 'DeductProductStockUseCase is not configured' });
+        return;
+      }
+      const { quantity, orderId, reason } = req.body;
+
+      const result = await this.deductProductStockUseCase.execute({
+        productId,
+        quantity: Number(quantity),
+        orderId,
+        reason,
+      });
+
+      res.status(200).json({
+        success: true,
+        data: result,
+      });
+    } catch (error: any) {
+      if (error.message?.includes('Insufficient stock')) {
+        res.status(409).json({
+          success: false,
+          error: error.message,
+        });
+        return;
+      }
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Lỗi khi trừ tồn kho sản phẩm.',
+      });
+    }
+  };
 }

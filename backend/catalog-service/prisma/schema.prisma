@@ -88,6 +88,8 @@ model Product {
 
   // Giá bán niêm yết ban đầu (VND)
   basePrice    Decimal            @map("base_price") @db.Decimal(12, 2)
+  stockQuantity Int               @default(1) @map("stock_quantity")
+  sellerName    String?           @default("Nexus Official Store") @map("seller_name") @db.VarChar(100)
 
   // Sản phẩm này có được phép mang đi đấu giá hay không (TRUE: Có, FALSE: Chỉ bán thẳng)
   allowAuction Boolean            @default(false) @map("allow_auction")
@@ -102,6 +104,7 @@ model Product {
   category     Category           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   images       ProductImage[]
   attributes   ProductAttribute[]
+  favorites    Favorite[]
 
   @@index([sellerId], map: "idx_product_seller")
   @@index([categoryId], map: "idx_product_category")
@@ -160,5 +163,22 @@ model ProductAttribute {
 
   @@index([productId], map: "idx_attribute_product")
   @@map("catalog_product_attributes")
+}
+
+// -----------------------------------------------------------------------------
+// 5. BẢNG SẢN PHẨM YÊU THÍCH (Wishlist của Buyer)
+// -----------------------------------------------------------------------------
+model Favorite {
+  id        String   @id @db.VarChar(36)
+  userId    String   @map("user_id") @db.VarChar(36)
+  productId String   @map("product_id") @db.VarChar(36)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId], map: "uq_user_product_favorite")
+  @@index([userId], map: "idx_favorite_user")
+  @@index([productId], map: "idx_favorite_product")
+  @@map("catalog_favorites")
 }
 
