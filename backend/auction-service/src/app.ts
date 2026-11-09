@@ -1,6 +1,7 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import { PostgresAuctionRepository } from './infrastructure/repositories/PostgresAuctionRepository';
+import { InMemoryAuctionRepository } from './infrastructure/repositories/InMemoryAuctionRepository';
 import { GetAuctionDetailUseCase } from './application/use-cases/GetAuctionDetailUseCase';
 import { CreateAuctionRoomUseCase } from './application/use-cases/CreateAuctionRoomUseCase';
 import { AuctionController } from './interfaces/http/controllers/AuctionController';
@@ -68,7 +69,11 @@ export function createApplication(
     });
   });
 
-  const auctionRepository = new PostgresAuctionRepository();
+  const auctionRepository =
+    process.env.USE_IN_MEMORY_DB === 'true'
+      ? new InMemoryAuctionRepository()
+      : new PostgresAuctionRepository();
+
   const getAuctionDetailUseCase = new GetAuctionDetailUseCase(auctionRepository);
   const createAuctionRoomUseCase = new CreateAuctionRoomUseCase(auctionRepository);
   const placeBidUseCase = new PlaceBidUseCase(auctionRepository);

@@ -14,9 +14,18 @@ export class SearchOrdersUseCase {
 
     const criteria: OrderSearchCriteria = {
       q: query.q?.trim() || undefined,
-      buyerId: query.buyerId?.trim() || undefined,
-      sellerId: query.sellerId?.trim() || undefined,
-      status: query.status?.trim().toUpperCase() || undefined,
+      buyerId:
+        query.buyerId?.trim() && query.buyerId.trim().toLowerCase() !== 'all'
+          ? query.buyerId.trim()
+          : undefined,
+      sellerId:
+        query.sellerId?.trim() && query.sellerId.trim().toLowerCase() !== 'all'
+          ? query.sellerId.trim()
+          : undefined,
+      status:
+        query.status?.trim() && query.status.trim().toLowerCase() !== 'all'
+          ? query.status.trim().toUpperCase()
+          : undefined,
       page,
       limit,
       sortBy: this.validateSortBy(query.sortBy),
@@ -35,16 +44,34 @@ export class SearchOrdersUseCase {
 
       return {
         id: order.id,
-        buyer: order.buyerName,
-        email: order.buyerEmail,
-        seller: order.sellerName,
+        orderCode: order.id,
+        buyer: order.buyerName || 'Khách hàng',
+        buyerId: order.buyerId,
+        email: order.buyerEmail || '',
+        seller: order.sellerName || 'Gian hàng đối tác',
+        sellerId: order.sellerId,
         product: firstItemName,
         date: formattedDate,
         total: order.totalAmount,
         totalAmount: order.totalAmount,
         status: order.status,
         tracking: order.trackingCode || '—',
+        trackingCode: order.trackingCode,
         itemsCount: order.items.length,
+        items: order.items.map((i) => ({
+          productId: i.productId,
+          productName: i.productName || 'Sản phẩm Nexus',
+          quantity: i.quantity,
+          unitPrice: i.unitPrice,
+          totalPrice: i.totalPrice,
+        })),
+        timeline: (order.timeline || []).map((t) => ({
+          status: t.status,
+          title: t.title,
+          description: t.note || t.title,
+          timestamp: t.timestamp.toISOString(),
+          note: t.note,
+        })),
         createdAt: order.createdAt.toISOString(),
         updatedAt: order.updatedAt.toISOString(),
       };

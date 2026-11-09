@@ -31,6 +31,7 @@ export interface AuctionProps {
   endTime: Date;
   actualEndTime?: Date;
   antiSnipingExtensionSeconds?: number;
+  cancelReason?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -50,6 +51,7 @@ export class Auction {
   private _endTime: Date;
   private _actualEndTime?: Date;
   private readonly _antiSnipingExtensionSeconds: number;
+  private _cancelReason?: string;
   private readonly _createdAt: Date;
   private _updatedAt: Date;
 
@@ -68,6 +70,7 @@ export class Auction {
     this._endTime = props.endTime;
     this._actualEndTime = props.actualEndTime;
     this._antiSnipingExtensionSeconds = props.antiSnipingExtensionSeconds ?? 120;
+    this._cancelReason = props.cancelReason;
     this._createdAt = props.createdAt || new Date();
     this._updatedAt = props.updatedAt || new Date();
   }
@@ -113,6 +116,9 @@ export class Auction {
   }
   public get antiSnipingExtensionSeconds(): number {
     return this._antiSnipingExtensionSeconds;
+  }
+  public get cancelReason(): string | undefined {
+    return this._cancelReason;
   }
   public get createdAt(): Date {
     return this._createdAt;
@@ -166,12 +172,14 @@ export class Auction {
     this._updatedAt = now;
   }
 
-  // Nghiệp vụ hủy phiên
+  // Nghiệp vụ hủy / dừng khẩn cấp phiên đấu giá
   public cancel(reason?: string): void {
-    if (this._status === AuctionStatus.ENDED) {
+    if (this._status === AuctionStatus.ENDED || this._status === AuctionStatus.CANCELLED) {
       throw new Error('Không thể hủy phiên đấu giá đã kết thúc.');
     }
     this._status = AuctionStatus.CANCELLED;
+    this._cancelReason = reason?.trim();
+    this._actualEndTime = new Date();
     this._updatedAt = new Date();
   }
 

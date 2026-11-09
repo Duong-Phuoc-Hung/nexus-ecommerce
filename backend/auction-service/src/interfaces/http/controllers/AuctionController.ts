@@ -22,17 +22,31 @@ export class AuctionController {
     private readonly auctionRepository: IAuctionRepository,
   ) {}
 
-  // Lấy danh sách các phiên đấu giá (hỗ trợ lọc theo status, sellerId hoặc mặc định là active)
+  // Lấy danh sách các phiên đấu giá (hỗ trợ lọc theo status, sellerId, từ khóa q hoặc mặc định là active)
   public async getActive(req: Request, res: Response): Promise<void> {
     try {
-      const { status, sellerId } = req.query;
-      const auctions =
-        status || sellerId
-          ? await this.auctionRepository.findAll({
-              status: status as string,
-              sellerId: sellerId as string,
-            })
-          : await this.auctionRepository.findActiveAuctions();
+      const authUser = (req as AuthenticatedRequest).user;
+      const isAdminOrStaff = authUser?.role === 'ADMIN' || authUser?.role === 'SUPPORT_STAFF';
+      const { status, sellerId, q } = req.query;
+
+      const shouldFindAll = Boolean(status || sellerId || q || isAdminOrStaff);
+      let auctions = shouldFindAll
+        ? await this.auctionRepository.findAll({
+            status: status as string,
+            sellerId: sellerId as string,
+          })
+        : await this.auctionRepository.findActiveAuctions();
+
+      if (q && typeof q === 'string' && q.trim()) {
+        const queryTerm = q.trim().toLowerCase();
+        auctions = auctions.filter(
+          (a) =>
+            a.id.toLowerCase().includes(queryTerm) ||
+            a.productId.toLowerCase().includes(queryTerm) ||
+            (a.title && a.title.toLowerCase().includes(queryTerm)) ||
+            a.sellerId.toLowerCase().includes(queryTerm),
+        );
+      }
 
       res.status(200).json({
         success: true,
@@ -50,6 +64,9 @@ export class AuctionController {
           startTime: a.startTime,
           endTime: a.endTime,
           actualEndTime: a.actualEndTime,
+          cancelReason: a.cancelReason,
+          createdAt: a.createdAt,
+          updatedAt: a.updatedAt,
         })),
       });
     } catch (error: any) {
@@ -300,20 +317,28 @@ export class AuctionController {
     }
   }
 
-  // Hủy phiên đấu giá (dành cho chủ phiên hoặc Quản trị viên)
+  // Hủy/dừng khẩn cấp phiên đấu giá (dành cho chủ phiên hoặc Quản trị viên/Support Staff)
   public async cancel(req: Request, res: Response): Promise<void> {
     try {
       const authUser = (req as AuthenticatedRequest).user;
       const auctionId = req.params.id as string;
       const sellerId = authUser?.id || 'usr_seller_default';
-      const isAdmin = authUser?.role === 'ADMIN';
-      const { reason } = req.body;
+      const isAdmin = authUser?.role === 'ADMIN' || authUser?.role === 'SUPPORT_STAFF';
+      const { reason } = req.body || {};
+
+      if (!reason || typeof reason !== 'string' || !reason.trim()) {
+        res.status(400).json({
+          success: false,
+          error: 'Lý do hủy/dừng khẩn cấp phiên đấu giá là bắt buộc.',
+        });
+        return;
+      }
 
       const result = await this.cancelAuctionUseCase.execute({
         auctionId,
         sellerId,
         isAdmin,
-        reason,
+        reason: reason.trim(),
       });
 
       res.status(200).json({
@@ -358,7 +383,7 @@ export class AuctionController {
       const { title, bidIncrement, buyNowPrice, startTime, endTime } = req.body;
 
       const sellerId = authUser?.id || 'usr_seller_default';
-      const isAdmin = authUser?.role === 'ADMIN';
+      const isAdmin = authUser?.role === 'ADMIN' || authUser?.role === 'SUPPORT_STAFF';
 
       const updatedAuction = await this.updateAuctionUseCase.execute({
         auctionId,

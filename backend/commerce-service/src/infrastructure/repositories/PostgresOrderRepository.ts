@@ -87,17 +87,29 @@ export class PostgresOrderRepository implements IOrderRepository {
     const where: any = {};
 
     // 1. Lọc theo Buyer ID (IDOR-safe)
-    if (criteria.buyerId && criteria.buyerId.trim().length > 0) {
+    if (
+      criteria.buyerId &&
+      criteria.buyerId.trim().length > 0 &&
+      criteria.buyerId.trim().toLowerCase() !== 'all'
+    ) {
       where.buyerId = criteria.buyerId.trim();
     }
 
     // 2. Lọc theo Seller ID (IDOR-safe)
-    if (criteria.sellerId && criteria.sellerId.trim().length > 0) {
+    if (
+      criteria.sellerId &&
+      criteria.sellerId.trim().length > 0 &&
+      criteria.sellerId.trim().toLowerCase() !== 'all'
+    ) {
       where.sellerId = criteria.sellerId.trim();
     }
 
     // 3. Lọc theo Status
-    if (criteria.status && criteria.status.trim().length > 0) {
+    if (
+      criteria.status &&
+      criteria.status.trim().length > 0 &&
+      criteria.status.trim().toLowerCase() !== 'all'
+    ) {
       where.status = { equals: criteria.status.trim(), mode: 'insensitive' };
     }
 
@@ -107,6 +119,8 @@ export class PostgresOrderRepository implements IOrderRepository {
       where.OR = [
         { orderCode: { contains: q, mode: 'insensitive' } },
         { id: { contains: q, mode: 'insensitive' } },
+        { sellerId: { contains: q, mode: 'insensitive' } },
+        { buyerId: { contains: q, mode: 'insensitive' } },
         { trackingCode: { contains: q, mode: 'insensitive' } },
         { items: { some: { productTitle: { contains: q, mode: 'insensitive' } } } },
       ];

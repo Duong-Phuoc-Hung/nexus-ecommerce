@@ -76,8 +76,19 @@ export class PostgresAuctionRepository implements IAuctionRepository {
   public async findAll(filters?: { status?: string; sellerId?: string }): Promise<Auction[]> {
     try {
       const where: any = {};
-      if (filters?.status) where.status = filters.status;
-      if (filters?.sellerId) where.sellerId = filters.sellerId;
+      if (filters?.status && filters.status.toLowerCase() !== 'all') {
+        const targetStatus = filters.status.toUpperCase();
+        if (targetStatus === 'ACTIVE') {
+          where.status = { in: ['ACTIVE', 'EXTENDED'] };
+        } else if (targetStatus === 'UPCOMING') {
+          where.status = 'SCHEDULED';
+        } else {
+          where.status = targetStatus;
+        }
+      }
+      if (filters?.sellerId && filters.sellerId.toLowerCase() !== 'all') {
+        where.sellerId = filters.sellerId;
+      }
 
       const records = await this.prisma.auctionRoom.findMany({
         where,
@@ -86,8 +97,21 @@ export class PostgresAuctionRepository implements IAuctionRepository {
       return records.map((r: any) => this.mapModelToAuction(r));
     } catch {
       let items = Array.from(this.fallbackMemory.values());
-      if (filters?.status) items = items.filter((a) => a.status === filters.status);
-      if (filters?.sellerId) items = items.filter((a) => a.sellerId === filters.sellerId);
+      if (filters?.status && filters.status.toLowerCase() !== 'all') {
+        const targetStatus = filters.status.toUpperCase();
+        items = items.filter((a) => {
+          if (targetStatus === 'ACTIVE') {
+            return a.status === AuctionStatus.ACTIVE || a.status === AuctionStatus.EXTENDED;
+          }
+          if (targetStatus === 'UPCOMING') {
+            return a.status === AuctionStatus.SCHEDULED;
+          }
+          return a.status === targetStatus;
+        });
+      }
+      if (filters?.sellerId && filters.sellerId.toLowerCase() !== 'all') {
+        items = items.filter((a) => a.sellerId === filters.sellerId);
+      }
       return items;
     }
   }

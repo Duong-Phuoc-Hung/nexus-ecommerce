@@ -27,29 +27,33 @@ export class InMemoryOrderRepository implements IOrderRepository {
   public async search(criteria: OrderSearchCriteria): Promise<OrderSearchPage> {
     let list = Array.from(this.orders.values());
 
-    // 1. Lọc theo từ khóa tìm kiếm q (id, buyerName, buyerEmail, sellerName, productName, trackingCode)
+    // 1. Lọc theo từ khóa tìm kiếm q (id, buyerName, buyerId, buyerEmail, sellerName, sellerId, productName, trackingCode)
     if (criteria.q && criteria.q.trim().length > 0) {
       const qLower = criteria.q.trim().toLowerCase();
       list = list.filter((order) => {
         const productNames = order.items.map((i) => i.productName || '').join(' ');
         const searchTarget =
-          `${order.id} ${order.buyerName} ${order.buyerEmail} ${order.sellerName} ${productNames} ${order.trackingCode || ''}`.toLowerCase();
+          `${order.id} ${order.buyerName || ''} ${order.buyerId} ${order.buyerEmail || ''} ${order.sellerName || ''} ${order.sellerId} ${productNames} ${order.trackingCode || ''}`.toLowerCase();
         return searchTarget.includes(qLower);
       });
     }
 
     // 2. Lọc theo Buyer ID
-    if (criteria.buyerId) {
+    if (criteria.buyerId && criteria.buyerId.trim().toLowerCase() !== 'all') {
       list = list.filter((o) => o.buyerId === criteria.buyerId);
     }
 
     // 3. Lọc theo Seller ID
-    if (criteria.sellerId) {
+    if (criteria.sellerId && criteria.sellerId.trim().toLowerCase() !== 'all') {
       list = list.filter((o) => o.sellerId === criteria.sellerId);
     }
 
     // 4. Lọc theo Status
-    if (criteria.status && criteria.status.trim().length > 0) {
+    if (
+      criteria.status &&
+      criteria.status.trim().length > 0 &&
+      criteria.status.trim().toLowerCase() !== 'all'
+    ) {
       const statusUpper = criteria.status.trim().toUpperCase();
       list = list.filter((o) => o.status.toUpperCase() === statusUpper);
     }

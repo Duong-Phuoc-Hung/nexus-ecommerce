@@ -33,8 +33,15 @@ export class OrderController {
 
       const authenticatedUser = (req as AuthenticatedRequest).user;
       const q = typeof req.query.q === 'string' ? req.query.q : undefined;
-      let buyerId = typeof req.query.buyerId === 'string' ? req.query.buyerId : undefined;
-      let sellerId = typeof req.query.sellerId === 'string' ? req.query.sellerId : undefined;
+      let buyerId = typeof req.query.buyerId === 'string' ? req.query.buyerId.trim() : undefined;
+      let sellerId = typeof req.query.sellerId === 'string' ? req.query.sellerId.trim() : undefined;
+
+      if (buyerId && (buyerId.toLowerCase() === 'all' || !buyerId)) {
+        buyerId = undefined;
+      }
+      if (sellerId && (sellerId.toLowerCase() === 'all' || !sellerId)) {
+        sellerId = undefined;
+      }
 
       // BẢO MẬT PHÂN QUYỀN (CHỐNG LỖ HỔNG IDOR - SRS 3.1 & 3.6):
       // - BUYER chỉ được xem đơn hàng của chính mình (buộc buyerId = user.sub, chặn xem trộm đơn khách khác).
