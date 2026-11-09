@@ -11,6 +11,8 @@ import { GetBidHistoryUseCase } from './application/use-cases/GetBidHistoryUseCa
 import { UpdateAuctionUseCase } from './application/use-cases/UpdateAuctionUseCase';
 import { BuyNowUseCase } from './application/use-cases/BuyNowUseCase';
 import { CancelAuctionUseCase } from './application/use-cases/CancelAuctionUseCase';
+import { AuctionCheckoutUseCase } from './application/use-cases/AuctionCheckoutUseCase';
+import { HttpCommerceOrderClient } from './infrastructure/clients/HttpCommerceOrderClient';
 
 export function createApplication(
   healthChecker: () => Promise<RedisHealthStatus> = checkRedisHealth,
@@ -76,6 +78,8 @@ export function createApplication(
   const updateAuctionUseCase = new UpdateAuctionUseCase(auctionRepository);
   const buyNowUseCase = new BuyNowUseCase(auctionRepository);
   const cancelAuctionUseCase = new CancelAuctionUseCase(auctionRepository);
+  const commerceOrderClient = new HttpCommerceOrderClient();
+  const auctionCheckoutUseCase = new AuctionCheckoutUseCase(auctionRepository, commerceOrderClient);
 
   const auctionController = new AuctionController(
     getAuctionDetailUseCase,
@@ -86,6 +90,7 @@ export function createApplication(
     buyNowUseCase,
     cancelAuctionUseCase,
     auctionRepository,
+    auctionCheckoutUseCase,
   );
 
   app.use('/api/v1/auctions', createAuctionRoutes(auctionController));

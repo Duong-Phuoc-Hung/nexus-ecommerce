@@ -9,6 +9,7 @@ import { GetBidHistoryUseCase } from '../../../application/use-cases/GetBidHisto
 import { UpdateAuctionUseCase } from '../../../application/use-cases/UpdateAuctionUseCase';
 import { BuyNowUseCase } from '../../../application/use-cases/BuyNowUseCase';
 import { CancelAuctionUseCase } from '../../../application/use-cases/CancelAuctionUseCase';
+import { AuctionCheckoutUseCase } from '../../../application/use-cases/AuctionCheckoutUseCase';
 
 export class AuctionController {
   constructor(
@@ -20,6 +21,7 @@ export class AuctionController {
     private readonly buyNowUseCase: BuyNowUseCase,
     private readonly cancelAuctionUseCase: CancelAuctionUseCase,
     private readonly auctionRepository: IAuctionRepository,
+    private readonly auctionCheckoutUseCase?: AuctionCheckoutUseCase,
   ) {}
 
   // Lấy danh sách các phiên đấu giá (hỗ trợ lọc theo status, sellerId hoặc mặc định là active)
@@ -394,6 +396,58 @@ export class AuctionController {
       res
         .status(400)
         .json({ success: false, error: error.message || 'Không thể chỉnh sửa phiên đấu giá.' });
+    }
+  }
+
+  // Chốt đơn thanh toán cho người thắng đấu giá (gọi sang Commerce Service để sinh VietQR PayOS)
+  public async checkout(req: Request, res: Response): Promise<void> {
+    try {
+      const authUser = (req as AuthenticatedRequest).user;
+      if (!authUser || !authUser.id) {
+        res.status(401).json({
+          success: false,
+          error: 'Unauthorized: Bạn cần đăng nhập để chốt đơn thanh toán.',
+        });
+        return;
+      }
+
+      if (!this.auctionCheckoutUseCase) {
+        res.status(500).json({
+          success: false,
+          error: 'AuctionCheckoutUseCase is not configured.',
+        });
+        return;
+      }
+
+      const auctionId = req.params.id as string;
+      const { shippingAddress } = req.body;
+      const authHeader = req.headers.authorization;
+
+      const result = await this.auctionCheckoutUseCase.execute({
+        auctionId,
+        buyerId: authUser.id,
+        buyerToken: authHeader,
+        shippingAddress,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Tạo đơn hàng thành công! Vui lòng quét mã VietQR PayOS để thanh toán.',
+        data: result,
+      });
+    } catch (error: any) {
+      if (error instanceof AuctionNotFoundException) {
+        res.status(404).json({ success: false, error: error.message });
+        return;
+      }
+      if (error?.message?.startsWith('FORBIDDEN')) {
+        res.status(403).json({ success: false, error: error.message });
+        return;
+      }
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Không thể chốt đơn thanh toán đấu giá.',
+      });
     }
   }
 }
