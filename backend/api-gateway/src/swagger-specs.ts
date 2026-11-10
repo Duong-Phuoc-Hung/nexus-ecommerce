@@ -1233,6 +1233,196 @@ export const catalogSpec = {
         },
       },
     },
+    '/api/v1/products/{id}/deduct-stock': {
+      post: {
+        tags: ['Products'],
+        summary: 'Trừ tồn kho khi thanh toán thành công (Internal / Commerce)',
+        description:
+          'Tự động trừ số lượng sản phẩm trong kho khi đơn hàng được thanh toán thành công từ Commerce Service.',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã sản phẩm',
+            schema: { type: 'string', example: '3' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['quantity'],
+                properties: {
+                  quantity: { type: 'integer', example: 1 },
+                  orderId: { type: 'string', example: '019310c2-5501-7000-8000-000000008021' },
+                  reason: { type: 'string', example: 'Order paid successfully' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Trừ kho thành công', {
+            success: true,
+            data: { id: '3', remainingStock: 4, status: 'ACTIVE' },
+          }),
+          400: errorResponse('Dữ liệu không hợp lệ', 'Số lượng trừ kho phải lớn hơn 0.'),
+          404: errorResponse('Không tìm thấy sản phẩm', 'Không tìm thấy sản phẩm với mã: 3'),
+          409: errorResponse('Tồn kho không đủ', 'Insufficient stock for product 3. Current: 0'),
+        },
+      },
+    },
+    '/api/v1/favorites': {
+      get: {
+        tags: ['Favorites'],
+        summary: 'Lấy danh sách yêu thích của Buyer (Wishlist)',
+        description:
+          'Xem tất cả sản phẩm mà người mua hiện tại đã thả tim. Yêu cầu đăng nhập tài khoản BUYER.',
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: jsonResponse('Danh sách sản phẩm yêu thích', {
+            success: true,
+            data: [
+              {
+                id: '3',
+                title: 'Máy ảnh Leica Q3 Full-Frame Compact',
+                price: 155000000,
+                status: 'ACTIVE',
+                sellerName: 'Trần Thị Seller',
+              },
+            ],
+            total: 1,
+          }),
+          401: unauthorized,
+        },
+      },
+    },
+    '/api/v1/favorites/{productId}': {
+      post: {
+        tags: ['Favorites'],
+        summary: 'Thêm / Bỏ yêu thích sản phẩm (Thả tim / Hủy tim)',
+        description:
+          'Chuyển đổi trạng thái yêu thích: nếu chưa thích thì thêm vào Wishlist, nếu đã thích rồi thì bấm lại sẽ bỏ thích.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'productId',
+            in: 'path',
+            required: true,
+            description: 'Mã sản phẩm cần thả tim / hủy tim',
+            schema: { type: 'string', example: '3' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Cập nhật trạng thái yêu thích thành công', {
+            success: true,
+            data: {
+              productId: '3',
+              isFavorited: true,
+              message: 'Đã thêm sản phẩm vào danh sách yêu thích thành công.',
+            },
+          }),
+          401: unauthorized,
+          404: errorResponse('Không tìm thấy sản phẩm', 'Không tìm thấy sản phẩm với mã: 3'),
+        },
+      },
+    },
+    '/api/v1/products/{id}/reviews': {
+      get: {
+        tags: ['Reviews'],
+        summary: 'Xem danh sách đánh giá & số sao trung bình của sản phẩm',
+        description:
+          'Lấy toàn bộ bình luận, đánh giá sao của sản phẩm cùng điểm đánh giá trung bình (averageRating) để Frontend hiển thị.',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã sản phẩm cần xem đánh giá',
+            schema: { type: 'string', example: '3' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Danh sách đánh giá', {
+            success: true,
+            data: {
+              productId: '3',
+              totalReviews: 2,
+              averageRating: 4.5,
+              reviews: [
+                {
+                  id: '019310c2-5501-7000-8000-000000009999',
+                  productId: '3',
+                  userId: 'usr_buyer_1',
+                  userName: 'Nguyễn Văn Buyer',
+                  rating: 5,
+                  comment: 'Chất lượng ảnh xuất sắc, đóng gói cẩn thận!',
+                  createdAt: '2026-11-10T10:00:00.000Z',
+                },
+              ],
+            },
+          }),
+          404: errorResponse('Không tìm thấy sản phẩm', 'Không tìm thấy sản phẩm với mã: 3'),
+        },
+      },
+      post: {
+        tags: ['Reviews'],
+        summary: 'Gửi đánh giá sản phẩm (Người mua)',
+        description:
+          'Chấm điểm từ 1 đến 5 sao và để lại bình luận cho sản phẩm. Yêu cầu đăng nhập.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã sản phẩm được đánh giá',
+            schema: { type: 'string', example: '3' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['rating'],
+                properties: {
+                  rating: { type: 'integer', minimum: 1, maximum: 5, example: 5 },
+                  comment: {
+                    type: 'string',
+                    example: 'Sản phẩm dùng rất tốt, giao hàng nhanh chóng!',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: jsonResponse('Gửi đánh giá thành công', {
+            success: true,
+            data: {
+              id: '019310c2-5501-7000-8000-000000009999',
+              productId: '3',
+              userId: 'usr_buyer_1',
+              userName: 'Nguyễn Văn Buyer',
+              rating: 5,
+              comment: 'Sản phẩm dùng rất tốt, giao hàng nhanh chóng!',
+              createdAt: '2026-11-10T10:00:00.000Z',
+            },
+          }),
+          400: errorResponse(
+            'Dữ liệu không hợp lệ',
+            'Điểm đánh giá phải là số nguyên từ 1 đến 5 sao.',
+          ),
+          401: unauthorized,
+          404: errorResponse('Không tìm thấy sản phẩm', 'Không tìm thấy sản phẩm với mã: 3'),
+        },
+      },
+    },
   },
 };
 
@@ -1627,6 +1817,70 @@ export const auctionSpec = {
           ),
           401: errorResponse('Chưa đăng nhập', 'Vui lòng đăng nhập để tham gia trả giá.'),
           404: errorResponse('Không tìm thấy', 'Auction with ID "1" was not found.'),
+        },
+      },
+    },
+    '/api/v1/auctions/{id}/checkout': {
+      post: {
+        tags: ['Auction Settlement'],
+        summary: 'Chốt đơn người thắng đấu giá & Sinh link VietQR PayOS',
+        description:
+          'Dành riêng cho người chiến thắng (highestBidderId) của phiên đã kết thúc (ENDED) chốt đơn và nhận link thanh toán PayOS.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã phòng đấu giá đã kết thúc',
+            schema: { type: 'string', example: '1' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['shippingAddress'],
+                properties: {
+                  shippingAddress: {
+                    type: 'object',
+                    required: ['fullName', 'phone', 'province', 'addressLine', 'country'],
+                    properties: {
+                      fullName: { type: 'string', example: 'Lê Văn Thắng' },
+                      phone: { type: 'string', example: '0988776655' },
+                      province: { type: 'string', example: 'Hồ Chí Minh' },
+                      district: { type: 'string', example: 'Quận 1' },
+                      ward: { type: 'string', example: 'Bến Nghé' },
+                      addressLine: { type: 'string', example: 'Số 1 Lê Duẩn' },
+                      country: { type: 'string', example: 'Vietnam' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Tạo đơn thanh toán đấu giá thành công', {
+            success: true,
+            message: 'Tạo đơn hàng thành công! Vui lòng quét mã VietQR PayOS để thanh toán.',
+            data: {
+              orderId: '019310c2-5501-7000-8000-000000008021',
+              orderCode: 123456,
+              totalAmount: 25000000,
+              payment: {
+                paymentLinkId: 'plink_abc123',
+                checkoutUrl: 'https://pay.payos.vn/web/123456',
+                status: 'PENDING',
+              },
+            },
+          }),
+          400: errorResponse('Lỗi nghiệp vụ', 'Phiên đấu giá chưa kết thúc.'),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy phiên', 'Auction with ID "1" was not found.'),
         },
       },
     },

@@ -14,12 +14,10 @@ export class FavoriteController {
     try {
       const authUser = (req as AuthenticatedRequest).user;
       if (!authUser || !authUser.id) {
-        res
-          .status(401)
-          .json({
-            success: false,
-            error: 'Unauthorized: Bạn cần đăng nhập để xem danh sách yêu thích.',
-          });
+        res.status(401).json({
+          success: false,
+          error: 'Unauthorized: Bạn cần đăng nhập để xem danh sách yêu thích.',
+        });
         return;
       }
 
@@ -56,12 +54,10 @@ export class FavoriteController {
     try {
       const authUser = (req as AuthenticatedRequest).user;
       if (!authUser || !authUser.id) {
-        res
-          .status(401)
-          .json({
-            success: false,
-            error: 'Unauthorized: Bạn cần đăng nhập để thực hiện thao tác này.',
-          });
+        res.status(401).json({
+          success: false,
+          error: 'Unauthorized: Bạn cần đăng nhập để thực hiện thao tác này.',
+        });
         return;
       }
 
