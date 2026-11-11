@@ -10,7 +10,7 @@ export interface CleanupResult {
  * để tự động hủy đơn (CANCELLED) và nhả tồn kho tạm giữ (RELEASED).
  */
 export class ExpiredOrderCleanupWorker {
-  private timer: NodeJS.Timeout | null = null;
+  private timer: ReturnType<typeof setInterval> | null = null;
   private isRunning: boolean = false;
 
   constructor(
