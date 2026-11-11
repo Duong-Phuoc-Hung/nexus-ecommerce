@@ -40,22 +40,28 @@ async function withCommerceServer<T>(run: (baseUrl: string) => Promise<T>): Prom
   }
 }
 
-test('GET /api/v1/orders enforces RBAC: 401 when unauthenticated, 403 for BUYER, 200 for SUPPORT_STAFF', async () => {
+test('GET /api/v1/orders enforces RBAC: 401 when unauthenticated, 200 for BUYER (scoped to buyerId), 200 for SUPPORT_STAFF', async () => {
   await withCommerceServer(async (baseUrl) => {
     // 1. Unauthenticated -> 401
     const unauthRes = await fetch(`${baseUrl}/api/v1/orders`);
     assert.equal(unauthRes.status, 401);
 
-    // 2. Authenticate as BUYER -> 403 (Buyer cannot list all orders)
+    // 2. Authenticate as BUYER -> 200 OK (Buyer xem danh sách đơn của chính mình, bảo vệ chống IDOR)
     const buyerToken = createTestToken({
       sub: 'usr_buyer_123',
       email: 'buyer@example.com',
       role: 'BUYER',
     });
-    const buyerForbiddenRes = await fetch(`${baseUrl}/api/v1/orders`, {
+    const buyerRes = await fetch(`${baseUrl}/api/v1/orders`, {
       headers: { Authorization: `Bearer ${buyerToken}` },
     });
-    assert.equal(buyerForbiddenRes.status, 403);
+    assert.equal(buyerRes.status, 200);
+    const buyerJson = (await buyerRes.json()) as any;
+    assert.equal(buyerJson.success, true);
+    assert.ok(Array.isArray(buyerJson.data));
+    for (const order of buyerJson.data) {
+      assert.equal(order.buyerId, 'usr_buyer_123');
+    }
 
     // 3. Authenticate as SUPPORT_STAFF -> 200 OK
     const staffToken = createTestToken({

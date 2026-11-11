@@ -31,7 +31,7 @@ export class OrderController {
         return;
       }
 
-      const authenticatedUser = (req as AuthenticatedRequest).user;
+      const user = (req as AuthenticatedRequest).user;
       const q = typeof req.query.q === 'string' ? req.query.q : undefined;
       let buyerId = typeof req.query.buyerId === 'string' ? req.query.buyerId : undefined;
       let sellerId = typeof req.query.sellerId === 'string' ? req.query.sellerId : undefined;
@@ -42,18 +42,19 @@ export class OrderController {
       //   + Khi truy vấn lịch sử mua trước đây của chính mình (?buyerId=<user.sub> và không truyền sellerId): cho phép xem lịch sử mua thuộc sở hữu của mình.
       //   + Mặc định hoặc khi quản lý đơn bán của shop: buộc sellerId = user.sub, chặn xem trộm đơn shop khác.
       // - ADMIN và SUPPORT_STAFF giữ nguyên 100% quyền xem/lọc toàn bộ đơn hàng trên sàn.
-      if (authenticatedUser?.role === 'BUYER') {
-        buyerId = authenticatedUser.sub;
+      if (user?.role === 'BUYER') {
+        buyerId = user.sub;
         sellerId = undefined;
-      } else if (authenticatedUser?.role === 'SELLER') {
-        if (buyerId === authenticatedUser.sub && !sellerId) {
-          buyerId = authenticatedUser.sub;
+      } else if (user?.role === 'SELLER') {
+        if (buyerId === user.sub && !sellerId) {
+          buyerId = user.sub;
           sellerId = undefined;
         } else {
           buyerId = undefined;
-          sellerId = authenticatedUser.sub;
+          sellerId = user.sub;
         }
       }
+
       const status = typeof req.query.status === 'string' ? req.query.status : undefined;
       const page = req.query.page ? Number(req.query.page) : undefined;
       const limit = req.query.limit ? Number(req.query.limit) : undefined;
@@ -146,8 +147,36 @@ export class OrderController {
         return;
       }
 
+      const authenticatedUser = (req as AuthenticatedRequest).user;
       const orderId = req.params.id as string;
-      const reason = req.body?.reason;
+      const existingOrder = await this.getOrderDetailUseCase.execute(orderId);
+
+      // Nếu là BUYER, kiểm tra đơn có phải của mình không và trạng thái có cho phép hủy không
+      if (authenticatedUser && authenticatedUser.role === 'BUYER') {
+        if (existingOrder.buyerId !== authenticatedUser.sub) {
+          res.status(403).json({
+            success: false,
+            error: 'Bạn không có quyền hủy đơn hàng của người khác.',
+          });
+          return;
+        }
+        const currentStatus = (existingOrder.status || '').toUpperCase();
+        if (
+          currentStatus === 'DELIVERED' ||
+          currentStatus === 'SHIPPED' ||
+          currentStatus === 'CANCELLED' ||
+          currentStatus === 'REFUNDED'
+        ) {
+          res.status(400).json({
+            success: false,
+            error: `Không thể hủy đơn hàng đang ở trạng thái "${existingOrder.status}". Chỉ có thể hủy đơn khi chưa giao hàng.`,
+          });
+          return;
+        }
+      }
+
+      const reason =
+        req.body?.reason || (authenticatedUser?.role === 'BUYER' ? 'Người mua tự hủy' : undefined);
       const result = await this.cancelOrderUseCase.execute(orderId, reason);
 
       res.status(200).json({
