@@ -32,6 +32,12 @@ export function createOrderRoutes(controller: OrderController): Router {
   router.post('/:id/dispatch', requireAuth, requireOrderPermission('DISPATCH'), (req, res) =>
     controller.dispatch(req, res),
   );
+  router.patch('/:id/status', requireAuth, requireOrderPermission('UPDATE_STATUS'), (req, res) =>
+    controller.updateStatus(req, res),
+  );
+  router.post('/:id/status', requireAuth, requireOrderPermission('UPDATE_STATUS'), (req, res) =>
+    controller.updateStatus(req, res),
+  );
   router.post(
     '/:id/refund/request',
     requireAuth,

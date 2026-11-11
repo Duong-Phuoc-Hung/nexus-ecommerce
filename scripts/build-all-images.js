@@ -20,6 +20,7 @@ const SERVICES = [
   'auction-service',
   'fulfillment-service',
   'notification-service',
+  'chat-service',
 ];
 
 const args = process.argv.slice(2);

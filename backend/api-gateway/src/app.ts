@@ -1,7 +1,14 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
-import { userSpec, catalogSpec, auctionSpec, commerceSpec, fulfillmentSpec } from './swagger-specs';
+import {
+  userSpec,
+  catalogSpec,
+  auctionSpec,
+  commerceSpec,
+  fulfillmentSpec,
+  chatSpec,
+} from './swagger-specs';
 
 export function createApplication(): Application {
   const app = express();
@@ -24,6 +31,8 @@ export function createApplication(): Application {
     fulfillment:
       process.env.FULFILLMENT_SERVICE_URL ||
       `http://localhost:${process.env.FULFILLMENT_SERVICE_PORT || 4005}`,
+    chat:
+      process.env.CHAT_SERVICE_URL || `http://localhost:${process.env.CHAT_SERVICE_PORT || 4008}`,
     notification:
       process.env.NOTIFICATION_SERVICE_URL ||
       `http://localhost:${process.env.NOTIFICATION_SERVICE_PORT || 4006}`,
@@ -78,6 +87,11 @@ export function createApplication(): Application {
           prefix: '/api/v1/notifications',
           target: SERVICE_ENDPOINTS.notification,
         },
+        {
+          name: 'AI Chat & Support',
+          prefix: '/api/v1/chat',
+          target: SERVICE_ENDPOINTS.chat,
+        },
       ],
     });
   });
@@ -88,6 +102,7 @@ export function createApplication(): Application {
   app.get('/docs-json/auction', (_req: Request, res: Response) => res.json(auctionSpec));
   app.get('/docs-json/commerce', (_req: Request, res: Response) => res.json(commerceSpec));
   app.get('/docs-json/fulfillment', (_req: Request, res: Response) => res.json(fulfillmentSpec));
+  app.get('/docs-json/chat', (_req: Request, res: Response) => res.json(chatSpec));
 
   const swaggerUrls = [
     { name: '1. User & Auth Service', url: '/docs-json/user' },
@@ -95,6 +110,7 @@ export function createApplication(): Application {
     { name: '3. Auction Service (Đấu giá)', url: '/docs-json/auction' },
     { name: '4. Commerce Service (Đơn hàng & Support)', url: '/docs-json/commerce' },
     { name: '5. Fulfillment Service (Vận chuyển & Support)', url: '/docs-json/fulfillment' },
+    { name: '6. AI Chat & Support Service (Chatbot & Policy FAQ)', url: '/docs-json/chat' },
   ];
 
   // Swagger UI tổng với Dropdown chọn từng Service
@@ -189,6 +205,7 @@ export function createApplication(): Application {
     '/api/v1/notifications',
     createProxy('Notification Service', SERVICE_ENDPOINTS.notification),
   );
+  app.use('/api/v1/chat', createProxy('Chat Service', SERVICE_ENDPOINTS.chat));
 
   return app;
 }

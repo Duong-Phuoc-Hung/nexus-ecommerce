@@ -3167,3 +3167,361 @@ export const fulfillmentSpec = {
     },
   },
 };
+
+export const chatSpec = {
+  openapi: '3.0.0',
+  info: {
+    title: 'Nexus - AI Chatbot, Policy FAQ & Dispute Service',
+    version: '1.0.0',
+    description:
+      'Dịch vụ Chat đa luồng cách ly bảo mật (AI_BOT, BUYER_SELLER, BUYER_SUPPORT), tra cứu vận đơn tự động qua Tool Call, hỏi đáp chính sách có trích dẫn nguồn văn bản (Versioned Policy Grounding) và bàn giao khiếu nại kẹp khóa chống trùng Idempotency.',
+  },
+  servers: [{ url: '/', description: 'API Gateway (Same Origin)' }],
+  components: commonComponents,
+  paths: {
+    '/api/v1/chat/conversations': {
+      post: {
+        tags: ['Chat & Conversations'],
+        summary: 'Mở hoặc tìm kiếm cuộc hội thoại theo đơn hàng',
+        description: `${PRIVATE} Tạo mới hoặc trả về cuộc hội thoại đã có theo orderId và channelType ('AI_BOT', 'BUYER_SELLER', 'BUYER_SUPPORT'). Tự động cô lập kênh, chống rò rỉ IDOR giữa Người mua, Người bán và Nhân viên CSKH.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['orderId', 'channelType'],
+                properties: {
+                  orderId: { type: 'string', example: 'ord_123456789' },
+                  channelType: {
+                    type: 'string',
+                    enum: ['AI_BOT', 'BUYER_SELLER', 'BUYER_SUPPORT'],
+                    example: 'AI_BOT',
+                  },
+                  sellerId: { type: 'string', example: 'seller_uuid_001' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Lấy hoặc tạo phòng chat thành công', {
+            success: true,
+            data: {
+              id: 'conv_a1b2c3d4e5f6',
+              orderId: 'ord_123456789',
+              channelType: 'AI_BOT',
+              buyerId: 'buyer_uuid_001',
+              sellerId: 'seller_uuid_001',
+              createdAt: '2026-11-12T00:00:00.000Z',
+              updatedAt: '2026-11-12T00:00:00.000Z',
+            },
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+    },
+    '/api/v1/chat/conversations/{id}': {
+      get: {
+        tags: ['Chat & Conversations'],
+        summary: 'Xem chi tiết phòng chat (Anti-IDOR Guard)',
+        description: `${PRIVATE} Lấy thông tin phòng chat theo ID. Bắt buộc tài khoản gọi phải là Buyer, Seller (nếu kênh BUYER_SELLER) hoặc CSKH. Chặn hoàn toàn trường hợp Buyer khác đổi ID để đọc trộm.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+            example: 'conv_a1b2c3d4e5f6',
+          },
+        ],
+        responses: {
+          200: jsonResponse('Lấy chi tiết phòng chat thành công', {
+            success: true,
+            data: {
+              id: 'conv_a1b2c3d4e5f6',
+              orderId: 'ord_123456789',
+              channelType: 'AI_BOT',
+              buyerId: 'buyer_uuid_001',
+            },
+          }),
+          401: unauthorized,
+          403: errorResponse(
+            'Không có quyền truy cập',
+            'Forbidden: You are not authorized to view this conversation.',
+          ),
+          404: errorResponse('Không tìm thấy cuộc hội thoại', 'Conversation not found.'),
+        },
+      },
+    },
+    '/api/v1/chat/orders/{orderId}/conversations': {
+      get: {
+        tags: ['Chat & Conversations'],
+        summary: 'Danh sách các phòng chat thuộc một đơn hàng',
+        description: `${PRIVATE} Lấy danh sách các cuộc hội thoại liên quan đến đơn hàng mà người dùng hiện tại có thẩm quyền truy cập.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'orderId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+            example: 'ord_123456789',
+          },
+        ],
+        responses: {
+          200: jsonResponse('Danh sách cuộc hội thoại hợp lệ', {
+            success: true,
+            data: [
+              {
+                id: 'conv_a1b2c3d4e5f6',
+                orderId: 'ord_123456789',
+                channelType: 'AI_BOT',
+              },
+            ],
+          }),
+          401: unauthorized,
+        },
+      },
+    },
+    '/api/v1/chat/conversations/{id}/messages': {
+      post: {
+        tags: ['Chat & Messages'],
+        summary: 'Gửi tin nhắn (Tự động kích hoạt Tool tra cứu vận đơn nếu là AI_BOT)',
+        description: `${PRIVATE} Gửi tin nhắn văn bản kèm tệp đính kèm. Nếu kênh là AI_BOT và nội dung hỏi về hành trình đơn hàng, AI Tool sẽ tự động tra cứu Fulfillment Service và sinh phản hồi tự động ngay lập tức.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+            example: 'conv_a1b2c3d4e5f6',
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['content'],
+                properties: {
+                  content: { type: 'string', example: 'Đơn hàng của tôi đã giao đến đâu rồi?' },
+                  attachments: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        url: { type: 'string', example: 'https://cdn.nexus.vn/proof.jpg' },
+                        fileName: { type: 'string', example: 'proof.jpg' },
+                        fileType: { type: 'string', example: 'image/jpeg' },
+                        fileSize: { type: 'number', example: 1048576 },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: jsonResponse('Gửi tin nhắn thành công', {
+            success: true,
+            data: {
+              userMessage: {
+                id: 'msg_001',
+                senderId: 'buyer_uuid_001',
+                senderRole: 'BUYER',
+                content: 'Đơn hàng của tôi đã giao đến đâu rồi?',
+                createdAt: '2026-11-12T00:00:01.000Z',
+              },
+              aiReply: {
+                id: 'msg_002',
+                senderId: 'SYSTEM_AI_BOT',
+                senderRole: 'AI_ASSISTANT',
+                content:
+                  'Vận đơn shp_123 đang trên đường giao. Đơn vị vận chuyển: GHN Express. Dự kiến giao: 2 ngày tới.',
+                createdAt: '2026-11-12T00:00:02.000Z',
+              },
+            },
+          }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy cuộc hội thoại', 'Conversation not found.'),
+        },
+      },
+      get: {
+        tags: ['Chat & Messages'],
+        summary: 'Lấy lịch sử tin nhắn (Hỗ trợ Polling ?after=<timestamp>)',
+        description: `${PRIVATE} Lấy danh sách tin nhắn trong phòng chat. Hỗ trợ query parameter 'after' để polling các tin nhắn mới nhất nhằm tối ưu tải cho client.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+            example: 'conv_a1b2c3d4e5f6',
+          },
+          {
+            name: 'after',
+            in: 'query',
+            required: false,
+            schema: { type: 'string' },
+            example: '2026-11-12T00:00:00.000Z',
+          },
+        ],
+        responses: {
+          200: jsonResponse('Lấy tin nhắn thành công', {
+            success: true,
+            data: [
+              {
+                id: 'msg_001',
+                senderId: 'buyer_uuid_001',
+                senderRole: 'BUYER',
+                content: 'Đơn hàng của tôi đã giao đến đâu rồi?',
+                createdAt: '2026-11-12T00:00:01.000Z',
+              },
+            ],
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+    },
+    '/api/v1/chat/faq': {
+      post: {
+        tags: ['Policy FAQ & Knowledge'],
+        summary: 'Tra cứu câu hỏi chính sách có trích dẫn văn bản (Grounded Citations)',
+        description: `${PUBLIC} Tra cứu quy chế nền tảng (Đấu giá, Trả hàng, Giao hàng) theo phiên bản. Phân biệt rõ chính sách mặc định và chính sách áp dụng thực tế. Tự động trả về truthful fallback nếu thiếu căn cứ.`,
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['query'],
+                properties: {
+                  query: { type: 'string', example: 'Tôi bị mất cọc đấu giá khi nào?' },
+                  category: { type: 'string', example: 'AUCTION' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Trả lời có dẫn chứng', {
+            success: true,
+            data: {
+              question: 'Tôi bị mất cọc đấu giá khi nào?',
+              answer:
+                'Người thắng đấu giá có 24h để thanh toán. Quá 24h không thanh toán sẽ hủy tư cách mua và tịch thu tiền cọc.',
+              citations: [
+                {
+                  code: 'AUCTION_WIN_PAYMENT_DEADLINE',
+                  title: 'Thời hạn thanh toán đấu giá',
+                  article: 'Điều 4.2 - Quy chế Đấu giá v1.2',
+                  version: 'v1.2',
+                  content:
+                    'Người thắng đấu giá có tối đa 24 giờ kể từ thời điểm chốt phiên để hoàn tất thanh toán.',
+                },
+              ],
+              isGrounded: true,
+              canEscalate: false,
+            },
+          }),
+        },
+      },
+    },
+    '/api/v1/chat/policies': {
+      get: {
+        tags: ['Policy FAQ & Knowledge'],
+        summary: 'Danh sách các quy chế nền tảng đang kích hoạt',
+        description: `${PUBLIC} Lấy toàn bộ các điều khoản quy chế, phiên bản hiệu lực và tham số cấu hình phục vụ giải quyết khiếu nại.`,
+        responses: {
+          200: jsonResponse('Danh sách chính sách hiệu lực', {
+            success: true,
+            data: [
+              {
+                code: 'AUCTION_WIN_PAYMENT_DEADLINE',
+                title: 'Thời hạn thanh toán đấu giá',
+                articleReference: 'Điều 4.2 - Quy chế Đấu giá v1.2',
+                version: 'v1.2',
+                isActive: true,
+              },
+            ],
+          }),
+        },
+      },
+    },
+    '/api/v1/chat/escalate': {
+      post: {
+        tags: ['Dispute Escalation'],
+        summary: 'Bàn giao khiếu nại kẹp khóa chống trùng Idempotency sang CSKH',
+        description: `${PRIVATE} Tạo hồ sơ khiếu nại đơn hàng (hàng vỡ, sai mẫu mã, hư hỏng) kẹp khóa Idempotency Key (qua Redis / Cache). Ngăn chặn tạo case trùng lặp khi mạng gián đoạn retry. Tự động kiểm tra định dạng và dung lượng đính kèm (<= 20MB, JPG/PNG/WEBP/MP4).`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['orderId', 'reason', 'idempotencyKey'],
+                properties: {
+                  orderId: { type: 'string', example: 'ord_123456789' },
+                  reason: { type: 'string', example: 'Hàng nhận bị nứt vỡ mặt kính khi mở hộp.' },
+                  idempotencyKey: { type: 'string', example: 'idemp-req-789-retry-1' },
+                  attachments: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        url: { type: 'string', example: 'https://cdn.nexus.vn/broken-box.jpg' },
+                        fileName: { type: 'string', example: 'broken-box.jpg' },
+                        fileType: { type: 'string', example: 'image/jpeg' },
+                        fileSize: { type: 'number', example: 5242880 },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: jsonResponse('Tạo case khiếu nại thành công', {
+            success: true,
+            data: {
+              caseId: 'dsp_1710123456789_a1b2c3',
+              orderId: 'ord_123456789',
+              buyerId: 'buyer_uuid_001',
+              status: 'OPEN',
+              isDuplicateRequest: false,
+              assignedDepartment: 'SUPPORT_DISPUTE_TIER_1',
+              supportQueue: 'DISPUTE_ESCALATION_QUEUE',
+              message: 'Hồ sơ khiếu nại đã được chuyển giao thành công cho Support Staff.',
+            },
+          }),
+          200: jsonResponse('Đã tồn tại case với Idempotency Key này (Chống trùng lặp)', {
+            success: true,
+            data: {
+              caseId: 'dsp_1710123456789_a1b2c3',
+              orderId: 'ord_123456789',
+              isDuplicateRequest: true,
+              message: 'Yêu cầu khiếu nại đã được tiếp nhận trước đó, không tạo trùng hồ sơ.',
+            },
+          }),
+          400: errorResponse(
+            'Đính kèm không hợp lệ hoặc thiếu dữ liệu',
+            'File proof exceeds maximum limit of 20MB.',
+          ),
+          401: unauthorized,
+        },
+      },
+    },
+  },
+};

@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../database/generated/client';
 import { PrismaClientWrapper } from '../database/PrismaClient';
 import { IReviewRepository } from '../../domain/repositories/IReviewRepository';
 import { Review } from '../../domain/entities/Review';

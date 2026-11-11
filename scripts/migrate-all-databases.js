@@ -14,6 +14,14 @@ const { execSync } = require('child_process');
 
 const SERVICES_CONFIG = [
   {
+    name: 'chat-service',
+    container: 'nexus-postgres-chat',
+    user: 'nexus_chat',
+    db: 'nexus_chat_db',
+    dir: path.join(__dirname, '..', 'backend', 'chat-service', 'prisma'),
+  },
+
+  {
     name: 'user-service',
     container: 'nexus-postgres-user',
     user: 'nexus_user',

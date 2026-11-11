@@ -141,6 +141,26 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
     }
   }
 
+  async function handleMarkAsDelivered() {
+    if (!order || isDelivered || isCancelled || isRefunded) return;
+    setActing(true);
+    setNotice('');
+    try {
+      const updated = await ordersApi.updateStatus(
+        orderId,
+        'DELIVERED',
+        'Xác nhận giao hàng thành công bởi bộ phận Chăm sóc khách hàng (Support Staff)',
+      );
+      setOrder(updated);
+      showToast('Đã xác nhận giao hàng và trừ tồn kho thành công');
+      setNotice('Đơn hàng đã chuyển sang trạng thái ĐÃ GIAO HÀNG và đồng bộ trừ kho thành công.');
+    } catch (err) {
+      setNotice(userMessage(err));
+    } finally {
+      setActing(false);
+    }
+  }
+
   return (
     <>
       <Heading
@@ -431,6 +451,17 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
               </p>
             </div>
             <div className="support-action-buttons">
+              {!isCancelled && !isRefunded && !isDelivered && (
+                <button
+                  type="button"
+                  style={{ background: '#059669', borderColor: '#059669', color: '#ffffff' }}
+                  disabled={acting}
+                  onClick={handleMarkAsDelivered}
+                  title="Xác nhận đơn hàng đã giao thành công cho khách và đồng bộ trừ tồn kho"
+                >
+                  {acting ? 'Đang cập nhật…' : '✓ Xác nhận đã giao hàng'}
+                </button>
+              )}
               <button
                 type="button"
                 disabled={!canCancel}
