@@ -314,6 +314,32 @@ export function SellerOrdersPage() {
             </div>
           </div>
 
+          {selectedOrder.status === 'REFUND_REQUESTED' && (
+            <div
+              style={{
+                background: '#fffbeb',
+                border: '1px solid #fde68a',
+                borderRadius: '8px',
+                padding: '12px 16px',
+                marginBottom: '16px',
+                fontSize: '0.8rem',
+                color: '#92400e',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+              }}
+            >
+              <span style={{ fontSize: '1.25rem' }}>⚖</span>
+              <div>
+                <strong>Đơn hàng đang có yêu cầu khiếu nại / hoàn tiền:</strong>
+                <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: '#b45309' }}>
+                  Hồ sơ đang được chuyển sang Bộ phận Trọng tài Support giải quyết theo chuẩn SLA.
+                  Quý đối tác vui lòng lưu giữ hình ảnh và video đóng gói để đối chiếu bằng chứng.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div
             style={{
               display: 'grid',
@@ -336,7 +362,33 @@ export function SellerOrdersPage() {
             </div>
             <div>
               <p style={{ color: '#7e8a9c', margin: '0 0 4px' }}>Mã vận đơn liên kết:</p>
-              <code>{selectedOrder.tracking}</code>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <code
+                  style={{
+                    background: '#f8fafc',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    border: '1px solid #e2e8f0',
+                  }}
+                >
+                  {selectedOrder.tracking || 'Chưa bàn giao'}
+                </code>
+                {selectedOrder.tracking && (
+                  <span
+                    style={{
+                      fontSize: '0.68rem',
+                      background: '#ecfdf5',
+                      color: '#047857',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      border: '1px solid #a7f3d0',
+                      fontWeight: 600,
+                    }}
+                  >
+                    Đã bàn giao GHN ✓
+                  </span>
+                )}
+              </div>
             </div>
             <div>
               <p style={{ color: '#7e8a9c', margin: '0 0 4px' }}>Ngày tạo đơn:</p>

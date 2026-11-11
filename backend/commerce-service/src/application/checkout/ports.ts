@@ -23,6 +23,7 @@ export interface ShippingAddress {
 export interface CartLineInput {
   productId: string;
   quantity: number;
+  price?: number;
 }
 
 export interface CatalogProduct {
@@ -32,10 +33,12 @@ export interface CatalogProduct {
   price: number;
   stockQuantity: number;
   status: string;
+  imageUrl?: string | null;
 }
 
 export interface ICatalogClient {
   findProduct(productId: string): Promise<CatalogProduct | null>;
+  deductStock?(productId: string, quantity: number, orderId: string): Promise<boolean>;
 }
 
 export interface IShippingQuote {
@@ -46,6 +49,7 @@ export interface IShippingQuote {
 }
 
 export interface PaymentLinkRequest {
+  orderId?: string;
   orderCode: number;
   amount: number;
   description: string;
@@ -56,6 +60,13 @@ export interface PaymentLinkRequest {
 export interface PaymentLink {
   paymentLinkId: string;
   checkoutUrl: string;
+  qrCode?: string;
+  bin?: string;
+  accountNumber?: string;
+  accountName?: string;
+  description?: string;
+  amount?: number;
+  orderCode?: number;
 }
 
 export interface PaymentWebhook {
@@ -84,6 +95,7 @@ export interface IPaymentGateway {
   isConfigured(): boolean;
   createPaymentLink(request: PaymentLinkRequest): Promise<PaymentLink>;
   verifyWebhook(body: unknown): PaymentWebhook | null;
+  getPaymentStatus?(orderCode: number): Promise<{ status: string; amountPaid: number } | null>;
   executeRefund?(request: RefundRequest): Promise<RefundResponse>;
 }
 
@@ -124,12 +136,18 @@ export interface OrderRecord {
 export interface PaymentRecord {
   id: string;
   orderId: string;
+  paymentMethod?: string;
   payosOrderCode: number;
   status: string;
   amount: number;
   currency: string;
   checkoutUrl?: string;
   paymentLinkId?: string;
+  qrCode?: string;
+  bin?: string;
+  accountNumber?: string;
+  accountName?: string;
+  description?: string;
   expiresAt?: Date;
   paidAt?: Date;
 }
@@ -143,6 +161,7 @@ export interface CreateOrderParams {
   subtotal: number;
   shippingFee: number;
   totalAmount: number;
+  paymentMethod?: 'PAYOS' | 'COD';
   idempotencyKey?: string;
   requestHash: string;
   orderExpiresAt: Date;
@@ -168,4 +187,5 @@ export interface ICheckoutRepository {
   markPaymentCancelled(paymentId: string): Promise<void>;
   setPaymentLink(paymentId: string, link: PaymentLink): Promise<void>;
   applyPaymentResult(webhook: PaymentWebhook): Promise<ApplyPaymentOutcome>;
+  findOrderByPayosCode?(payosOrderCode: number): Promise<OrderRecord | null>;
 }

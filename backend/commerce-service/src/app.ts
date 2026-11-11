@@ -3,10 +3,14 @@ import cors from 'cors';
 import { IOrderRepository } from './domain/repositories/IOrderRepository';
 import { InMemoryOrderRepository } from './infrastructure/repositories/InMemoryOrderRepository';
 import { PostgresOrderRepository } from './infrastructure/repositories/PostgresOrderRepository';
+import { PostgresCartRepository } from './infrastructure/repositories/PostgresCartRepository';
+import { CartService } from './application/cart/CartService';
+import { CartController } from './interfaces/http/controllers/CartController';
+import { createCartRoutes } from './interfaces/http/routes/CartRoutes';
+import { HttpCatalogClient } from './infrastructure/clients/HttpCatalogClient';
 import { getCommerceDbPool } from './infrastructure/database/pgPool';
 import { PostgresAdminOrderReader } from './infrastructure/repositories/PostgresAdminOrderReader';
 import { PrismaClientWrapper } from './infrastructure/database/PrismaClient';
-
 import { GetOrderDetailUseCase } from './application/use-cases/GetOrderDetailUseCase';
 import { SearchOrdersUseCase } from './application/use-cases/SearchOrdersUseCase';
 import { CancelOrderUseCase } from './application/use-cases/CancelOrderUseCase';
@@ -16,12 +20,11 @@ import { DispatchOrderUseCase } from './application/use-cases/DispatchOrderUseCa
 import { RequestRefundUseCase } from './application/use-cases/RequestRefundUseCase';
 import { ExecuteRefundUseCase } from './application/use-cases/ExecuteRefundUseCase';
 import { GetRefundStatusUseCase } from './application/use-cases/GetRefundStatusUseCase';
-import { GhnCarrierClient } from './infrastructure/clients/GhnCarrierClient';
-import { PayOsGateway } from './infrastructure/clients/PayOsGateway';
-
 import { OrderController } from './interfaces/http/controllers/OrderController';
 import { createOrderRoutes } from './interfaces/http/routes/OrderRoutes';
 import { createCheckoutRoutes } from './interfaces/http/routes/CheckoutRoutes';
+import { GhnCarrierClient } from './infrastructure/clients/GhnCarrierClient';
+import { PayOsGateway } from './infrastructure/clients/PayOsGateway';
 
 type OrderReader = Pick<IOrderRepository, 'search' | 'findById'>;
 
@@ -31,6 +34,7 @@ export function createApplication(adminOrderReader?: OrderReader): Application {
   app.use(cors());
   app.use(express.json());
 
+  // Probes theo chuẩn DevOps Nexus
   app.get('/health', (_req: Request, res: Response) => {
     const autoSeed =
       process.env.ENABLE_AUTO_SEED === 'true' ||
@@ -109,7 +113,13 @@ export function createApplication(adminOrderReader?: OrderReader): Application {
     },
   );
 
+  const catalogClient = new HttpCatalogClient();
+  const cartRepository = new PostgresCartRepository(pool);
+  const cartService = new CartService(cartRepository, catalogClient);
+  const cartController = new CartController(cartService);
+
   app.use('/api/v1', createCheckoutRoutes(pool));
+  app.use('/api/v1/cart', createCartRoutes(cartController));
   app.use('/api/v1/orders', createOrderRoutes(orderController));
 
   return app;

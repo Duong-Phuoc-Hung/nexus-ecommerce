@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
-import { Pool, PoolClient } from 'pg';
+import { Pool } from 'pg';
+import { PrismaClient } from '../database/generated/client';
+import { PrismaClientWrapper } from '../database/PrismaClient';
 import {
   ApplyPaymentOutcome,
   CheckoutError,
@@ -14,44 +16,45 @@ import {
   ShippingAddress,
 } from '../../application/checkout/ports';
 
-type Row = Record<string, any>;
-
-const ORDER_SELECT = `SELECT id, order_code, buyer_id, seller_id, status, total_amount, shipping_fee,
-  shipping_address, checkout_session_expires_at FROM commerce_orders`;
-
-const PAYMENT_SELECT = `SELECT id, order_id, payos_order_code, status, amount, currency, checkout_url,
-  payment_link_id, expires_at, paid_at FROM commerce_payments`;
-
-function toPayment(row: Row): PaymentRecord {
+function toPayment(row: any): PaymentRecord {
   return {
     id: String(row.id),
-    orderId: String(row.order_id),
-    payosOrderCode: Number(row.payos_order_code),
+    orderId: String(row.orderId || row.order_id),
+    paymentMethod: row.paymentMethod || row.payment_method || 'PAYOS',
+    payosOrderCode: Number(row.payosOrderCode || row.payos_order_code),
     status: row.status,
     amount: Number(row.amount),
-    currency: row.currency,
-    checkoutUrl: row.checkout_url || undefined,
-    paymentLinkId: row.payment_link_id || undefined,
-    expiresAt: row.expires_at ? new Date(row.expires_at) : undefined,
-    paidAt: row.paid_at ? new Date(row.paid_at) : undefined,
+    currency: row.currency || 'VND',
+    checkoutUrl: row.checkoutUrl || row.checkout_url || undefined,
+    paymentLinkId: row.paymentLinkId || row.payment_link_id || undefined,
+    expiresAt:
+      row.expiresAt || row.expires_at ? new Date(row.expiresAt || row.expires_at) : undefined,
+    paidAt: row.paidAt || row.paid_at ? new Date(row.paidAt || row.paid_at) : undefined,
   };
 }
 
-function toOrder(row: Row, items: Row[]): OrderRecord {
+function toOrder(row: any, items: any[]): OrderRecord {
+  const shippingAddress =
+    typeof row.shippingAddress === 'string'
+      ? JSON.parse(row.shippingAddress)
+      : row.shippingAddress || row.shipping_address;
+
   return {
     id: String(row.id),
-    orderCode: row.order_code,
-    buyerId: row.buyer_id,
-    sellerId: row.seller_id,
+    orderCode: row.orderCode || row.order_code,
+    buyerId: row.buyerId || row.buyer_id,
+    sellerId: row.sellerId || row.seller_id,
     status: row.status,
-    totalAmount: Number(row.total_amount),
-    shippingFee: Number(row.shipping_fee),
-    shippingAddress: row.shipping_address as ShippingAddress,
-    expiresAt: new Date(row.checkout_session_expires_at),
+    totalAmount: Number(row.totalAmount || row.total_amount),
+    shippingFee: Number(row.shippingFee || row.shipping_fee),
+    shippingAddress: shippingAddress as ShippingAddress,
+    expiresAt: new Date(
+      row.checkoutSessionExpiresAt || row.checkout_session_expires_at || Date.now(),
+    ),
     items: items.map((item): PricedLine => ({
-      productId: String(item.product_id),
-      title: item.product_title,
-      unitPrice: Number(item.unit_price),
+      productId: String(item.productId || item.product_id),
+      title: item.productTitle || item.product_title,
+      unitPrice: Number(item.unitPrice || item.unit_price),
       quantity: Number(item.quantity),
       subtotal: Number(item.subtotal),
     })),
@@ -59,112 +62,134 @@ function toOrder(row: Row, items: Row[]): OrderRecord {
 }
 
 export class PostgresCheckoutRepository implements ICheckoutRepository {
-  constructor(private readonly pool: Pool) {}
+  private _prisma?: PrismaClient;
 
-  private async tx<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
-    const client = await this.pool.connect();
-    try {
-      await client.query('BEGIN');
-      const result = await work(client);
-      await client.query('COMMIT');
-      return result;
-    } catch (error) {
-      await client.query('ROLLBACK').catch(() => undefined);
-      throw error;
-    } finally {
-      client.release();
+  constructor(
+    private readonly pool?: Pool,
+    prisma?: PrismaClient,
+  ) {
+    if (prisma) {
+      this._prisma = prisma;
     }
   }
 
+  private get prisma(): PrismaClient {
+    if (!this._prisma) {
+      this._prisma = PrismaClientWrapper.getInstance();
+    }
+    return this._prisma;
+  }
+
   public async saveQuote(quote: QuoteRecord): Promise<void> {
-    await this.pool.query(
-      `INSERT INTO commerce_checkout_quotes
-        (id, buyer_id, seller_id, items, shipping_address, subtotal, shipping_fee, total_amount, currency, expires_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-      [
-        quote.id,
-        quote.buyerId,
-        quote.sellerId,
-        JSON.stringify(quote.items),
-        JSON.stringify(quote.shippingAddress),
-        quote.subtotal,
-        quote.shippingFee,
-        quote.totalAmount,
-        quote.currency,
-        quote.expiresAt,
-      ],
-    );
+    await this.prisma.checkoutQuote.create({
+      data: {
+        id: quote.id,
+        buyerId: quote.buyerId,
+        sellerId: quote.sellerId,
+        items: quote.items as any,
+        shippingAddress: quote.shippingAddress as any,
+        subtotal: quote.subtotal,
+        shippingFee: quote.shippingFee,
+        totalAmount: quote.totalAmount,
+        currency: quote.currency,
+        expiresAt: quote.expiresAt,
+      },
+    });
   }
 
   public async findQuote(id: string): Promise<QuoteRecord | null> {
     if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
-    const { rows } = await this.pool.query('SELECT * FROM commerce_checkout_quotes WHERE id = $1', [
-      id,
-    ]);
-    if (rows.length === 0) return null;
-    const row = rows[0];
+
+    const row = await this.prisma.checkoutQuote.findUnique({
+      where: { id },
+    });
+    if (!row) return null;
+
+    const items = typeof row.items === 'string' ? JSON.parse(row.items) : row.items;
+    const shippingAddress =
+      typeof row.shippingAddress === 'string'
+        ? JSON.parse(row.shippingAddress)
+        : row.shippingAddress;
+
     return {
       id: row.id,
-      buyerId: row.buyer_id,
-      sellerId: row.seller_id,
-      items: row.items,
-      shippingAddress: row.shipping_address,
+      buyerId: row.buyerId,
+      sellerId: row.sellerId,
+      items,
+      shippingAddress,
       subtotal: Number(row.subtotal),
-      shippingFee: Number(row.shipping_fee),
-      totalAmount: Number(row.total_amount),
+      shippingFee: Number(row.shippingFee),
+      totalAmount: Number(row.totalAmount),
       currency: row.currency,
-      expiresAt: new Date(row.expires_at),
+      expiresAt: new Date(row.expiresAt),
     };
   }
 
   public async createOrder(params: CreateOrderParams) {
-    return this.tx(async (client) => {
+    return this.prisma.$transaction(async (tx) => {
       if (params.idempotencyKey) {
-        const claim = await client.query(
-          `INSERT INTO commerce_checkout_idempotency (buyer_id, idempotency_key, request_hash)
-           VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING idempotency_key`,
-          [params.buyerId, params.idempotencyKey, params.requestHash],
-        );
-        if (claim.rowCount === 0) {
-          // Khóa dòng để chờ giao dịch đầu tiên commit xong order_id
-          const existing = await client.query(
-            `SELECT request_hash, order_id FROM commerce_checkout_idempotency
-             WHERE buyer_id = $1 AND idempotency_key = $2 FOR SHARE`,
-            [params.buyerId, params.idempotencyKey],
-          );
-          const row = existing.rows[0];
-          if (row.request_hash !== params.requestHash) {
-            return {
-              order: null as unknown as OrderRecord,
-              payment: null as unknown as PaymentRecord,
-              replay: true,
-              requestHash: row.request_hash as string,
-            };
+        try {
+          await tx.checkoutIdempotency.create({
+            data: {
+              buyerId: params.buyerId,
+              idempotencyKey: params.idempotencyKey,
+              requestHash: params.requestHash,
+            },
+          });
+        } catch {
+          // Khóa Idempotency đã tồn tại, kiểm tra xem có cùng request_hash không
+          const existing = await tx.checkoutIdempotency.findUnique({
+            where: {
+              buyerId_idempotencyKey: {
+                buyerId: params.buyerId,
+                idempotencyKey: params.idempotencyKey,
+              },
+            },
+          });
+
+          if (existing) {
+            if (existing.requestHash !== params.requestHash) {
+              return {
+                order: null as unknown as OrderRecord,
+                payment: null as unknown as PaymentRecord,
+                replay: true,
+                requestHash: existing.requestHash,
+              };
+            }
+            if (existing.orderId) {
+              const order = await this.loadOrderPrisma(tx, String(existing.orderId));
+              const payment = await this.loadLatestPaymentPrisma(tx, String(existing.orderId));
+              return {
+                order: order!,
+                payment: payment!,
+                replay: true,
+                requestHash: params.requestHash,
+              };
+            }
           }
-          const order = await this.loadOrder(client, String(row.order_id));
-          const payment = await this.loadLatestPayment(client, String(row.order_id));
-          return {
-            order: order!,
-            payment: payment!,
-            replay: true,
-            requestHash: params.requestHash,
-          };
         }
       }
 
-      // Tuần tự hóa việc giữ hàng theo từng sản phẩm (sắp xếp để tránh deadlock)
-      const productIds = params.items.map((item) => Number(item.productId)).sort((a, b) => a - b);
-      for (const productId of productIds) {
-        await client.query('SELECT pg_advisory_xact_lock($1)', [productId]);
+      // Tuần tự hóa việc giữ hàng theo từng sản phẩm qua Advisory Lock
+      const sortedProductIds = [...params.items.map((item) => item.productId)].sort();
+      for (const productId of sortedProductIds) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${productId}))`;
       }
+
       for (const item of params.items) {
-        const held = await client.query(
-          `SELECT COALESCE(SUM(quantity), 0) AS qty FROM commerce_stock_reservations
-           WHERE product_id = $1 AND status = 'ACTIVE' AND expires_at > NOW()`,
-          [item.productId],
-        );
+        const heldRes = await tx.stockReservation.aggregate({
+          where: {
+            productId: item.productId,
+            status: 'ACTIVE',
+            expiresAt: { gt: new Date() },
+          },
+          _sum: {
+            quantity: true,
+          },
+        });
+        const heldQty = heldRes._sum.quantity || 0;
         const stock = params.stockByProduct[item.productId];
-        if (stock !== undefined && Number(held.rows[0].qty) + item.quantity > stock) {
+        if (stock !== undefined && heldQty + item.quantity > stock) {
           throw new CheckoutError(
             409,
             'INSUFFICIENT_STOCK',
@@ -173,181 +198,354 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
         }
       }
 
-      const orderResult = await client.query(
-        `INSERT INTO commerce_orders
-          (order_code, buyer_id, seller_id, total_amount, shipping_fee, status, shipping_address,
-           checkout_session_expires_at)
-         VALUES ('ORD-' || to_char(NOW(), 'YYYYMMDD') || '-' || lpad(nextval('commerce_order_code_seq')::text, 6, '0'),
-                 $1,$2,$3,$4,'PENDING_PAYMENT',$5,$6)
-         RETURNING id`,
-        [
-          params.buyerId,
-          params.sellerId,
-          params.totalAmount,
-          params.shippingFee,
-          JSON.stringify(params.shippingAddress),
-          params.orderExpiresAt,
-        ],
+      // Sinh mã đơn hàng tuần tự
+      const seqRes = await tx.$queryRaw<
+        Array<{ nextval: bigint }>
+      >`SELECT nextval('commerce_order_code_seq')`;
+      const seqNum = String(seqRes[0]?.nextval || Math.floor(1000 + Math.random() * 9000)).padStart(
+        6,
+        '0',
       );
-      const orderId = String(orderResult.rows[0].id);
+      const nowFormatted = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const orderCode = `ORD-${nowFormatted}-${seqNum}`;
+
+      const initialStatus = params.paymentMethod === 'COD' ? 'PROCESSING' : 'PENDING_PAYMENT';
+      const order = await tx.order.create({
+        data: {
+          orderCode,
+          buyerId: params.buyerId,
+          sellerId: params.sellerId,
+          totalAmount: params.totalAmount,
+          shippingFee: params.shippingFee,
+          status: initialStatus,
+          shippingAddress: params.shippingAddress as any,
+          checkoutSessionExpiresAt: params.orderExpiresAt,
+        },
+      });
+
+      const orderId = String(order.id);
+      const reservationStatus = params.paymentMethod === 'COD' ? 'COMMITTED' : 'ACTIVE';
 
       for (const item of params.items) {
-        await client.query(
-          `INSERT INTO commerce_order_items (order_id, product_id, product_title, unit_price, quantity, subtotal)
-           VALUES ($1,$2,$3,$4,$5,$6)`,
-          [orderId, item.productId, item.title, item.unitPrice, item.quantity, item.subtotal],
-        );
-        await client.query(
-          `INSERT INTO commerce_stock_reservations (order_id, product_id, quantity, expires_at)
-           VALUES ($1,$2,$3,$4)`,
-          [orderId, item.productId, item.quantity, params.reservationExpiresAt],
-        );
+        await tx.orderItem.create({
+          data: {
+            orderId: order.id,
+            productId: item.productId,
+            productTitle: item.title,
+            unitPrice: item.unitPrice,
+            quantity: item.quantity,
+            subtotal: item.subtotal,
+          },
+        });
+
+        await tx.stockReservation.create({
+          data: {
+            orderId: order.id,
+            productId: item.productId,
+            quantity: item.quantity,
+            status: reservationStatus,
+            expiresAt: params.reservationExpiresAt,
+          },
+        });
       }
 
-      await this.insertPayment(client, orderId, params.totalAmount, params.orderExpiresAt);
+      // Sinh PayOS order code
+      const payosSeqRes = await tx.$queryRaw<
+        Array<{ nextval: bigint }>
+      >`SELECT nextval('commerce_payos_order_code_seq')`;
+      const payosOrderCode = Number(
+        payosSeqRes[0]?.nextval || Math.floor(1000000 + Math.random() * 9000000),
+      );
+
+      await tx.payment.create({
+        data: {
+          orderId: order.id,
+          paymentMethod: params.paymentMethod || 'PAYOS',
+          idempotencyKey: crypto.randomUUID(),
+          amount: params.totalAmount,
+          currency: 'VND',
+          status: 'PENDING',
+          payosOrderCode: BigInt(payosOrderCode),
+          expiresAt: params.orderExpiresAt,
+        },
+      });
+
       if (params.idempotencyKey) {
-        await client.query(
-          `UPDATE commerce_checkout_idempotency SET order_id = $3
-           WHERE buyer_id = $1 AND idempotency_key = $2`,
-          [params.buyerId, params.idempotencyKey, orderId],
-        );
+        await tx.checkoutIdempotency.update({
+          where: {
+            buyerId_idempotencyKey: {
+              buyerId: params.buyerId,
+              idempotencyKey: params.idempotencyKey,
+            },
+          },
+          data: {
+            orderId: order.id,
+          },
+        });
       }
 
-      const order = await this.loadOrder(client, orderId);
-      const payment = await this.loadLatestPayment(client, orderId);
-      return { order: order!, payment: payment!, replay: false, requestHash: params.requestHash };
+      // Xóa các món đã checkout khỏi giỏ hàng nếu là đơn COD
+      if (params.paymentMethod === 'COD') {
+        const itemPids = params.items.map((it) => it.productId);
+        if (itemPids.length > 0) {
+          const cart = await tx.cart.findFirst({
+            where: {
+              userId: params.buyerId,
+              expiresAt: { gt: new Date() },
+            },
+            orderBy: { id: 'desc' },
+          });
+
+          if (cart) {
+            await tx.cartItem.deleteMany({
+              where: {
+                cartId: cart.id,
+                productId: { in: itemPids },
+              },
+            });
+            await tx.cart.update({
+              where: { id: cart.id },
+              data: { updatedAt: new Date() },
+            });
+          }
+        }
+      }
+
+      const loadedOrder = await this.loadOrderPrisma(tx, orderId);
+      const loadedPayment = await this.loadLatestPaymentPrisma(tx, orderId);
+
+      return {
+        order: loadedOrder!,
+        payment: loadedPayment!,
+        replay: false,
+        requestHash: params.requestHash,
+      };
     });
   }
 
   public async findOrder(orderId: string): Promise<OrderRecord | null> {
-    const client = await this.pool.connect();
-    try {
-      return await this.loadOrder(client, orderId);
-    } finally {
-      client.release();
-    }
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        items: {
+          orderBy: { id: 'asc' },
+        },
+      },
+    });
+
+    if (!order) return null;
+    return toOrder(order, (order as any).items || []);
+  }
+
+  public async findOrderByPayosCode(payosOrderCode: number): Promise<OrderRecord | null> {
+    const payment = await this.prisma.payment.findFirst({
+      where: {
+        payosOrderCode: BigInt(payosOrderCode),
+      },
+      orderBy: { id: 'desc' },
+    });
+
+    if (!payment) return null;
+    return this.findOrder(String(payment.orderId));
   }
 
   public async latestPayment(orderId: string): Promise<PaymentRecord | null> {
-    const { rows } = await this.pool.query(
-      `${PAYMENT_SELECT} WHERE order_id = $1 ORDER BY id DESC LIMIT 1`,
-      [orderId],
-    );
-    return rows.length ? toPayment(rows[0]) : null;
+    const row = await this.prisma.payment.findFirst({
+      where: {
+        orderId: orderId,
+      },
+      orderBy: { id: 'desc' },
+    });
+
+    return row ? toPayment(row) : null;
   }
 
   public async countPayments(orderId: string): Promise<number> {
-    const { rows } = await this.pool.query(
-      'SELECT COUNT(*)::int AS n FROM commerce_payments WHERE order_id = $1',
-      [orderId],
-    );
-    return rows[0].n;
+    return this.prisma.payment.count({
+      where: {
+        orderId: orderId,
+      },
+    });
   }
 
   public async createPaymentAttempt(orderId: string, amount: number, expiresAt: Date) {
-    return this.tx(async (client) => {
-      const id = await this.insertPayment(client, orderId, amount, expiresAt);
-      const { rows } = await client.query(`${PAYMENT_SELECT} WHERE id = $1`, [id]);
-      return toPayment(rows[0]);
+    return this.prisma.$transaction(async (tx) => {
+      const payosSeqRes = await tx.$queryRaw<
+        Array<{ nextval: bigint }>
+      >`SELECT nextval('commerce_payos_order_code_seq')`;
+      const payosOrderCode = Number(
+        payosSeqRes[0]?.nextval || Math.floor(1000000 + Math.random() * 9000000),
+      );
+
+      const row = await tx.payment.create({
+        data: {
+          orderId: orderId,
+          paymentMethod: 'PAYOS',
+          idempotencyKey: crypto.randomUUID(),
+          amount,
+          currency: 'VND',
+          status: 'PENDING',
+          payosOrderCode: BigInt(payosOrderCode),
+          expiresAt,
+        },
+      });
+
+      return toPayment(row);
     });
   }
 
   public async markPaymentCancelled(paymentId: string): Promise<void> {
-    await this.pool.query(
-      `UPDATE commerce_payments SET status = 'CANCELLED', updated_at = NOW()
-       WHERE id = $1 AND status = 'PENDING'`,
-      [paymentId],
-    );
+    await this.prisma.payment.updateMany({
+      where: {
+        id: BigInt(paymentId),
+        status: 'PENDING',
+      },
+      data: {
+        status: 'CANCELLED',
+        updatedAt: new Date(),
+      },
+    });
   }
 
   public async setPaymentLink(paymentId: string, link: PaymentLink): Promise<void> {
-    await this.pool.query(
-      `UPDATE commerce_payments SET checkout_url = $2, payment_link_id = $3, updated_at = NOW()
-       WHERE id = $1`,
-      [paymentId, link.checkoutUrl, link.paymentLinkId],
-    );
+    await this.prisma.payment.update({
+      where: {
+        id: BigInt(paymentId),
+      },
+      data: {
+        checkoutUrl: link.checkoutUrl,
+        paymentLinkId: link.paymentLinkId,
+        updatedAt: new Date(),
+      },
+    });
   }
 
   public async applyPaymentResult(webhook: PaymentWebhook): Promise<ApplyPaymentOutcome> {
-    return this.tx(async (client) => {
-      const found = await client.query(`${PAYMENT_SELECT} WHERE payos_order_code = $1 FOR UPDATE`, [
-        webhook.orderCode,
-      ]);
-      if (found.rowCount === 0) return 'UNKNOWN_ORDER_CODE';
+    return this.prisma.$transaction(async (tx) => {
+      const found = await tx.payment.findFirst({
+        where: {
+          payosOrderCode: BigInt(webhook.orderCode),
+        },
+      });
 
-      const payment = toPayment(found.rows[0]);
+      if (!found) return 'UNKNOWN_ORDER_CODE';
+
+      const payment = toPayment(found);
       if (payment.status === 'SUCCEEDED') return 'DUPLICATE';
 
       const raw = JSON.stringify(webhook.raw);
       if (webhook.amount !== payment.amount) {
-        await client.query(
-          `UPDATE commerce_payments SET status = 'FAILED', raw_response = $2, updated_at = NOW() WHERE id = $1`,
-          [payment.id, raw],
-        );
+        await tx.payment.update({
+          where: { id: found.id },
+          data: {
+            status: 'FAILED',
+            rawResponse: raw as any,
+            updatedAt: new Date(),
+          },
+        });
         return 'AMOUNT_MISMATCH';
       }
 
       if (!webhook.success) {
-        await client.query(
-          `UPDATE commerce_payments SET status = 'FAILED', raw_response = $2, updated_at = NOW()
-           WHERE id = $1 AND status = 'PENDING'`,
-          [payment.id, raw],
-        );
+        await tx.payment.update({
+          where: { id: found.id },
+          data: {
+            status: 'FAILED',
+            rawResponse: raw as any,
+            updatedAt: new Date(),
+          },
+        });
         return 'PAYMENT_FAILED';
       }
 
-      await client.query(
-        `UPDATE commerce_payments
-         SET status = 'SUCCEEDED', paid_at = NOW(), transaction_id = $2, raw_response = $3, updated_at = NOW()
-         WHERE id = $1`,
-        [payment.id, webhook.reference ?? null, raw],
-      );
-      await client.query(
-        `UPDATE commerce_orders SET status = 'PAID', updated_at = NOW()
-         WHERE id = $1 AND status = 'PENDING_PAYMENT'`,
-        [payment.orderId],
-      );
-      await client.query(
-        `UPDATE commerce_stock_reservations SET status = 'COMMITTED'
-         WHERE order_id = $1 AND status = 'ACTIVE'`,
-        [payment.orderId],
-      );
+      await tx.payment.update({
+        where: { id: found.id },
+        data: {
+          status: 'SUCCEEDED',
+          paidAt: new Date(),
+          transactionId: webhook.reference || null,
+          rawResponse: raw as any,
+          updatedAt: new Date(),
+        },
+      });
+
+      await tx.order.updateMany({
+        where: {
+          id: found.orderId,
+          status: 'PENDING_PAYMENT',
+        },
+        data: {
+          status: 'PAID',
+          updatedAt: new Date(),
+        },
+      });
+
+      await tx.stockReservation.updateMany({
+        where: {
+          orderId: found.orderId,
+          status: 'ACTIVE',
+        },
+        data: {
+          status: 'COMMITTED',
+        },
+      });
+
+      // Xóa các món đã thanh toán khỏi giỏ hàng của Buyer
+      const order = await tx.order.findUnique({
+        where: { id: found.orderId },
+        include: { items: true },
+      });
+
+      if (order && order.items.length > 0) {
+        const productIds = order.items.map((r) => r.productId);
+        const cart = await tx.cart.findFirst({
+          where: {
+            userId: order.buyerId,
+            expiresAt: { gt: new Date() },
+          },
+          orderBy: { id: 'desc' },
+        });
+
+        if (cart) {
+          await tx.cartItem.deleteMany({
+            where: {
+              cartId: cart.id,
+              productId: { in: productIds },
+            },
+          });
+          await tx.cart.update({
+            where: { id: cart.id },
+            data: { updatedAt: new Date() },
+          });
+        }
+      }
+
       return 'PAID';
     });
   }
 
-  private async insertPayment(
-    client: PoolClient,
-    orderId: string,
-    amount: number,
-    expiresAt: Date,
-  ): Promise<string> {
-    const { rows } = await client.query(
-      `INSERT INTO commerce_payments
-        (order_id, payment_method, idempotency_key, amount, currency, status, payos_order_code, expires_at)
-       VALUES ($1,'PAYOS',$2,$3,'VND','PENDING', nextval('commerce_payos_order_code_seq'), $4)
-       RETURNING id`,
-      [orderId, crypto.randomUUID(), amount, expiresAt],
-    );
-    return String(rows[0].id);
+  private async loadOrderPrisma(tx: any, orderId: string): Promise<OrderRecord | null> {
+    const order = await tx.order.findUnique({
+      where: { id: orderId },
+      include: {
+        items: {
+          orderBy: { id: 'asc' },
+        },
+      },
+    });
+
+    if (!order) return null;
+    return toOrder(order, (order as any).items || []);
   }
 
-  private async loadOrder(client: PoolClient, orderId: string): Promise<OrderRecord | null> {
-    if (!/^\d+$/.test(orderId)) return null;
-    const order = await client.query(`${ORDER_SELECT} WHERE id = $1`, [orderId]);
-    if (order.rowCount === 0) return null;
-    const items = await client.query(
-      'SELECT * FROM commerce_order_items WHERE order_id = $1 ORDER BY id',
-      [orderId],
-    );
-    return toOrder(order.rows[0], items.rows);
-  }
+  private async loadLatestPaymentPrisma(tx: any, orderId: string): Promise<PaymentRecord | null> {
+    const row = await tx.payment.findFirst({
+      where: {
+        orderId: orderId,
+      },
+      orderBy: { id: 'desc' },
+    });
 
-  private async loadLatestPayment(client: PoolClient, orderId: string) {
-    const { rows } = await client.query(
-      `${PAYMENT_SELECT} WHERE order_id = $1 ORDER BY id DESC LIMIT 1`,
-      [orderId],
-    );
-    return rows.length ? toPayment(rows[0]) : null;
+    return row ? toPayment(row) : null;
   }
 }

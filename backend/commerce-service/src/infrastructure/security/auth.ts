@@ -141,9 +141,14 @@ export function requireOrderPermission(
       }
     }
 
-    // 3. BUYER có quyền VIEW và REQUEST_REFUND đơn hàng của chính mình
+    // 3. BUYER có quyền VIEW, LIST, CANCEL và REQUEST_REFUND đơn hàng của chính mình (OrderController đã ép buộc buyerId = user.sub chống IDOR)
     if (normalizedRole === 'BUYER') {
-      if (action === 'VIEW' || action === 'REQUEST_REFUND') {
+      if (
+        action === 'VIEW' ||
+        action === 'LIST' ||
+        action === 'CANCEL' ||
+        action === 'REQUEST_REFUND'
+      ) {
         return next();
       }
     }

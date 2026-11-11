@@ -122,9 +122,50 @@ export function OrdersTable({
                 <td>{item.date}</td>
                 <td>{currency(item.total)}</td>
                 <td>
-                  <span className={`seller-status ${statusClass(item.status)}`}>
-                    {getSharedOrderStatusLabel(item.status)}
-                  </span>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <span className={`seller-status ${statusClass(item.status)}`}>
+                      {getSharedOrderStatusLabel(item.status)}
+                    </span>
+                    {item.tracking && (
+                      <span
+                        title={`Mã vận đơn: ${item.tracking}`}
+                        style={{
+                          fontSize: '0.65rem',
+                          background: '#f0fdf4',
+                          color: '#15803d',
+                          border: '1px solid #bbf7d0',
+                          padding: '1px 5px',
+                          borderRadius: '3px',
+                          fontWeight: 600,
+                        }}
+                      >
+                        GHN
+                      </span>
+                    )}
+                    {item.status === 'REFUND_REQUESTED' && (
+                      <span
+                        title="Đang có yêu cầu hoàn tiền hoặc khiếu nại"
+                        style={{
+                          fontSize: '0.65rem',
+                          background: '#fff7ed',
+                          color: '#c2410c',
+                          border: '1px solid #ffedd5',
+                          padding: '1px 5px',
+                          borderRadius: '3px',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Khiếu nại
+                      </span>
+                    )}
+                  </div>
                 </td>
                 {onViewDetail && (
                   <td>

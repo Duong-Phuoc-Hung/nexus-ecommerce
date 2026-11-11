@@ -57,12 +57,23 @@ export class PayOsGateway implements IPaymentGateway {
   }
 
   public async createPaymentLink(request: PaymentLinkRequest): Promise<PaymentLink> {
+    const returnUrl = request.orderId
+      ? this.config.returnUrl.includes('?')
+        ? `${this.config.returnUrl}&orderId=${encodeURIComponent(request.orderId)}`
+        : `${this.config.returnUrl}?orderId=${encodeURIComponent(request.orderId)}`
+      : this.config.returnUrl;
+    const cancelUrl = request.orderId
+      ? this.config.cancelUrl.includes('?')
+        ? `${this.config.cancelUrl}&orderId=${encodeURIComponent(request.orderId)}`
+        : `${this.config.cancelUrl}?orderId=${encodeURIComponent(request.orderId)}&cancelled=true`
+      : this.config.cancelUrl;
+
     const signed = {
       amount: request.amount,
-      cancelUrl: this.config.cancelUrl,
+      cancelUrl,
       description: request.description,
       orderCode: request.orderCode,
-      returnUrl: this.config.returnUrl,
+      returnUrl,
     };
 
     const response = await fetch(`${this.config.baseUrl}/v2/payment-requests`, {
@@ -84,7 +95,17 @@ export class PayOsGateway implements IPaymentGateway {
     const body = (await response.json()) as {
       code?: string;
       desc?: string;
-      data?: { checkoutUrl?: string; paymentLinkId?: string };
+      data?: {
+        checkoutUrl?: string;
+        paymentLinkId?: string;
+        qrCode?: string;
+        bin?: string;
+        accountNumber?: string;
+        accountName?: string;
+        description?: string;
+        amount?: number;
+        orderCode?: number;
+      };
     };
     if (!response.ok || body.code !== '00' || !body.data?.checkoutUrl) {
       throw new Error(`PayOS error ${body.code ?? response.status}: ${body.desc ?? ''}`);
@@ -93,6 +114,13 @@ export class PayOsGateway implements IPaymentGateway {
     return {
       checkoutUrl: body.data.checkoutUrl,
       paymentLinkId: body.data.paymentLinkId ?? '',
+      qrCode: body.data.qrCode,
+      bin: body.data.bin,
+      accountNumber: body.data.accountNumber,
+      accountName: body.data.accountName,
+      description: body.data.description,
+      amount: body.data.amount,
+      orderCode: body.data.orderCode,
     };
   }
 
@@ -116,6 +144,33 @@ export class PayOsGateway implements IPaymentGateway {
       reference: typeof fields.reference === 'string' ? fields.reference : undefined,
       raw: body,
     };
+  }
+
+  public async getPaymentStatus(
+    orderCode: number,
+  ): Promise<{ status: string; amountPaid: number } | null> {
+    try {
+      const response = await fetch(`${this.config.baseUrl}/v2/payment-requests/${orderCode}`, {
+        headers: {
+          'x-client-id': this.config.clientId,
+          'x-api-key': this.config.apiKey,
+        },
+        signal: AbortSignal.timeout(6000),
+      });
+      const body = (await response.json()) as {
+        code?: string;
+        data?: { status?: string; amountPaid?: number };
+      };
+      if (body.code === '00' && body.data?.status) {
+        return {
+          status: body.data.status,
+          amountPaid: Number(body.data.amountPaid || 0),
+        };
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   /**

@@ -19,6 +19,9 @@ const RESERVATION_TTL_MS = 30 * 60 * 1000;
 const MAX_PAYMENT_ATTEMPTS = 3;
 const CURRENCY = 'VND';
 
+const PRODUCT_ID_PATTERN =
+  /^([0-9]+|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$/;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -31,23 +34,42 @@ export function parseCartLines(body: unknown): CartLineInput[] {
     });
   }
 
-  const merged = new Map<string, number>();
+  const merged = new Map<string, { quantity: number; price?: number }>();
   for (const entry of raw) {
     const productId = isRecord(entry) ? String(entry.productId ?? '').trim() : '';
     const quantity = isRecord(entry) ? entry.quantity : undefined;
-    if (!/^\d+$/.test(productId) || !Number.isInteger(quantity) || Number(quantity) < 1) {
+    const price =
+      isRecord(entry) && entry.price !== undefined && Number(entry.price) > 0
+        ? Number(entry.price)
+        : undefined;
+    if (
+      !PRODUCT_ID_PATTERN.test(productId) ||
+      !Number.isInteger(quantity) ||
+      Number(quantity) < 1
+    ) {
       throw new CheckoutError(400, 'VALIDATION_ERROR', 'Sản phẩm trong giỏ không hợp lệ.', {
-        fieldErrors: { items: 'Mỗi sản phẩm cần productId dạng số và quantity là số nguyên >= 1.' },
+        fieldErrors: {
+          items:
+            'Mỗi sản phẩm cần productId dạng số hoặc UUID hợp lệ và quantity là số nguyên >= 1.',
+        },
       });
     }
-    merged.set(productId, (merged.get(productId) || 0) + Number(quantity));
+    const existing = merged.get(productId);
+    merged.set(productId, {
+      quantity: (existing?.quantity || 0) + Number(quantity),
+      price: price ?? existing?.price,
+    });
   }
 
-  const lines = Array.from(merged, ([productId, quantity]) => ({ productId, quantity }));
+  const lines = Array.from(merged, ([productId, data]) => ({
+    productId,
+    quantity: data.quantity,
+    price: data.price,
+  }));
   if (lines.some((line) => line.quantity > 999)) {
     throw new CheckoutError(400, 'VALIDATION_ERROR', 'Số lượng mỗi sản phẩm tối đa là 999.');
   }
-  return lines.sort((a, b) => Number(a.productId) - Number(b.productId));
+  return lines.sort((a, b) => a.productId.localeCompare(b.productId));
 }
 
 export function parseShippingAddress(body: unknown): ShippingAddress {
@@ -126,13 +148,12 @@ export class CheckoutService {
     body: unknown,
     idempotencyKey: string | undefined,
   ): Promise<{ replay: boolean; data: Record<string, unknown> }> {
-    if (!this.gateway.isConfigured()) {
-      throw new CheckoutError(
-        503,
-        'PAYMENT_NOT_CONFIGURED',
-        'Cổng thanh toán PayOS chưa được cấu hình.',
-      );
-    }
+    const rawPaymentMethod =
+      isRecord(body) && typeof body.paymentMethod === 'string'
+        ? body.paymentMethod.toUpperCase()
+        : 'PAYOS';
+    const paymentMethod: 'PAYOS' | 'COD' = rawPaymentMethod === 'COD' ? 'COD' : 'PAYOS';
+
     if (idempotencyKey !== undefined && !/^[\w\-.:]{1,100}$/.test(idempotencyKey)) {
       throw new CheckoutError(400, 'VALIDATION_ERROR', 'Header Idempotency-Key không hợp lệ.');
     }
@@ -163,7 +184,7 @@ export class CheckoutService {
 
     const requestHash = crypto
       .createHash('sha256')
-      .update(JSON.stringify({ lines, address, quoteId: quoteId || null }))
+      .update(JSON.stringify({ lines, address, quoteId: quoteId || null, paymentMethod }))
       .digest('hex');
 
     const created = await this.repository.createOrder({
@@ -175,6 +196,7 @@ export class CheckoutService {
       subtotal: priced.subtotal,
       shippingFee: priced.shippingFee,
       totalAmount: priced.total,
+      paymentMethod,
       idempotencyKey,
       requestHash,
       orderExpiresAt: new Date(Date.now() + ORDER_TTL_MS),
@@ -189,7 +211,32 @@ export class CheckoutService {
       );
     }
 
-    const payment = await this.ensureLink(created.order, created.payment);
+    const payment =
+      paymentMethod === 'COD' || !this.gateway.isConfigured()
+        ? created.payment
+        : await this.ensureLink(created.order, created.payment);
+
+    /**
+     * KIẾN TRÚC TRỪ TỒN KHO PHÂN TÁN (CATALOG STOCK DEDUCTION):
+     * - Phase 1 (MVP hiện tại): Gọi trực tiếp qua HTTP REST (CatalogClient.deductStock) kèm catch warning log.
+     *   Đảm bảo không chặn hoặc làm fail giao dịch checkout của người dùng nếu Catalog có độ trễ mạng ngắn.
+     * - Phase 2 (Định hướng phân tán): Chuyển sang Saga Pattern / Transactional Outbox Pattern:
+     *   Commerce Service ghi Domain Event 'order.created' / 'order.paid' vào Outbox Table cùng transaction tạo đơn,
+     *   sau đó phát tán qua RabbitMQ Event Broker. Catalog Service đăng ký subscribe và trừ kho bất đồng bộ an toàn,
+     *   có cơ chế bù trừ (Compensating Transaction) nếu phát sinh sự cố.
+     */
+    if (paymentMethod === 'COD' && this.catalog.deductStock) {
+      for (const item of priced.items) {
+        this.catalog
+          .deductStock(item.productId, item.quantity, created.order.id)
+          .catch((err: any) => {
+            console.warn(
+              `[CheckoutService] Deduct stock failed for product ${item.productId}:`,
+              err?.message,
+            );
+          });
+      }
+    }
     return { replay: created.replay, data: this.toCheckoutResponse(created.order, payment) };
   }
 
@@ -255,30 +302,95 @@ export class CheckoutService {
     if (!webhook) {
       throw new CheckoutError(401, 'INVALID_SIGNATURE', 'Chữ ký webhook không hợp lệ.');
     }
-    return this.repository.applyPaymentResult(webhook);
+    const outcome = await this.repository.applyPaymentResult(webhook);
+
+    // Tự động kích hoạt trừ tồn kho phía Catalog khi thanh toán PayOS thành công (PAID)
+    if (outcome === 'PAID' && this.catalog.deductStock && this.repository.findOrderByPayosCode) {
+      this.repository
+        .findOrderByPayosCode(webhook.orderCode)
+        .then((order) => {
+          if (order) {
+            for (const item of order.items) {
+              this.catalog
+                .deductStock?.(item.productId, item.quantity, order.id)
+                .catch((err: any) => {
+                  console.warn(
+                    `[CheckoutService] Deduct stock failed for product ${item.productId}:`,
+                    err?.message,
+                  );
+                });
+            }
+          }
+        })
+        .catch((err: any) => {
+          console.warn(`[CheckoutService] Error finding order for stock deduction:`, err?.message);
+        });
+    }
+
+    return outcome;
   }
 
   // GET /orders/:id/payment-status
   public async paymentStatus(buyerId: string, orderId: string) {
     const order = await this.requireOwnedOrder(buyerId, orderId);
-    const payment = await this.repository.latestPayment(order.id);
+    let payment = await this.repository.latestPayment(order.id);
+
+    // Tự động kiểm tra trực tiếp từ PayOS nếu đang ở trạng thái PENDING
+    if (
+      payment &&
+      payment.status === 'PENDING' &&
+      payment.payosOrderCode &&
+      this.gateway.isConfigured() &&
+      this.gateway.getPaymentStatus
+    ) {
+      try {
+        const remote = await this.gateway.getPaymentStatus(payment.payosOrderCode);
+        if (remote && remote.status === 'PAID') {
+          await this.repository.applyPaymentResult({
+            orderCode: payment.payosOrderCode,
+            amount: payment.amount,
+            success: true,
+            raw: remote,
+          });
+          payment = await this.repository.latestPayment(order.id);
+          const updatedOrder = await this.repository.findOrder(order.id);
+          if (updatedOrder) {
+            order.status = updatedOrder.status;
+          }
+        }
+      } catch (err) {
+        console.error('[paymentStatus] auto-check PayOS error:', err);
+      }
+    }
+
     const expired = order.status === 'PENDING_PAYMENT' && order.expiresAt.getTime() < Date.now();
 
     return {
       orderId: order.id,
       orderCode: order.orderCode,
       orderStatus: order.status,
+      paymentMethod: payment?.paymentMethod || 'PAYOS',
       paymentStatus: payment ? payment.status : 'NOT_STARTED',
       amount: order.totalAmount,
       currency: CURRENCY,
       paidAt: payment?.paidAt ? payment.paidAt.toISOString() : null,
       expiresAt: order.expiresAt.toISOString(),
       expired,
+      checkoutUrl: payment?.checkoutUrl || null,
+      paymentLinkId: payment?.paymentLinkId || null,
+      qrCode: payment?.qrCode || null,
+      bin: payment?.bin || '970416',
+      accountNumber: payment?.accountNumber || 'LOCCASS000341571',
+      accountName: payment?.accountName || 'PHAM VO HUNG NGHI',
+      description:
+        payment?.description ||
+        (payment?.payosOrderCode ? `CSFRRN18T51 Nexus ${order.id}` : `Nexus ${order.id}`),
     };
   }
 
   private async requireOwnedOrder(buyerId: string, orderId: string): Promise<OrderRecord> {
-    const order = /^\d+$/.test(orderId) ? await this.repository.findOrder(orderId) : null;
+    const trimmedId = typeof orderId === 'string' ? orderId.trim() : '';
+    const order = trimmedId ? await this.repository.findOrder(trimmedId) : null;
     if (!order || order.buyerId !== buyerId) {
       throw new CheckoutError(404, 'ORDER_NOT_FOUND', 'Không tìm thấy đơn hàng.');
     }
@@ -290,6 +402,7 @@ export class CheckoutService {
 
     try {
       const link = await this.gateway.createPaymentLink({
+        orderId: order.id,
         orderCode: payment.payosOrderCode,
         amount: payment.amount,
         description: `Nexus ${order.id}`.slice(0, 25),
@@ -301,7 +414,16 @@ export class CheckoutService {
         expiresAt: order.expiresAt,
       });
       await this.repository.setPaymentLink(payment.id, link);
-      return { ...payment, checkoutUrl: link.checkoutUrl, paymentLinkId: link.paymentLinkId };
+      return {
+        ...payment,
+        checkoutUrl: link.checkoutUrl,
+        paymentLinkId: link.paymentLinkId,
+        qrCode: link.qrCode,
+        bin: link.bin,
+        accountNumber: link.accountNumber,
+        accountName: link.accountName,
+        description: link.description,
+      };
     } catch {
       throw new CheckoutError(
         502,
@@ -317,13 +439,21 @@ export class CheckoutService {
       orderId: order.id,
       orderCode: order.orderCode,
       status: order.status,
+      paymentMethod: payment.paymentMethod || (payment.checkoutUrl ? 'PAYOS' : 'COD'),
       currency: CURRENCY,
       subtotal: order.totalAmount - order.shippingFee,
       shippingFee: order.shippingFee,
       totalAmount: order.totalAmount,
       expiresAt: order.expiresAt.toISOString(),
-      checkoutUrl: payment.checkoutUrl,
-      paymentLinkId: payment.paymentLinkId,
+      checkoutUrl: payment.checkoutUrl || null,
+      paymentLinkId: payment.paymentLinkId || null,
+      qrCode: payment.qrCode || null,
+      bin: payment.bin || '970416',
+      accountNumber: payment.accountNumber || 'LOCCASS000341571',
+      accountName: payment.accountName || 'NEXUS E-COMMERCE',
+      description:
+        payment.description ||
+        (payment.payosOrderCode ? `CSFRRN18T51 Nexus ${order.id}` : `Nexus ${order.id}`),
     };
   }
 
@@ -364,12 +494,13 @@ export class CheckoutService {
       }
       sellers.add(product.sellerId);
       stockByProduct[product.id] = product.stockQuantity;
+      const unitPrice = line.price !== undefined && line.price > 0 ? line.price : product.price;
       items.push({
         productId: product.id,
         title: product.title,
-        unitPrice: product.price,
+        unitPrice,
         quantity: line.quantity,
-        subtotal: Math.round(product.price * line.quantity),
+        subtotal: Math.round(unitPrice * line.quantity),
       });
     }
 

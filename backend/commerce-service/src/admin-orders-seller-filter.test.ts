@@ -189,16 +189,50 @@ test('SCRUM-298: Admin Orders API - Lọc đơn hàng theo từng Seller và xem
     });
     assert.equal(invalidLimitRes.status, 400);
 
-    // 10. RBAC: BUYER bị chặn 403 khi gọi API danh sách toàn bộ đơn hàng
+    // 10. RBAC & Anti-IDOR: BUYER chỉ xem được đơn của chính mình (200 scoped to buyerId), không dùng được bộ lọc toàn sàn hay xem đơn buyer khác
+    const buyerId = '01a15822-43b8-78c3-a246-16bff78bc6e8';
     const buyerToken = createTestToken({
-      sub: '01a15822-43b8-78c3-a246-16bff78bc6e8',
+      sub: buyerId,
       email: 'buyer@test.com',
       role: 'BUYER',
     });
-    const buyerRes = await fetch(`${baseUrl}/api/v1/orders`, {
-      headers: { Authorization: `Bearer ${buyerToken}` },
+    const buyerRes = await fetch(
+      `${baseUrl}/api/v1/orders?sellerId=${encodeURIComponent(seller2Id)}`,
+      {
+        headers: { Authorization: `Bearer ${buyerToken}` },
+      },
+    );
+    assert.equal(buyerRes.status, 200);
+    const buyerJson = (await buyerRes.json()) as any;
+    assert.equal(buyerJson.success, true);
+    assert.ok(Array.isArray(buyerJson.data));
+    assert.ok(buyerJson.data.length > 0);
+    assert.ok(buyerJson.data.every((o: any) => o.buyerId === buyerId));
+    assert.ok(!buyerJson.data.some((o: any) => o.id === 'order-test-seller-2'));
+
+    const otherBuyerToken = createTestToken({
+      sub: '01a15822-43b8-78c3-a246-16bff78bc6ff',
+      email: 'other-buyer@test.com',
+      role: 'BUYER',
     });
-    assert.equal(buyerRes.status, 403);
+    const otherBuyerRes = await fetch(
+      `${baseUrl}/api/v1/orders?buyerId=${encodeURIComponent(buyerId)}&sellerId=${encodeURIComponent(seller1Id)}`,
+      {
+        headers: { Authorization: `Bearer ${otherBuyerToken}` },
+      },
+    );
+    assert.equal(otherBuyerRes.status, 200);
+    const otherBuyerJson = (await otherBuyerRes.json()) as any;
+    assert.equal(otherBuyerJson.data.length, 0);
+
+    const buyerAdminActionRes = await fetch(
+      `${baseUrl}/api/v1/orders/${encodeURIComponent(firstOrder.id)}/refund`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${buyerToken}` },
+      },
+    );
+    assert.equal(buyerAdminActionRes.status, 403);
 
     // 11. RBAC & Anti-IDOR: SELLER cố tình truyền sellerId khác thì hệ thống buộc về sellerId của token
     const sellerToken = createTestToken({

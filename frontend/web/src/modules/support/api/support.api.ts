@@ -101,22 +101,18 @@ export function createSupportApi(request: RequestApi) {
     async listDisputes(
       params: { status?: string; page?: number; limit?: number; q?: string } = {},
       signal?: AbortSignal,
-    ): Promise<{
-      items: DisputeItem[];
-      pagination: { total: number; page: number; limit: number; totalPages: number };
-    }> {
+    ): Promise<DisputeItem[]> {
       const q = new URLSearchParams();
       for (const [k, v] of Object.entries(params)) {
         if (v !== undefined && v !== '') q.set(k, String(v));
       }
-      const raw = await request<{
-        success: boolean;
-        data: {
-          items: DisputeItem[];
-          pagination: { total: number; page: number; limit: number; totalPages: number };
-        };
-      }>(`/support/disputes${q.toString() ? `?${q.toString()}` : ''}`, { signal });
-      return unwrap(raw);
+      const raw = await request<any>(`/support/disputes${q.toString() ? `?${q.toString()}` : ''}`, {
+        signal,
+      });
+      const unwrapped = unwrap<any>(raw);
+      if (Array.isArray(unwrapped)) return unwrapped;
+      if (Array.isArray(unwrapped?.items)) return unwrapped.items;
+      return [];
     },
     async issueVerdict(
       caseId: string,

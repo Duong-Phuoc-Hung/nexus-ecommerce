@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { supportShipmentsApi, type Shipment } from '@/modules/fulfillment/api/shipments.api';
 import { userMessage } from '@/lib/axios/http';
@@ -78,6 +79,15 @@ export function SupportShipmentsPage() {
   const [confirmReturnOpen, setConfirmReturnOpen] = useState(false);
   const [returnCondition, setReturnCondition] = useState<'INTACT' | 'DAMAGED' | 'LOST'>('INTACT');
   const [returnedAt, setReturnedAt] = useState('');
+
+  // Tự động nhận từ khóa tìm kiếm khi điều hướng từ trang Chi tiết đơn hàng (?q=GHN_...)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      const q = p.get('q');
+      if (q) setQuery(q);
+    }
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -527,7 +537,16 @@ export function SupportShipmentsPage() {
                     <td>
                       <strong>{shipment.code}</strong>
                     </td>
-                    <td>{shipment.order}</td>
+                    <td>
+                      <Link
+                        href={`/support/orders/${encodeURIComponent(shipment.orderId || shipment.order)}`}
+                        className="inline-flex items-center gap-1 font-semibold text-sky-600 hover:text-sky-800 hover:underline"
+                        title="Xem chi tiết đơn hàng tương ứng"
+                      >
+                        <span>{shipment.order}</span>
+                        <span className="text-[10px]">↗</span>
+                      </Link>
+                    </td>
                     <td>{shipment.carrier}</td>
                     <td>{shipment.recipient}</td>
                     <td>
@@ -575,7 +594,16 @@ export function SupportShipmentsPage() {
             <div className="support-info-grid">
               <div>
                 <small>Đơn hàng liên kết</small>
-                <strong>{selected.order}</strong>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <strong>{selected.order}</strong>
+                  <Link
+                    href={`/support/orders/${encodeURIComponent(selected.orderId || selected.order)}`}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-sky-600 hover:text-sky-800 bg-sky-50 px-2 py-0.5 rounded border border-sky-200 transition hover:bg-sky-100"
+                    title="Mở hồ sơ đơn hàng tương ứng"
+                  >
+                    Xem đơn ↗
+                  </Link>
+                </div>
               </div>
               <div>
                 <small>Đơn vị vận chuyển</small>

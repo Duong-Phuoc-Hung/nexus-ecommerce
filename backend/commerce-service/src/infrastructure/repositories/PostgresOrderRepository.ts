@@ -48,6 +48,7 @@ export class PostgresOrderRepository implements IOrderRepository {
 
   public async findById(id: string): Promise<Order | null> {
     const cleanId = id.trim();
+    const isNumeric = /^\d+$/.test(cleanId);
 
     const orderRow = await this.prisma.order.findFirst({
       where: {
@@ -107,6 +108,9 @@ export class PostgresOrderRepository implements IOrderRepository {
       where.OR = [
         { orderCode: { contains: q, mode: 'insensitive' } },
         { id: { contains: q, mode: 'insensitive' } },
+        { buyerName: { contains: q, mode: 'insensitive' } },
+        { buyerEmail: { contains: q, mode: 'insensitive' } },
+        { sellerName: { contains: q, mode: 'insensitive' } },
         { trackingCode: { contains: q, mode: 'insensitive' } },
         { items: { some: { productTitle: { contains: q, mode: 'insensitive' } } } },
       ];
@@ -157,14 +161,22 @@ export class PostgresOrderRepository implements IOrderRepository {
 
   public async save(order: Order): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
-      const shippingAddressJson = JSON.stringify(order.shippingAddress || {});
+      const shippingAddressJson = JSON.stringify(
+        typeof order.shippingAddress === 'object' &&
+          Object.keys(order.shippingAddress || {}).length > 0
+          ? order.shippingAddress
+          : { name: order.buyerName, email: order.buyerEmail },
+      );
       const lookupCode = order.id.startsWith('NX-ORD') ? order.id : `NX-ORD-${order.id}`;
 
       const upserted = await tx.order.upsert({
         where: { orderCode: lookupCode },
         update: {
           buyerId: order.buyerId,
+          buyerName: order.buyerName,
+          buyerEmail: order.buyerEmail,
           sellerId: order.sellerId,
+          sellerName: order.sellerName,
           totalAmount: order.totalAmount,
           status: order.status,
           shippingAddress: shippingAddressJson as any,
@@ -174,9 +186,12 @@ export class PostgresOrderRepository implements IOrderRepository {
         },
         create: {
           id: order.id,
-          orderCode: order.id.startsWith('NX-ORD') ? order.id : `NX-ORD-${Date.now()}`,
+          orderCode: lookupCode,
           buyerId: order.buyerId,
+          buyerName: order.buyerName,
+          buyerEmail: order.buyerEmail,
           sellerId: order.sellerId,
+          sellerName: order.sellerName,
           totalAmount: order.totalAmount,
           shippingFee: order.shippingFee || 0,
           discountAmount: order.discountAmount || 0,
@@ -196,18 +211,14 @@ export class PostgresOrderRepository implements IOrderRepository {
 
       if (order.items.length > 0) {
         await tx.orderItem.createMany({
-          data: order.items.map((item) => {
-            const rawId = String(item.productId || '').replace(/\D/g, '');
-            const parsedProductId = rawId.length > 0 ? BigInt(rawId) : BigInt(1);
-            return {
-              orderId: upserted.id,
-              productId: parsedProductId,
-              productTitle: item.productName || 'Sản phẩm Nexus',
-              unitPrice: item.unitPrice,
-              quantity: item.quantity,
-              subtotal: item.totalPrice,
-            };
-          }),
+          data: order.items.map((item) => ({
+            orderId: upserted.id,
+            productId: String(item.productId),
+            productTitle: item.productName || 'Sản phẩm Nexus',
+            unitPrice: item.unitPrice,
+            quantity: item.quantity,
+            subtotal: item.totalPrice,
+          })),
         });
       }
     });
@@ -268,12 +279,13 @@ export class PostgresOrderRepository implements IOrderRepository {
         : orderRow.shippingAddress || {};
 
     const buyerName =
+      orderRow.buyerName ||
       shippingAddress.fullName ||
       shippingAddress.name ||
       shippingAddress.recipientName ||
       'Khách hàng';
 
-    const buyerEmail = shippingAddress.email || '';
+    const buyerEmail = orderRow.buyerEmail || shippingAddress.email || '';
 
     return new Order({
       id: orderRow.orderCode || String(orderRow.id),
@@ -281,7 +293,7 @@ export class PostgresOrderRepository implements IOrderRepository {
       buyerName,
       buyerEmail,
       sellerId: orderRow.sellerId,
-      sellerName: 'Gian hàng đối tác',
+      sellerName: orderRow.sellerName || 'Gian hàng đối tác',
       items,
       subtotal:
         Number(orderRow.totalAmount) -

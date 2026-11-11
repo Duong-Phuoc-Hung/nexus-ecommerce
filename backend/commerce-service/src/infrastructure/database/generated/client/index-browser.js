@@ -146,12 +146,17 @@ exports.Prisma.OrderScalarFieldEnum = {
   orderCode: 'orderCode',
   buyerId: 'buyerId',
   sellerId: 'sellerId',
+  buyerName: 'buyerName',
+  buyerEmail: 'buyerEmail',
+  sellerName: 'sellerName',
   totalAmount: 'totalAmount',
   shippingFee: 'shippingFee',
   discountAmount: 'discountAmount',
   status: 'status',
   shippingAddress: 'shippingAddress',
   checkoutSessionExpiresAt: 'checkoutSessionExpiresAt',
+  trackingCode: 'trackingCode',
+  timeline: 'timeline',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
@@ -177,6 +182,11 @@ exports.Prisma.PaymentScalarFieldEnum = {
   currency: 'currency',
   status: 'status',
   rawResponse: 'rawResponse',
+  payosOrderCode: 'payosOrderCode',
+  paymentLinkId: 'paymentLinkId',
+  checkoutUrl: 'checkoutUrl',
+  expiresAt: 'expiresAt',
+  paidAt: 'paidAt',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
@@ -187,6 +197,38 @@ exports.Prisma.InvoiceScalarFieldEnum = {
   invoiceCode: 'invoiceCode',
   pdfUrl: 'pdfUrl',
   issuedAt: 'issuedAt',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.CheckoutQuoteScalarFieldEnum = {
+  id: 'id',
+  buyerId: 'buyerId',
+  sellerId: 'sellerId',
+  items: 'items',
+  shippingAddress: 'shippingAddress',
+  subtotal: 'subtotal',
+  shippingFee: 'shippingFee',
+  totalAmount: 'totalAmount',
+  currency: 'currency',
+  expiresAt: 'expiresAt',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.CheckoutIdempotencyScalarFieldEnum = {
+  buyerId: 'buyerId',
+  idempotencyKey: 'idempotencyKey',
+  requestHash: 'requestHash',
+  orderId: 'orderId',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.StockReservationScalarFieldEnum = {
+  id: 'id',
+  orderId: 'orderId',
+  productId: 'productId',
+  quantity: 'quantity',
+  status: 'status',
+  expiresAt: 'expiresAt',
   createdAt: 'createdAt'
 };
 
@@ -227,7 +269,10 @@ exports.Prisma.ModelName = {
   Order: 'Order',
   OrderItem: 'OrderItem',
   Payment: 'Payment',
-  Invoice: 'Invoice'
+  Invoice: 'Invoice',
+  CheckoutQuote: 'CheckoutQuote',
+  CheckoutIdempotency: 'CheckoutIdempotency',
+  StockReservation: 'StockReservation'
 };
 
 /**
