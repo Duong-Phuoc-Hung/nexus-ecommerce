@@ -12,6 +12,8 @@ import { userMessage } from '@/lib/axios/http';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import { readAddresses } from '@/modules/user/utils/address-book';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import { BuyerOrderConversationPanel } from './buyer-order-conversation-panel';
+import type { ComplaintCaseType } from '../types/order-conversation.types';
 import {
   ArrowLeft,
   Copy,
@@ -37,6 +39,7 @@ import {
   LifeBuoy,
   FileWarning,
   Info,
+  MessageSquare,
 } from 'lucide-react';
 
 const CANCEL_REASON_PRESETS = [
@@ -172,6 +175,11 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
   const [copiedTracking, setCopiedTracking] = useState(false);
   const [copiedOrderId, setCopiedOrderId] = useState(false);
   const [productImages, setProductImages] = useState<Record<string, string>>({});
+  const [conversationTrigger, setConversationTrigger] = useState<{
+    action: 'OPEN_SELLER' | 'OPEN_SUPPORT' | 'OPEN_CASE_MODAL' | 'ASK_AI_SHIPMENT';
+    caseType?: ComplaintCaseType;
+    nonce: number;
+  } | null>(null);
 
   useEffect(() => {
     setSavedDrafts(readOrderSupportDrafts(orderId));
@@ -909,6 +917,16 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
               </ol>
             </section>
 
+            {/* TRUNG TÂM NHẮN TIN ĐƠN HÀNG (SELLER / SUPPORT) & TRỢ LÝ NEXUS (AI) & HỒ SƠ KHIẾU NẠI */}
+            {user.role === 'BUYER' && (
+              <BuyerOrderConversationPanel
+                order={order}
+                recipientName={recipientName}
+                recipientPhone={recipientPhone}
+                externalTrigger={conversationTrigger}
+              />
+            )}
+
             {/* BỐ CỤC 2 CỘT CHÍNH - PHỤ THEO CHUẨN SRS */}
             <section className="mt-6 grid gap-6 lg:grid-cols-[1.35fr_.65fr]">
               {/* CỘT CHÍNH (BÊN TRÁI): Người bán, Danh sách món hàng kèm ảnh, Thông tin nhận hàng, Vận đơn */}
@@ -933,13 +951,30 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
                       </div>
                     </div>
 
-                    <Link
-                      href={`/products?sellerId=${encodeURIComponent(order.sellerId || '')}`}
-                      className="inline-flex items-center gap-1 rounded-xl border border-line bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50 transition"
-                    >
-                      <span>Xem gian hàng</span>
-                      <ExternalLink className="size-3 text-stone-400" />
-                    </Link>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {user.role === 'BUYER' && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setConversationTrigger({
+                              action: 'OPEN_SELLER',
+                              nonce: Date.now(),
+                            })
+                          }
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-brand/30 bg-brand/5 px-3 py-1.5 text-xs font-semibold text-brand-dark hover:bg-brand/10 transition"
+                        >
+                          <MessageSquare className="size-3.5" />
+                          <span>Nhắn người bán</span>
+                        </button>
+                      )}
+                      <Link
+                        href={`/products?sellerId=${encodeURIComponent(order.sellerId || '')}`}
+                        className="inline-flex items-center gap-1 rounded-xl border border-line bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50 transition"
+                      >
+                        <span>Xem gian hàng</span>
+                        <ExternalLink className="size-3 text-stone-400" />
+                      </Link>
+                    </div>
                   </div>
                 </div>
 
@@ -1274,6 +1309,24 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
                         </Button>
                       </div>
 
+                      <div className="pt-1">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full h-9 rounded-xl border-brand/30 bg-brand/5 text-brand-dark hover:bg-brand/10 text-xs font-semibold justify-center"
+                          onClick={() =>
+                            setConversationTrigger({
+                              action: 'OPEN_CASE_MODAL',
+                              caseType: isDelivered ? 'OTHER' : 'DAMAGED_ITEM',
+                              nonce: Date.now(),
+                            })
+                          }
+                        >
+                          <MessageSquare className="mr-1.5 size-3.5" />
+                          Mở hồ sơ Báo hàng vỡ / Khiếu nại (Có đính kèm & AI)
+                        </Button>
+                      </div>
+
                       {/* Danh sách bản ghi yêu cầu đã chuẩn bị trên thiết bị */}
                       {savedDrafts.length > 0 && (
                         <div className="mt-3 space-y-2 border-t border-line pt-3">
@@ -1590,15 +1643,22 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
                           <span className="text-muted">SL trả:</span>
                           <input
                             type="number"
+                            inputMode="numeric"
                             min={0}
                             max={item.quantity}
                             disabled={!checked}
                             value={currentQty}
+                            onKeyDown={(e) => {
+                              if (['-', '+', 'e', 'E', '.'].includes(e.key)) {
+                                e.preventDefault();
+                              }
+                            }}
                             onChange={(e) => {
-                              const val = Number(e.target.value);
+                              const cleaned = e.target.value.replace(/\D/g, '');
+                              const val = cleaned ? parseInt(cleaned, 10) : 0;
                               setReturnItemQuantities((prev) => ({
                                 ...prev,
-                                [item.productId]: Number.isNaN(val) ? 0 : val,
+                                [item.productId]: Math.min(item.quantity, Math.max(0, val)),
                               }));
                               setSupportFieldErrors((prev) => ({ ...prev, items: undefined }));
                               setDraftSavedBanner('');
@@ -1631,11 +1691,21 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
               <input
                 id="support-phone-input"
                 type="tel"
+                inputMode="tel"
                 aria-invalid={Boolean(supportFieldErrors.contactPhone)}
                 placeholder="Ví dụ: 0912345678"
                 value={supportContactPhone}
+                onKeyDown={(e) => {
+                  if (e.key === '-' || e.key === 'e' || e.key === 'E') {
+                    e.preventDefault();
+                  }
+                }}
                 onChange={(e) => {
-                  setSupportContactPhone(e.target.value);
+                  const withoutMinus = e.target.value.replace(/-/g, '');
+                  const hasPlus = withoutMinus.startsWith('+');
+                  const digits = withoutMinus.replace(/\D/g, '');
+                  const nextVal = hasPlus ? `+${digits.slice(0, 11)}` : digits.slice(0, 10);
+                  setSupportContactPhone(nextVal);
                   setSupportFieldErrors((prev) => ({ ...prev, contactPhone: undefined }));
                   setDraftSavedBanner('');
                 }}
