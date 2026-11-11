@@ -180,6 +180,16 @@ export function createOrdersApi(request: RequestApi) {
       );
       return unwrap<OrderDetail>(raw);
     },
+    async updateStatus(id: string, status: string, note?: string) {
+      const raw = await request<{ success: boolean; message?: string; data: OrderDetail }>(
+        `/orders/${encodeURIComponent(id)}/status`,
+        {
+          method: 'PATCH',
+          body: { status, note },
+        },
+      );
+      return unwrap<OrderDetail>(raw);
+    },
     async requestRefund(id: string, reason: string, evidenceUrls?: string[]) {
       const raw = await request<{ success: boolean; message?: string; data: OrderDetail }>(
         `/orders/${encodeURIComponent(id)}/refund/request`,

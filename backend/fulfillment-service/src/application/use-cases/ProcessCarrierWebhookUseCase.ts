@@ -2,6 +2,10 @@ import crypto from 'node:crypto';
 import { IShipmentRepository } from '../../domain/repositories/IShipmentRepository';
 import { CarrierCode, Shipment, ShipmentStatus } from '../../domain/entities/Shipment';
 import { ShipmentNotFoundException } from '../../domain/exceptions/ShipmentNotFoundException';
+import {
+  CommerceOrderClient,
+  ICommerceOrderClient,
+} from '../../infrastructure/clients/CommerceOrderClient';
 
 export interface CarrierWebhookInput {
   carrier?: string;
@@ -15,7 +19,14 @@ export interface CarrierWebhookInput {
 }
 
 export class ProcessCarrierWebhookUseCase {
-  constructor(private readonly shipmentRepository: IShipmentRepository) {}
+  private readonly commerceClient: ICommerceOrderClient;
+
+  constructor(
+    private readonly shipmentRepository: IShipmentRepository,
+    commerceClient?: ICommerceOrderClient,
+  ) {
+    this.commerceClient = commerceClient || new CommerceOrderClient();
+  }
 
   public async execute(input: CarrierWebhookInput): Promise<Shipment> {
     const rawTracking = (input.trackingCode || '').trim();
@@ -78,6 +89,15 @@ export class ProcessCarrierWebhookUseCase {
 
     shipment.updateStatus(mappedStatus, location);
     await this.shipmentRepository.update(shipment);
+
+    // Tự động đồng bộ trạng thái đơn hàng sang Commerce Service (SRS 3.4 & 3.6)
+    if (shipment.orderId) {
+      await this.commerceClient.syncStatus(
+        shipment.orderId,
+        mappedStatus,
+        `Cập nhật qua 3PL Carrier Webhook (${input.carrier || 'Carrier'})`,
+      );
+    }
 
     return shipment;
   }

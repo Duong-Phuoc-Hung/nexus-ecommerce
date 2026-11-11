@@ -115,7 +115,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 }
 
 export function requireOrderPermission(
-  action: 'VIEW' | 'LIST' | 'CANCEL' | 'REFUND' | 'DISPATCH' | 'REQUEST_REFUND',
+  action: 'VIEW' | 'LIST' | 'CANCEL' | 'REFUND' | 'DISPATCH' | 'REQUEST_REFUND' | 'UPDATE_STATUS',
 ) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const user = (req as AuthenticatedRequest).user;
@@ -129,14 +129,19 @@ export function requireOrderPermission(
 
     const normalizedRole = (user.role || '').toUpperCase();
 
-    // 1. ADMIN và SUPPORT_STAFF có toàn quyền xem, tìm kiếm, hủy đơn, bàn giao và hoàn tiền khiếu nại
+    // 1. ADMIN và SUPPORT_STAFF có toàn quyền xem, tìm kiếm, hủy đơn, bàn giao, cập nhật trạng thái và hoàn tiền khiếu nại
     if (normalizedRole === 'ADMIN' || normalizedRole === 'SUPPORT_STAFF') {
       return next();
     }
 
-    // 2. SELLER có quyền VIEW, LIST và DISPATCH đơn hàng của gian hàng mình
+    // 2. SELLER có quyền VIEW, LIST, DISPATCH và UPDATE_STATUS đơn hàng của gian hàng mình
     if (normalizedRole === 'SELLER') {
-      if (action === 'VIEW' || action === 'LIST' || action === 'DISPATCH') {
+      if (
+        action === 'VIEW' ||
+        action === 'LIST' ||
+        action === 'DISPATCH' ||
+        action === 'UPDATE_STATUS'
+      ) {
         return next();
       }
     }

@@ -1,6 +1,11 @@
 import { IShipmentRepository } from '../../domain/repositories/IShipmentRepository';
 import { ShipmentNotFoundException } from '../../domain/exceptions/ShipmentNotFoundException';
+import { ShipmentStatus } from '../../domain/entities/Shipment';
 import { mapShipmentToDto, ShipmentDetailDto } from '../dtos/ShipmentDetailDto';
+import {
+  CommerceOrderClient,
+  ICommerceOrderClient,
+} from '../../infrastructure/clients/CommerceOrderClient';
 
 export interface ConfirmReturnInput {
   shipmentId: string;
@@ -13,7 +18,14 @@ export interface ConfirmReturnInput {
  * Xác nhận đơn giao thất bại đã hoàn về kho Người bán thành công để đóng hồ sơ vận đơn (SRS 3.6)
  */
 export class ConfirmReturnUseCase {
-  constructor(private readonly shipmentRepository: IShipmentRepository) {}
+  private readonly commerceClient: ICommerceOrderClient;
+
+  constructor(
+    private readonly shipmentRepository: IShipmentRepository,
+    commerceClient?: ICommerceOrderClient,
+  ) {
+    this.commerceClient = commerceClient || new CommerceOrderClient();
+  }
 
   public async execute(input: ConfirmReturnInput): Promise<ShipmentDetailDto> {
     const rawId = (input.shipmentId || '').trim();
@@ -46,6 +58,16 @@ export class ConfirmReturnUseCase {
     });
 
     await this.shipmentRepository.update(shipment);
+
+    // Tự động đồng bộ sang Commerce Service
+    if (shipment.orderId) {
+      await this.commerceClient.syncStatus(
+        shipment.orderId,
+        ShipmentStatus.RETURNED,
+        `Xác nhận hàng đã hoàn về kho người bán (Tình trạng: ${condition})`,
+      );
+    }
+
     return mapShipmentToDto(shipment);
   }
 }
