@@ -1,4 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from './generated/client';
+
+export { PrismaClient } from './generated/client';
 
 export class PrismaClientWrapper {
   private static instance: PrismaClient;
