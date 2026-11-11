@@ -15,6 +15,15 @@ export interface AddToCartInputDto {
   quantity: number;
 }
 
+export interface MergeCartItemInputDto {
+  productId: string;
+  quantity: number;
+}
+
+export interface MergeCartInputDto {
+  items: MergeCartItemInputDto[];
+}
+
 export interface UpdateCartItemInputDto {
   quantity: number;
 }
@@ -101,5 +110,135 @@ export function validateUpdateCartItemInput(body: unknown): UpdateCartItemInputD
 
   return {
     quantity: rawQuantity,
+  };
+}
+
+export function validateMergeCartInput(body: unknown): MergeCartInputDto {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    throw new CartValidationError(400, 'VALIDATION_ERROR', 'Dữ liệu gộp giỏ hàng không hợp lệ.');
+  }
+
+  const record = body as Record<string, unknown>;
+  const rawItems = record.items;
+
+  if (!Array.isArray(rawItems)) {
+    throw new CartValidationError(
+      400,
+      'VALIDATION_ERROR',
+      'Danh sách món hàng (items) phải là một mảng.',
+    );
+  }
+
+  const validatedItems: MergeCartItemInputDto[] = [];
+  const fieldErrors: Record<string, string> = {};
+
+  rawItems.forEach((entry, index) => {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+      fieldErrors[`items[${index}]`] = 'Item không hợp lệ.';
+      return;
+    }
+
+    const itemRecord = entry as Record<string, unknown>;
+    const rawProductId =
+      itemRecord.productId !== undefined ? String(itemRecord.productId).trim() : '';
+    const rawQuantity = itemRecord.quantity !== undefined ? Number(itemRecord.quantity) : 1;
+
+    if (!rawProductId || !PRODUCT_ID_PATTERN.test(rawProductId)) {
+      fieldErrors[`items[${index}].productId`] = 'Mã sản phẩm phải là chuỗi số hoặc UUID hợp lệ.';
+      return;
+    }
+
+    if (
+      isNaN(rawQuantity) ||
+      !Number.isInteger(rawQuantity) ||
+      rawQuantity < 1 ||
+      rawQuantity > 999
+    ) {
+      fieldErrors[`items[${index}].quantity`] = 'Số lượng sản phẩm phải từ 1 đến 999.';
+      return;
+    }
+
+    validatedItems.push({
+      productId: rawProductId,
+      quantity: rawQuantity,
+    });
+  });
+
+  if (Object.keys(fieldErrors).length > 0) {
+    throw new CartValidationError(
+      400,
+      'VALIDATION_ERROR',
+      'Một hoặc nhiều sản phẩm trong danh sách gộp giỏ không hợp lệ.',
+      fieldErrors,
+    );
+  }
+
+  return {
+    items: validatedItems,
+  };
+}
+
+export function validateMergeCartInput(body: unknown): MergeCartInputDto {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    throw new CartValidationError(400, 'VALIDATION_ERROR', 'Dữ liệu gộp giỏ hàng không hợp lệ.');
+  }
+
+  const record = body as Record<string, unknown>;
+  const rawItems = record.items;
+
+  if (!Array.isArray(rawItems)) {
+    throw new CartValidationError(
+      400,
+      'VALIDATION_ERROR',
+      'Danh sách món hàng (items) phải là một mảng.',
+    );
+  }
+
+  const validatedItems: MergeCartItemInputDto[] = [];
+  const fieldErrors: Record<string, string> = {};
+
+  rawItems.forEach((entry, index) => {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+      fieldErrors[`items[${index}]`] = 'Item không hợp lệ.';
+      return;
+    }
+
+    const itemRecord = entry as Record<string, unknown>;
+    const rawProductId =
+      itemRecord.productId !== undefined ? String(itemRecord.productId).trim() : '';
+    const rawQuantity = itemRecord.quantity !== undefined ? Number(itemRecord.quantity) : 1;
+
+    if (!rawProductId || !PRODUCT_ID_PATTERN.test(rawProductId)) {
+      fieldErrors[`items[${index}].productId`] = 'Mã sản phẩm phải là chuỗi số hoặc UUID hợp lệ.';
+      return;
+    }
+
+    if (
+      isNaN(rawQuantity) ||
+      !Number.isInteger(rawQuantity) ||
+      rawQuantity < 1 ||
+      rawQuantity > 999
+    ) {
+      fieldErrors[`items[${index}].quantity`] = 'Số lượng sản phẩm phải từ 1 đến 999.';
+      return;
+    }
+
+    validatedItems.push({
+      productId: rawProductId,
+      quantity: rawQuantity,
+    });
+  });
+
+  if (Object.keys(fieldErrors).length > 0) {
+    throw new CartValidationError(
+      400,
+      'VALIDATION_ERROR',
+      'Một hoặc nhiều sản phẩm trong danh sách gộp giỏ không hợp lệ.',
+      fieldErrors,
+    );
+  }
+
+  return {
+    items: validatedItems,
   };
 }

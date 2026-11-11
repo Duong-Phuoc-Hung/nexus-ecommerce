@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import path from 'path';
 import { createApplication } from './app';
+import { ExpiredOrderCleanupWorker } from './infrastructure/workers/ExpiredOrderCleanupWorker';
 
 dotenv.config();
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
@@ -20,4 +21,13 @@ app.listen(PORT, () => {
   console.log(`Health check: http://localhost:${PORT}/health`);
   console.log(`API Docs: http://localhost:${PORT}/api/v1/orders/ord_01hqz555abc`);
   console.log('='.repeat(60));
+
+  // SCRUM-173: Khởi động Background Cron Worker tự động hủy đơn quá hạn 15 phút
+  if (process.env.NODE_ENV !== 'test') {
+    const cleanupWorker = new ExpiredOrderCleanupWorker();
+    cleanupWorker.start(60000); // Quét mỗi 1 phút
+    console.log(
+      '[ExpiredOrderCleanupWorker] Started periodic expired order cleanup (1m interval).',
+    );
+  }
 });
