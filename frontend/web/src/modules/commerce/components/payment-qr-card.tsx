@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Copy, Check, RefreshCw, Lightbulb, AlertTriangle } from 'lucide-react';
+import { Check, Copy, ExternalLink, RefreshCw, AlertTriangle } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { commerceApi } from '../api/commerce.api';
 import { Button } from '@/components/ui/button';
@@ -31,59 +31,74 @@ interface PaymentInfo {
 }
 
 export function PaymentQrCard({ orderId, amount, onCancelOrder }: PaymentQrCardProps) {
-  const [copiedField, setCopiedField] = useState<string | null>(null);
   const [paymentInfo, setPaymentInfo] = useState<PaymentInfo | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const requestSeq = useRef(0);
 
-  const loadLink = useCallback(
-    (renew = false) => {
-      if (!orderId) return;
-      const seq = ++requestSeq.current;
-      setLoading(true);
-      setLoadError('');
-      commerceApi
-        .getPaymentLink(orderId, renew)
-        .then((res) => {
-          if (seq !== requestSeq.current) return;
-          setPaymentInfo({
-            qrCode: res?.qrCode || null,
-            bin: res?.bin || '970416',
-            accountNumber: res?.accountNumber || 'LOCCASS000341571',
-            accountName: res?.accountName || 'PHAM VO HUNG NGHI',
-            description: res?.description || (orderId ? `CSFRRN18T51 Nexus ${orderId}` : ''),
-            checkoutUrl: res?.checkoutUrl || null,
-            amount: typeof amount === 'number' && amount > 0 ? amount : undefined,
-          });
-        })
-        .catch(() => {
-          if (seq === requestSeq.current) {
-            setLoadError('Chưa nạp được thông tin VietQR. Hãy bấm Làm mới mã.');
-          }
-        })
-        .finally(() => {
-          if (seq === requestSeq.current) setLoading(false);
+  const loadLink = useCallback(() => {
+    if (!orderId) return;
+    const seq = ++requestSeq.current;
+    setLoading(true);
+    setLoadError('');
+    commerceApi
+      .getPaymentLink(orderId, false)
+      .then((res) => {
+        if (seq !== requestSeq.current) return;
+        setPaymentInfo({
+          qrCode: res?.qrCode || null,
+          bin: res?.bin || null,
+          accountNumber: res?.accountNumber || null,
+          accountName: res?.accountName || null,
+          description: res?.description || null,
+          checkoutUrl: res?.checkoutUrl || null,
+          amount: typeof amount === 'number' && amount > 0 ? amount : undefined,
         });
-    },
-    [orderId, amount],
-  );
+      })
+      .catch(() => {
+        if (seq === requestSeq.current) {
+          setLoadError('Chưa tải được mã thanh toán. Vui lòng thử lại.');
+        }
+      })
+      .finally(() => {
+        if (seq === requestSeq.current) setLoading(false);
+      });
+  }, [orderId, amount]);
 
   useEffect(() => {
-    loadLink(false);
+    loadLink();
   }, [loadLink]);
 
-  const copyText = (text: string, field: string) => {
-    if (typeof navigator === 'undefined' || !navigator.clipboard) return;
-    navigator.clipboard
-      .writeText(text)
-      .then(() => {
-        setCopiedField(field);
-        setTimeout(() => setCopiedField(null), 2000);
-      })
-      .catch(() => setCopiedField(null));
+  const copyField = async (value: string, field: string) => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        const input = document.createElement('textarea');
+        input.value = value;
+        input.style.position = 'fixed';
+        input.style.opacity = '0';
+        document.body.appendChild(input);
+        input.select();
+        const copied = document.execCommand('copy');
+        input.remove();
+        if (!copied) throw new Error('Copy failed');
+      }
+      setCopiedField(field);
+      window.setTimeout(
+        () => setCopiedField((current) => (current === field ? null : current)),
+        2000,
+      );
+    } catch {
+      setCopiedField(`error-${field}`);
+      window.setTimeout(
+        () => setCopiedField((current) => (current === `error-${field}` ? null : current)),
+        2000,
+      );
+    }
   };
 
   const handleConfirmCancel = async () => {
@@ -100,213 +115,183 @@ export function PaymentQrCard({ orderId, amount, onCancelOrder }: PaymentQrCardP
     }
   };
 
-  const accountNumber = paymentInfo?.accountNumber || 'LOCCASS000341571';
-  const accountName = paymentInfo?.accountName || 'PHAM VO HUNG NGHI';
-  const transferDescription =
-    paymentInfo?.description || (orderId ? `CSFRRN18T51 Nexus ${orderId}` : 'Nexus Thanh toan');
   const transferAmount = paymentInfo?.amount ?? amount ?? 0;
-  const qrString = paymentInfo?.qrCode || paymentInfo?.checkoutUrl || '';
+  const qrString = paymentInfo?.qrCode || '';
+  const accountNumber = paymentInfo?.accountNumber;
+  const description = paymentInfo?.description;
+  const bankName =
+    paymentInfo?.bin === '970416'
+      ? 'Ngân hàng TMCP Á Châu (ACB)'
+      : paymentInfo?.bin
+        ? `Mã ngân hàng ${paymentInfo.bin}`
+        : null;
+  const checkoutUrl = paymentInfo?.checkoutUrl;
+  const safeCheckoutUrl = checkoutUrl && /^https:\/\//i.test(checkoutUrl) ? checkoutUrl : null;
 
   return (
     <>
-      <div className="w-full rounded-2xl sm:rounded-3xl border border-stone-200/90 bg-white p-4 sm:p-5 shadow-sm text-left">
-        {/* Dòng hướng dẫn đầu bảng có icon bóng đèn */}
-        <div className="flex items-center gap-2 rounded-xl bg-amber-50/70 border border-amber-200/60 px-3 py-2 text-xs text-amber-950">
-          <Lightbulb className="size-4 shrink-0 text-amber-600" />
-          <p className="leading-snug">
-            Mở App Ngân hàng bất kỳ để <strong className="font-bold">quét mã VietQR</strong> hoặc{' '}
-            <strong className="font-bold">chuyển khoản</strong> chính xác số tiền, nội dung bên dưới
-          </p>
-        </div>
+      <section
+        className="w-full rounded-2xl border border-stone-200 bg-white p-3 text-left shadow-sm sm:p-4"
+        aria-label="Thanh toán PayOS"
+      >
+        <h2 className="mb-2 text-base font-bold text-stone-900">Quét mã để thanh toán</h2>
 
-        {/* Khung 2 cột: Cột trái Mã QR VietQR PRO, Cột phải Thông tin chuyển khoản */}
-        <div className="mt-4 grid gap-5 md:grid-cols-[240px_1fr] items-center">
-          {/* CỘT TRÁI: VIETQR PRO + MÃ QR + LOGO ACB + NÚT HỦY */}
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-slate-50/50 p-3 sm:p-4 text-center">
-            {/* Logo VietQR PRO */}
-            <div className="mb-2 flex items-center justify-center gap-1">
-              <span className="text-sm font-extrabold tracking-tight">
-                <span className="text-[#003B70]">Viet</span>
-                <span className="text-[#E61B23]">QR</span>
-              </span>
-              <span className="rounded bg-gradient-to-r from-emerald-600 to-teal-600 px-1.5 py-0.5 text-[9px] font-black uppercase text-white shadow-xs">
-                PRO
-              </span>
-            </div>
+        <div className="grid items-center gap-4 md:grid-cols-[minmax(0,240px)_1fr]">
+          <div className="flex flex-col items-center rounded-2xl border border-stone-200 bg-white p-2">
+            {qrString ? (
+              <QRCodeSVG
+                value={qrString}
+                size={224}
+                level="M"
+                marginSize={4}
+                className="h-auto w-full max-w-56"
+                title="Mã QR thanh toán PayOS"
+              />
+            ) : (
+              <div className="flex aspect-square w-full max-w-56 flex-col items-center justify-center gap-3 text-center text-sm text-stone-600">
+                <RefreshCw
+                  aria-hidden="true"
+                  className={`size-6 ${loading ? 'animate-spin' : ''}`}
+                />
+                <span>
+                  {loading ? 'Đang tải mã thanh toán…' : loadError || 'Chưa có mã thanh toán'}
+                </span>
+              </div>
+            )}
+          </div>
 
-            {/* Khung chứa mã QR nét, tương phản cao */}
-            <div className="relative overflow-hidden rounded-xl border border-stone-200 bg-white p-2.5 shadow-xs">
-              {qrString ? (
-                <div className="relative flex items-center justify-center">
-                  <QRCodeSVG
-                    value={qrString}
-                    size={170}
-                    level="M"
-                    marginSize={2}
-                    title="Mã VietQR thanh toán 24/7"
-                  />
-                  {/* Logo V nhỏ ở giữa chuẩn VietQR */}
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="grid size-6 place-items-center rounded-full bg-white shadow-sm border border-red-200">
-                      <span className="text-xs font-black text-[#E61B23]">V</span>
-                    </div>
-                  </div>
+          <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
+            {bankName && (
+              <div className="min-w-0">
+                <p className="text-xs text-stone-600">Ngân hàng</p>
+                <p className="font-semibold text-stone-900">{bankName}</p>
+              </div>
+            )}
+            {paymentInfo?.accountName && (
+              <div className="min-w-0">
+                <p className="text-xs text-stone-600">Chủ tài khoản</p>
+                <p className="font-semibold text-stone-900">{paymentInfo.accountName}</p>
+              </div>
+            )}
+            {accountNumber && (
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-xs text-stone-600">Số tài khoản thanh toán</p>
+                  <p className="break-all font-semibold text-stone-900">{accountNumber}</p>
                 </div>
-              ) : (
-                <div className="flex size-[170px] flex-col items-center justify-center text-center p-3">
-                  <RefreshCw className={`size-6 text-brand ${loading ? 'animate-spin' : ''}`} />
-                  <p className="mt-2 text-xs text-muted">
-                    {loading ? 'Đang tạo VietQR…' : loadError || 'Chưa lấy được mã'}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-11 shrink-0 px-2"
+                  onClick={() => copyField(accountNumber, 'account')}
+                >
+                  {copiedField === 'account' ? (
+                    <Check aria-hidden="true" className="mr-1 size-4" />
+                  ) : (
+                    <Copy aria-hidden="true" className="mr-1 size-4" />
+                  )}
+                  {copiedField === 'account'
+                    ? 'Đã chép'
+                    : copiedField === 'error-account'
+                      ? 'Không chép được'
+                      : 'Sao chép'}
+                </Button>
+              </div>
+            )}
+            {transferAmount > 0 && (
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs text-stone-600">Số tiền</p>
+                  <p className="text-lg font-bold text-brand-dark">
+                    {new Intl.NumberFormat('vi-VN').format(transferAmount)} ₫
                   </p>
                 </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-11 shrink-0 px-2"
+                  onClick={() => copyField(String(transferAmount), 'amount')}
+                >
+                  {copiedField === 'amount' ? (
+                    <Check aria-hidden="true" className="mr-1 size-4" />
+                  ) : (
+                    <Copy aria-hidden="true" className="mr-1 size-4" />
+                  )}
+                  {copiedField === 'amount'
+                    ? 'Đã chép'
+                    : copiedField === 'error-amount'
+                      ? 'Không chép được'
+                      : 'Sao chép'}
+                </Button>
+              </div>
+            )}
+            {description && (
+              <div className="flex min-w-0 items-center justify-between gap-2 sm:col-span-2">
+                <div className="min-w-0">
+                  <p className="text-xs text-stone-600">Nội dung chuyển khoản</p>
+                  <p className="break-all font-semibold text-stone-900">{description}</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-11 shrink-0 px-2"
+                  onClick={() => copyField(description, 'description')}
+                >
+                  {copiedField === 'description' ? (
+                    <Check aria-hidden="true" className="mr-1 size-4" />
+                  ) : (
+                    <Copy aria-hidden="true" className="mr-1 size-4" />
+                  )}
+                  {copiedField === 'description'
+                    ? 'Đã chép'
+                    : copiedField === 'error-description'
+                      ? 'Không chép được'
+                      : 'Sao chép'}
+                </Button>
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
+              {safeCheckoutUrl && (
+                <a
+                  href={safeCheckoutUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-brand-dark px-4 text-sm font-semibold text-white hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-dark"
+                >
+                  Mở trang thanh toán PayOS <ExternalLink aria-hidden="true" className="size-4" />
+                </a>
               )}
-            </div>
-
-            {/* Thương hiệu liên kết napas 247 | ACB */}
-            <div className="mt-2 flex items-center justify-center gap-2 text-[11px] font-bold text-stone-600">
-              <span className="text-teal-700">napas 247</span>
-              <span className="text-stone-300">|</span>
-              <span className="text-[#005baa]">ACB</span>
-            </div>
-
-            {/* Nút Huỷ thanh toán */}
-            <div className="mt-3 w-full flex items-center justify-center gap-2">
+              {!qrString && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={loadLink}
+                  disabled={loading}
+                  className="min-h-11"
+                >
+                  {loading ? 'Đang tải…' : 'Thử lại'}
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
                 onClick={() => setCancelDialogOpen(true)}
-                className="h-8 rounded-lg px-6 text-xs text-stone-600 hover:text-red-700 hover:border-red-200 hover:bg-red-50"
+                className="min-h-11"
               >
-                Huỷ
+                Hủy đơn
               </Button>
-              <button
-                type="button"
-                onClick={() => loadLink(true)}
-                disabled={loading}
-                title="Làm mới lại mã thanh toán"
-                className="p-1.5 text-stone-400 hover:text-brand transition"
-              >
-                <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
-          </div>
-
-          {/* CỘT PHẢI: BẢNG THÔNG TIN TÀI KHOẢN & SAO CHÉP */}
-          <div className="space-y-2.5 text-xs sm:text-sm">
-            {/* Hàng 1: Ngân hàng */}
-            <div className="flex items-center gap-3 rounded-xl border border-stone-100 bg-stone-50/70 p-2.5">
-              <div className="grid size-8 place-items-center rounded-full bg-[#005baa] text-white font-extrabold text-[11px] shadow-xs">
-                ACB
-              </div>
-              <div className="flex-1">
-                <span className="block text-[11px] text-muted">Ngân hàng</span>
-                <strong className="block text-stone-900 font-bold">Ngân hàng TMCP Á Châu</strong>
-              </div>
-            </div>
-
-            {/* Hàng 2: Chủ tài khoản */}
-            <div className="rounded-xl border border-stone-100 bg-stone-50/70 p-2.5">
-              <span className="block text-[11px] text-muted">Chủ tài khoản:</span>
-              <strong className="block font-bold text-stone-900 uppercase tracking-wide">
-                {accountName}
-              </strong>
-            </div>
-
-            {/* Hàng 3: Số tài khoản + Nút sao chép */}
-            <div className="flex items-center justify-between rounded-xl border border-stone-100 bg-stone-50/70 p-2.5">
-              <div>
-                <span className="block text-[11px] text-muted">Số tài khoản:</span>
-                <strong className="font-mono text-sm font-bold text-blue-900 tracking-wider">
-                  {accountNumber}
-                </strong>
-              </div>
-              <button
-                type="button"
-                onClick={() => copyText(accountNumber, 'acc')}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-stone-700 shadow-2xs hover:bg-slate-50 transition"
-              >
-                {copiedField === 'acc' ? (
-                  <>
-                    <Check className="size-3 text-emerald-600" />
-                    <span className="text-emerald-700 font-semibold">Đã chép</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="size-3 text-stone-400" />
-                    <span>Sao chép</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* Hàng 4: Số tiền + Nút sao chép */}
-            <div className="flex items-center justify-between rounded-xl border border-stone-100 bg-stone-50/70 p-2.5">
-              <div>
-                <span className="block text-[11px] text-muted">Số tiền:</span>
-                <strong className="font-bold text-sm text-emerald-700">
-                  {new Intl.NumberFormat('vi-VN').format(transferAmount)} vnd
-                </strong>
-              </div>
-              <button
-                type="button"
-                onClick={() => copyText(String(transferAmount), 'amt')}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-stone-700 shadow-2xs hover:bg-slate-50 transition"
-              >
-                {copiedField === 'amt' ? (
-                  <>
-                    <Check className="size-3 text-emerald-600" />
-                    <span className="text-emerald-700 font-semibold">Đã chép</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="size-3 text-stone-400" />
-                    <span>Sao chép</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* Hàng 5: Nội dung + Nút sao chép */}
-            <div className="flex items-center justify-between rounded-xl border border-stone-100 bg-stone-50/70 p-2.5">
-              <div className="min-w-0 pr-2">
-                <span className="block text-[11px] text-muted">Nội dung:</span>
-                <strong className="font-mono text-xs sm:text-sm font-bold text-stone-900 break-all">
-                  {transferDescription}
-                </strong>
-              </div>
-              <button
-                type="button"
-                onClick={() => copyText(transferDescription, 'desc')}
-                className="shrink-0 inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-stone-700 shadow-2xs hover:bg-slate-50 transition"
-              >
-                {copiedField === 'desc' ? (
-                  <>
-                    <Check className="size-3 text-emerald-600" />
-                    <span className="text-emerald-700 font-semibold">Đã chép</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="size-3 text-stone-400" />
-                    <span>Sao chép</span>
-                  </>
-                )}
-              </button>
             </div>
           </div>
         </div>
-
-        {/* Dòng ghi chú nhắc nhở bên dưới đúng như ảnh mẫu */}
-        <div className="mt-3 pt-3 border-t border-stone-100 text-xs text-stone-600 leading-relaxed">
-          <span>Lưu ý : Nhập chính xác số tiền </span>
-          <strong className="font-bold text-stone-900">
-            {new Intl.NumberFormat('vi-VN').format(transferAmount)}
-          </strong>
-          <span>, nội dung </span>
-          <strong className="font-bold text-stone-900 font-mono">{transferDescription}</strong>
-          <span> khi chuyển khoản.</span>
-        </div>
-      </div>
+        {accountNumber && description && (
+          <p className="mt-2 border-t border-stone-100 pt-2 text-xs leading-relaxed text-stone-600">
+            Nếu chuyển khoản thủ công, dùng đúng số tài khoản, số tiền và nội dung của đơn này.
+          </p>
+        )}
+      </section>
 
       {/* Hộp thoại xác nhận hủy thanh toán */}
       <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>

@@ -244,9 +244,7 @@ export default function CheckoutPage() {
       rememberPendingPayosCart(result.orderId, lines);
       sessionStorage.setItem('nexus-pending-payos-order', result.orderId);
       clearCheckoutSelection();
-      window.location.assign(
-        '/checkout/result?method=PAYOS&orderId=' + encodeURIComponent(result.orderId),
-      );
+      window.location.assign(checkoutUrl);
       return;
     } catch (e) {
       setError(userMessage(e));
@@ -429,7 +427,7 @@ export default function CheckoutPage() {
 
               <p className="mt-3 text-xs text-muted">
                 {paymentMethod === 'PAYOS'
-                  ? 'Sau khi bấm tiến hành thanh toán, mã QR chuẩn PayOS và số tiền cần thanh toán sẽ được hiển thị ngay.'
+                  ? 'Sau khi đặt hàng, bạn sẽ được chuyển đến trang PayOS để quét mã và thanh toán.'
                   : 'Đơn hàng sẽ được chuyển đến người bán để chuẩn bị và giao đến bạn.'}
               </p>
             </section>
