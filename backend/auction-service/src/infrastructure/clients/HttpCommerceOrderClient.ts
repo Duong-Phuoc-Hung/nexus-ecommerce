@@ -30,6 +30,7 @@ export class HttpCommerceOrderClient implements ICommerceOrderClient {
             {
               productId: input.productId,
               quantity: 1,
+              price: input.amount,
             },
           ],
           shippingAddress: input.shippingAddress,

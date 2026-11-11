@@ -67,7 +67,7 @@ test('AuctionCheckoutUseCase validates auction state and processes winner checko
 
   const repo = new MockAuctionRepo([endedAuction, activeAuction]);
   const commerceClient = new MockCommerceClient();
-  const useCase = new AuctionCheckoutUseCase(repo as IAuctionRepository, commerceClient);
+  const useCase = new AuctionCheckoutUseCase(repo as unknown as IAuctionRepository, commerceClient);
 
   const address = {
     fullName: 'Nguyen Van A',
