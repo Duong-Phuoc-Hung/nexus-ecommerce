@@ -195,6 +195,8 @@ export class PostgresProductRepository implements IProductRepository {
         status: product.status,
         condition: product.condition,
         basePrice: product.price,
+        stockQuantity: product.stockQuantity,
+        sellerName: product.sellerName || 'Nexus Official Store',
         allowAuction: product.allowAuction,
         images: {
           create: product.images.map((url, idx) => ({
@@ -227,6 +229,7 @@ export class PostgresProductRepository implements IProductRepository {
           description: product.description,
           categoryId: BigInt(product.categoryId),
           basePrice: product.price,
+          stockQuantity: product.stockQuantity,
           status: product.status,
           condition: product.condition,
           allowAuction: product.allowAuction,
@@ -294,7 +297,7 @@ export class PostgresProductRepository implements IProductRepository {
     return new Product({
       id: String(row.id),
       sellerId: row.sellerId,
-      sellerName: 'Nexus Official Store',
+      sellerName: row.sellerName || 'Nexus Official Store',
       categoryId: String(row.categoryId),
       title: row.title,
       slug: row.slug,
@@ -302,7 +305,7 @@ export class PostgresProductRepository implements IProductRepository {
       status: row.status as ProductStatus,
       condition: row.condition,
       price: Number(row.basePrice),
-      stockQuantity: 10,
+      stockQuantity: Number(row.stockQuantity ?? 10),
       allowAuction: Boolean(row.allowAuction),
       images,
       attributes,

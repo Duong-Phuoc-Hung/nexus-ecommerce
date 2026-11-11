@@ -171,6 +171,7 @@ export function createApplication(): Application {
   app.use('/api/v1/admin/seller-applications', createProxy('User Service', SERVICE_ENDPOINTS.user));
   app.use('/api/v1/products', createProxy('Catalog Service', SERVICE_ENDPOINTS.catalog));
   app.use('/api/v1/categories', createProxy('Catalog Service', SERVICE_ENDPOINTS.catalog));
+  app.use('/api/v1/favorites', createProxy('Catalog Service', SERVICE_ENDPOINTS.catalog));
   app.use('/api/v1/auctions', createProxy('Auction Service', SERVICE_ENDPOINTS.auction));
   app.use('/api/v1/orders', createProxy('Commerce Service', SERVICE_ENDPOINTS.commerce));
   app.use('/api/v1/checkout', createProxy('Commerce Service', SERVICE_ENDPOINTS.commerce));

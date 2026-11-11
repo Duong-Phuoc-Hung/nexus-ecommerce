@@ -13,6 +13,9 @@ import { RecoverProductUseCase } from '../../../application/use-cases/RecoverPro
 import { ISellerDirectory } from '../../../infrastructure/clients/HttpSellerDirectory';
 import { ListCatalogProductsUseCase } from '../../../application/use-cases/ListCatalogProductsUseCase';
 import { ProductStatus } from '../../../domain/entities/Product';
+import { DeductProductStockUseCase } from '../../../application/use-cases/DeductProductStockUseCase';
+import { CreateProductReviewUseCase } from '../../../application/use-cases/CreateProductReviewUseCase';
+import { GetProductReviewsUseCase } from '../../../application/use-cases/GetProductReviewsUseCase';
 
 export class ProductController {
   constructor(
@@ -26,6 +29,9 @@ export class ProductController {
     private readonly recoverProductUseCase?: RecoverProductUseCase,
     private readonly sellerDirectory?: ISellerDirectory,
     private readonly listCatalogProductsUseCase?: ListCatalogProductsUseCase,
+    private readonly deductProductStockUseCase?: DeductProductStockUseCase,
+    private readonly createProductReviewUseCase?: CreateProductReviewUseCase,
+    private readonly getProductReviewsUseCase?: GetProductReviewsUseCase,
   ) {}
 
   public async search(req: Request, res: Response): Promise<void> {
@@ -524,4 +530,130 @@ export class ProductController {
       res.status(400).json({ success: false, error: error?.message || 'Yêu cầu không hợp lệ.' });
     }
   }
+
+  public deductStock = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const productId = String(req.params.id);
+      if (!this.deductProductStockUseCase) {
+        res
+          .status(500)
+          .json({ success: false, error: 'DeductProductStockUseCase is not configured' });
+        return;
+      }
+      const { quantity, orderId, reason } = req.body;
+
+      const result = await this.deductProductStockUseCase.execute({
+        productId,
+        quantity: Number(quantity),
+        orderId,
+        reason,
+      });
+
+      res.status(200).json({
+        success: true,
+        data: result,
+      });
+    } catch (error: any) {
+      if (error.message?.includes('Insufficient stock')) {
+        res.status(409).json({
+          success: false,
+          error: error.message,
+        });
+        return;
+      }
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Lỗi khi trừ tồn kho sản phẩm.',
+      });
+    }
+  };
+
+  public createReview = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const authUser = (req as AuthenticatedRequest).user;
+      if (!authUser || !authUser.id) {
+        res
+          .status(401)
+          .json({ success: false, error: 'Unauthorized: Bạn cần đăng nhập để đánh giá sản phẩm.' });
+        return;
+      }
+
+      if (!this.createProductReviewUseCase) {
+        res
+          .status(500)
+          .json({ success: false, error: 'CreateProductReviewUseCase is not configured.' });
+        return;
+      }
+
+      const productId = String(req.params.id);
+      const { rating, comment } = req.body;
+
+      const review = await this.createProductReviewUseCase.execute({
+        productId,
+        userId: authUser.id,
+        userName: authUser.fullName || 'Người mua',
+        rating: Number(rating),
+        comment,
+      });
+
+      res.status(201).json({
+        success: true,
+        data: {
+          id: review.id,
+          productId: review.productId,
+          userId: review.userId,
+          userName: review.userName,
+          rating: review.rating,
+          comment: review.comment,
+          createdAt: review.createdAt,
+        },
+      });
+    } catch (error: any) {
+      if (error instanceof ProductNotFoundException) {
+        res.status(404).json({ success: false, error: error.message });
+        return;
+      }
+      res.status(400).json({ success: false, error: error.message || 'Lỗi khi gửi đánh giá.' });
+    }
+  };
+
+  public getReviews = async (req: Request, res: Response): Promise<void> => {
+    try {
+      if (!this.getProductReviewsUseCase) {
+        res
+          .status(500)
+          .json({ success: false, error: 'GetProductReviewsUseCase is not configured.' });
+        return;
+      }
+
+      const productId = String(req.params.id);
+      const result = await this.getProductReviewsUseCase.execute(productId);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          productId: result.productId,
+          totalReviews: result.totalReviews,
+          averageRating: result.averageRating,
+          reviews: result.reviews.map((r) => ({
+            id: r.id,
+            productId: r.productId,
+            userId: r.userId,
+            userName: r.userName,
+            rating: r.rating,
+            comment: r.comment,
+            createdAt: r.createdAt,
+          })),
+        },
+      });
+    } catch (error: any) {
+      if (error instanceof ProductNotFoundException) {
+        res.status(404).json({ success: false, error: error.message });
+        return;
+      }
+      res
+        .status(400)
+        .json({ success: false, error: error.message || 'Lỗi khi lấy danh sách đánh giá.' });
+    }
+  };
 }
