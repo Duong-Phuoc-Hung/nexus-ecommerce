@@ -379,12 +379,10 @@ export class CheckoutService {
       checkoutUrl: payment?.checkoutUrl || null,
       paymentLinkId: payment?.paymentLinkId || null,
       qrCode: payment?.qrCode || null,
-      bin: payment?.bin || '970416',
-      accountNumber: payment?.accountNumber || 'LOCCASS000341571',
-      accountName: payment?.accountName || 'PHAM VO HUNG NGHI',
-      description:
-        payment?.description ||
-        (payment?.payosOrderCode ? `CSFRRN18T51 Nexus ${order.id}` : `Nexus ${order.id}`),
+      bin: payment?.bin || null,
+      accountNumber: payment?.accountNumber || null,
+      accountName: payment?.accountName || null,
+      description: payment?.description || null,
     };
   }
 
@@ -448,12 +446,10 @@ export class CheckoutService {
       checkoutUrl: payment.checkoutUrl || null,
       paymentLinkId: payment.paymentLinkId || null,
       qrCode: payment.qrCode || null,
-      bin: payment.bin || '970416',
-      accountNumber: payment.accountNumber || 'LOCCASS000341571',
-      accountName: payment.accountName || 'NEXUS E-COMMERCE',
-      description:
-        payment.description ||
-        (payment.payosOrderCode ? `CSFRRN18T51 Nexus ${order.id}` : `Nexus ${order.id}`),
+      bin: payment.bin || null,
+      accountNumber: payment.accountNumber || null,
+      accountName: payment.accountName || null,
+      description: payment.description || null,
     };
   }
 
