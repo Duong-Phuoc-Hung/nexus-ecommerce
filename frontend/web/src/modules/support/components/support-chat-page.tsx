@@ -24,6 +24,7 @@ export function SupportChatPage() {
   const [sending, setSending] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [resolvedNotice, setResolvedNotice] = useState<string | null>(null);
+  const [showActionPanel, setShowActionPanel] = useState(true);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -182,7 +183,8 @@ export function SupportChatPage() {
       style={{
         display: 'flex',
         flexDirection: 'column',
-        height: 'calc(100vh - 110px)',
+        height: 'calc(100vh - 170px)',
+        minHeight: '560px',
         background: '#f8fafc',
         borderRadius: '14px',
         overflow: 'hidden',
@@ -200,6 +202,7 @@ export function SupportChatPage() {
           alignItems: 'center',
           justifyContent: 'space-between',
           borderBottom: '1px solid #172554',
+          flexShrink: 0,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -247,6 +250,7 @@ export function SupportChatPage() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            flexShrink: 0,
           }}
         >
           <span>✅ {resolvedNotice}</span>
@@ -261,15 +265,19 @@ export function SupportChatPage() {
       )}
 
       {/* Thân giao diện 3 CỘT CHUẨN HELPDESK */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* CỘT 1: HÀNG ĐỢI TICKET & HỘI THOẠI (340px) */}
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        {/* CỘT 1: HÀNG ĐỢI TICKET & HỘI THOẠI */}
         <div
           style={{
-            width: '340px',
+            width: '300px',
+            minWidth: '300px',
+            maxWidth: '300px',
+            flexShrink: 0,
             background: '#ffffff',
             borderRight: '1px solid #e2e8f0',
             display: 'flex',
             flexDirection: 'column',
+            overflow: 'hidden',
           }}
         >
           {/* Tab lọc */}
@@ -280,6 +288,7 @@ export function SupportChatPage() {
               background: '#f1f5f9',
               borderBottom: '1px solid #e2e8f0',
               gap: '6px',
+              flexShrink: 0,
             }}
           >
             {[
@@ -310,7 +319,7 @@ export function SupportChatPage() {
           </div>
 
           {/* Ô tìm kiếm */}
-          <div style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9' }}>
+          <div style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
             <input
               type="text"
               placeholder="Tìm Case ID, tên khách, mã đơn..."
@@ -366,6 +375,7 @@ export function SupportChatPage() {
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         marginBottom: '4px',
+                        gap: '6px',
                       }}
                     >
                       <span
@@ -374,6 +384,7 @@ export function SupportChatPage() {
                           fontWeight: 700,
                           padding: '2px 6px',
                           borderRadius: '4px',
+                          flexShrink: 0,
                           background: isUrgent ? '#fee2e2' : '#fef3c7',
                           color: isUrgent ? '#991b1b' : '#92400e',
                         }}
@@ -384,6 +395,7 @@ export function SupportChatPage() {
                         style={{
                           fontSize: '10.5px',
                           fontWeight: 600,
+                          flexShrink: 0,
                           color: isUrgent ? '#dc2626' : '#64748b',
                         }}
                       >
@@ -391,10 +403,28 @@ export function SupportChatPage() {
                       </span>
                     </div>
 
-                    <div style={{ fontSize: '13.5px', fontWeight: 600, color: '#0f172a' }}>
+                    <div
+                      style={{
+                        fontSize: '13.5px',
+                        fontWeight: 600,
+                        color: '#0f172a',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
                       {item.customerName}
                     </div>
-                    <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>
+                    <div
+                      style={{
+                        fontSize: '11px',
+                        color: '#64748b',
+                        marginBottom: '4px',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
                       Mã đơn: <strong>{item.orderCode}</strong>
                       {item.supportCaseId && ` · Case: ${item.supportCaseId}`}
                     </div>
@@ -417,8 +447,17 @@ export function SupportChatPage() {
           </div>
         </div>
 
-        {/* CỘT 2: KHUNG CHAT GIẢI QUYẾT TRANH CHẤP (Flex 1) */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#f8fafc' }}>
+        {/* CỘT 2: KHUNG CHAT GIẢI QUYẾT TRANH CHẤP */}
+        <div
+          style={{
+            flex: 1,
+            minWidth: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            background: '#f8fafc',
+            overflow: 'hidden',
+          }}
+        >
           {activeThread ? (
             <>
               {/* Header của phòng chat */}
@@ -430,11 +469,21 @@ export function SupportChatPage() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
+                  flexShrink: 0,
                 }}
               >
-                <div>
+                <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>
+                    <span
+                      style={{
+                        fontSize: '15px',
+                        fontWeight: 700,
+                        color: '#0f172a',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
                       {activeThread.customerName}
                     </span>
                     <span
@@ -445,6 +494,7 @@ export function SupportChatPage() {
                         background: '#dbeafe',
                         color: '#1e40af',
                         fontWeight: 600,
+                        flexShrink: 0,
                       }}
                     >
                       Kênh BUYER_SUPPORT (Trọng tài)
@@ -456,7 +506,28 @@ export function SupportChatPage() {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowActionPanel((prev) => !prev)}
+                    title="Ẩn hoặc hiện cột hồ sơ chi tiết và phán quyết trọng tài bên phải"
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      background: showActionPanel ? '#eff6ff' : '#ffffff',
+                      color: showActionPanel ? '#1d4ed8' : '#475569',
+                      border: '1px solid',
+                      borderColor: showActionPanel ? '#93c5fd' : '#cbd5e1',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    {showActionPanel ? '📋 Thu gọn hồ sơ' : '📋 Mở hồ sơ'}
+                  </button>
                   <Link
                     href={`/support/orders/${activeThread.orderId}`}
                     style={{
@@ -485,6 +556,7 @@ export function SupportChatPage() {
                   alignItems: 'flex-start',
                   gap: '12px',
                   fontSize: '12.5px',
+                  flexShrink: 0,
                 }}
               >
                 <span style={{ fontSize: '24px' }}>🤖</span>
@@ -640,6 +712,8 @@ export function SupportChatPage() {
                   gap: '8px',
                   overflowX: 'auto',
                   whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  minWidth: 0,
                 }}
               >
                 {SUPPORT_QUICK_REPLIES.map((reply, idx) => (
@@ -648,6 +722,7 @@ export function SupportChatPage() {
                     type="button"
                     onClick={() => handleSend(reply)}
                     style={{
+                      flexShrink: 0,
                       background: '#f8fafc',
                       border: '1px solid #e2e8f0',
                       borderRadius: '16px',
@@ -674,6 +749,7 @@ export function SupportChatPage() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '10px',
+                  flexShrink: 0,
                 }}
               >
                 <input
@@ -768,11 +844,14 @@ export function SupportChatPage() {
           )}
         </div>
 
-        {/* CỘT 3: ACTION & POLICY COPILOT PANEL (320px) */}
-        {activeThread && (
+        {/* CỘT 3: ACTION & POLICY COPILOT PANEL */}
+        {activeThread && showActionPanel && (
           <div
             style={{
-              width: '320px',
+              width: '300px',
+              minWidth: '300px',
+              maxWidth: '300px',
+              flexShrink: 0,
               background: '#ffffff',
               borderLeft: '1px solid #e2e8f0',
               display: 'flex',

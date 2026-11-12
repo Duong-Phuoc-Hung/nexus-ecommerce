@@ -171,7 +171,8 @@ export function SellerChatPage() {
       style={{
         display: 'flex',
         flexDirection: 'column',
-        height: 'calc(100vh - 110px)',
+        height: 'calc(100vh - 170px)',
+        minHeight: '560px',
         background: '#f8fafc',
         borderRadius: '14px',
         overflow: 'hidden',
@@ -189,6 +190,7 @@ export function SellerChatPage() {
           alignItems: 'center',
           justifyContent: 'space-between',
           borderBottom: '1px solid #1e293b',
+          flexShrink: 0,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -235,19 +237,23 @@ export function SellerChatPage() {
       </div>
 
       {/* Thân giao diện 2 cột */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
         {/* CỘT TRÁI: Danh sách tài khoản đang chat */}
         <div
           style={{
-            width: '360px',
+            width: '320px',
+            minWidth: '320px',
+            maxWidth: '320px',
+            flexShrink: 0,
             background: '#ffffff',
             borderRight: '1px solid #e2e8f0',
             display: 'flex',
             flexDirection: 'column',
+            overflow: 'hidden',
           }}
         >
           {/* Ô tìm kiếm */}
-          <div style={{ padding: '14px', borderBottom: '1px solid #f1f5f9' }}>
+          <div style={{ padding: '14px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
             <div
               style={{
                 display: 'flex',
@@ -328,9 +334,18 @@ export function SellerChatPage() {
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         marginBottom: '4px',
+                        gap: '8px',
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          minWidth: 0,
+                          flex: 1,
+                        }}
+                      >
                         <span
                           style={{
                             width: '32px',
@@ -343,15 +358,35 @@ export function SellerChatPage() {
                             justifyContent: 'center',
                             fontSize: '13px',
                             fontWeight: 700,
+                            flexShrink: 0,
                           }}
                         >
                           {item.customerName.slice(0, 1).toUpperCase()}
                         </span>
-                        <div>
-                          <div style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div
+                            style={{
+                              fontSize: '14px',
+                              fontWeight: 600,
+                              color: '#0f172a',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
                             {item.customerName}
                           </div>
-                          <div style={{ fontSize: '11px', color: '#64748b' }}>{item.orderCode}</div>
+                          <div
+                            style={{
+                              fontSize: '11px',
+                              color: '#64748b',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {item.orderCode}
+                          </div>
                         </div>
                       </div>
                       <span
@@ -360,6 +395,7 @@ export function SellerChatPage() {
                           fontWeight: 600,
                           padding: '2px 6px',
                           borderRadius: '4px',
+                          flexShrink: 0,
                           background:
                             item.orderStatus === 'PAID' || item.orderStatus === 'DELIVERED'
                               ? '#dcfce7'
@@ -399,7 +435,16 @@ export function SellerChatPage() {
         </div>
 
         {/* CỘT PHẢI: Khung chat chi tiết */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#f8fafc' }}>
+        <div
+          style={{
+            flex: 1,
+            minWidth: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            background: '#f8fafc',
+            overflow: 'hidden',
+          }}
+        >
           {activeThread ? (
             <>
               {/* Topbar của phòng chat */}
@@ -411,11 +456,21 @@ export function SellerChatPage() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
+                  flexShrink: 0,
                 }}
               >
-                <div>
+                <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>
+                    <span
+                      style={{
+                        fontSize: '15px',
+                        fontWeight: 700,
+                        color: '#0f172a',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
                       {activeThread.customerName}
                     </span>
                     <span
@@ -426,6 +481,7 @@ export function SellerChatPage() {
                         background: '#e0f2fe',
                         color: '#0369a1',
                         fontWeight: 600,
+                        flexShrink: 0,
                       }}
                     >
                       Kênh BUYER_SELLER (Riêng tư)
@@ -437,7 +493,7 @@ export function SellerChatPage() {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                   <Link
                     href={`/seller/orders`}
                     style={{
@@ -466,6 +522,7 @@ export function SellerChatPage() {
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   fontSize: '12px',
+                  flexShrink: 0,
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -618,6 +675,8 @@ export function SellerChatPage() {
                   gap: '8px',
                   overflowX: 'auto',
                   whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  minWidth: 0,
                 }}
               >
                 {SELLER_QUICK_REPLIES.map((reply, idx) => (
@@ -626,6 +685,7 @@ export function SellerChatPage() {
                     type="button"
                     onClick={() => handleSend(reply)}
                     style={{
+                      flexShrink: 0,
                       background: '#f8fafc',
                       border: '1px solid #e2e8f0',
                       borderRadius: '16px',
@@ -653,6 +713,7 @@ export function SellerChatPage() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
+                    flexShrink: 0,
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -696,6 +757,7 @@ export function SellerChatPage() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '10px',
+                  flexShrink: 0,
                 }}
               >
                 <input
