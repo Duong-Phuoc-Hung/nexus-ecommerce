@@ -62,19 +62,40 @@ export function AdminShipmentActions({
     setNotice('');
   }
   async function save() {
-    if (busy || reason.trim().length < 10) return;
-    setBusy(true);
+    if (busy) return;
     setError('');
+    if (mode === 'status') {
+      if (!status) {
+        setError('Vui lòng chọn trạng thái tiếp theo cho vận đơn.');
+        return;
+      }
+      if (!allowed.includes(status)) {
+        setError('Trạng thái đã chọn không hợp lệ theo quy trình vận chuyển.');
+        return;
+      }
+    } else if (mode === 'override') {
+      if (!address.trim()) {
+        setError('Vui lòng nhập địa chỉ nhận hàng.');
+        return;
+      }
+      if (!tracking.trim()) {
+        setError('Vui lòng nhập mã vận đơn mới.');
+        return;
+      }
+    }
+    if (reason.trim().length < 10) {
+      setError('Vui lòng nhập lý do điều chỉnh vận đơn ít nhất 10 ký tự.');
+      return;
+    }
+    setBusy(true);
     try {
       if (mode === 'status') {
-        if (!allowed.includes(status)) throw new Error('Chọn trạng thái tiếp theo hợp lệ.');
         await api.updateStatus(String(data.id), {
           status,
           location: location.trim() || undefined,
           note: reason.trim(),
         });
       } else {
-        if (!address.trim() || !tracking.trim()) throw new Error('Nhập địa chỉ và mã vận đơn.');
         await api.override(String(data.id), {
           trackingCode: tracking.trim(),
           shippingAddress: address.trim(),
@@ -176,10 +197,25 @@ export function AdminShipmentActions({
           )}
           <label className="space-y-2 text-sm">
             Lý do (ít nhất 10 ký tự)
-            <Textarea value={reason} onChange={(e) => setReason(e.target.value)} maxLength={1000} />
+            <Textarea
+              value={reason}
+              onChange={(e) => {
+                setReason(e.target.value);
+                if (error.startsWith('Vui lòng nhập lý do')) setError('');
+              }}
+              maxLength={1000}
+              aria-invalid={error.startsWith('Vui lòng nhập lý do')}
+              aria-describedby={
+                error.startsWith('Vui lòng nhập lý do') ? 'shipment-reason-error' : undefined
+              }
+            />
           </label>
           {error && (
-            <p role="alert" className="text-sm text-red-700">
+            <p
+              id={error.startsWith('Vui lòng nhập lý do') ? 'shipment-reason-error' : undefined}
+              role="alert"
+              className="text-sm text-red-700"
+            >
               {error}
             </p>
           )}
@@ -187,10 +223,7 @@ export function AdminShipmentActions({
             <Button variant="outline" disabled={busy} onClick={() => setMode('')}>
               Đóng
             </Button>
-            <Button
-              disabled={busy || reason.trim().length < 10 || (mode === 'status' && !status)}
-              onClick={() => void save()}
-            >
+            <Button disabled={busy} onClick={() => void save()}>
               {busy ? 'Đang lưu…' : 'Xác nhận cập nhật'}
             </Button>
           </div>

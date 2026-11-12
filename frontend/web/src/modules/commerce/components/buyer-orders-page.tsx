@@ -7,7 +7,6 @@ import { commerceApi } from '../api/commerce.api';
 import type { OrderSummary } from '../types/order.types';
 import { formatOrderStatus, getOrderStatusBadgeClass } from '../utils/order-status';
 import { userMessage } from '@/lib/axios/http';
-import { isOrderMarkedPaid } from '../config/payment-qr';
 const money = (n: number) => `${new Intl.NumberFormat('vi-VN').format(n)} ₫`;
 export default function BuyerOrdersPage() {
   const { user, phase } = useSession();
@@ -122,7 +121,7 @@ export default function BuyerOrdersPage() {
                 <tbody>
                   {orders.map((o) => {
                     const isCancelled = o.status === 'CANCELLED';
-                    const isPaid = !isCancelled && (o.status === 'PAID' || isOrderMarkedPaid(o.id));
+                    const isPaid = !isCancelled && o.status === 'PAID';
                     const badgeClass = getOrderStatusBadgeClass(o.status, isCancelled, isPaid);
                     const statusText = isCancelled
                       ? 'ĐÃ HỦY'

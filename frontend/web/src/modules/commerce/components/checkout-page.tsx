@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { CreditCard, MapPin, Plus, ShieldCheck, AlertCircle } from 'lucide-react';
 import { StoreHeader } from '@/components/layout/store-header';
 import { Button } from '@/components/ui/button';
@@ -19,9 +19,23 @@ import {
   type ShippingAddress,
 } from '@/modules/user/utils/address-book';
 import { commerceApi } from '../api/commerce.api';
-import { cartApi } from '../api/cart.api';
+
 import { readCart, writeCart, type CartLine } from '../utils/cart';
-import { markOrderAsPaid } from '../config/payment-qr';
+import {
+  clearCheckoutSelection,
+  readCheckoutSelection,
+  rememberPendingPayosCart,
+} from '../utils/cart-selection';
+
+/** crypto.randomUUID chỉ có trong secure context (https/localhost); mở qua IP LAN trên điện thoại sẽ không có. */
+function newIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 export default function CheckoutPage() {
   const { user, phase } = useSession();
@@ -40,8 +54,13 @@ export default function CheckoutPage() {
     shippingFee: number;
     totalAmount: number;
   } | null>(null);
+  const idempotencyRef = useRef<{ fingerprint: string; key: string } | null>(null);
 
-  useEffect(() => setLines(readCart()), []);
+  useEffect(() => {
+    const cart = readCart();
+    const selected = readCheckoutSelection();
+    setLines(selected === null ? cart : cart.filter((line) => selected.includes(line.productId)));
+  }, []);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -73,6 +92,8 @@ export default function CheckoutPage() {
 
   // Tự động gọi quote khi có sản phẩm và địa chỉ
   useEffect(() => {
+    // Bỏ báo giá cũ ngay khi giỏ/địa chỉ thay đổi để không gửi quoteId lệch dữ liệu.
+    setQuote(null);
     if (!lines.length || !selectedAddress || user?.role !== 'BUYER' || hasOutOfStock) return;
     let active = true;
 
@@ -156,7 +177,17 @@ export default function CheckoutPage() {
 
     setBusy(true);
     try {
-      const idempotencyKey = crypto.randomUUID();
+      // Giữ cùng một khóa cho cùng nội dung đơn: nếu lần trước timeout và Buyer bấm lại,
+      // BE nhận ra yêu cầu trùng thay vì tạo đơn thứ hai.
+      const fingerprint = JSON.stringify([
+        paymentMethod,
+        selectedAddress.id,
+        lines.map((x) => [x.productId, x.quantity]),
+      ]);
+      if (idempotencyRef.current?.fingerprint !== fingerprint) {
+        idempotencyRef.current = { fingerprint, key: newIdempotencyKey() };
+      }
+      const idempotencyKey = idempotencyRef.current.key;
       const shippingAddressPayload = {
         fullName: selectedAddress.recipientName,
         phone: selectedAddress.phone,
@@ -183,16 +214,7 @@ export default function CheckoutPage() {
         const currentCart = readCart();
         const remainingCart = currentCart.filter((x) => !purchasedIds.includes(x.productId));
         writeCart(remainingCart);
-        if (remainingCart.length === 0) {
-          cartApi.clearCart().catch(() => {});
-        } else {
-          for (const line of lines) {
-            if (line.cartItemId) {
-              cartApi.removeItem(line.cartItemId).catch(() => {});
-            }
-          }
-        }
-
+        clearCheckoutSelection();
         window.location.assign(
           `/checkout/result?orderId=${encodeURIComponent(result.orderId)}&method=COD`,
         );
@@ -210,27 +232,19 @@ export default function CheckoutPage() {
         idempotencyKey,
       );
 
-      // Bỏ các sản phẩm đã mua khỏi giỏ hàng cả LocalStorage và Server
-      const purchasedIds = lines.map((x) => x.productId);
-      const currentCart = readCart();
-      const remainingCart = currentCart.filter((x) => !purchasedIds.includes(x.productId));
-      writeCart(remainingCart);
-      if (remainingCart.length === 0) {
-        cartApi.clearCart().catch(() => {});
-      } else {
-        for (const line of lines) {
-          if (line.cartItemId) {
-            cartApi.removeItem(line.cartItemId).catch(() => {});
-          }
-        }
+      // Tạo đơn chưa đồng nghĩa đã thanh toán. PayOS hiển thị QR trên trang thanh toán của họ.
+      // Nếu link chưa trả về cùng checkout, lấy lại qua endpoint payment-link.
+      const checkoutUrl =
+        result.checkoutUrl || (await commerceApi.getPaymentLink(result.orderId)).checkoutUrl;
+      if (!checkoutUrl || !/^https:\/\//i.test(checkoutUrl)) {
+        throw new Error(
+          'Chưa nhận được liên kết thanh toán PayOS. Vui lòng mở đơn hàng để thử lại.',
+        );
       }
-
-      // Chuyển thẳng sang màn hình kết quả đặt hàng (Hình 2), bỏ bước trung gian trang PayOS (Hình 1)
-      const finalAmount = result.totalAmount || (quote ? quote.totalAmount : subtotal);
-      markOrderAsPaid(result.orderId);
-      window.location.assign(
-        `/checkout/result?orderId=${encodeURIComponent(result.orderId)}&method=PAYOS&status=PAID&amount=${encodeURIComponent(String(finalAmount))}`,
-      );
+      rememberPendingPayosCart(result.orderId, lines);
+      sessionStorage.setItem('nexus-pending-payos-order', result.orderId);
+      clearCheckoutSelection();
+      window.location.assign(checkoutUrl);
       return;
     } catch (e) {
       setError(userMessage(e));
@@ -241,7 +255,7 @@ export default function CheckoutPage() {
 
   const shippingFeeDisplay = quote
     ? `${new Intl.NumberFormat('vi-VN').format(quote.shippingFee)} ₫`
-    : 'Miễn phí';
+    : 'Chưa có báo giá';
   const totalAmountDisplay = quote
     ? `${new Intl.NumberFormat('vi-VN').format(quote.totalAmount)} ₫`
     : `${new Intl.NumberFormat('vi-VN').format(subtotal)} ₫`;
@@ -413,7 +427,7 @@ export default function CheckoutPage() {
 
               <p className="mt-3 text-xs text-muted">
                 {paymentMethod === 'PAYOS'
-                  ? 'Sau khi bấm tiến hành thanh toán, mã QR chuẩn PayOS và số tiền cần thanh toán sẽ được hiển thị ngay.'
+                  ? 'Sau khi đặt hàng, bạn sẽ được chuyển đến trang PayOS để quét mã và thanh toán.'
                   : 'Đơn hàng sẽ được chuyển đến người bán để chuẩn bị và giao đến bạn.'}
               </p>
             </section>

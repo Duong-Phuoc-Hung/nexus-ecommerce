@@ -338,24 +338,61 @@ export function MarketplaceHome() {
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
-            <a
-              href="/auctions"
-              className="flex min-h-11 items-center border-b-2 border-brand font-bold text-brand-dark"
-            >
-              Đấu giá trực tiếp
-            </a>
-            <a
-              href="/products"
-              className="hidden min-h-11 items-center hover:text-brand-dark sm:flex"
-            >
-              Tất cả sản phẩm
-            </a>
-            <a
-              href="#how-it-works"
-              className="hidden min-h-11 items-center hover:text-brand-dark md:flex"
-            >
-              Nexus hoạt động thế nào?
-            </a>
+            {user ? (
+              <>
+                <Link
+                  href="/"
+                  className="flex min-h-11 items-center border-b-2 border-brand font-bold text-brand-dark"
+                >
+                  Trang chủ
+                </Link>
+                <Link
+                  href="/products"
+                  className="flex min-h-11 items-center text-muted hover:text-brand-dark"
+                >
+                  Sản phẩm
+                </Link>
+                <Link
+                  href="/auctions"
+                  className="flex min-h-11 items-center text-muted hover:text-brand-dark"
+                >
+                  Phiên đấu giá
+                </Link>
+                <Link
+                  href="/account/orders"
+                  className="flex min-h-11 items-center text-muted hover:text-brand-dark"
+                >
+                  Đơn mua
+                </Link>
+                <a
+                  href="#how-it-works"
+                  className="hidden min-h-11 items-center text-muted hover:text-brand-dark md:flex"
+                >
+                  Nexus hoạt động thế nào?
+                </a>
+              </>
+            ) : (
+              <>
+                <a
+                  href="/auctions"
+                  className="flex min-h-11 items-center border-b-2 border-brand font-bold text-brand-dark"
+                >
+                  Đấu giá trực tiếp
+                </a>
+                <a
+                  href="/products"
+                  className="hidden min-h-11 items-center hover:text-brand-dark sm:flex"
+                >
+                  Tất cả sản phẩm
+                </a>
+                <a
+                  href="#how-it-works"
+                  className="hidden min-h-11 items-center hover:text-brand-dark md:flex"
+                >
+                  Nexus hoạt động thế nào?
+                </a>
+              </>
+            )}
           </nav>
           <span className="hidden items-center gap-1.5 text-muted md:flex">
             <span className="size-1.5 rounded-full bg-brand" />
