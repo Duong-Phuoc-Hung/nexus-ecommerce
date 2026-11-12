@@ -5,11 +5,13 @@ import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import { SupportRouteGuard } from './support-route-guard';
+import { ChatFloatingBubble } from '@/modules/chat/components/chat-floating-bubble';
 
 const items = [
   { href: '/support', label: 'Tổng quan', icon: '⌂' },
   { href: '/support/disputes', label: 'Trọng tài tranh chấp', icon: '⚖' },
   { href: '/support/orders', label: 'Tra cứu đơn hàng', icon: '▤' },
+  { href: '/support/chat', label: 'Tin nhắn hỗ trợ', icon: '💬' },
   { href: '/support/users', label: 'Tra cứu người dùng', icon: '◎' },
   { href: '/support/shipments', label: 'Vận đơn', icon: '⇢' },
 ];
@@ -100,6 +102,7 @@ export function SupportShell({ children }: { children: ReactNode }) {
           <SupportRouteGuard>{children}</SupportRouteGuard>
         </main>
       </div>
+      <ChatFloatingBubble role="SUPPORT" targetUrl="/support/chat" />
     </div>
   );
 }

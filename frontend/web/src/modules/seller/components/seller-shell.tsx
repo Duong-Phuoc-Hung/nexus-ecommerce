@@ -6,12 +6,14 @@ import type { ReactNode } from 'react';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import { SellerRouteGuard } from './seller-route-guard';
 import { ReputationBadge } from '@/components/reputation';
+import { ChatFloatingBubble } from '@/modules/chat/components/chat-floating-bubble';
 
 const navigation = [
   { href: '/seller', label: 'Tổng quan', icon: '⌂' },
   { href: '/seller/products', label: 'Sản phẩm', icon: '▦' },
   { href: '/seller/auctions', label: 'Đấu giá', icon: '◷' },
   { href: '/seller/orders', label: 'Đơn hàng', icon: '▤' },
+  { href: '/seller/chat', label: 'Tin nhắn khách', icon: '💬' },
   { href: '/seller/inventory', label: 'Tồn kho', icon: '▥' },
   { href: '/seller/reputation', label: 'Điểm uy tín', icon: '✦' },
 ];
@@ -105,6 +107,7 @@ export function SellerShell({ children }: { children: ReactNode }) {
           <SellerRouteGuard>{children}</SellerRouteGuard>
         </main>
       </div>
+      <ChatFloatingBubble role="SELLER" targetUrl="/seller/chat" />
     </div>
   );
 }
