@@ -8,6 +8,7 @@ import { hashPassword } from '../security/auth';
 
 export class InMemoryUserRepository implements IUserRepository {
   private readonly users: Map<string, User> = new Map();
+  private readonly legacyAliases: Map<string, string> = new Map();
 
   constructor() {
     const now = new Date();
@@ -25,7 +26,7 @@ export class InMemoryUserRepository implements IUserRepository {
       updatedAt: new Date(now.getTime() - 86400000 * 3),
     });
     this.users.set(buyer.id, buyer);
-    this.users.set('usr_01hqz789abc', buyer);
+    this.legacyAliases.set('usr_01hqz789abc', buyer.id);
 
     const sellerUuid = '01a15822-3fd0-7b39-ad01-f11da72d5b80';
     const seller = new User({
@@ -41,7 +42,7 @@ export class InMemoryUserRepository implements IUserRepository {
       updatedAt: new Date(now.getTime() - 86400000 * 2),
     });
     this.users.set(seller.id, seller);
-    this.users.set('usr_seller_001', seller);
+    this.legacyAliases.set('usr_seller_001', seller.id);
 
     const staffUuid = '01a15822-47a0-78fd-83de-477ceaa393a7';
     const staff = new User({
@@ -57,7 +58,7 @@ export class InMemoryUserRepository implements IUserRepository {
       updatedAt: new Date(now.getTime() - 86400000),
     });
     this.users.set(staff.id, staff);
-    this.users.set('usr_staff_001', staff);
+    this.legacyAliases.set('usr_staff_001', staff.id);
 
     const suspended = new User({
       id: 'usr_suspended_001',
@@ -100,7 +101,8 @@ export class InMemoryUserRepository implements IUserRepository {
   }
 
   public async findById(id: string): Promise<User | null> {
-    return this.users.get(id) || null;
+    const resolvedId = this.legacyAliases.get(id) ?? id;
+    return this.users.get(resolvedId) || null;
   }
 
   public async findByEmail(email: string): Promise<User | null> {
@@ -205,6 +207,7 @@ export class InMemoryUserRepository implements IUserRepository {
   }
 
   public async delete(id: string): Promise<void> {
-    this.users.delete(id);
+    const resolvedId = this.legacyAliases.get(id) ?? id;
+    this.users.delete(resolvedId);
   }
 }
