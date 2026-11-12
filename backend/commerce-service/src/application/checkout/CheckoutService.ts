@@ -154,6 +154,14 @@ export class CheckoutService {
         : 'PAYOS';
     const paymentMethod: 'PAYOS' | 'COD' = rawPaymentMethod === 'COD' ? 'COD' : 'PAYOS';
 
+    if (paymentMethod === 'PAYOS' && !this.gateway.isConfigured()) {
+      throw new CheckoutError(
+        503,
+        'PAYMENT_NOT_CONFIGURED',
+        'Cổng thanh toán PayOS chưa được cấu hình.',
+      );
+    }
+
     if (idempotencyKey !== undefined && !/^[\w\-.:]{1,100}$/.test(idempotencyKey)) {
       throw new CheckoutError(400, 'VALIDATION_ERROR', 'Header Idempotency-Key không hợp lệ.');
     }
@@ -212,7 +220,7 @@ export class CheckoutService {
     }
 
     const payment =
-      paymentMethod === 'COD' || !this.gateway.isConfigured()
+      paymentMethod === 'COD'
         ? created.payment
         : await this.ensureLink(created.order, created.payment);
 
