@@ -1,17 +1,31 @@
 import { IChatMessageRepository } from '../../domain/repositories/IChatMessageRepository';
 import { IConversationRepository } from '../../domain/repositories/IConversationRepository';
+import { IPolicyRepository } from '../../domain/repositories/IPolicyRepository';
 import { ChatMessage } from '../../domain/entities/ChatMessage';
 import { SendMessageInput } from '../dtos/ChatDtos';
 import { ConversationNotFoundException } from '../../domain/exceptions/ConversationNotFoundException';
 import { ChatForbiddenException } from '../../domain/exceptions/ChatForbiddenException';
 import { OrderTrackingTool } from '../tools/OrderTrackingTool';
+import { ILanguageModelProvider } from '../ports/ILanguageModelProvider';
+import { GeminiLlmProvider } from '../../infrastructure/ai/GeminiLlmProvider';
 
 export class SendMessageUseCase {
+  private readonly llmProvider: ILanguageModelProvider;
+
   constructor(
     private readonly messageRepo: IChatMessageRepository,
     private readonly conversationRepo: IConversationRepository,
     private readonly orderTrackingTool?: OrderTrackingTool,
-  ) {}
+    llmProvider?: ILanguageModelProvider,
+    policyRepo?: IPolicyRepository,
+  ) {
+    this.llmProvider =
+      llmProvider ||
+      new GeminiLlmProvider({
+        orderTrackingTool: this.orderTrackingTool,
+        policyRepo,
+      });
+  }
 
   public async execute(
     input: SendMessageInput,
@@ -40,41 +54,30 @@ export class SendMessageUseCase {
 
     await this.messageRepo.save(userMessage);
 
-    // 3. Xử lý phản hồi tự động nếu là kênh AI_BOT (Kịch bản A: Tra cứu vận đơn)
+    // 3. Xử lý phản hồi tự động nếu là kênh AI_BOT qua AI Engine (với Graceful Fallback)
     let aiReply: ChatMessage | undefined;
     if (conv.channelType === 'AI_BOT') {
-      const lower = (input.content || '').toLowerCase();
+      const aiResult = await this.llmProvider.generateReply(input.content || '', {
+        conversationId: conv.id,
+        orderId: conv.orderId,
+        userId: currentUserId,
+        userRole: currentUserRole,
+      });
 
-      // Nếu câu hỏi có ý định hỏi vị trí đơn / vận đơn
-      if (
-        lower.includes('đến đâu') ||
-        lower.includes('vận đơn') ||
-        lower.includes('giao') ||
-        lower.includes('vị trí') ||
-        lower.includes('tracking')
-      ) {
-        const trackingTool = this.orderTrackingTool || new OrderTrackingTool();
-        const trackingInfo = await trackingTool.trackByOrder(conv.orderId);
+      aiReply = new ChatMessage({
+        id: `msg_ai_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+        conversationId: conv.id,
+        senderId: 'SYSTEM_AI',
+        senderRole: 'AI',
+        content: aiResult.content,
+        metadata: {
+          model: aiResult.modelUsed,
+          toolCalls: aiResult.toolCalls,
+          ...aiResult.metadata,
+        },
+      });
 
-        let replyText = `Đơn hàng ${conv.orderId} của bạn hiện có trạng thái: ${trackingInfo?.status || 'Đang giao'}.`;
-        if (trackingInfo) {
-          replyText = `Đơn hàng ${conv.orderId} đang được hãng ${trackingInfo.carrier} vận chuyển với mã tra cứu ${trackingInfo.trackingCode}. Hiện tại kiện hàng đang ở: ${trackingInfo.currentLocation} (${trackingInfo.estimatedDelivery}).`;
-        }
-
-        aiReply = new ChatMessage({
-          id: `msg_ai_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-          conversationId: conv.id,
-          senderId: 'SYSTEM_AI',
-          senderRole: 'AI',
-          content: replyText,
-          metadata: {
-            toolName: 'OrderTrackingTool',
-            trackingData: trackingInfo,
-          },
-        });
-
-        await this.messageRepo.save(aiReply);
-      }
+      await this.messageRepo.save(aiReply);
     }
 
     return { message: userMessage, reply: aiReply };

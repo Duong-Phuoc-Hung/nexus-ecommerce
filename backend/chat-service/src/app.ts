@@ -46,6 +46,8 @@ export function createApplication(): Application {
     messageRepo,
     conversationRepo,
     orderTrackingTool,
+    undefined,
+    policyRepo,
   );
   const queryPolicyFaqUseCase = new QueryPolicyFaqUseCase(policyRepo);
   const escalateDisputeUseCase = new EscalateDisputeUseCase(conversationRepo, idempotencyService);
