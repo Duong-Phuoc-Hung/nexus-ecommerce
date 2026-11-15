@@ -64,16 +64,17 @@ test('password rules are consistent: 6 characters minimum for register and reset
 test('changing a user role revokes their active sessions', async () => {
   const users = new InMemoryUserRepository();
   const sessions = new AuthTokenStore();
-  sessions.track('active-session-token', 'usr_01hqz789abc');
+  const buyerId = '01a15822-43b8-78c3-a246-16bff78bc6e8';
+  sessions.track('active-session-token', buyerId);
 
   const assignRole = new AssignUserRoleUseCase(users, (userId) => {
     sessions.revokeUserTokens(userId);
   });
-  const result = await assignRole.execute('usr_01hqz789abc', 'SELLER');
+  const result = await assignRole.execute(buyerId, 'SELLER');
 
   assert.equal(result.role, 'SELLER');
   assert.equal(sessions.isRevoked('active-session-token'), true);
-  await assert.rejects(assignRole.execute('usr_01hqz789abc', 'ROOT'), /Role must be/);
+  await assert.rejects(assignRole.execute(buyerId, 'ROOT'), /Role must be/);
 });
 
 test('account locks after 5 consecutive failed login attempts', async () => {
