@@ -28,6 +28,16 @@ export interface PolicyCitation {
   title: string;
 }
 
+export interface DamageVerdict {
+  is_damaged?: boolean;
+  damage_type?: string;
+  severity?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | string;
+  summary?: string;
+  confidence?: number;
+  evidence_found?: string[];
+  [key: string]: any;
+}
+
 export interface QueryPolicyFaqResult {
   answer: string;
   isGrounded: boolean;
@@ -49,6 +59,7 @@ export interface EscalateDisputeInput {
   priority?: 'Cao' | 'Trung bình' | 'Thấp' | 'HIGH' | 'MEDIUM' | 'LOW';
   attachments?: ChatAttachment[];
   idempotencyKey?: string;
+  aiVerdict?: DamageVerdict;
 }
 
 export interface EscalateDisputeResult {
@@ -60,4 +71,5 @@ export interface EscalateDisputeResult {
   message: string;
   isDuplicateRequest: boolean;
   evidenceCount: number;
+  aiVerdict?: DamageVerdict;
 }

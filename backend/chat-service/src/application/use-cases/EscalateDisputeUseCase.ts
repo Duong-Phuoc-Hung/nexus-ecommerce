@@ -95,6 +95,14 @@ export class EscalateDisputeUseCase {
             note: input.reason.trim(),
             submittedAt: new Date().toISOString(),
           },
+          aiAssessment: input.aiVerdict
+            ? {
+                isDamaged: input.aiVerdict?.is_damaged,
+                damageType: input.aiVerdict?.damage_type,
+                severity: input.aiVerdict?.severity,
+                summary: input.aiVerdict?.summary,
+              }
+            : undefined,
         }),
         signal: controller.signal,
       }).catch(() => null);
@@ -124,6 +132,7 @@ export class EscalateDisputeUseCase {
         'Hồ sơ khiếu nại đã được chuyển giao thành công tới bộ phận Trọng tài Support Staff.',
       isDuplicateRequest: false,
       evidenceCount: attachments.length,
+      aiVerdict: input.aiVerdict,
     };
 
     // 5. Lưu khóa Idempotency vào bộ nhớ đệm (TTL 24h = 86400s)
