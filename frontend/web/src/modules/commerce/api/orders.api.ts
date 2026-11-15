@@ -180,6 +180,16 @@ export function createOrdersApi(request: RequestApi) {
       );
       return unwrap<OrderDetail>(raw);
     },
+    async updateStatus(id: string, status: string, note?: string) {
+      const raw = await request<{ success: boolean; message?: string; data: OrderDetail }>(
+        `/orders/${encodeURIComponent(id)}/status`,
+        {
+          method: 'PATCH',
+          body: { status, note },
+        },
+      );
+      return unwrap<OrderDetail>(raw);
+    },
     async requestRefund(id: string, reason: string, evidenceUrls?: string[]) {
       const raw = await request<{ success: boolean; message?: string; data: OrderDetail }>(
         `/orders/${encodeURIComponent(id)}/refund/request`,
@@ -266,6 +276,11 @@ export function createOrdersApi(request: RequestApi) {
         expiresAt?: string;
         checkoutUrl?: string | null;
         paymentLinkId?: string | null;
+        qrCode?: string | null;
+        bin?: string | null;
+        accountNumber?: string | null;
+        accountName?: string | null;
+        description?: string | null;
       };
     },
     async getPaymentLink(orderId: string, renew?: boolean) {
@@ -274,6 +289,11 @@ export function createOrdersApi(request: RequestApi) {
         orderCode?: number;
         checkoutUrl?: string | null;
         paymentLinkId?: string | null;
+        qrCode?: string | null;
+        bin?: string | null;
+        accountNumber?: string | null;
+        accountName?: string | null;
+        description?: string | null;
         reused?: boolean;
       }>(
         await request(`/orders/${encodeURIComponent(orderId)}/payment-link`, {
@@ -293,6 +313,13 @@ export function createOrdersApi(request: RequestApi) {
         paidAt: string | null;
         expiresAt: string;
         expired: boolean;
+        checkoutUrl?: string | null;
+        paymentLinkId?: string | null;
+        qrCode?: string | null;
+        bin?: string | null;
+        accountNumber?: string | null;
+        accountName?: string | null;
+        description?: string | null;
       }>(await request(`/orders/${encodeURIComponent(orderId)}/payment-status`, { signal }));
     },
   };

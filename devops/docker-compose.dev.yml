@@ -3,6 +3,7 @@ services:
   postgres-user:
     image: postgres:16-alpine
     container_name: nexus-postgres-user
+    restart: unless-stopped
     environment:
       POSTGRES_USER: nexus_user
       POSTGRES_PASSWORD: nexus_password
@@ -16,6 +17,7 @@ services:
   postgres-catalog:
     image: postgres:16-alpine
     container_name: nexus-postgres-catalog
+    restart: unless-stopped
     environment:
       POSTGRES_USER: nexus_catalog
       POSTGRES_PASSWORD: nexus_password
@@ -29,6 +31,7 @@ services:
   postgres-commerce:
     image: postgres:16-alpine
     container_name: nexus-postgres-commerce
+    restart: unless-stopped
     environment:
       POSTGRES_USER: nexus_commerce
       POSTGRES_PASSWORD: nexus_password
@@ -42,6 +45,7 @@ services:
   postgres-auction:
     image: postgres:16-alpine
     container_name: nexus-postgres-auction
+    restart: unless-stopped
     environment:
       POSTGRES_USER: nexus_auction
       POSTGRES_PASSWORD: nexus_password
@@ -55,6 +59,7 @@ services:
   postgres-fulfillment:
     image: postgres:16-alpine
     container_name: nexus-postgres-fulfillment
+    restart: unless-stopped
     environment:
       POSTGRES_USER: nexus_fulfillment
       POSTGRES_PASSWORD: nexus_password
@@ -68,6 +73,7 @@ services:
   postgres-notification:
     image: postgres:16-alpine
     container_name: nexus-postgres-notification
+    restart: unless-stopped
     environment:
       POSTGRES_USER: nexus_notification
       POSTGRES_PASSWORD: nexus_password
@@ -77,10 +83,25 @@ services:
     volumes:
       - notification_db_data:/var/lib/postgresql/data
 
+  # 7. Database cho Chat & AI Support Service
+  postgres-chat:
+    image: postgres:16-alpine
+    container_name: nexus-postgres-chat
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nexus_chat
+      POSTGRES_PASSWORD: nexus_password
+      POSTGRES_DB: nexus_chat_db
+    ports:
+      - '5438:5432'
+    volumes:
+      - chat_db_data:/var/lib/postgresql/data
+
   # 7. Redis Cache & Distributed Lock (SRS 5.1 Bidding SLA <= 300ms)
   redis:
     image: redis:7-alpine
     container_name: nexus-redis
+    restart: unless-stopped
     ports:
       - '${REDIS_PORT:-6379}:6379'
     volumes:
@@ -95,6 +116,7 @@ services:
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: nexus-rabbitmq
+    restart: unless-stopped
     ports:
       - '5672:5672'
       - '15672:15672'
@@ -108,5 +130,6 @@ volumes:
   auction_db_data:
   fulfillment_db_data:
   notification_db_data:
+  chat_db_data:
   redis_data:
   rabbitmq_data:

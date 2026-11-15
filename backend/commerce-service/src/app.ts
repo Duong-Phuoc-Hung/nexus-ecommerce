@@ -21,6 +21,7 @@ import { DispatchOrderUseCase } from './application/use-cases/DispatchOrderUseCa
 import { RequestRefundUseCase } from './application/use-cases/RequestRefundUseCase';
 import { ExecuteRefundUseCase } from './application/use-cases/ExecuteRefundUseCase';
 import { GetRefundStatusUseCase } from './application/use-cases/GetRefundStatusUseCase';
+import { UpdateOrderStatusUseCase } from './application/use-cases/UpdateOrderStatusUseCase';
 import { OrderController } from './interfaces/http/controllers/OrderController';
 import { createOrderRoutes } from './interfaces/http/routes/OrderRoutes';
 import { createCheckoutRoutes } from './interfaces/http/routes/CheckoutRoutes';
@@ -94,6 +95,12 @@ export function createApplication(): Application {
   const payOsGateway = new PayOsGateway();
   const executeRefundUseCase = new ExecuteRefundUseCase(orderRepository, payOsGateway);
   const getRefundStatusUseCase = new GetRefundStatusUseCase(orderRepository);
+  const catalogClient = new HttpCatalogClient();
+  const updateOrderStatusUseCase = new UpdateOrderStatusUseCase(
+    orderRepository,
+    getOrderDetailUseCase,
+    catalogClient,
+  );
 
   const orderController = new OrderController(
     getOrderDetailUseCase,
@@ -105,9 +112,9 @@ export function createApplication(): Application {
     requestRefundUseCase,
     executeRefundUseCase,
     getRefundStatusUseCase,
+    updateOrderStatusUseCase,
   );
 
-  const catalogClient = new HttpCatalogClient();
   const cartRepository: ICartRepository =
     process.env.USE_IN_MEMORY_DB === 'true'
       ? new InMemoryCartRepository()

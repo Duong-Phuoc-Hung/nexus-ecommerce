@@ -27,6 +27,11 @@ function toPayment(row: any): PaymentRecord {
     currency: row.currency || 'VND',
     checkoutUrl: row.checkoutUrl || row.checkout_url || undefined,
     paymentLinkId: row.paymentLinkId || row.payment_link_id || undefined,
+    qrCode: row.qrCode || undefined,
+    bin: row.bankBin || undefined,
+    accountNumber: row.accountNumber || undefined,
+    accountName: row.accountName || undefined,
+    description: row.transferDescription || undefined,
     expiresAt:
       row.expiresAt || row.expires_at ? new Date(row.expiresAt || row.expires_at) : undefined,
     paidAt: row.paidAt || row.paid_at ? new Date(row.paidAt || row.paid_at) : undefined,
@@ -415,6 +420,11 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
       data: {
         checkoutUrl: link.checkoutUrl,
         paymentLinkId: link.paymentLinkId,
+        qrCode: link.qrCode || null,
+        bankBin: link.bin || null,
+        accountNumber: link.accountNumber || null,
+        accountName: link.accountName || null,
+        transferDescription: link.description || null,
         updatedAt: new Date(),
       },
     });

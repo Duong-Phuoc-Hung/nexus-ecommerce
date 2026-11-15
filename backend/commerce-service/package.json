@@ -5,7 +5,7 @@
   "description": "Project Nexus - Cart, Orders & Payments Bounded Context (SRS 3.4)",
   "main": "dist/index.js",
   "scripts": {
-    "predev": "node ../../scripts/free-port.js 4003",
+    "predev": "node ../../scripts/free-port.js 4003 && prisma generate --schema=./prisma/schema.prisma",
     "build": "prisma generate --schema=./prisma/schema.prisma && tsc && node -e \"const fs=require('fs'); if(fs.existsSync('src/infrastructure/database/generated')) fs.cpSync('src/infrastructure/database/generated', 'dist/infrastructure/database/generated', { recursive: true });\"",
     "start": "node dist/index.js",
     "test": "node --import tsx --test --test-concurrency=1 \"src/**/*.test.ts\"",

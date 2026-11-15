@@ -25,6 +25,7 @@ import { ListSupportCasesUseCase } from './application/use-cases/ListSupportCase
 import { ResolveSupportCaseUseCase } from './application/use-cases/ResolveSupportCaseUseCase';
 import { GetDisputesUseCase } from './application/use-cases/GetDisputesUseCase';
 import { IssueDisputeVerdictUseCase } from './application/use-cases/IssueDisputeVerdictUseCase';
+import { CommerceOrderClient } from './infrastructure/clients/CommerceOrderClient';
 
 import { ShipmentController } from './interfaces/http/controllers/ShipmentController';
 import { InventoryController } from './interfaces/http/controllers/InventoryController';
@@ -94,15 +95,25 @@ export function createApplication(): Application {
   }
 
   // 2. Use Cases - Vận đơn (Shipments)
+  const commerceOrderClient = new CommerceOrderClient();
   const getShipmentDetailUseCase = new GetShipmentDetailUseCase(shipmentRepository);
   const searchShipmentsUseCase = new SearchShipmentsUseCase(shipmentRepository);
-  const updateShipmentStatusUseCase = new UpdateShipmentStatusUseCase(shipmentRepository);
-  const manualOverrideShipmentUseCase = new ManualOverrideShipmentUseCase(shipmentRepository);
+  const updateShipmentStatusUseCase = new UpdateShipmentStatusUseCase(
+    shipmentRepository,
+    commerceOrderClient,
+  );
+  const manualOverrideShipmentUseCase = new ManualOverrideShipmentUseCase(
+    shipmentRepository,
+    commerceOrderClient,
+  );
   const getFulfillmentSummaryUseCase = new GetFulfillmentSummaryUseCase(shipmentRepository);
-  const processCarrierWebhookUseCase = new ProcessCarrierWebhookUseCase(shipmentRepository);
+  const processCarrierWebhookUseCase = new ProcessCarrierWebhookUseCase(
+    shipmentRepository,
+    commerceOrderClient,
+  );
   const createShipmentUseCase = new CreateShipmentUseCase(shipmentRepository);
   const requestRedeliveryUseCase = new RequestRedeliveryUseCase(shipmentRepository);
-  const confirmReturnUseCase = new ConfirmReturnUseCase(shipmentRepository);
+  const confirmReturnUseCase = new ConfirmReturnUseCase(shipmentRepository, commerceOrderClient);
 
   // 3. Use Cases - Tồn kho (Inventory)
   const getSkuInventoryUseCase = new GetSkuInventoryUseCase(inventoryRepository);

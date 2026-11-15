@@ -1,0 +1,79 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/infrastructure/database/generated/client"
+}
+
+enum ChannelType {
+  AI_BOT
+  BUYER_SELLER
+  BUYER_SUPPORT
+}
+
+enum MessageSenderRole {
+  BUYER
+  SELLER
+  SUPPORT_STAFF
+  AI
+  SYSTEM
+}
+
+model ChatConversation {
+  id            String      @id @default(uuid()) @db.VarChar(36)
+  orderId       String      @map("order_id") @db.VarChar(36)
+  channelType   ChannelType @map("channel_type")
+  buyerId       String      @map("buyer_id") @db.VarChar(36)
+  sellerId      String      @map("seller_id") @db.VarChar(36)
+  supportCaseId String?     @map("support_case_id") @db.VarChar(36)
+  status        String      @default("ACTIVE") @db.VarChar(20)
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  messages      ChatMessage[]
+
+  @@unique([orderId, channelType], name: "order_channel_unique")
+  @@index([orderId])
+  @@index([buyerId])
+  @@index([sellerId])
+  @@map("chat_conversations")
+}
+
+model ChatMessage {
+  id             String            @id @default(uuid()) @db.VarChar(36)
+  conversationId String            @map("conversation_id") @db.VarChar(36)
+  senderId       String            @map("sender_id") @db.VarChar(36)
+  senderRole     MessageSenderRole @map("sender_role")
+  content        String            @db.Text
+  attachments    Json?             @map("attachments")
+  metadata       Json?             @map("metadata")
+  createdAt      DateTime          @default(now()) @map("created_at")
+
+  conversation   ChatConversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("chat_messages")
+}
+
+model PlatformPolicy {
+  id             String    @id @default(uuid()) @db.VarChar(36)
+  category       String    @db.VarChar(50)
+  policyCode     String    @unique @map("policy_code") @db.VarChar(50)
+  version        String    @db.VarChar(20)
+  effectiveFrom  DateTime  @default(now()) @map("effective_from")
+  effectiveTo    DateTime? @map("effective_to")
+  title          String    @db.VarChar(255)
+  defaultValue   Json      @map("default_value")
+  content        String    @db.Text
+  citationSource String    @map("citation_source") @db.VarChar(100)
+  isActive       Boolean   @default(true) @map("is_active")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@index([category])
+  @@index([policyCode])
+  @@map("platform_policies")
+}

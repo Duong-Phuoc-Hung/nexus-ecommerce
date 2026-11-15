@@ -17,7 +17,16 @@ export class InMemoryOrderRepository implements IOrderRepository {
   }
 
   public async findById(id: string): Promise<Order | null> {
-    return this.orders.get(id) || null;
+    const cleanId = (id || '').trim();
+    if (this.orders.has(cleanId)) {
+      return this.orders.get(cleanId) || null;
+    }
+    for (const order of this.orders.values()) {
+      if (order.id.toLowerCase() === cleanId.toLowerCase()) {
+        return order;
+      }
+    }
+    return null;
   }
 
   public async findByBuyerId(buyerId: string): Promise<Order[]> {

@@ -1,0 +1,30 @@
+{
+  "name": "@nexus/chat-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Project Nexus - Multi-party Chat, Order Tracking, Policy FAQ & Dispute Handoff Bounded Context",
+  "main": "dist/index.js",
+  "scripts": {
+    "predev": "node ../../scripts/free-port.js 4008",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "test": "node --import tsx --test \"src/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.5",
+    "express": "^5.2.1",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.4",
+    "@types/pg": "^8.23.1",
+    "prisma": "^5.22.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

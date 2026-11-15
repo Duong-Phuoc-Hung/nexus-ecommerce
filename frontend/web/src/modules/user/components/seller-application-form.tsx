@@ -39,7 +39,25 @@ const FALLBACK_CATEGORIES = [
   { id: 'cat_books_media', name: 'Sách, Đĩa nhạc & Ấn phẩm' },
 ];
 
-const VN_PHONE_REGEX = /^(?:0|\+84)\d{9}$/;
+const VN_PHONE_REGEX = /^(?:0|\+84)[35789]\d{8}$/;
+
+function validateVietnamPhone(rawPhone: string): string {
+  const trimmed = rawPhone.trim();
+  if (!trimmed) {
+    return 'Số điện thoại liên hệ là bắt buộc.';
+  }
+  if (trimmed.startsWith('-') || trimmed.includes('-')) {
+    return 'Số điện thoại không được là số âm hoặc chứa dấu trừ (-).';
+  }
+  if (/[^\d+\s.]/.test(trimmed)) {
+    return 'Số điện thoại chỉ được chứa chữ số (0–9) hoặc mã vùng +84 ở đầu.';
+  }
+  const normalized = trimmed.replace(/[\s.]/g, '');
+  if (!VN_PHONE_REGEX.test(normalized)) {
+    return 'Số điện thoại liên hệ cần đúng định dạng di động Việt Nam (10 chữ số bắt đầu bằng 03, 05, 07, 08, 09 hoặc +84).';
+  }
+  return '';
+}
 
 interface SellerApplicationFormProps {
   mode: 'create' | 'resubmit';
@@ -193,12 +211,9 @@ export function SellerApplicationForm({
       errors.contactName = 'Tên người liên hệ cần từ 2 đến 100 ký tự.';
     }
 
-    const normalizedPhone = contactPhone.trim().replace(/[\s.-]/g, '');
-    if (!normalizedPhone) {
-      errors.contactPhone = 'Số điện thoại liên hệ là bắt buộc.';
-    } else if (!VN_PHONE_REGEX.test(normalizedPhone)) {
-      errors.contactPhone =
-        'Số điện thoại liên hệ cần đúng định dạng Việt Nam (10 chữ số bắt đầu bằng 0 hoặc +84).';
+    const phoneErr = validateVietnamPhone(contactPhone);
+    if (phoneErr) {
+      errors.contactPhone = phoneErr;
     }
 
     if (!currentProvince?.code) {
@@ -248,7 +263,7 @@ export function SellerApplicationForm({
     await onSubmit({
       shopName: shopName.trim(),
       contactName: contactName.trim(),
-      contactPhone: contactPhone.trim().replace(/[\s.-]/g, ''),
+      contactPhone: contactPhone.trim().replace(/[\s.]/g, ''),
       pickupAddress: {
         provinceCode: currentProvince?.code ?? provinceCode,
         provinceName: currentProvince?.name ?? '',
@@ -444,19 +459,48 @@ export function SellerApplicationForm({
               <Input
                 id={`${formId}-contactPhone`}
                 type="tel"
+                inputMode="tel"
+                maxLength={15}
                 value={contactPhone}
                 onChange={(e) => {
-                  setContactPhone(e.target.value);
-                  if (fieldErrors.contactPhone) {
+                  const val = e.target.value;
+                  setContactPhone(val);
+                  if (val.trim().startsWith('-') || val.includes('-')) {
+                    setFieldErrors((prev) => ({
+                      ...prev,
+                      contactPhone: 'Số điện thoại không được là số âm hoặc chứa dấu trừ (-).',
+                    }));
+                  } else if (/[^\d+\s.]/.test(val.trim())) {
+                    setFieldErrors((prev) => ({
+                      ...prev,
+                      contactPhone: 'Số điện thoại chỉ được chứa chữ số (0–9) hoặc mã vùng +84.',
+                    }));
+                  } else if (fieldErrors.contactPhone) {
+                    const err = validateVietnamPhone(val);
                     setFieldErrors((prev) => {
                       const next = { ...prev };
-                      delete next.contactPhone;
+                      if (err && val.trim().replace(/[\s.]/g, '').length >= 10) {
+                        next.contactPhone = err;
+                      } else {
+                        delete next.contactPhone;
+                      }
                       return next;
                     });
                   }
                 }}
+                onBlur={() => {
+                  if (contactPhone.trim()) {
+                    const err = validateVietnamPhone(contactPhone);
+                    if (err) {
+                      setFieldErrors((prev) => ({ ...prev, contactPhone: err }));
+                    }
+                  }
+                }}
                 placeholder="0901234567"
                 aria-invalid={Boolean(fieldErrors.contactPhone)}
+                aria-describedby={
+                  fieldErrors.contactPhone ? `${formId}-contactPhone-error` : undefined
+                }
                 disabled={isSubmitting}
               />
               <Phone
@@ -465,9 +509,17 @@ export function SellerApplicationForm({
               />
             </div>
             {fieldErrors.contactPhone ? (
-              <p className="text-xs font-medium text-red-600">{fieldErrors.contactPhone}</p>
+              <p
+                id={`${formId}-contactPhone-error`}
+                role="alert"
+                className="text-xs font-medium text-red-600"
+              >
+                {fieldErrors.contactPhone}
+              </p>
             ) : (
-              <p className="text-xs text-muted">Số điện thoại 10 chữ số bắt đầu bằng 0 hoặc +84.</p>
+              <p className="text-xs text-muted">
+                Số điện thoại 10 chữ số di động Việt Nam (03, 05, 07, 08, 09) hoặc +84.
+              </p>
             )}
           </div>
 

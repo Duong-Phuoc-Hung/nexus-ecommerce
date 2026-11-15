@@ -19,6 +19,17 @@ import { InMemoryCategoryRepository } from './infrastructure/repositories/InMemo
 import { GetCategoriesUseCase } from './application/use-cases/GetCategoriesUseCase';
 import { CategoryController } from './interfaces/http/controllers/CategoryController';
 import { createCategoryRoutes } from './interfaces/http/routes/CategoryRoutes';
+import { DeductProductStockUseCase } from './application/use-cases/DeductProductStockUseCase';
+import { PostgresFavoriteRepository } from './infrastructure/repositories/PostgresFavoriteRepository';
+import { InMemoryFavoriteRepository } from './infrastructure/repositories/InMemoryFavoriteRepository';
+import { GetFavoritesUseCase } from './application/use-cases/GetFavoritesUseCase';
+import { ToggleFavoriteUseCase } from './application/use-cases/ToggleFavoriteUseCase';
+import { FavoriteController } from './interfaces/http/controllers/FavoriteController';
+import { createFavoriteRoutes } from './interfaces/http/routes/FavoriteRoutes';
+import { PostgresReviewRepository } from './infrastructure/repositories/PostgresReviewRepository';
+import { InMemoryReviewRepository } from './infrastructure/repositories/InMemoryReviewRepository';
+import { CreateProductReviewUseCase } from './application/use-cases/CreateProductReviewUseCase';
+import { GetProductReviewsUseCase } from './application/use-cases/GetProductReviewsUseCase';
 
 export function createApplication(): Application {
   const app = express();
@@ -59,7 +70,19 @@ export function createApplication(): Application {
   const getSellerProductsUseCase = new GetSellerProductsUseCase(productRepository);
   const recoverProductUseCase = new RecoverProductUseCase(productRepository);
   const listCatalogProductsUseCase = new ListCatalogProductsUseCase(productRepository);
+  const deductProductStockUseCase = new DeductProductStockUseCase(productRepository);
   const sellerDirectory = new HttpSellerDirectory();
+
+  // ĐÁNH GIÁ SẢN PHẨM (REVIEWS & RATINGS):
+  const reviewRepository = isTest ? new InMemoryReviewRepository() : new PostgresReviewRepository();
+  const createProductReviewUseCase = new CreateProductReviewUseCase(
+    reviewRepository,
+    productRepository,
+  );
+  const getProductReviewsUseCase = new GetProductReviewsUseCase(
+    reviewRepository,
+    productRepository,
+  );
 
   const productController = new ProductController(
     getProductDetailUseCase,
@@ -72,9 +95,22 @@ export function createApplication(): Application {
     recoverProductUseCase,
     sellerDirectory,
     listCatalogProductsUseCase,
+    deductProductStockUseCase,
+    createProductReviewUseCase,
+    getProductReviewsUseCase,
   );
 
   app.use('/api/v1/products', createProductRoutes(productController));
+
+  // YÊU THÍCH (FAVORITES / WISHLIST):
+  const favoriteRepository = isTest
+    ? new InMemoryFavoriteRepository(productRepository)
+    : new PostgresFavoriteRepository();
+  const getFavoritesUseCase = new GetFavoritesUseCase(favoriteRepository);
+  const toggleFavoriteUseCase = new ToggleFavoriteUseCase(favoriteRepository, productRepository);
+  const favoriteController = new FavoriteController(getFavoritesUseCase, toggleFavoriteUseCase);
+
+  app.use('/api/v1/favorites', createFavoriteRoutes(favoriteController));
 
   return app;
 }
