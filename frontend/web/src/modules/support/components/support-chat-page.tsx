@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { chatApi } from '@/modules/chat/api/chat.api';
 import type { ChatMessageDto, ChatThreadItem } from '@/modules/chat/types/chat.types';
+import { compressImageToDataUrl } from '@/lib/utils/image-compressor';
 
 const SUPPORT_QUICK_REPLIES = [
   '📋 Chào bạn, Nexus Support đã tiếp nhận yêu cầu khiếu nại của bạn về đơn hàng.',
@@ -143,7 +144,7 @@ export function SupportChatPage() {
     }
   }
 
-  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -152,13 +153,18 @@ export function SupportChatPage() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setSelectedImage(reader.result);
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const dataUrl = await compressImageToDataUrl(file);
+      setSelectedImage(dataUrl);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          setSelectedImage(reader.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   }
 
   function handleResolveCase() {

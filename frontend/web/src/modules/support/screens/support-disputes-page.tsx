@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { supportApi, type DisputeItem } from '../api/support.api';
+import { chatApi } from '@/modules/chat/api/chat.api';
 import { userMessage } from '@/lib/axios/http';
 import { Heading, DemoBanner, money, supportStatusClass } from '../components/support-shared';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -135,6 +136,57 @@ export function SupportDisputesPage() {
   // Image preview modal (phóng to ảnh)
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
+  // Task FE-06: AI Copilot analysis states
+  const [isAnalyzingAi, setIsAnalyzingAi] = useState(false);
+  const [aiAnalysisResult, setAiAnalysisResult] = useState<{
+    buyerSummary: string;
+    sellerSummary: string;
+    recommendedVerdict: 'REFUND_BUYER' | 'REJECT_CLAIM' | 'COMPENSATE_SELLER';
+    recommendedVerdictLabel: string;
+    confidenceScore: number;
+    legalGrounding: string;
+    suggestedNote: string;
+  } | null>(null);
+  const [aiAppliedNotice, setAiAppliedNotice] = useState<string | null>(null);
+
+  async function handleAnalyzeWithAi() {
+    if (!selectedDispute) return;
+    setIsAnalyzingAi(true);
+    setAiAppliedNotice(null);
+    try {
+      const res = await chatApi.analyzeDisputeEvidence({
+        caseId: selectedDispute.caseId || selectedDispute.id,
+        orderId: selectedDispute.orderId || selectedDispute.orderCode || selectedDispute.order,
+        reason: selectedDispute.reason,
+        buyerPhotos: selectedDispute.buyerEvidence?.photos,
+        sellerVideos: selectedDispute.sellerEvidence?.videos,
+        sellerPhotos: selectedDispute.sellerEvidence?.photos,
+      });
+      setAiAnalysisResult(res);
+    } catch (err) {
+      console.error('Failed to analyze with AI', err);
+    } finally {
+      setIsAnalyzingAi(false);
+    }
+  }
+
+  function handleApplyAiRecommendation() {
+    if (!aiAnalysisResult) return;
+    if (aiAnalysisResult.recommendedVerdict === 'REFUND_BUYER') {
+      setDecision('REFUND_BUYER');
+      setLiableParty('CARRIER');
+    } else if (aiAnalysisResult.recommendedVerdict === 'REJECT_CLAIM') {
+      setDecision('REJECT_BUYER');
+      setLiableParty('BUYER');
+    } else {
+      setDecision('REFUND_BUYER');
+      setLiableParty('SELLER');
+    }
+    setVerdictNote(aiAnalysisResult.suggestedNote);
+    setAiAppliedNotice('✓ Đã áp dụng đề xuất AI Copilot vào biên bản phán quyết thành công!');
+    setTimeout(() => setAiAppliedNotice(null), 4000);
+  }
+
   function showToast(msg: string) {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 4000);
@@ -189,6 +241,8 @@ export function SupportDisputesPage() {
     setLiableParty(item.verdict?.liableParty || 'SELLER');
     setVerdictNote(item.verdict?.note || 'Xác nhận bằng chứng đối chiếu hợp lệ theo quy chế sàn.');
     setVerdictError(null);
+    setAiAnalysisResult(null);
+    setAiAppliedNotice(null);
     setModalOpen(true);
   }
 
@@ -491,6 +545,97 @@ export function SupportDisputesPage() {
           {verdictError && (
             <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs font-medium text-red-700">
               ⚠️ {verdictError}
+            </div>
+          )}
+
+          {/* Thanh tiêu đề và Nút AI Phân Tích & Gợi Ý Phán Quyết (Task FE-06) */}
+          <div className="mt-5 flex items-center justify-between border-b border-slate-200 pb-2">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+              Hồ Sơ Chứng Cứ Đối Chiếu (Dual Evidence Side-by-Side)
+            </h3>
+            <button
+              type="button"
+              disabled={isAnalyzingAi}
+              onClick={handleAnalyzeWithAi}
+              className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-md hover:from-purple-700 hover:to-indigo-700 transition disabled:opacity-50"
+            >
+              <span>✨</span>
+              {isAnalyzingAi
+                ? 'AI Copilot đang quét bằng chứng...'
+                : '✨ AI Phân Tích & Gợi Ý Phán Quyết'}
+            </button>
+          </div>
+
+          {/* Task FE-06: Bảng tóm tắt đối chiếu chứng cứ 3 mục của AI */}
+          {aiAnalysisResult && (
+            <div className="mt-4 rounded-xl border-2 border-purple-300 bg-gradient-to-br from-purple-50 via-indigo-50/50 to-white p-4 shadow-sm">
+              <div className="flex items-center justify-between border-b border-purple-200 pb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">✨</span>
+                  <h4 className="text-xs font-bold text-purple-950 uppercase tracking-wide">
+                    AI Copilot - Bảng Đối Chiếu Bằng Chứng & Đề Xuất Phán Quyết (Task FE-06)
+                  </h4>
+                </div>
+                <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-[11px] font-bold text-purple-800 border border-purple-200">
+                  Độ tin cậy: {(aiAnalysisResult.confidenceScore * 100).toFixed(0)}%
+                </span>
+              </div>
+
+              {/* 3 Mục đối chiếu: Buyer vs Seller vs AI Verdict */}
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+                {/* 1. Bằng chứng Buyer */}
+                <div className="rounded-lg bg-white/90 p-3 border border-rose-200 shadow-xs">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-rose-800 mb-1">
+                    <span>📸</span> Bằng chứng Buyer:
+                  </div>
+                  <p className="text-xs text-slate-700 leading-relaxed">
+                    {aiAnalysisResult.buyerSummary}
+                  </p>
+                </div>
+
+                {/* 2. Bằng chứng Seller */}
+                <div className="rounded-lg bg-white/90 p-3 border border-emerald-200 shadow-xs">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 mb-1">
+                    <span>📦</span> Bằng chứng Seller:
+                  </div>
+                  <p className="text-xs text-slate-700 leading-relaxed">
+                    {aiAnalysisResult.sellerSummary}
+                  </p>
+                </div>
+
+                {/* 3. Đề xuất phán quyết của AI */}
+                <div className="rounded-lg bg-white/90 p-3 border border-purple-300 shadow-xs">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-purple-900 mb-1">
+                    <span>⚖️</span> Đề xuất phán quyết AI:
+                  </div>
+                  <div className="text-xs font-bold text-indigo-700">
+                    {aiAnalysisResult.recommendedVerdictLabel}
+                  </div>
+                  <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                    {aiAnalysisResult.legalGrounding}
+                  </p>
+                </div>
+              </div>
+
+              {/* Hàng nút bấm 1-chạm: Áp dụng đề xuất này */}
+              <div className="mt-3.5 flex items-center justify-between border-t border-purple-200 pt-2.5">
+                <span className="text-xs text-purple-900 font-medium">
+                  Tự động điền phán quyết và căn cứ quy chế sàn vào biểu mẫu bên dưới:
+                </span>
+                <button
+                  type="button"
+                  onClick={handleApplyAiRecommendation}
+                  className="flex items-center gap-1.5 rounded-lg bg-purple-700 px-4 py-2 text-xs font-bold text-white shadow hover:bg-purple-800 transition active:scale-95"
+                >
+                  <span>⚡</span> Áp dụng đề xuất này
+                </button>
+              </div>
+
+              {aiAppliedNotice && (
+                <div className="mt-2.5 rounded-lg bg-emerald-100 border border-emerald-300 p-2 text-xs font-semibold text-emerald-900 text-center">
+                  {aiAppliedNotice}
+                </div>
+              )}
             </div>
           )}
 

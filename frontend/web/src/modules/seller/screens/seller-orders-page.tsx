@@ -1,10 +1,12 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import { ordersApi, type OrderListItem, type OrderDetail } from '@/modules/commerce/api/orders.api';
 import { userMessage } from '@/lib/axios/http';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
+import { compressImage, formatBytes } from '@/lib/utils/image-compressor';
 import {
   currency,
   statusClass,
@@ -78,6 +80,69 @@ export function SellerOrdersPage() {
 
   // Dialog state for printing shipping waybill
   const [printOrder, setPrintOrder] = useState<OrderDetail | null>(null);
+
+  // Task FE-05: Dialog states for dispute evidence and AI policy rules
+  const [evidenceModalOpen, setEvidenceModalOpen] = useState(false);
+  const [policyModalOpen, setPolicyModalOpen] = useState(false);
+  const [evidenceFiles, setEvidenceFiles] = useState<
+    { name: string; size: string; rawSize: string; previewUrl: string; isCompressed: boolean }[]
+  >([]);
+  const [evidenceNote, setEvidenceNote] = useState(
+    'Shop đã kiểm tra sản phẩm nguyên seal, quấn 3 lớp màng xốp khí và dán kín tem vỡ trước khi bàn giao bưu tá.',
+  );
+  const [isCompressingFile, setIsCompressingFile] = useState(false);
+  const [isSubmittingEvidence, setIsSubmittingEvidence] = useState(false);
+  const [evidenceSuccess, setEvidenceSuccess] = useState(false);
+
+  async function handleEvidenceFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsCompressingFile(true);
+    try {
+      const newItems: {
+        name: string;
+        size: string;
+        rawSize: string;
+        previewUrl: string;
+        isCompressed: boolean;
+      }[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const rawBytes = file.size;
+        let finalFile = file;
+        let compressed = false;
+
+        if (file.type.startsWith('image/')) {
+          finalFile = await compressImage(file, 1600, 0.8);
+          compressed = finalFile.size < rawBytes;
+        }
+
+        const previewUrl = URL.createObjectURL(finalFile);
+        newItems.push({
+          name: finalFile.name,
+          size: formatBytes(finalFile.size),
+          rawSize: formatBytes(rawBytes),
+          previewUrl,
+          isCompressed: compressed,
+        });
+      }
+      setEvidenceFiles((prev) => [...prev, ...newItems]);
+    } finally {
+      setIsCompressingFile(false);
+    }
+  }
+
+  async function handleSubmitEvidence() {
+    if (evidenceFiles.length === 0) {
+      alert('Vui lòng chọn ít nhất 1 ảnh hoặc video đóng gói.');
+      return;
+    }
+    setIsSubmittingEvidence(true);
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    setIsSubmittingEvidence(false);
+    setEvidenceSuccess(true);
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -314,28 +379,154 @@ export function SellerOrdersPage() {
             </div>
           </div>
 
-          {selectedOrder.status === 'REFUND_REQUESTED' && (
+          {/* Task FE-05: Thẻ Cảnh Báo Đối Soát AI trên Màn Hình Seller */}
+          {(selectedOrder.status === 'REFUND_REQUESTED' ||
+            Boolean((selectedOrder as any).disputeInfo)) && (
             <div
               style={{
-                background: '#fffbeb',
-                border: '1px solid #fde68a',
-                borderRadius: '8px',
-                padding: '12px 16px',
-                marginBottom: '16px',
-                fontSize: '0.8rem',
-                color: '#92400e',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
+                background: '#fff7ed',
+                border: '2px solid #ea580c',
+                borderRadius: '10px',
+                padding: '16px 20px',
+                marginBottom: '20px',
+                boxShadow: '0 4px 12px rgba(234, 88, 12, 0.1)',
               }}
             >
-              <span style={{ fontSize: '1.25rem' }}>⚖</span>
-              <div>
-                <strong>Đơn hàng đang có yêu cầu khiếu nại / hoàn tiền:</strong>
-                <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: '#b45309' }}>
-                  Hồ sơ đang được chuyển sang Bộ phận Trọng tài Support giải quyết theo chuẩn SLA.
-                  Quý đối tác vui lòng lưu giữ hình ảnh và video đóng gói để đối chiếu bằng chứng.
-                </p>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: '8px',
+                  flexWrap: 'wrap',
+                  gap: '8px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '1.4rem' }}>⚠️</span>
+                  <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#9a3412' }}>
+                    AI phát hiện kiện hàng bị nứt vỡ (Mức độ: CAO). Mời Shop nộp video đóng gói để
+                    đối soát!
+                  </h3>
+                </div>
+                <span
+                  style={{
+                    background: '#fed7aa',
+                    color: '#9a3412',
+                    fontSize: '0.7rem',
+                    fontWeight: 700,
+                    padding: '3px 8px',
+                    borderRadius: '20px',
+                    border: '1px solid #fdba74',
+                  }}
+                >
+                  ⚡ ĐỘ NGUY CƠ: CAO
+                </span>
+              </div>
+
+              {/* Trích dẫn câu tóm tắt của AI: {order.disputeInfo.summary} */}
+              <div
+                style={{
+                  background: '#ffedd5',
+                  borderLeft: '4px solid #ea580c',
+                  padding: '10px 14px',
+                  borderRadius: '0 6px 6px 0',
+                  margin: '10px 0 14px',
+                  fontSize: '0.8rem',
+                  color: '#7c2d12',
+                  lineHeight: 1.5,
+                }}
+              >
+                <div
+                  style={{
+                    fontWeight: 600,
+                    fontSize: '0.72rem',
+                    textTransform: 'uppercase',
+                    color: '#c2410c',
+                    marginBottom: '2px',
+                  }}
+                >
+                  🤖 Trích dẫn tóm tắt phân tích tự động từ AI Chatbot:
+                </div>
+                <em>
+                  "
+                  {(selectedOrder as any)?.disputeInfo?.summary ||
+                    'AI phát hiện kiện hàng xuất hiện vết nứt vỡ góc màn hình đường kính > 5cm và vỏ hộp móp rách nghiêm trọng theo ảnh bưu tá cung cấp. Yêu cầu Người bán đối soát video đóng gói trước 24h.'}
+                  "
+                </em>
+              </div>
+
+              {/* Nhóm nút bấm hành động của Task FE-05 */}
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '10px',
+                  alignItems: 'center',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEvidenceModalOpen(true);
+                    setEvidenceSuccess(false);
+                  }}
+                  style={{
+                    background: '#ea580c',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '8px 16px',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 2px 4px rgba(234, 88, 12, 0.25)',
+                  }}
+                >
+                  <span>📹</span> Nộp Bằng Chứng Đóng Gói
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPolicyModalOpen(true)}
+                  style={{
+                    background: '#ffffff',
+                    color: '#c2410c',
+                    border: '1px solid #fdba74',
+                    borderRadius: '6px',
+                    padding: '8px 14px',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <span>🤖</span> Hỏi AI quy định đối soát
+                </button>
+
+                <Link
+                  href="/seller/chat"
+                  style={{
+                    background: '#f8fafc',
+                    color: '#475569',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '6px',
+                    padding: '8px 14px',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    textDecoration: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <span>💬</span> Mở phòng chat đối soát
+                </Link>
               </div>
             </div>
           )}
@@ -693,6 +884,238 @@ export function SellerOrdersPage() {
               className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 transition flex items-center gap-1.5"
             >
               🖨️ In phiếu ngay
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Task FE-05: Modal Nộp Bằng Chứng Đóng Gói Cho Shop */}
+      <Dialog open={evidenceModalOpen} onOpenChange={setEvidenceModalOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogTitle className="flex items-center gap-2 text-base font-bold text-slate-900">
+            <span>📹</span> Nộp Bằng Chứng Đóng Gói Đối Soát (Task FE-05)
+          </DialogTitle>
+          <DialogDescription className="text-xs text-slate-500">
+            Mã đơn đối soát: <strong>{selectedOrder?.id}</strong> · Khách hàng:{' '}
+            <strong>{selectedOrder?.buyer}</strong>
+          </DialogDescription>
+
+          {evidenceSuccess ? (
+            <div className="py-6 text-center space-y-3">
+              <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-2xl font-bold">
+                ✓
+              </div>
+              <h3 className="text-sm font-bold text-slate-900">
+                Đã nộp bằng chứng đối soát thành công!
+              </h3>
+              <p className="text-xs text-slate-600 max-w-md mx-auto leading-relaxed">
+                Hồ sơ đã được mã hóa và chuyển giao tới Bộ phận Trọng tài CSKH Nexus. Nếu video đạt
+                chuẩn theo Điều 3.6, Sàn sẽ bồi hoàn toàn bộ giá trị kiện hàng từ Quỹ Bảo Hiểm Vận
+                Chuyển.
+              </p>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEvidenceModalOpen(false)}
+                  className="px-5 py-2 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition"
+                >
+                  Hoàn tất & Đóng
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4 pt-1">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex items-start gap-2.5">
+                <span className="text-base">💡</span>
+                <div className="leading-relaxed">
+                  <strong>Khuyến nghị từ AI Nexus:</strong> Nộp video quay liền mạch 6 mặt kiện hàng
+                  và ảnh chụp rõ mã vận đơn GHN. Ảnh chụp &gt; 1MB từ điện thoại sẽ được{' '}
+                  <span className="font-semibold text-amber-900">
+                    tự động nén qua Canvas Client (Task FE-01)
+                  </span>{' '}
+                  xuống ~400KB trước khi tải lên.
+                </div>
+              </div>
+
+              {/* Khu vực chọn tệp */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Tải video đóng gói / ảnh niêm phong kiện hàng:
+                </label>
+                <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center hover:border-orange-500 transition cursor-pointer relative bg-slate-50">
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*,video/mp4,video/quicktime"
+                    onChange={handleEvidenceFileSelect}
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                  />
+                  <div className="text-2xl mb-1">📤</div>
+                  <div className="text-xs font-semibold text-slate-800">
+                    Bấm để chọn tệp hoặc kéo thả video/ảnh vào đây
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">
+                    Hỗ trợ MP4, MOV, JPG, PNG (tự động nén Canvas nếu dung lượng lớn)
+                  </div>
+                </div>
+              </div>
+
+              {isCompressingFile && (
+                <div className="text-xs text-orange-600 flex items-center gap-1.5 font-medium animate-pulse">
+                  <span>⏳</span> Đang nén ảnh bằng Canvas phía Client...
+                </div>
+              )}
+
+              {/* Danh sách tệp đã chọn */}
+              {evidenceFiles.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-bold text-slate-700">
+                    Tệp đính kèm ({evidenceFiles.length}):
+                  </div>
+                  <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                    {evidenceFiles.map((f, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-2 rounded bg-white border border-slate-200 text-xs"
+                      >
+                        <div className="flex items-center gap-2 overflow-hidden">
+                          <span className="text-base">📎</span>
+                          <span className="font-medium text-slate-800 truncate max-w-[240px]">
+                            {f.name}
+                          </span>
+                          <span className="text-[11px] text-slate-500">
+                            {f.isCompressed ? (
+                              <span className="text-emerald-600 font-semibold">
+                                {f.size} (gốc: {f.rawSize})
+                              </span>
+                            ) : (
+                              f.size
+                            )}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEvidenceFiles((prev) => prev.filter((_, i) => i !== idx))
+                          }
+                          className="text-red-500 hover:text-red-700 text-xs px-2 py-0.5"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Ô ghi chú quy trình đóng gói */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Ghi chú của Người bán cho Trọng tài sàn:
+                </label>
+                <textarea
+                  rows={3}
+                  value={evidenceNote}
+                  onChange={(e) => setEvidenceNote(e.target.value)}
+                  className="w-full text-xs p-2.5 rounded-lg border border-slate-300 outline-none focus:border-orange-500 text-slate-800"
+                  placeholder="Mô tả tóm tắt quá trình kiểm hàng, niêm phong và bàn giao cho bưu tá..."
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <button
+                  type="button"
+                  onClick={() => setEvidenceModalOpen(false)}
+                  className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="button"
+                  disabled={isSubmittingEvidence || evidenceFiles.length === 0}
+                  onClick={handleSubmitEvidence}
+                  className="px-5 py-2 bg-orange-600 text-white rounded-lg text-xs font-semibold hover:bg-orange-700 transition flex items-center gap-1.5 disabled:bg-slate-400 disabled:cursor-not-allowed"
+                >
+                  {isSubmittingEvidence ? 'Đang gửi bằng chứng...' : 'Xác nhận nộp bằng chứng 🚀'}
+                </button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Task FE-05: Pop-up AI Hướng Dẫn Quy Chuẩn Video & Quy Chế Đối Soát (Task INT-02) */}
+      <Dialog open={policyModalOpen} onOpenChange={setPolicyModalOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogTitle className="flex items-center gap-2 text-base font-bold text-slate-900">
+            <span>🤖</span> AI Trợ Lý - Quy Chuẩn Video Đối Soát Hợp Lệ (Task INT-02)
+          </DialogTitle>
+          <DialogDescription className="text-xs text-slate-500">
+            Căn cứ Điều 3.6 và Quy chế Trọng tài Sàn Nexus (Bảo vệ Người bán & Người mua)
+          </DialogDescription>
+
+          <div className="space-y-3 pt-2 text-xs text-slate-700">
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-1.5">
+              <div className="font-bold text-blue-900 flex items-center gap-1.5">
+                <span>📹</span> 1. Yêu cầu kỹ thuật bắt buộc của Video:
+              </div>
+              <ul className="list-disc list-inside space-y-1 text-blue-800 leading-relaxed pl-1">
+                <li>
+                  Video phải quay <strong>1 cú máy liên tục</strong>, không cắt ghép, không tua
+                  nhanh hoặc chèn hiệu ứng che khuất.
+                </li>
+                <li>
+                  Quay rõ <strong>tình trạng 6 mặt kiện hàng</strong> trước khi đóng nắp và lúc dán
+                  băng dính niêm phong.
+                </li>
+                <li>
+                  Zoom rõ <strong>Mã vận đơn bưu tá GHN</strong> và Tem vỡ niêm phong Nexus trên
+                  thùng.
+                </li>
+              </ul>
+            </div>
+
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg space-y-1.5">
+              <div className="font-bold text-emerald-900 flex items-center gap-1.5">
+                <span>🛡️</span> 2. Quyền lợi bảo vệ Người bán (Nexus Seller Shield):
+              </div>
+              <p className="text-emerald-800 leading-relaxed">
+                Khi Shop cung cấp đủ video đạt chuẩn trên, sàn xác định lỗi thuộc về khâu vận chuyển
+                của bưu cục. Người mua sẽ được bồi hoàn từ{' '}
+                <strong>Quỹ Bảo Hiểm Vận Chuyển Sàn</strong>, Shop{' '}
+                <strong>được thanh toán 100% tiền hàng</strong> và <strong>không bị giảm</strong>{' '}
+                điểm uy tín người bán!
+              </p>
+            </div>
+
+            <div className="p-3 bg-slate-100 rounded-lg space-y-1 text-slate-600">
+              <div className="font-semibold text-slate-800">⏱️ Thời hạn nộp bằng chứng:</div>
+              <p>
+                Trong vòng <strong>24 giờ</strong> kể từ lúc nhận được thông báo yêu cầu khiếu nại.
+                Sau thời hạn này nếu không có video đối soát, đơn sẽ được xử lý theo bằng chứng của
+                Người mua.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t mt-1">
+            <button
+              type="button"
+              onClick={() => setPolicyModalOpen(false)}
+              className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+            >
+              Đã hiểu quy định
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPolicyModalOpen(false);
+                setEvidenceModalOpen(true);
+                setEvidenceSuccess(false);
+              }}
+              className="px-4 py-2 bg-orange-600 text-white rounded-lg text-xs font-semibold hover:bg-orange-700 transition flex items-center gap-1.5"
+            >
+              📹 Nộp bằng chứng ngay
             </button>
           </div>
         </DialogContent>

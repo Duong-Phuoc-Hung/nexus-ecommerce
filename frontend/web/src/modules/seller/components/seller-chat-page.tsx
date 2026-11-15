@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { chatApi } from '@/modules/chat/api/chat.api';
 import type { ChatMessageDto, ChatThreadItem } from '@/modules/chat/types/chat.types';
+import { compressImageToDataUrl } from '@/lib/utils/image-compressor';
 
 const SELLER_QUICK_REPLIES = [
   '📦 Dạ shop đã đóng gói và chuẩn bị bàn giao cho bưu tá GHN rồi bạn nhé!',
@@ -140,8 +141,8 @@ export function SellerChatPage() {
     }
   }
 
-  // 4. Chọn ảnh đính kèm từ máy
-  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+  // 4. Chọn ảnh đính kèm từ máy (tự động nén qua canvas nếu > 1MB)
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -150,13 +151,18 @@ export function SellerChatPage() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setSelectedImage(reader.result);
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const dataUrl = await compressImageToDataUrl(file);
+      setSelectedImage(dataUrl);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          setSelectedImage(reader.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   }
 
   const filteredThreads = threads.filter(
