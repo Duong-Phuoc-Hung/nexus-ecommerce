@@ -3523,5 +3523,82 @@ export const chatSpec = {
         },
       },
     },
+    '/api/v1/chat/dispute/analyze-evidence': {
+      post: {
+        tags: ['Dispute Escalation', 'AI Copilot Arbiter'],
+        summary: 'Thẩm định đối soát bằng chứng tranh chấp bằng AI Copilot Arbiter (Task BE-05)',
+        description: `${PRIVATE} Đối chiếu chéo bằng chứng giữa Người mua (Buyer Claim & Evidence) và Người bán (Seller Defense & Evidence) qua Gemini 1.5 Flash. Trả về kết luận lỗi (fault), độ tin cậy (confidence), phân tích (reasoning), khuyến nghị (recommendation) và gợi ý phán quyết 4 trường tự động map vào Modal của Support Staff.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  disputeId: { type: 'string', example: 'CS-4021' },
+                  orderId: { type: 'string', example: 'ord_01hqz555abc' },
+                  orderAmount: { type: 'number', example: 550000 },
+                  disputeReason: {
+                    type: 'string',
+                    example: 'Sản phẩm giao vỡ màn hình, nứt bể khi nhận',
+                  },
+                  buyerEvidence: {
+                    type: 'object',
+                    properties: {
+                      photos: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        example: ['https://assets.nexus.vn/screen_broken.jpg'],
+                      },
+                      note: {
+                        type: 'string',
+                        example: 'Khi mở hộp sản phẩm thì màn hình đã nứt hoàn toàn.',
+                      },
+                    },
+                  },
+                  sellerEvidence: {
+                    type: 'object',
+                    properties: {
+                      videos: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        example: ['https://assets.nexus.vn/pack_video.mp4'],
+                      },
+                      photos: { type: 'array', items: { type: 'string' } },
+                      note: {
+                        type: 'string',
+                        example:
+                          'Shop đã dán tem niêm phong và bọc chống sốc 3 lớp trước khi giao.',
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Thẩm định đối soát bằng chứng thành công', {
+            success: true,
+            data: {
+              fault: 'LOGISTICS_DAMAGE',
+              confidence: 0.88,
+              recommendation:
+                'Áp dụng Quỹ Bảo Hiểm Vận Chuyển: Hoàn 100% tiền cọc cho Buyer và thanh toán cho Seller.',
+              reasoning:
+                'Ảnh của khách cho thấy màn hình vỡ dạng va đập. Video của Shop chứng minh lúc giao hàng còn nguyên tem niêm phong.',
+              suggestedVerdict: {
+                decision: 'REFUND_BUYER',
+                liableParty: 'CARRIER',
+                refundAmount: 550000,
+                note: 'AI Phán Quyết [LOGISTICS_DAMAGE - Độ tin cậy 88%]: Hư hỏng va đập trong quá trình vận chuyển. Kích hoạt Quỹ Bảo Hiểm Vận Chuyển Nexus bồi thường.',
+              },
+            },
+          }),
+          401: unauthorized,
+        },
+      },
+    },
   },
 };

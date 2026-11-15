@@ -11,6 +11,7 @@ import { GetOrCreateConversationUseCase } from './application/use-cases/GetOrCre
 import { SendMessageUseCase } from './application/use-cases/SendMessageUseCase';
 import { QueryPolicyFaqUseCase } from './application/use-cases/QueryPolicyFaqUseCase';
 import { EscalateDisputeUseCase } from './application/use-cases/EscalateDisputeUseCase';
+import { DisputeArbiterAI } from './infrastructure/ai/DisputeArbiterAI';
 import { ChatController } from './interfaces/http/controllers/ChatController';
 import { PolicyController } from './interfaces/http/controllers/PolicyController';
 import { createChatRoutes } from './interfaces/http/routes/ChatRoutes';
@@ -46,17 +47,21 @@ export function createApplication(): Application {
     messageRepo,
     conversationRepo,
     orderTrackingTool,
+    undefined,
+    policyRepo,
   );
   const queryPolicyFaqUseCase = new QueryPolicyFaqUseCase(policyRepo);
   const escalateDisputeUseCase = new EscalateDisputeUseCase(conversationRepo, idempotencyService);
 
   // 3. Controllers
+  const disputeArbiterAi = new DisputeArbiterAI();
   const chatController = new ChatController(
     getOrCreateConversationUseCase,
     sendMessageUseCase,
     escalateDisputeUseCase,
     conversationRepo,
     messageRepo,
+    disputeArbiterAi,
   );
   const policyController = new PolicyController(queryPolicyFaqUseCase, policyRepo);
 
