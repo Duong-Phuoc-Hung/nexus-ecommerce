@@ -154,6 +154,14 @@ export class CheckoutService {
         : 'PAYOS';
     const paymentMethod: 'PAYOS' | 'COD' = rawPaymentMethod === 'COD' ? 'COD' : 'PAYOS';
 
+    if (paymentMethod === 'PAYOS' && !this.gateway.isConfigured()) {
+      throw new CheckoutError(
+        503,
+        'PAYMENT_NOT_CONFIGURED',
+        'Cổng thanh toán PayOS chưa được cấu hình.',
+      );
+    }
+
     if (idempotencyKey !== undefined && !/^[\w\-.:]{1,100}$/.test(idempotencyKey)) {
       throw new CheckoutError(400, 'VALIDATION_ERROR', 'Header Idempotency-Key không hợp lệ.');
     }
@@ -212,7 +220,7 @@ export class CheckoutService {
     }
 
     const payment =
-      paymentMethod === 'COD' || !this.gateway.isConfigured()
+      paymentMethod === 'COD'
         ? created.payment
         : await this.ensureLink(created.order, created.payment);
 
@@ -379,12 +387,10 @@ export class CheckoutService {
       checkoutUrl: payment?.checkoutUrl || null,
       paymentLinkId: payment?.paymentLinkId || null,
       qrCode: payment?.qrCode || null,
-      bin: payment?.bin || '970416',
-      accountNumber: payment?.accountNumber || 'LOCCASS000341571',
-      accountName: payment?.accountName || 'PHAM VO HUNG NGHI',
-      description:
-        payment?.description ||
-        (payment?.payosOrderCode ? `CSFRRN18T51 Nexus ${order.id}` : `Nexus ${order.id}`),
+      bin: payment?.bin || null,
+      accountNumber: payment?.accountNumber || null,
+      accountName: payment?.accountName || null,
+      description: payment?.description || null,
     };
   }
 
@@ -448,12 +454,10 @@ export class CheckoutService {
       checkoutUrl: payment.checkoutUrl || null,
       paymentLinkId: payment.paymentLinkId || null,
       qrCode: payment.qrCode || null,
-      bin: payment.bin || '970416',
-      accountNumber: payment.accountNumber || 'LOCCASS000341571',
-      accountName: payment.accountName || 'NEXUS E-COMMERCE',
-      description:
-        payment.description ||
-        (payment.payosOrderCode ? `CSFRRN18T51 Nexus ${order.id}` : `Nexus ${order.id}`),
+      bin: payment.bin || null,
+      accountNumber: payment.accountNumber || null,
+      accountName: payment.accountName || null,
+      description: payment.description || null,
     };
   }
 

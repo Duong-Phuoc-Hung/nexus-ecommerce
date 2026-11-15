@@ -200,6 +200,11 @@ model Payment {
   payosOrderCode BigInt?  @unique @map("payos_order_code")
   paymentLinkId  String?  @map("payment_link_id") @db.VarChar(100)
   checkoutUrl    String?  @map("checkout_url") @db.Text
+  qrCode         String?  @map("qr_code") @db.Text
+  bankBin        String?  @map("bank_bin") @db.VarChar(20)
+  accountNumber  String?  @map("account_number") @db.VarChar(100)
+  accountName    String?  @map("account_name") @db.VarChar(255)
+  transferDescription String? @map("transfer_description") @db.Text
   expiresAt      DateTime? @map("expires_at") @db.Timestamptz()
   paidAt         DateTime? @map("paid_at") @db.Timestamptz()
 

@@ -2,6 +2,10 @@ import { IShipmentRepository } from '../../domain/repositories/IShipmentReposito
 import { ShipmentNotFoundException } from '../../domain/exceptions/ShipmentNotFoundException';
 import { CarrierCode, ShipmentStatus } from '../../domain/entities/Shipment';
 import { mapShipmentToDto, ShipmentDetailDto } from '../dtos/ShipmentDetailDto';
+import {
+  CommerceOrderClient,
+  ICommerceOrderClient,
+} from '../../infrastructure/clients/CommerceOrderClient';
 
 export interface ManualOverrideShipmentRequest {
   shipmentId: string;
@@ -15,7 +19,14 @@ export interface ManualOverrideShipmentRequest {
 }
 
 export class ManualOverrideShipmentUseCase {
-  constructor(private readonly shipmentRepository: IShipmentRepository) {}
+  private readonly commerceClient: ICommerceOrderClient;
+
+  constructor(
+    private readonly shipmentRepository: IShipmentRepository,
+    commerceClient?: ICommerceOrderClient,
+  ) {
+    this.commerceClient = commerceClient || new CommerceOrderClient();
+  }
 
   public async execute(req: ManualOverrideShipmentRequest): Promise<ShipmentDetailDto> {
     const trimmed = (req.shipmentId || '').trim();
@@ -55,6 +66,15 @@ export class ManualOverrideShipmentUseCase {
     });
 
     await this.shipmentRepository.update(shipment);
+
+    // Tự động đồng bộ trạng thái đơn hàng sang Commerce Service nếu có cập nhật trạng thái
+    if (resolvedStatus && shipment.orderId) {
+      await this.commerceClient.syncStatus(
+        shipment.orderId,
+        resolvedStatus,
+        req.reason || 'Can thiệp thủ công từ nhân viên Hỗ trợ (Manual Override)',
+      );
+    }
 
     return mapShipmentToDto(shipment);
   }

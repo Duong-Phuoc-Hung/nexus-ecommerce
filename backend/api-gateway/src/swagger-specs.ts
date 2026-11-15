@@ -1233,6 +1233,196 @@ export const catalogSpec = {
         },
       },
     },
+    '/api/v1/products/{id}/deduct-stock': {
+      post: {
+        tags: ['Products'],
+        summary: 'Trừ tồn kho khi thanh toán thành công (Internal / Commerce)',
+        description:
+          'Tự động trừ số lượng sản phẩm trong kho khi đơn hàng được thanh toán thành công từ Commerce Service.',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã sản phẩm',
+            schema: { type: 'string', example: '3' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['quantity'],
+                properties: {
+                  quantity: { type: 'integer', example: 1 },
+                  orderId: { type: 'string', example: '019310c2-5501-7000-8000-000000008021' },
+                  reason: { type: 'string', example: 'Order paid successfully' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Trừ kho thành công', {
+            success: true,
+            data: { id: '3', remainingStock: 4, status: 'ACTIVE' },
+          }),
+          400: errorResponse('Dữ liệu không hợp lệ', 'Số lượng trừ kho phải lớn hơn 0.'),
+          404: errorResponse('Không tìm thấy sản phẩm', 'Không tìm thấy sản phẩm với mã: 3'),
+          409: errorResponse('Tồn kho không đủ', 'Insufficient stock for product 3. Current: 0'),
+        },
+      },
+    },
+    '/api/v1/favorites': {
+      get: {
+        tags: ['Favorites'],
+        summary: 'Lấy danh sách yêu thích của Buyer (Wishlist)',
+        description:
+          'Xem tất cả sản phẩm mà người mua hiện tại đã thả tim. Yêu cầu đăng nhập tài khoản BUYER.',
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: jsonResponse('Danh sách sản phẩm yêu thích', {
+            success: true,
+            data: [
+              {
+                id: '3',
+                title: 'Máy ảnh Leica Q3 Full-Frame Compact',
+                price: 155000000,
+                status: 'ACTIVE',
+                sellerName: 'Trần Thị Seller',
+              },
+            ],
+            total: 1,
+          }),
+          401: unauthorized,
+        },
+      },
+    },
+    '/api/v1/favorites/{productId}': {
+      post: {
+        tags: ['Favorites'],
+        summary: 'Thêm / Bỏ yêu thích sản phẩm (Thả tim / Hủy tim)',
+        description:
+          'Chuyển đổi trạng thái yêu thích: nếu chưa thích thì thêm vào Wishlist, nếu đã thích rồi thì bấm lại sẽ bỏ thích.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'productId',
+            in: 'path',
+            required: true,
+            description: 'Mã sản phẩm cần thả tim / hủy tim',
+            schema: { type: 'string', example: '3' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Cập nhật trạng thái yêu thích thành công', {
+            success: true,
+            data: {
+              productId: '3',
+              isFavorited: true,
+              message: 'Đã thêm sản phẩm vào danh sách yêu thích thành công.',
+            },
+          }),
+          401: unauthorized,
+          404: errorResponse('Không tìm thấy sản phẩm', 'Không tìm thấy sản phẩm với mã: 3'),
+        },
+      },
+    },
+    '/api/v1/products/{id}/reviews': {
+      get: {
+        tags: ['Reviews'],
+        summary: 'Xem danh sách đánh giá & số sao trung bình của sản phẩm',
+        description:
+          'Lấy toàn bộ bình luận, đánh giá sao của sản phẩm cùng điểm đánh giá trung bình (averageRating) để Frontend hiển thị.',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã sản phẩm cần xem đánh giá',
+            schema: { type: 'string', example: '3' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Danh sách đánh giá', {
+            success: true,
+            data: {
+              productId: '3',
+              totalReviews: 2,
+              averageRating: 4.5,
+              reviews: [
+                {
+                  id: '019310c2-5501-7000-8000-000000009999',
+                  productId: '3',
+                  userId: 'usr_buyer_1',
+                  userName: 'Nguyễn Văn Buyer',
+                  rating: 5,
+                  comment: 'Chất lượng ảnh xuất sắc, đóng gói cẩn thận!',
+                  createdAt: '2026-11-10T10:00:00.000Z',
+                },
+              ],
+            },
+          }),
+          404: errorResponse('Không tìm thấy sản phẩm', 'Không tìm thấy sản phẩm với mã: 3'),
+        },
+      },
+      post: {
+        tags: ['Reviews'],
+        summary: 'Gửi đánh giá sản phẩm (Người mua)',
+        description:
+          'Chấm điểm từ 1 đến 5 sao và để lại bình luận cho sản phẩm. Yêu cầu đăng nhập.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã sản phẩm được đánh giá',
+            schema: { type: 'string', example: '3' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['rating'],
+                properties: {
+                  rating: { type: 'integer', minimum: 1, maximum: 5, example: 5 },
+                  comment: {
+                    type: 'string',
+                    example: 'Sản phẩm dùng rất tốt, giao hàng nhanh chóng!',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: jsonResponse('Gửi đánh giá thành công', {
+            success: true,
+            data: {
+              id: '019310c2-5501-7000-8000-000000009999',
+              productId: '3',
+              userId: 'usr_buyer_1',
+              userName: 'Nguyễn Văn Buyer',
+              rating: 5,
+              comment: 'Sản phẩm dùng rất tốt, giao hàng nhanh chóng!',
+              createdAt: '2026-11-10T10:00:00.000Z',
+            },
+          }),
+          400: errorResponse(
+            'Dữ liệu không hợp lệ',
+            'Điểm đánh giá phải là số nguyên từ 1 đến 5 sao.',
+          ),
+          401: unauthorized,
+          404: errorResponse('Không tìm thấy sản phẩm', 'Không tìm thấy sản phẩm với mã: 3'),
+        },
+      },
+    },
   },
 };
 
@@ -1757,6 +1947,70 @@ export const auctionSpec = {
           ),
           401: errorResponse('Chưa đăng nhập', 'Vui lòng đăng nhập để tham gia trả giá.'),
           404: errorResponse('Không tìm thấy', 'Auction with ID "1" was not found.'),
+        },
+      },
+    },
+    '/api/v1/auctions/{id}/checkout': {
+      post: {
+        tags: ['Auction Settlement'],
+        summary: 'Chốt đơn người thắng đấu giá & Sinh link VietQR PayOS',
+        description:
+          'Dành riêng cho người chiến thắng (highestBidderId) của phiên đã kết thúc (ENDED) chốt đơn và nhận link thanh toán PayOS.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã phòng đấu giá đã kết thúc',
+            schema: { type: 'string', example: '1' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['shippingAddress'],
+                properties: {
+                  shippingAddress: {
+                    type: 'object',
+                    required: ['fullName', 'phone', 'province', 'addressLine', 'country'],
+                    properties: {
+                      fullName: { type: 'string', example: 'Lê Văn Thắng' },
+                      phone: { type: 'string', example: '0988776655' },
+                      province: { type: 'string', example: 'Hồ Chí Minh' },
+                      district: { type: 'string', example: 'Quận 1' },
+                      ward: { type: 'string', example: 'Bến Nghé' },
+                      addressLine: { type: 'string', example: 'Số 1 Lê Duẩn' },
+                      country: { type: 'string', example: 'Vietnam' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Tạo đơn thanh toán đấu giá thành công', {
+            success: true,
+            message: 'Tạo đơn hàng thành công! Vui lòng quét mã VietQR PayOS để thanh toán.',
+            data: {
+              orderId: '019310c2-5501-7000-8000-000000008021',
+              orderCode: 123456,
+              totalAmount: 25000000,
+              payment: {
+                paymentLinkId: 'plink_abc123',
+                checkoutUrl: 'https://pay.payos.vn/web/123456',
+                status: 'PENDING',
+              },
+            },
+          }),
+          400: errorResponse('Lỗi nghiệp vụ', 'Phiên đấu giá chưa kết thúc.'),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy phiên', 'Auction with ID "1" was not found.'),
         },
       },
     },
@@ -3053,6 +3307,441 @@ export const fulfillmentSpec = {
           401: unauthorized,
           403: forbidden,
           404: errorResponse('Không tìm thấy vận đơn', 'Shipment not found.'),
+        },
+      },
+    },
+  },
+};
+
+export const chatSpec = {
+  openapi: '3.0.0',
+  info: {
+    title: 'Nexus - AI Chatbot, Policy FAQ & Dispute Service',
+    version: '1.0.0',
+    description:
+      'Dịch vụ Chat đa luồng cách ly bảo mật (AI_BOT, BUYER_SELLER, BUYER_SUPPORT), tra cứu vận đơn tự động qua Tool Call, hỏi đáp chính sách có trích dẫn nguồn văn bản (Versioned Policy Grounding) và bàn giao khiếu nại kẹp khóa chống trùng Idempotency.',
+  },
+  servers: [{ url: '/', description: 'API Gateway (Same Origin)' }],
+  components: commonComponents,
+  paths: {
+    '/api/v1/chat/conversations': {
+      post: {
+        tags: ['Chat & Conversations'],
+        summary: 'Mở hoặc tìm kiếm cuộc hội thoại theo đơn hàng',
+        description: `${PRIVATE} Tạo mới hoặc trả về cuộc hội thoại đã có theo orderId và channelType ('AI_BOT', 'BUYER_SELLER', 'BUYER_SUPPORT'). Tự động cô lập kênh, chống rò rỉ IDOR giữa Người mua, Người bán và Nhân viên CSKH.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['orderId', 'channelType'],
+                properties: {
+                  orderId: { type: 'string', example: 'ord_123456789' },
+                  channelType: {
+                    type: 'string',
+                    enum: ['AI_BOT', 'BUYER_SELLER', 'BUYER_SUPPORT'],
+                    example: 'AI_BOT',
+                  },
+                  sellerId: { type: 'string', example: 'seller_uuid_001' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Lấy hoặc tạo phòng chat thành công', {
+            success: true,
+            data: {
+              id: 'conv_a1b2c3d4e5f6',
+              orderId: 'ord_123456789',
+              channelType: 'AI_BOT',
+              buyerId: 'buyer_uuid_001',
+              sellerId: 'seller_uuid_001',
+              createdAt: '2026-11-12T00:00:00.000Z',
+              updatedAt: '2026-11-12T00:00:00.000Z',
+            },
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+    },
+    '/api/v1/chat/conversations/{id}': {
+      get: {
+        tags: ['Chat & Conversations'],
+        summary: 'Xem chi tiết phòng chat (Anti-IDOR Guard)',
+        description: `${PRIVATE} Lấy thông tin phòng chat theo ID. Bắt buộc tài khoản gọi phải là Buyer, Seller (nếu kênh BUYER_SELLER) hoặc CSKH. Chặn hoàn toàn trường hợp Buyer khác đổi ID để đọc trộm.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+            example: 'conv_a1b2c3d4e5f6',
+          },
+        ],
+        responses: {
+          200: jsonResponse('Lấy chi tiết phòng chat thành công', {
+            success: true,
+            data: {
+              id: 'conv_a1b2c3d4e5f6',
+              orderId: 'ord_123456789',
+              channelType: 'AI_BOT',
+              buyerId: 'buyer_uuid_001',
+            },
+          }),
+          401: unauthorized,
+          403: errorResponse(
+            'Không có quyền truy cập',
+            'Forbidden: You are not authorized to view this conversation.',
+          ),
+          404: errorResponse('Không tìm thấy cuộc hội thoại', 'Conversation not found.'),
+        },
+      },
+    },
+    '/api/v1/chat/orders/{orderId}/conversations': {
+      get: {
+        tags: ['Chat & Conversations'],
+        summary: 'Danh sách các phòng chat thuộc một đơn hàng',
+        description: `${PRIVATE} Lấy danh sách các cuộc hội thoại liên quan đến đơn hàng mà người dùng hiện tại có thẩm quyền truy cập.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'orderId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+            example: 'ord_123456789',
+          },
+        ],
+        responses: {
+          200: jsonResponse('Danh sách cuộc hội thoại hợp lệ', {
+            success: true,
+            data: [
+              {
+                id: 'conv_a1b2c3d4e5f6',
+                orderId: 'ord_123456789',
+                channelType: 'AI_BOT',
+              },
+            ],
+          }),
+          401: unauthorized,
+        },
+      },
+    },
+    '/api/v1/chat/conversations/{id}/messages': {
+      post: {
+        tags: ['Chat & Messages'],
+        summary: 'Gửi tin nhắn (Tự động kích hoạt Tool tra cứu vận đơn nếu là AI_BOT)',
+        description: `${PRIVATE} Gửi tin nhắn văn bản kèm tệp đính kèm. Nếu kênh là AI_BOT và nội dung hỏi về hành trình đơn hàng, AI Tool sẽ tự động tra cứu Fulfillment Service và sinh phản hồi tự động ngay lập tức.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+            example: 'conv_a1b2c3d4e5f6',
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['content'],
+                properties: {
+                  content: { type: 'string', example: 'Đơn hàng của tôi đã giao đến đâu rồi?' },
+                  attachments: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        url: { type: 'string', example: 'https://cdn.nexus.vn/proof.jpg' },
+                        fileName: { type: 'string', example: 'proof.jpg' },
+                        fileType: { type: 'string', example: 'image/jpeg' },
+                        fileSize: { type: 'number', example: 1048576 },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: jsonResponse('Gửi tin nhắn thành công', {
+            success: true,
+            data: {
+              userMessage: {
+                id: 'msg_001',
+                senderId: 'buyer_uuid_001',
+                senderRole: 'BUYER',
+                content: 'Đơn hàng của tôi đã giao đến đâu rồi?',
+                createdAt: '2026-11-12T00:00:01.000Z',
+              },
+              aiReply: {
+                id: 'msg_002',
+                senderId: 'SYSTEM_AI_BOT',
+                senderRole: 'AI_ASSISTANT',
+                content:
+                  'Vận đơn shp_123 đang trên đường giao. Đơn vị vận chuyển: GHN Express. Dự kiến giao: 2 ngày tới.',
+                createdAt: '2026-11-12T00:00:02.000Z',
+              },
+            },
+          }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy cuộc hội thoại', 'Conversation not found.'),
+        },
+      },
+      get: {
+        tags: ['Chat & Messages'],
+        summary: 'Lấy lịch sử tin nhắn (Hỗ trợ Polling ?after=<timestamp>)',
+        description: `${PRIVATE} Lấy danh sách tin nhắn trong phòng chat. Hỗ trợ query parameter 'after' để polling các tin nhắn mới nhất nhằm tối ưu tải cho client.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+            example: 'conv_a1b2c3d4e5f6',
+          },
+          {
+            name: 'after',
+            in: 'query',
+            required: false,
+            schema: { type: 'string' },
+            example: '2026-11-12T00:00:00.000Z',
+          },
+        ],
+        responses: {
+          200: jsonResponse('Lấy tin nhắn thành công', {
+            success: true,
+            data: [
+              {
+                id: 'msg_001',
+                senderId: 'buyer_uuid_001',
+                senderRole: 'BUYER',
+                content: 'Đơn hàng của tôi đã giao đến đâu rồi?',
+                createdAt: '2026-11-12T00:00:01.000Z',
+              },
+            ],
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+    },
+    '/api/v1/chat/faq': {
+      post: {
+        tags: ['Policy FAQ & Knowledge'],
+        summary: 'Tra cứu câu hỏi chính sách có trích dẫn văn bản (Grounded Citations)',
+        description: `${PUBLIC} Tra cứu quy chế nền tảng (Đấu giá, Trả hàng, Giao hàng) theo phiên bản. Phân biệt rõ chính sách mặc định và chính sách áp dụng thực tế. Tự động trả về truthful fallback nếu thiếu căn cứ.`,
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['query'],
+                properties: {
+                  query: { type: 'string', example: 'Tôi bị mất cọc đấu giá khi nào?' },
+                  category: { type: 'string', example: 'AUCTION' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Trả lời có dẫn chứng', {
+            success: true,
+            data: {
+              question: 'Tôi bị mất cọc đấu giá khi nào?',
+              answer:
+                'Người thắng đấu giá có 24h để thanh toán. Quá 24h không thanh toán sẽ hủy tư cách mua và tịch thu tiền cọc.',
+              citations: [
+                {
+                  code: 'AUCTION_WIN_PAYMENT_DEADLINE',
+                  title: 'Thời hạn thanh toán đấu giá',
+                  article: 'Điều 4.2 - Quy chế Đấu giá v1.2',
+                  version: 'v1.2',
+                  content:
+                    'Người thắng đấu giá có tối đa 24 giờ kể từ thời điểm chốt phiên để hoàn tất thanh toán.',
+                },
+              ],
+              isGrounded: true,
+              canEscalate: false,
+            },
+          }),
+        },
+      },
+    },
+    '/api/v1/chat/policies': {
+      get: {
+        tags: ['Policy FAQ & Knowledge'],
+        summary: 'Danh sách các quy chế nền tảng đang kích hoạt',
+        description: `${PUBLIC} Lấy toàn bộ các điều khoản quy chế, phiên bản hiệu lực và tham số cấu hình phục vụ giải quyết khiếu nại.`,
+        responses: {
+          200: jsonResponse('Danh sách chính sách hiệu lực', {
+            success: true,
+            data: [
+              {
+                code: 'AUCTION_WIN_PAYMENT_DEADLINE',
+                title: 'Thời hạn thanh toán đấu giá',
+                articleReference: 'Điều 4.2 - Quy chế Đấu giá v1.2',
+                version: 'v1.2',
+                isActive: true,
+              },
+            ],
+          }),
+        },
+      },
+    },
+    '/api/v1/chat/escalate': {
+      post: {
+        tags: ['Dispute Escalation'],
+        summary: 'Bàn giao khiếu nại kẹp khóa chống trùng Idempotency sang CSKH',
+        description: `${PRIVATE} Tạo hồ sơ khiếu nại đơn hàng (hàng vỡ, sai mẫu mã, hư hỏng) kẹp khóa Idempotency Key (qua Redis / Cache). Ngăn chặn tạo case trùng lặp khi mạng gián đoạn retry. Tự động kiểm tra định dạng và dung lượng đính kèm (<= 20MB, JPG/PNG/WEBP/MP4).`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['orderId', 'reason', 'idempotencyKey'],
+                properties: {
+                  orderId: { type: 'string', example: 'ord_123456789' },
+                  reason: { type: 'string', example: 'Hàng nhận bị nứt vỡ mặt kính khi mở hộp.' },
+                  idempotencyKey: { type: 'string', example: 'idemp-req-789-retry-1' },
+                  attachments: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        url: { type: 'string', example: 'https://cdn.nexus.vn/broken-box.jpg' },
+                        fileName: { type: 'string', example: 'broken-box.jpg' },
+                        fileType: { type: 'string', example: 'image/jpeg' },
+                        fileSize: { type: 'number', example: 5242880 },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: jsonResponse('Tạo case khiếu nại thành công', {
+            success: true,
+            data: {
+              caseId: 'dsp_1710123456789_a1b2c3',
+              orderId: 'ord_123456789',
+              buyerId: 'buyer_uuid_001',
+              status: 'OPEN',
+              isDuplicateRequest: false,
+              assignedDepartment: 'SUPPORT_DISPUTE_TIER_1',
+              supportQueue: 'DISPUTE_ESCALATION_QUEUE',
+              message: 'Hồ sơ khiếu nại đã được chuyển giao thành công cho Support Staff.',
+            },
+          }),
+          200: jsonResponse('Đã tồn tại case với Idempotency Key này (Chống trùng lặp)', {
+            success: true,
+            data: {
+              caseId: 'dsp_1710123456789_a1b2c3',
+              orderId: 'ord_123456789',
+              isDuplicateRequest: true,
+              message: 'Yêu cầu khiếu nại đã được tiếp nhận trước đó, không tạo trùng hồ sơ.',
+            },
+          }),
+          400: errorResponse(
+            'Đính kèm không hợp lệ hoặc thiếu dữ liệu',
+            'File proof exceeds maximum limit of 20MB.',
+          ),
+          401: unauthorized,
+        },
+      },
+    },
+    '/api/v1/chat/dispute/analyze-evidence': {
+      post: {
+        tags: ['Dispute Escalation', 'AI Copilot Arbiter'],
+        summary: 'Thẩm định đối soát bằng chứng tranh chấp bằng AI Copilot Arbiter (Task BE-05)',
+        description: `${PRIVATE} Đối chiếu chéo bằng chứng giữa Người mua (Buyer Claim & Evidence) và Người bán (Seller Defense & Evidence) qua Gemini 1.5 Flash. Trả về kết luận lỗi (fault), độ tin cậy (confidence), phân tích (reasoning), khuyến nghị (recommendation) và gợi ý phán quyết 4 trường tự động map vào Modal của Support Staff.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  disputeId: { type: 'string', example: 'CS-4021' },
+                  orderId: { type: 'string', example: 'ord_01hqz555abc' },
+                  orderAmount: { type: 'number', example: 550000 },
+                  disputeReason: {
+                    type: 'string',
+                    example: 'Sản phẩm giao vỡ màn hình, nứt bể khi nhận',
+                  },
+                  buyerEvidence: {
+                    type: 'object',
+                    properties: {
+                      photos: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        example: ['https://assets.nexus.vn/screen_broken.jpg'],
+                      },
+                      note: {
+                        type: 'string',
+                        example: 'Khi mở hộp sản phẩm thì màn hình đã nứt hoàn toàn.',
+                      },
+                    },
+                  },
+                  sellerEvidence: {
+                    type: 'object',
+                    properties: {
+                      videos: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        example: ['https://assets.nexus.vn/pack_video.mp4'],
+                      },
+                      photos: { type: 'array', items: { type: 'string' } },
+                      note: {
+                        type: 'string',
+                        example:
+                          'Shop đã dán tem niêm phong và bọc chống sốc 3 lớp trước khi giao.',
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Thẩm định đối soát bằng chứng thành công', {
+            success: true,
+            data: {
+              fault: 'LOGISTICS_DAMAGE',
+              confidence: 0.88,
+              recommendation:
+                'Áp dụng Quỹ Bảo Hiểm Vận Chuyển: Hoàn 100% tiền cọc cho Buyer và thanh toán cho Seller.',
+              reasoning:
+                'Ảnh của khách cho thấy màn hình vỡ dạng va đập. Video của Shop chứng minh lúc giao hàng còn nguyên tem niêm phong.',
+              suggestedVerdict: {
+                decision: 'REFUND_BUYER',
+                liableParty: 'CARRIER',
+                refundAmount: 550000,
+                note: 'AI Phán Quyết [LOGISTICS_DAMAGE - Độ tin cậy 88%]: Hư hỏng va đập trong quá trình vận chuyển. Kích hoạt Quỹ Bảo Hiểm Vận Chuyển Nexus bồi thường.',
+              },
+            },
+          }),
+          401: unauthorized,
         },
       },
     },

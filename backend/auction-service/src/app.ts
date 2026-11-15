@@ -11,11 +11,12 @@ import { AuctionController } from './interfaces/http/controllers/AuctionControll
 import { createAuctionRoutes } from './interfaces/http/routes/AuctionRoutes';
 import { checkRedisHealth, RedisHealthStatus } from './infrastructure/redis/RedisClient';
 import { GetBidHistoryUseCase } from './application/use-cases/GetBidHistoryUseCase';
-
 import {
   createAuctionMutations,
   createInMemoryAuctionTransaction,
 } from './application/auction-mutations';
+import { AuctionCheckoutUseCase } from './application/use-cases/AuctionCheckoutUseCase';
+import { HttpCommerceOrderClient } from './infrastructure/clients/HttpCommerceOrderClient';
 
 export function createApplication(
   healthChecker: () => Promise<RedisHealthStatus> = checkRedisHealth,
@@ -86,6 +87,8 @@ export function createApplication(
   const getAuctionDetailUseCase = new GetAuctionDetailUseCase(auctionRepository);
   const createAuctionRoomUseCase = new CreateAuctionRoomUseCase(auctionRepository);
   const getBidHistoryUseCase = new GetBidHistoryUseCase(auctionRepository);
+  const commerceOrderClient = new HttpCommerceOrderClient();
+  const auctionCheckoutUseCase = new AuctionCheckoutUseCase(auctionRepository, commerceOrderClient);
 
   const auctionController = new AuctionController(
     getAuctionDetailUseCase,
@@ -96,6 +99,7 @@ export function createApplication(
     mutations.buy,
     mutations.cancel,
     auctionRepository,
+    auctionCheckoutUseCase,
   );
 
   app.use('/api/v1/auctions', createAuctionRoutes(auctionController));

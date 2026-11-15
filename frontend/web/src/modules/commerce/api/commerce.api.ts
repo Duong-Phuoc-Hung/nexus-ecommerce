@@ -140,6 +140,11 @@ export function createCommerceApi(request: RequestApi) {
         expiresAt?: string;
         checkoutUrl?: string | null;
         paymentLinkId?: string | null;
+        qrCode?: string | null;
+        bin?: string | null;
+        accountNumber?: string | null;
+        accountName?: string | null;
+        description?: string | null;
       };
     },
     async getPaymentLink(orderId: string, renew?: boolean) {
@@ -148,6 +153,11 @@ export function createCommerceApi(request: RequestApi) {
         orderCode?: number;
         checkoutUrl?: string | null;
         paymentLinkId?: string | null;
+        qrCode?: string | null;
+        bin?: string | null;
+        accountNumber?: string | null;
+        accountName?: string | null;
+        description?: string | null;
         reused?: boolean;
       }>(
         await request(`/orders/${encodeURIComponent(orderId)}/payment-link`, {
@@ -167,6 +177,13 @@ export function createCommerceApi(request: RequestApi) {
         paidAt: string | null;
         expiresAt: string;
         expired: boolean;
+        checkoutUrl?: string | null;
+        paymentLinkId?: string | null;
+        qrCode?: string | null;
+        bin?: string | null;
+        accountNumber?: string | null;
+        accountName?: string | null;
+        description?: string | null;
       }>(await request(`/orders/${encodeURIComponent(orderId)}/payment-status`, { signal }));
     },
   };

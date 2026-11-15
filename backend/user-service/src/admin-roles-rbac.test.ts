@@ -184,18 +184,21 @@ test('PUT /api/v1/users/:id/role enforces RBAC, validates role input, updates ro
     assert.equal(notFoundRes.status, 404);
 
     // 7. Admin updates valid user (buyer -> SELLER) -> 200 OK
-    const updateSuccessRes = await fetch(`${baseUrl}/api/v1/users/usr_01hqz789abc/role`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${adminToken}`,
+    const updateSuccessRes = await fetch(
+      `${baseUrl}/api/v1/users/01a15822-43b8-78c3-a246-16bff78bc6e8/role`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ role: 'SELLER' }),
       },
-      body: JSON.stringify({ role: 'SELLER' }),
-    });
+    );
     assert.equal(updateSuccessRes.status, 200);
     const updateJson = (await updateSuccessRes.json()) as any;
     assert.equal(updateJson.success, true);
-    assert.equal(updateJson.data.id, 'usr_01hqz789abc');
+    assert.equal(updateJson.data.id, '01a15822-43b8-78c3-a246-16bff78bc6e8');
     assert.equal(updateJson.data.role, 'SELLER');
 
     // 8. Session Revocation Check (SRS 3.1.2 requirement):

@@ -8,6 +8,7 @@ import { DispatchOrderUseCase } from '../../../application/use-cases/DispatchOrd
 import { RequestRefundUseCase } from '../../../application/use-cases/RequestRefundUseCase';
 import { ExecuteRefundUseCase } from '../../../application/use-cases/ExecuteRefundUseCase';
 import { GetRefundStatusUseCase } from '../../../application/use-cases/GetRefundStatusUseCase';
+import { UpdateOrderStatusUseCase } from '../../../application/use-cases/UpdateOrderStatusUseCase';
 import { OrderNotFoundException } from '../../../domain/exceptions/OrderNotFoundException';
 import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
 
@@ -22,6 +23,7 @@ export class OrderController {
     private readonly requestRefundUseCase?: RequestRefundUseCase,
     private readonly executeRefundUseCase?: ExecuteRefundUseCase,
     private readonly getRefundStatusUseCase?: GetRefundStatusUseCase,
+    private readonly updateOrderStatusUseCase?: UpdateOrderStatusUseCase,
     private readonly adminReads?: {
       search: SearchOrdersUseCase;
       detail: GetOrderDetailUseCase;
@@ -475,6 +477,52 @@ export class OrderController {
       res.status(500).json({
         success: false,
         error: error.message || 'Không thể tra cứu trạng thái hoàn tiền.',
+      });
+    }
+  }
+
+  /**
+   * PATCH /api/v1/orders/:id/status & POST /api/v1/orders/:id/status
+   * Cập nhật trạng thái đơn hàng (Đồng bộ từ Fulfillment/3PL hoặc thao tác can thiệp từ Support/Seller/Admin)
+   * Tự động kích hoạt trừ kho Catalog khi chuyển sang DELIVERED.
+   */
+  public async updateStatus(req: Request, res: Response): Promise<void> {
+    try {
+      if (!this.updateOrderStatusUseCase) {
+        res.status(500).json({ success: false, error: 'UpdateOrderStatusUseCase not configured.' });
+        return;
+      }
+
+      const orderId = req.params.id as string;
+      const { status, note } = req.body || {};
+      const user = (req as AuthenticatedRequest).user;
+
+      if (!status) {
+        res.status(400).json({ success: false, error: 'Thiếu thông tin trạng thái (status).' });
+        return;
+      }
+
+      const result = await this.updateOrderStatusUseCase.execute({
+        orderId,
+        status,
+        note,
+        operatorId: user?.sub,
+        operatorRole: user?.role,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Cập nhật trạng thái đơn hàng thành công.',
+        data: result,
+      });
+    } catch (error: any) {
+      if (error instanceof OrderNotFoundException) {
+        res.status(404).json({ success: false, error: error.message });
+        return;
+      }
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Không thể cập nhật trạng thái đơn hàng.',
       });
     }
   }

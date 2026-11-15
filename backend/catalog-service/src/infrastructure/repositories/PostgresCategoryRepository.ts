@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../database/generated/client';
 import { PrismaClientWrapper } from '../database/PrismaClient';
 import { ICategoryRepository } from '../../domain/repositories/ICategoryRepository';
 import { Category } from '../../domain/entities/Category';

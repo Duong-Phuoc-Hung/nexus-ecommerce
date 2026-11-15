@@ -2,6 +2,10 @@ import { IShipmentRepository } from '../../domain/repositories/IShipmentReposito
 import { ShipmentNotFoundException } from '../../domain/exceptions/ShipmentNotFoundException';
 import { ShipmentStatus } from '../../domain/entities/Shipment';
 import { mapShipmentToDto, ShipmentDetailDto } from '../dtos/ShipmentDetailDto';
+import {
+  CommerceOrderClient,
+  ICommerceOrderClient,
+} from '../../infrastructure/clients/CommerceOrderClient';
 
 export interface UpdateShipmentStatusRequest {
   shipmentId: string;
@@ -11,7 +15,14 @@ export interface UpdateShipmentStatusRequest {
 }
 
 export class UpdateShipmentStatusUseCase {
-  constructor(private readonly shipmentRepository: IShipmentRepository) {}
+  private readonly commerceClient: ICommerceOrderClient;
+
+  constructor(
+    private readonly shipmentRepository: IShipmentRepository,
+    commerceClient?: ICommerceOrderClient,
+  ) {
+    this.commerceClient = commerceClient || new CommerceOrderClient();
+  }
 
   public async execute(req: UpdateShipmentStatusRequest): Promise<ShipmentDetailDto> {
     const trimmed = (req.shipmentId || '').trim();
@@ -63,6 +74,11 @@ export class UpdateShipmentStatusUseCase {
 
     shipment.updateStatus(targetStatus, req.location);
     await this.shipmentRepository.update(shipment);
+
+    // Tự động đồng bộ trạng thái đơn hàng sang Commerce Service (SRS 3.4 & 3.6)
+    if (shipment.orderId) {
+      await this.commerceClient.syncStatus(shipment.orderId, targetStatus, req.note);
+    }
 
     return mapShipmentToDto(shipment);
   }

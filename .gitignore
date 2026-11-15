@@ -10,6 +10,7 @@ build/
 out/
 .next/
 *.tsbuildinfo
+*.node
 
 # Logs & Debugging
 logs/

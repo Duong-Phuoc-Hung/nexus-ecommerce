@@ -44,6 +44,11 @@ const fakeGateway: IPaymentGateway = {
     return {
       paymentLinkId: `plink_${request.orderCode}`,
       checkoutUrl: `https://pay.test/${request.orderCode}`,
+      qrCode: `000201NEXUS${request.orderCode}`,
+      bin: '970422',
+      accountNumber: '123456789',
+      accountName: 'NEXUS TEST',
+      description: `NEXUS${request.orderCode}`,
     };
   },
   verifyWebhook: (body) => payos.verifyWebhook(body),
@@ -183,6 +188,7 @@ test(
       assert.equal(order.status, 201);
       assert.equal(order.json.data.totalAmount, 230000);
       assert.match(order.json.data.checkoutUrl, /^https:\/\/pay\.test\//);
+      assert.match(order.json.data.qrCode, /^000201NEXUS/);
       const orderId = order.json.data.orderId;
 
       const replay = await call('POST', '/orders/checkout', buyerTk, body, {
@@ -190,6 +196,7 @@ test(
       });
       assert.equal(replay.status, 200);
       assert.equal(replay.json.data.orderId, orderId);
+      assert.equal(replay.json.data.qrCode, order.json.data.qrCode);
 
       const reused = await call(
         'POST',

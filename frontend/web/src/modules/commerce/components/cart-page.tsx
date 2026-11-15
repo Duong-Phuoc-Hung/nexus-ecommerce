@@ -5,16 +5,26 @@ import { StoreHeader } from '@/components/layout/store-header';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import { readCart, syncCartFromServer, writeCart, type CartLine } from '../utils/cart';
 import { cartApi } from '../api/cart.api';
+import { readCheckoutSelection, writeCheckoutSelection } from '../utils/cart-selection';
 const cash = (n: number) => `${new Intl.NumberFormat('vi-VN').format(n)} ₫`;
 export default function CartPage() {
   const { user } = useSession();
   const [lines, setLines] = useState<CartLine[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [quantityErrors, setQuantityErrors] = useState<Record<string, string>>({});
   const isNonBuyerRole = Boolean(user && user.role !== 'BUYER');
   useEffect(() => {
-    setLines(readCart());
+    const localLines = readCart();
+    setLines(localLines);
+    const saved = readCheckoutSelection();
+    setSelectedIds(saved === null ? localLines.map((line) => line.productId) : saved);
     if (!user || user.role === 'BUYER') {
       syncCartFromServer().then((remoteLines) => {
         setLines(remoteLines);
+        setSelectedIds((current) => {
+          const savedIds = readCheckoutSelection();
+          return savedIds === null ? remoteLines.map((line) => line.productId) : current;
+        });
       });
     }
     const sync = () => setLines(readCart());
@@ -22,9 +32,22 @@ export default function CartPage() {
     return () => window.removeEventListener('nexus-cart-change', sync);
   }, [user]);
 
+  const selectItems = (ids: string[]) => {
+    setSelectedIds(ids);
+    writeCheckoutSelection(ids);
+  };
+
   const handleQuantityChange = async (line: CartLine, newQuantity: number) => {
     if (isNonBuyerRole) return;
-    const q = Math.max(1, Math.min(newQuantity, line.stock ?? 99));
+    if (!Number.isInteger(newQuantity) || newQuantity < 1 || newQuantity > (line.stock ?? 99)) {
+      setQuantityErrors((current) => ({
+        ...current,
+        [line.productId]: `Số lượng phải từ 1 đến ${line.stock ?? 99}.`,
+      }));
+      return;
+    }
+    setQuantityErrors((current) => ({ ...current, [line.productId]: '' }));
+    const q = newQuantity;
     const next = lines.map((x) => (x.productId === line.productId ? { ...x, quantity: q } : x));
     setLines(next);
     writeCart(next);
@@ -32,15 +55,28 @@ export default function CartPage() {
       try {
         await cartApi.updateItem(line.cartItemId, q);
       } catch {
-        // Fallback locally
+        // Máy chủ từ chối (vd. vượt tồn kho): trả lại số lượng cũ để giỏ không lệch với BE.
+        setLines((current) => {
+          const reverted = current.map((x) =>
+            x.productId === line.productId ? { ...x, quantity: line.quantity } : x,
+          );
+          writeCart(reverted);
+          return reverted;
+        });
+        setQuantityErrors((current) => ({
+          ...current,
+          [line.productId]: 'Chưa cập nhật được số lượng. Vui lòng thử lại.',
+        }));
       }
     }
   };
 
   const handleRemove = async (line: CartLine) => {
+    if (isNonBuyerRole) return;
     const next = lines.filter((x) => x.productId !== line.productId);
     setLines(next);
     writeCart(next);
+    selectItems(selectedIds.filter((id) => id !== line.productId));
     if (line.cartItemId) {
       try {
         await cartApi.removeItem(line.cartItemId);
@@ -49,14 +85,15 @@ export default function CartPage() {
       }
     }
   };
-  const total = lines.reduce((sum, l) => sum + l.price * l.quantity, 0);
+  const selectedLines = lines.filter((line) => selectedIds.includes(line.productId));
+  const total = selectedLines.reduce((sum, line) => sum + line.price * line.quantity, 0);
   return (
     <>
       <StoreHeader />
       <main className="nexus-container min-h-[70vh] py-8">
         <p className="text-xs font-bold uppercase tracking-widest text-brand-dark">GIỎ HÀNG</p>
         <h1 className="mt-2 text-3xl font-bold">Sản phẩm đã chọn</h1>
-        <p className="mt-2 text-sm text-muted">Danh sách giỏ hàng được lưu trên trình duyệt này.</p>
+        <p className="mt-2 text-sm text-muted">Chọn những món bạn muốn thanh toán trong lần này.</p>
 
         {isNonBuyerRole && (
           <div
@@ -95,11 +132,38 @@ export default function CartPage() {
         ) : (
           <div className="mt-6 grid gap-5 lg:grid-cols-[1fr_340px]">
             <section className="overflow-hidden rounded-2xl border border-line bg-white">
+              <label className="flex min-h-12 items-center gap-3 border-b border-line px-4 text-sm font-semibold sm:px-5">
+                <input
+                  type="checkbox"
+                  aria-label="Chọn tất cả sản phẩm"
+                  checked={selectedLines.length === lines.length}
+                  onChange={(event) =>
+                    selectItems(event.target.checked ? lines.map((line) => line.productId) : [])
+                  }
+                  disabled={isNonBuyerRole}
+                  className="size-5 accent-brand"
+                />
+                Chọn tất cả ({lines.length})
+              </label>
               {lines.map((line) => (
                 <article
                   key={line.productId}
                   className="flex flex-wrap items-center gap-4 border-b border-line p-4 sm:p-5"
                 >
+                  <input
+                    type="checkbox"
+                    aria-label={`Chọn mua ${line.title}`}
+                    checked={selectedIds.includes(line.productId)}
+                    onChange={(event) =>
+                      selectItems(
+                        event.target.checked
+                          ? [...selectedIds, line.productId]
+                          : selectedIds.filter((id) => id !== line.productId),
+                      )
+                    }
+                    disabled={isNonBuyerRole}
+                    className="size-5 shrink-0 accent-brand"
+                  />
                   <img
                     src={line.image}
                     alt=""
@@ -114,21 +178,40 @@ export default function CartPage() {
                     </Link>
                     <p className="mt-1 text-sm text-muted">{cash(line.price)}</p>
                   </div>
-                  <label className="text-sm">
-                    Số lượng{' '}
+                  <div className="text-sm">
+                    <label htmlFor={`cart-quantity-${line.productId}`}>Số lượng</label>{' '}
                     <input
+                      id={`cart-quantity-${line.productId}`}
                       aria-label={`Số lượng ${line.title}`}
+                      aria-invalid={Boolean(quantityErrors[line.productId])}
+                      aria-describedby={
+                        quantityErrors[line.productId]
+                          ? `cart-quantity-error-${line.productId}`
+                          : undefined
+                      }
                       className="ml-2 h-11 w-20 rounded-lg border border-line px-3 disabled:bg-stone-100"
                       type="number"
                       min={1}
                       max={line.stock ?? 99}
+                      step={1}
                       value={line.quantity}
                       disabled={isNonBuyerRole}
-                      onChange={(e) => handleQuantityChange(line, Number(e.target.value) || 1)}
+                      onChange={(e) => void handleQuantityChange(line, Number(e.target.value))}
                     />
-                  </label>
+                    {quantityErrors[line.productId] && (
+                      <p
+                        id={`cart-quantity-error-${line.productId}`}
+                        role="alert"
+                        className="mt-1 text-xs text-red-700"
+                      >
+                        {quantityErrors[line.productId]}
+                      </p>
+                    )}
+                  </div>
                   <button
-                    className="min-h-11 rounded-lg px-3 text-sm text-brand-dark underline"
+                    type="button"
+                    disabled={isNonBuyerRole}
+                    className="min-h-11 rounded-lg px-3 text-sm text-brand-dark underline disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={() => handleRemove(line)}
                   >
                     Xóa
@@ -138,6 +221,7 @@ export default function CartPage() {
             </section>
             <aside className="h-fit rounded-2xl border border-line bg-white p-5">
               <h2 className="font-semibold">Tóm tắt đơn</h2>
+              <p className="mt-1 text-sm text-muted">Đã chọn {selectedLines.length} sản phẩm</p>
               <div className="mt-4 flex justify-between text-sm">
                 <span className="text-muted">Tạm tính</span>
                 <span>{cash(total)}</span>
@@ -146,13 +230,13 @@ export default function CartPage() {
                 <span>Tổng cộng</span>
                 <span className="text-brand-dark">{cash(total)}</span>
               </div>
-              {isNonBuyerRole ? (
+              {isNonBuyerRole || selectedLines.length === 0 ? (
                 <button
                   type="button"
                   disabled
                   className="mt-5 inline-flex min-h-12 w-full cursor-not-allowed items-center justify-center rounded-xl bg-stone-200 px-5 text-sm font-semibold text-stone-600"
                 >
-                  Thanh toán chỉ dành cho Buyer
+                  {isNonBuyerRole ? 'Thanh toán chỉ dành cho Buyer' : 'Chọn sản phẩm để thanh toán'}
                 </button>
               ) : (
                 <Link
