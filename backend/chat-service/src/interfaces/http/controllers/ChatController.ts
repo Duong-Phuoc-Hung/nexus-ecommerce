@@ -240,8 +240,8 @@ export class ChatController {
         reason,
         priority,
         attachments,
-        aiVerdict,
         idempotencyKey,
+        aiVerdict,
       });
 
       const statusCode = result.isDuplicateRequest ? 200 : 201;

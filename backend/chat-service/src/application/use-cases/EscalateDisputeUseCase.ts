@@ -89,18 +89,24 @@ export class EscalateDisputeUseCase {
           reason: input.reason.trim(),
           type: 'Yêu cầu trả hàng / hoàn tiền',
           priority: input.priority || 'Cao',
+          aiVerdict: input.aiVerdict,
           buyerEvidence: {
             photos: photos.length > 0 ? photos : undefined,
             videos: videos.length > 0 ? videos : undefined,
+            aiVerdict: input.aiVerdict,
             note: input.reason.trim(),
             submittedAt: new Date().toISOString(),
           },
           aiAssessment: input.aiVerdict
             ? {
-                isDamaged: input.aiVerdict?.is_damaged,
-                damageType: input.aiVerdict?.damage_type,
-                severity: input.aiVerdict?.severity,
-                summary: input.aiVerdict?.summary,
+                isDamaged:
+                  (input.aiVerdict as any)?.is_damaged ??
+                  Boolean((input.aiVerdict as any)?.damageAssessment),
+                damageType:
+                  (input.aiVerdict as any)?.damage_type ??
+                  (input.aiVerdict as any)?.detectedDamageTypes?.[0],
+                severity: (input.aiVerdict as any)?.severity,
+                summary: (input.aiVerdict as any)?.summary,
               }
             : undefined,
         }),

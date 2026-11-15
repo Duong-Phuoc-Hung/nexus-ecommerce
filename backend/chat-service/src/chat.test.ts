@@ -317,3 +317,208 @@ test('🎯 [NGHIỆM THU 3] Khiếu nại và bàn giao (Kịch bản C: Hàng v
     server.close();
   }
 });
+
+test('🎯 [TASK BE-02] Tích hợp Kết quả Thẩm Định AI vào EscalateDisputeUseCase & Guard Rails', async () => {
+  const app = createApplication();
+  const server = app.listen(0);
+  const port = (server.address() as any).port;
+
+  const buyer = { id: 'usr_buyer_ai_test', role: 'BUYER' };
+  const orderId = 'NX-ORD-9099';
+  const aiDisputeKey = `idemp_ai_test_${Date.now()}`;
+
+  const aiVerdictPayload = {
+    damageAssessment: 'Màn hình nứt vỡ nghiêm trọng 80%',
+    confidenceScore: 0.96,
+    suggestedAction: 'REFUND_WITHOUT_RETURN',
+    detectedDamageTypes: ['CRACKED_SCREEN', 'PHYSICAL_IMPACT'],
+    summary: 'Ảnh chụp kiện hàng cho thấy màn hình vỡ nát do va đập mạnh trong khâu vận chuyển.',
+  };
+
+  try {
+    // 1. Gửi yêu cầu khiếu nại kẹp kết quả phân tích AI (aiVerdict)
+    const escalateRes = await fetch(`http://127.0.0.1:${port}/api/v1/chat/escalate`, {
+      method: 'POST',
+      headers: {
+        ...makeAuthHeaders(buyer.id, buyer.role, 'buyer.ai@nexus.com'),
+        'Idempotency-Key': aiDisputeKey,
+      },
+      body: JSON.stringify({
+        orderId,
+        orderCode: 'NX-ORD-9099',
+        reason: 'Sản phẩm giao bị vỡ màn hình nghiêm trọng',
+        priority: 'Cao',
+        attachments: [
+          {
+            url: 'https://cdn.nexus.com/evidence/broken_box.jpg',
+            filename: 'broken_box.jpg',
+            mimeType: 'image/jpeg',
+            sizeBytes: 1024 * 500, // 500 KB hợp lệ (< 20MB)
+          },
+        ],
+        aiVerdict: aiVerdictPayload,
+      }),
+    });
+
+    assert.equal(escalateRes.status, 201);
+    const body = ((await escalateRes.json()) as any).data;
+    assert.ok(body.caseId, 'Phải tạo thành công caseId khiếu nại');
+    assert.equal(body.orderId, orderId);
+    assert.equal(body.isDuplicateRequest, false);
+
+    // Xác nhận kết quả phân tích thẩm định của AI được bảo toàn đầy đủ
+    assert.ok(body.aiVerdict, 'Dữ liệu kết quả AI thẩm định phải được lưu giữ');
+    assert.equal(body.aiVerdict.damageAssessment, aiVerdictPayload.damageAssessment);
+    assert.equal(body.aiVerdict.confidenceScore, 0.96);
+    assert.equal(body.aiVerdict.suggestedAction, 'REFUND_WITHOUT_RETURN');
+    assert.deepEqual(body.aiVerdict.detectedDamageTypes, ['CRACKED_SCREEN', 'PHYSICAL_IMPACT']);
+
+    // 2. Kiểm tra Idempotency với aiVerdict: gửi lại cùng khóa phải trả về case cũ kèm aiVerdict
+    const retryRes = await fetch(`http://127.0.0.1:${port}/api/v1/chat/escalate`, {
+      method: 'POST',
+      headers: {
+        ...makeAuthHeaders(buyer.id, buyer.role, 'buyer.ai@nexus.com'),
+        'Idempotency-Key': aiDisputeKey,
+      },
+      body: JSON.stringify({
+        orderId,
+        reason: 'Sản phẩm giao bị vỡ màn hình nghiêm trọng',
+        aiVerdict: aiVerdictPayload,
+      }),
+    });
+    assert.equal(retryRes.status, 200);
+    const retryData = ((await retryRes.json()) as any).data;
+    assert.equal(retryData.isDuplicateRequest, true);
+    assert.equal(retryData.caseId, body.caseId);
+    assert.equal(retryData.aiVerdict?.confidenceScore, 0.96);
+
+    // 3. Kiểm tra rào chắn MIME: Chặn định dạng tệp không hợp lệ (ví dụ: application/zip)
+    const invalidMimeRes = await fetch(`http://127.0.0.1:${port}/api/v1/chat/escalate`, {
+      method: 'POST',
+      headers: makeAuthHeaders(buyer.id, buyer.role),
+      body: JSON.stringify({
+        orderId,
+        reason: 'Kiểm tra chặn MIME không hợp lệ',
+        attachments: [
+          {
+            url: 'https://cdn.nexus.com/files/virus.exe',
+            filename: 'payload.exe',
+            mimeType: 'application/x-msdownload',
+            sizeBytes: 1024,
+          },
+        ],
+      }),
+    });
+    assert.equal(invalidMimeRes.status, 400);
+    const invalidMimeJson = (await invalidMimeRes.json()) as any;
+    assert.match(invalidMimeJson.error, /không được hỗ trợ/);
+
+    // 4. Kiểm tra rào chắn dung lượng: Chặn tệp đính kèm vượt quá 20MB
+    const oversizedRes = await fetch(`http://127.0.0.1:${port}/api/v1/chat/escalate`, {
+      method: 'POST',
+      headers: makeAuthHeaders(buyer.id, buyer.role),
+      body: JSON.stringify({
+        orderId,
+        reason: 'Kiểm tra chặn tệp quá tải dung lượng',
+        attachments: [
+          {
+            url: 'https://cdn.nexus.com/videos/huge_video.mp4',
+            filename: 'huge_video.mp4',
+            mimeType: 'video/mp4',
+            sizeBytes: 25 * 1024 * 1024, // 25 MB > 20 MB
+          },
+        ],
+      }),
+    });
+    assert.equal(oversizedRes.status, 400);
+    const oversizedJson = (await oversizedRes.json()) as any;
+    assert.match(oversizedJson.error, /vượt quá giới hạn cho phép/);
+  } finally {
+    server.close();
+  }
+});
+
+test('🎯 [SUPPORT-STAFF CHAT] Support Staff gửi tin nhắn qua /sessions/:id/messages và Buyer Polling nhận được', async () => {
+  const app = createApplication();
+  const server = app.listen(0);
+  const port = (server.address() as any).port;
+
+  const buyer = { id: 'usr_buyer_handover', role: 'BUYER' };
+  const staff = { id: 'usr_staff_agent_01', role: 'SUPPORT_STAFF' };
+  const stranger = { id: 'usr_stranger_bob', role: 'BUYER' };
+  const orderId = 'NX-ORD-7788';
+
+  try {
+    // 1. Buyer mở phiên chat kênh BUYER_SUPPORT
+    const openRes = await fetch(`http://127.0.0.1:${port}/api/v1/chat/conversations`, {
+      method: 'POST',
+      headers: makeAuthHeaders(buyer.id, buyer.role, 'buyer@nexus.com'),
+      body: JSON.stringify({
+        orderId,
+        channelType: 'BUYER_SUPPORT',
+      }),
+    });
+    assert.equal(openRes.status, 200);
+    const convData = ((await openRes.json()) as any).data;
+    const sessionId = convData.id;
+    assert.ok(sessionId);
+
+    // 2. Buyer gửi tin nhắn đầu tiên thông báo sự cố
+    const buyerMsgRes = await fetch(
+      `http://127.0.0.1:${port}/api/v1/chat/sessions/${sessionId}/messages`,
+      {
+        method: 'POST',
+        headers: makeAuthHeaders(buyer.id, buyer.role, 'buyer@nexus.com'),
+        body: JSON.stringify({
+          content: 'Em cần chuyên viên hỗ trợ đơn hàng này bị giao thiếu phụ kiện ạ.',
+        }),
+      },
+    );
+    assert.equal(buyerMsgRes.status, 201);
+    const buyerMsgData = ((await buyerMsgRes.json()) as any).data.message;
+    const t0 = new Date(buyerMsgData.createdAt).getTime();
+
+    // 3. Support Staff gửi tin nhắn phản hồi qua alias route POST /api/v1/chat/sessions/:id/messages
+    const staffMsgRes = await fetch(
+      `http://127.0.0.1:${port}/api/v1/chat/sessions/${sessionId}/messages`,
+      {
+        method: 'POST',
+        headers: makeAuthHeaders(staff.id, staff.role, 'staff@nexus.com'),
+        body: JSON.stringify({
+          content:
+            'Chào bạn, mình là chuyên viên Nexus Support. Mình đã tiếp nhận và đang liên hệ bên giao hàng kiểm tra lại gói phụ kiện nhé!',
+        }),
+      },
+    );
+    assert.equal(staffMsgRes.status, 201);
+    const staffMsgData = ((await staffMsgRes.json()) as any).data.message;
+    assert.equal(staffMsgData.senderRole, 'SUPPORT_STAFF');
+    assert.equal(staffMsgData.senderId, staff.id);
+
+    // 4. Buyer thực hiện Polling: GET /api/v1/chat/sessions/:id/messages?after=<t0>
+    // Kiểm tra Buyer nhận được ngay tin nhắn trả lời của nhân viên
+    const pollRes = await fetch(
+      `http://127.0.0.1:${port}/api/v1/chat/sessions/${sessionId}/messages?after=${t0}`,
+      {
+        headers: makeAuthHeaders(buyer.id, buyer.role, 'buyer@nexus.com'),
+      },
+    );
+    assert.equal(pollRes.status, 200);
+    const pollJson = (await pollRes.json()) as any;
+    assert.equal(pollJson.success, true);
+    assert.equal(pollJson.data.length, 1);
+    assert.equal(pollJson.data[0].senderRole, 'SUPPORT_STAFF');
+    assert.match(pollJson.data[0].content, /chuyên viên Nexus Support/);
+
+    // 5. Kiểm tra bảo mật Anti-IDOR: Người lạ không được xem trộm hoặc gửi tin vào phiên chat
+    const unauthorizedRes = await fetch(
+      `http://127.0.0.1:${port}/api/v1/chat/sessions/${sessionId}/messages`,
+      {
+        headers: makeAuthHeaders(stranger.id, stranger.role, 'stranger@nexus.com'),
+      },
+    );
+    assert.equal(unauthorizedRes.status, 403);
+  } finally {
+    server.close();
+  }
+});
