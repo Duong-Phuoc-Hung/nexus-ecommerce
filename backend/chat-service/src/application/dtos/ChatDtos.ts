@@ -40,6 +40,15 @@ export interface QueryPolicyFaqResult {
   };
 }
 
+export interface AiVerdictDto {
+  damageAssessment?: string;
+  confidenceScore?: number;
+  suggestedAction?: string;
+  detectedDamageTypes?: string[];
+  summary?: string;
+  [key: string]: any;
+}
+
 export interface EscalateDisputeInput {
   orderId: string;
   orderCode?: string;
@@ -49,6 +58,7 @@ export interface EscalateDisputeInput {
   priority?: 'Cao' | 'Trung bình' | 'Thấp' | 'HIGH' | 'MEDIUM' | 'LOW';
   attachments?: ChatAttachment[];
   idempotencyKey?: string;
+  aiVerdict?: AiVerdictDto;
 }
 
 export interface EscalateDisputeResult {
@@ -60,4 +70,5 @@ export interface EscalateDisputeResult {
   message: string;
   isDuplicateRequest: boolean;
   evidenceCount: number;
+  aiVerdict?: AiVerdictDto;
 }

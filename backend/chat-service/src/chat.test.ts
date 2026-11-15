@@ -317,3 +317,123 @@ test('🎯 [NGHIỆM THU 3] Khiếu nại và bàn giao (Kịch bản C: Hàng v
     server.close();
   }
 });
+
+test('🎯 [TASK BE-02] Tích hợp Kết quả Thẩm Định AI vào EscalateDisputeUseCase & Guard Rails', async () => {
+  const app = createApplication();
+  const server = app.listen(0);
+  const port = (server.address() as any).port;
+
+  const buyer = { id: 'usr_buyer_ai_test', role: 'BUYER' };
+  const orderId = 'NX-ORD-9099';
+  const aiDisputeKey = `idemp_ai_test_${Date.now()}`;
+
+  const aiVerdictPayload = {
+    damageAssessment: 'Màn hình nứt vỡ nghiêm trọng 80%',
+    confidenceScore: 0.96,
+    suggestedAction: 'REFUND_WITHOUT_RETURN',
+    detectedDamageTypes: ['CRACKED_SCREEN', 'PHYSICAL_IMPACT'],
+    summary: 'Ảnh chụp kiện hàng cho thấy màn hình vỡ nát do va đập mạnh trong khâu vận chuyển.',
+  };
+
+  try {
+    // 1. Gửi yêu cầu khiếu nại kẹp kết quả phân tích AI (aiVerdict)
+    const escalateRes = await fetch(`http://127.0.0.1:${port}/api/v1/chat/escalate`, {
+      method: 'POST',
+      headers: {
+        ...makeAuthHeaders(buyer.id, buyer.role, 'buyer.ai@nexus.com'),
+        'Idempotency-Key': aiDisputeKey,
+      },
+      body: JSON.stringify({
+        orderId,
+        orderCode: 'NX-ORD-9099',
+        reason: 'Sản phẩm giao bị vỡ màn hình nghiêm trọng',
+        priority: 'Cao',
+        attachments: [
+          {
+            url: 'https://cdn.nexus.com/evidence/broken_box.jpg',
+            filename: 'broken_box.jpg',
+            mimeType: 'image/jpeg',
+            sizeBytes: 1024 * 500, // 500 KB hợp lệ (< 20MB)
+          },
+        ],
+        aiVerdict: aiVerdictPayload,
+      }),
+    });
+
+    assert.equal(escalateRes.status, 201);
+    const body = ((await escalateRes.json()) as any).data;
+    assert.ok(body.caseId, 'Phải tạo thành công caseId khiếu nại');
+    assert.equal(body.orderId, orderId);
+    assert.equal(body.isDuplicateRequest, false);
+
+    // Xác nhận kết quả phân tích thẩm định của AI được bảo toàn đầy đủ
+    assert.ok(body.aiVerdict, 'Dữ liệu kết quả AI thẩm định phải được lưu giữ');
+    assert.equal(body.aiVerdict.damageAssessment, aiVerdictPayload.damageAssessment);
+    assert.equal(body.aiVerdict.confidenceScore, 0.96);
+    assert.equal(body.aiVerdict.suggestedAction, 'REFUND_WITHOUT_RETURN');
+    assert.deepEqual(body.aiVerdict.detectedDamageTypes, ['CRACKED_SCREEN', 'PHYSICAL_IMPACT']);
+
+    // 2. Kiểm tra Idempotency với aiVerdict: gửi lại cùng khóa phải trả về case cũ kèm aiVerdict
+    const retryRes = await fetch(`http://127.0.0.1:${port}/api/v1/chat/escalate`, {
+      method: 'POST',
+      headers: {
+        ...makeAuthHeaders(buyer.id, buyer.role, 'buyer.ai@nexus.com'),
+        'Idempotency-Key': aiDisputeKey,
+      },
+      body: JSON.stringify({
+        orderId,
+        reason: 'Sản phẩm giao bị vỡ màn hình nghiêm trọng',
+        aiVerdict: aiVerdictPayload,
+      }),
+    });
+    assert.equal(retryRes.status, 200);
+    const retryData = ((await retryRes.json()) as any).data;
+    assert.equal(retryData.isDuplicateRequest, true);
+    assert.equal(retryData.caseId, body.caseId);
+    assert.equal(retryData.aiVerdict?.confidenceScore, 0.96);
+
+    // 3. Kiểm tra rào chắn MIME: Chặn định dạng tệp không hợp lệ (ví dụ: application/zip)
+    const invalidMimeRes = await fetch(`http://127.0.0.1:${port}/api/v1/chat/escalate`, {
+      method: 'POST',
+      headers: makeAuthHeaders(buyer.id, buyer.role),
+      body: JSON.stringify({
+        orderId,
+        reason: 'Kiểm tra chặn MIME không hợp lệ',
+        attachments: [
+          {
+            url: 'https://cdn.nexus.com/files/virus.exe',
+            filename: 'payload.exe',
+            mimeType: 'application/x-msdownload',
+            sizeBytes: 1024,
+          },
+        ],
+      }),
+    });
+    assert.equal(invalidMimeRes.status, 400);
+    const invalidMimeJson = (await invalidMimeRes.json()) as any;
+    assert.match(invalidMimeJson.error, /không được hỗ trợ/);
+
+    // 4. Kiểm tra rào chắn dung lượng: Chặn tệp đính kèm vượt quá 20MB
+    const oversizedRes = await fetch(`http://127.0.0.1:${port}/api/v1/chat/escalate`, {
+      method: 'POST',
+      headers: makeAuthHeaders(buyer.id, buyer.role),
+      body: JSON.stringify({
+        orderId,
+        reason: 'Kiểm tra chặn tệp quá tải dung lượng',
+        attachments: [
+          {
+            url: 'https://cdn.nexus.com/videos/huge_video.mp4',
+            filename: 'huge_video.mp4',
+            mimeType: 'video/mp4',
+            sizeBytes: 25 * 1024 * 1024, // 25 MB > 20 MB
+          },
+        ],
+      }),
+    });
+    assert.equal(oversizedRes.status, 400);
+    const oversizedJson = (await oversizedRes.json()) as any;
+    assert.match(oversizedJson.error, /vượt quá giới hạn cho phép/);
+  } finally {
+    server.close();
+  }
+});

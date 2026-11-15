@@ -228,7 +228,7 @@ export class ChatController {
 
       const idempotencyKey = (req.headers['idempotency-key'] as string) || req.body.idempotencyKey;
 
-      const { orderId, orderCode, reason, priority, attachments } = req.body;
+      const { orderId, orderCode, reason, priority, attachments, aiVerdict } = req.body;
 
       const result = await this.escalateDisputeUseCase.execute({
         orderId,
@@ -239,6 +239,7 @@ export class ChatController {
         priority,
         attachments,
         idempotencyKey,
+        aiVerdict,
       });
 
       const statusCode = result.isDuplicateRequest ? 200 : 201;
