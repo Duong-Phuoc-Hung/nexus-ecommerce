@@ -205,7 +205,7 @@ export function requireInventoryPermission(action: 'VIEW' | 'ADJUST') {
   };
 }
 
-export function requireSupportCasePermission(action: 'VIEW' | 'RESOLVE') {
+export function requireSupportCasePermission(action: 'VIEW' | 'RESOLVE' | 'SUBMIT_EVIDENCE') {
   return (req: Request, res: Response, next: NextFunction): void => {
     const user = (req as AuthenticatedRequest).user;
     if (!user) {
@@ -220,6 +220,14 @@ export function requireSupportCasePermission(action: 'VIEW' | 'RESOLVE') {
 
     // SUPPORT_STAFF và ADMIN có toàn quyền xem và giải quyết khiếu nại (SRS 2.3, 3.1.2)
     if (normalizedRole === 'SUPPORT_STAFF' || normalizedRole === 'ADMIN') {
+      return next();
+    }
+
+    // SELLER và BUYER có quyền nộp chứng cứ đối chất (SUBMIT_EVIDENCE)
+    if (
+      action === 'SUBMIT_EVIDENCE' &&
+      (normalizedRole === 'SELLER' || normalizedRole === 'BUYER')
+    ) {
       return next();
     }
 

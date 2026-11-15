@@ -3082,6 +3082,73 @@ export const fulfillmentSpec = {
       },
     },
 
+    '/api/v1/support/disputes/{caseId}/seller-evidence': {
+      post: {
+        tags: ['Seller / Khiếu nại & Tranh chấp', 'Support Staff / Quản lý khiếu nại'],
+        summary: 'Người bán (Seller) nộp video đóng gói và ảnh niêm phong đối chất (FE-05 / BE-03)',
+        description: `${PRIVATE} Dành cho SELLER, SUPPORT_STAFF và ADMIN. Cho phép Người bán nộp video đóng gói chèn xốp niêm phong và ảnh chụp kiện hàng bàn giao bưu tá phục vụ đối soát trọng tài phân xử tranh chấp.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'caseId',
+            in: 'path',
+            required: true,
+            description: 'Mã hồ sơ tranh chấp (hoặc mã đơn hàng orderId)',
+            schema: { type: 'string', example: 'CAS_01HQZ999ABC' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  videos: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    example: ['https://assets.nexus.vn/evidence/packaging_video.mp4'],
+                  },
+                  photos: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    example: ['https://assets.nexus.vn/evidence/box_sealed.jpg'],
+                  },
+                  note: {
+                    type: 'string',
+                    example:
+                      'Shop đã đóng gói 3 lớp xốp khí dán băng dính niêm phong bàn giao GHN.',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Nộp bằng chứng đóng gói thành công', {
+            success: true,
+            message: 'Nộp bằng chứng đóng gói thành công.',
+            data: {
+              caseId: 'CAS_01HQZ999ABC',
+              sellerEvidence: {
+                videos: ['https://assets.nexus.vn/evidence/packaging_video.mp4'],
+                photos: ['https://assets.nexus.vn/evidence/box_sealed.jpg'],
+                note: 'Shop đã đóng gói 3 lớp xốp khí dán băng dính niêm phong bàn giao GHN.',
+                submittedAt: '2026-11-15T16:00:00.000Z',
+              },
+            },
+          }),
+          400: errorResponse(
+            'Dữ liệu không hợp lệ',
+            'Vui lòng cung cấp ít nhất 1 ảnh, video hoặc ghi chú đối chất.',
+          ),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy ca tranh chấp', 'Dispute case not found.'),
+        },
+      },
+    },
+
     '/api/v1/fulfillments/shipments/{id}/request-redelivery': {
       post: {
         tags: ['Support Staff / Thao tác xử lý'],

@@ -455,6 +455,82 @@ test('Task 1 - Dispute Resolution & Arbitration: GET /disputes and POST /dispute
   });
 });
 
+test('Task FE-05 / BE-03 - Seller Dispute Evidence: POST /disputes/:caseId/seller-evidence and alias /orders/:orderId/dispute-evidence', async () => {
+  await withFulfillmentServer(async (baseUrl) => {
+    const sellerToken = createTestToken({
+      sub: 'usr_seller_001',
+      email: 'seller@nexus.vn',
+      role: 'SELLER',
+    });
+
+    const staffToken = createTestToken({
+      sub: 'usr_staff_arbitrator',
+      email: 'staff@nexus.vn',
+      role: 'SUPPORT_STAFF',
+    });
+
+    // 1. Lấy danh sách dispute hiện có
+    const disputesRes = await fetch(`${baseUrl}/api/v1/support/disputes?status=PENDING`, {
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+    assert.equal(disputesRes.status, 200);
+    const disputesJson = (await disputesRes.json()) as any;
+    const targetCase = disputesJson.data[0];
+    assert.ok(targetCase.caseId);
+
+    // 2. Seller nộp video đóng hàng qua caseId
+    const submitCaseRes = await fetch(
+      `${baseUrl}/api/v1/support/disputes/${targetCase.caseId}/seller-evidence`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${sellerToken}`,
+        },
+        body: JSON.stringify({
+          videos: ['https://assets.nexus.vn/evidence/seller_pack_01.mp4'],
+          photos: ['https://assets.nexus.vn/evidence/seller_pack_01.jpg'],
+          note: 'Shop đã đóng gói 3 lớp xốp khí dán băng dính niêm phong bàn giao GHN.',
+        }),
+      },
+    );
+    assert.equal(submitCaseRes.status, 200);
+    const submitCaseJson = (await submitCaseRes.json()) as any;
+    assert.equal(submitCaseJson.success, true);
+    assert.equal(
+      submitCaseJson.data.sellerEvidence.note,
+      'Shop đã đóng gói 3 lớp xốp khí dán băng dính niêm phong bàn giao GHN.',
+    );
+    assert.equal(
+      submitCaseJson.data.sellerEvidence.videos[0],
+      'https://assets.nexus.vn/evidence/seller_pack_01.mp4',
+    );
+
+    // 3. Seller nộp bằng chứng qua alias orderId
+    const submitOrderRes = await fetch(
+      `${baseUrl}/api/v1/support/orders/${targetCase.orderId}/dispute-evidence`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${sellerToken}`,
+        },
+        body: JSON.stringify({
+          photos: ['https://assets.nexus.vn/evidence/seller_pack_order_alias.jpg'],
+          note: 'Cập nhật thêm ảnh tem niêm phong cận cảnh theo mã đơn hàng.',
+        }),
+      },
+    );
+    assert.equal(submitOrderRes.status, 200);
+    const submitOrderJson = (await submitOrderRes.json()) as any;
+    assert.equal(submitOrderJson.success, true);
+    assert.equal(
+      submitOrderJson.data.sellerEvidence.photos[0],
+      'https://assets.nexus.vn/evidence/seller_pack_order_alias.jpg',
+    );
+  });
+});
+
 test('Task 3 - Failed Delivery & RTO: POST request-redelivery and confirm-return', async () => {
   await withFulfillmentServer(async (baseUrl) => {
     const staffToken = createTestToken({

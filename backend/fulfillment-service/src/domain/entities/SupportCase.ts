@@ -229,6 +229,40 @@ export class SupportCase {
     this._updatedAt = new Date();
   }
 
+  /**
+   * Cập nhật bằng chứng đối chất của Người bán (Video đóng gói, ảnh niêm phong)
+   */
+  public submitSellerEvidence(evidence: DisputeEvidence): void {
+    if (!evidence) {
+      throw new Error('Bằng chứng của người bán (sellerEvidence) không được để trống.');
+    }
+
+    this._sellerEvidence = {
+      photos: Array.isArray(evidence.photos) ? evidence.photos : [],
+      videos: Array.isArray(evidence.videos) ? evidence.videos : [],
+      note: (evidence.note || '').trim(),
+      submittedAt: evidence.submittedAt || new Date(),
+    };
+    this._updatedAt = new Date();
+  }
+
+  /**
+   * Cập nhật bằng chứng của Người mua (Ảnh mở hộp, video bóc hàng)
+   */
+  public submitBuyerEvidence(evidence: DisputeEvidence): void {
+    if (!evidence) {
+      throw new Error('Bằng chứng của người mua (buyerEvidence) không được để trống.');
+    }
+
+    this._buyerEvidence = {
+      photos: Array.isArray(evidence.photos) ? evidence.photos : [],
+      videos: Array.isArray(evidence.videos) ? evidence.videos : [],
+      note: (evidence.note || '').trim(),
+      submittedAt: evidence.submittedAt || new Date(),
+    };
+    this._updatedAt = new Date();
+  }
+
   public toResponseDto() {
     return {
       id: this.id,
