@@ -437,3 +437,88 @@ test('🎯 [TASK BE-02] Tích hợp Kết quả Thẩm Định AI vào EscalateD
     server.close();
   }
 });
+
+test('🎯 [SUPPORT-STAFF CHAT] Support Staff gửi tin nhắn qua /sessions/:id/messages và Buyer Polling nhận được', async () => {
+  const app = createApplication();
+  const server = app.listen(0);
+  const port = (server.address() as any).port;
+
+  const buyer = { id: 'usr_buyer_handover', role: 'BUYER' };
+  const staff = { id: 'usr_staff_agent_01', role: 'SUPPORT_STAFF' };
+  const stranger = { id: 'usr_stranger_bob', role: 'BUYER' };
+  const orderId = 'NX-ORD-7788';
+
+  try {
+    // 1. Buyer mở phiên chat kênh BUYER_SUPPORT
+    const openRes = await fetch(`http://127.0.0.1:${port}/api/v1/chat/conversations`, {
+      method: 'POST',
+      headers: makeAuthHeaders(buyer.id, buyer.role, 'buyer@nexus.com'),
+      body: JSON.stringify({
+        orderId,
+        channelType: 'BUYER_SUPPORT',
+      }),
+    });
+    assert.equal(openRes.status, 200);
+    const convData = ((await openRes.json()) as any).data;
+    const sessionId = convData.id;
+    assert.ok(sessionId);
+
+    // 2. Buyer gửi tin nhắn đầu tiên thông báo sự cố
+    const buyerMsgRes = await fetch(
+      `http://127.0.0.1:${port}/api/v1/chat/sessions/${sessionId}/messages`,
+      {
+        method: 'POST',
+        headers: makeAuthHeaders(buyer.id, buyer.role, 'buyer@nexus.com'),
+        body: JSON.stringify({
+          content: 'Em cần chuyên viên hỗ trợ đơn hàng này bị giao thiếu phụ kiện ạ.',
+        }),
+      },
+    );
+    assert.equal(buyerMsgRes.status, 201);
+    const buyerMsgData = ((await buyerMsgRes.json()) as any).data.message;
+    const t0 = new Date(buyerMsgData.createdAt).getTime();
+
+    // 3. Support Staff gửi tin nhắn phản hồi qua alias route POST /api/v1/chat/sessions/:id/messages
+    const staffMsgRes = await fetch(
+      `http://127.0.0.1:${port}/api/v1/chat/sessions/${sessionId}/messages`,
+      {
+        method: 'POST',
+        headers: makeAuthHeaders(staff.id, staff.role, 'staff@nexus.com'),
+        body: JSON.stringify({
+          content:
+            'Chào bạn, mình là chuyên viên Nexus Support. Mình đã tiếp nhận và đang liên hệ bên giao hàng kiểm tra lại gói phụ kiện nhé!',
+        }),
+      },
+    );
+    assert.equal(staffMsgRes.status, 201);
+    const staffMsgData = ((await staffMsgRes.json()) as any).data.message;
+    assert.equal(staffMsgData.senderRole, 'SUPPORT_STAFF');
+    assert.equal(staffMsgData.senderId, staff.id);
+
+    // 4. Buyer thực hiện Polling: GET /api/v1/chat/sessions/:id/messages?after=<t0>
+    // Kiểm tra Buyer nhận được ngay tin nhắn trả lời của nhân viên
+    const pollRes = await fetch(
+      `http://127.0.0.1:${port}/api/v1/chat/sessions/${sessionId}/messages?after=${t0}`,
+      {
+        headers: makeAuthHeaders(buyer.id, buyer.role, 'buyer@nexus.com'),
+      },
+    );
+    assert.equal(pollRes.status, 200);
+    const pollJson = (await pollRes.json()) as any;
+    assert.equal(pollJson.success, true);
+    assert.equal(pollJson.data.length, 1);
+    assert.equal(pollJson.data[0].senderRole, 'SUPPORT_STAFF');
+    assert.match(pollJson.data[0].content, /chuyên viên Nexus Support/);
+
+    // 5. Kiểm tra bảo mật Anti-IDOR: Người lạ không được xem trộm hoặc gửi tin vào phiên chat
+    const unauthorizedRes = await fetch(
+      `http://127.0.0.1:${port}/api/v1/chat/sessions/${sessionId}/messages`,
+      {
+        headers: makeAuthHeaders(stranger.id, stranger.role, 'stranger@nexus.com'),
+      },
+    );
+    assert.equal(unauthorizedRes.status, 403);
+  } finally {
+    server.close();
+  }
+});

@@ -29,5 +29,12 @@ export function createChatRoutes(controller: ChatController): Router {
   // 6. Bàn giao khiếu nại kẹp khóa chống trùng Idempotency sang Support Staff (Kịch bản C)
   router.post('/escalate', requireAuth, (req, res) => controller.escalateDispute(req, res));
 
+  // 7. Alias routes cho phiên chat (hỗ trợ Support Staff Portal & Client gọi qua /sessions/:id/messages)
+  router.post('/sessions/:id/messages', requireAuth, (req, res) =>
+    controller.sendMessage(req, res),
+  );
+  router.get('/sessions/:id/messages', requireAuth, (req, res) => controller.getMessages(req, res));
+  router.get('/sessions/:id', requireAuth, (req, res) => controller.getConversation(req, res));
+
   return router;
 }
