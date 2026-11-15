@@ -39,6 +39,16 @@ export class InMemoryConversationRepository implements IConversationRepository {
     this.items.set(conversation.id, conversation);
   }
 
+  public async findWaitingForStaff(limit: number): Promise<Conversation[]> {
+    return Array.from(this.items.values())
+      .filter(
+        (conversation) =>
+          conversation.channelType === 'AI_BOT' && conversation.status === 'WAITING_STAFF',
+      )
+      .sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime())
+      .slice(0, limit);
+  }
+
   public async update(conversation: Conversation): Promise<void> {
     this.items.set(conversation.id, conversation);
   }

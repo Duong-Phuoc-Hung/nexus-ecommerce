@@ -8,6 +8,8 @@ import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
 import { ConversationNotFoundException } from '../../../domain/exceptions/ConversationNotFoundException';
 import { ChatForbiddenException } from '../../../domain/exceptions/ChatForbiddenException';
 import { DisputeArbiterAI } from '../../../infrastructure/ai/DisputeArbiterAI';
+import { HandoverConversationUseCase } from '../../../application/use-cases/HandoverConversationUseCase';
+import { HandoverConflictException } from '../../../domain/exceptions/HandoverConflictException';
 
 export class ChatController {
   constructor(
@@ -16,8 +18,77 @@ export class ChatController {
     private readonly escalateDisputeUseCase: EscalateDisputeUseCase,
     private readonly conversationRepo: IConversationRepository,
     private readonly messageRepo: IChatMessageRepository,
+    private readonly handoverConversationUseCase: HandoverConversationUseCase,
     private readonly disputeArbiterAi: DisputeArbiterAI = new DisputeArbiterAI(),
   ) {}
+
+  public async handover(req: Request, res: Response): Promise<void> {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user) {
+      res.status(401).json({ success: false, error: 'Unauthorized.' });
+      return;
+    }
+    const { conversationId, userId } = req.body ?? {};
+    if (
+      typeof conversationId !== 'string' ||
+      !conversationId.trim() ||
+      conversationId.length > 128 ||
+      typeof userId !== 'string' ||
+      !userId.trim() ||
+      userId.length > 128
+    ) {
+      res.status(400).json({ success: false, error: 'conversationId và userId là bắt buộc.' });
+      return;
+    }
+    try {
+      const conversation = await this.handoverConversationUseCase.execute(
+        { conversationId: conversationId.trim(), userId: userId.trim() },
+        user.sub,
+        user.role,
+      );
+      res.status(200).json({ success: true, data: conversation.toDto() });
+    } catch (error) {
+      if (error instanceof ChatForbiddenException) {
+        res.status(403).json({ success: false, error: error.message });
+      } else if (error instanceof ConversationNotFoundException) {
+        res.status(404).json({ success: false, error: error.message });
+      } else if (error instanceof HandoverConflictException) {
+        res.status(409).json({ success: false, error: error.message });
+      } else {
+        res
+          .status(500)
+          .json({ success: false, error: 'Không thể ghi nhận yêu cầu CSKH. Vui lòng thử lại.' });
+      }
+    }
+  }
+
+  public async listHandovers(req: Request, res: Response): Promise<void> {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user || !['ADMIN', 'SUPPORT_STAFF'].includes(user.role)) {
+      res
+        .status(403)
+        .json({ success: false, error: 'Chỉ nhân viên hỗ trợ hoặc Admin được xem hàng chờ.' });
+      return;
+    }
+    const limit = req.query.limit === undefined ? 50 : Number(req.query.limit);
+    if (
+      Array.isArray(req.query.limit) ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 100
+    ) {
+      res.status(400).json({ success: false, error: 'limit phải là số nguyên từ 1 đến 100.' });
+      return;
+    }
+    try {
+      const conversations = await this.conversationRepo.findWaitingForStaff(limit);
+      res
+        .status(200)
+        .json({ success: true, data: conversations.map((conversation) => conversation.toDto()) });
+    } catch {
+      res.status(500).json({ success: false, error: 'Không thể tải hàng chờ CSKH.' });
+    }
+  }
 
   /**
    * POST /api/v1/chat/conversations
