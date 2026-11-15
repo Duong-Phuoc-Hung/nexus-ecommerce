@@ -4,6 +4,8 @@ import { ResolveSupportCaseUseCase } from '../../../application/use-cases/Resolv
 import { GetDisputesUseCase } from '../../../application/use-cases/GetDisputesUseCase';
 import { IssueDisputeVerdictUseCase } from '../../../application/use-cases/IssueDisputeVerdictUseCase';
 import { SubmitSellerEvidenceUseCase } from '../../../application/use-cases/SubmitSellerEvidenceUseCase';
+import { ISupportCaseRepository } from '../../../domain/repositories/ISupportCaseRepository';
+import { SupportCase } from '../../../domain/entities/SupportCase';
 import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
 
 export class SupportCaseController {
@@ -13,6 +15,7 @@ export class SupportCaseController {
     private readonly getDisputesUseCase?: GetDisputesUseCase,
     private readonly issueDisputeVerdictUseCase?: IssueDisputeVerdictUseCase,
     private readonly submitSellerEvidenceUseCase?: SubmitSellerEvidenceUseCase,
+    private readonly supportCaseRepository?: ISupportCaseRepository,
   ) {}
 
   /**
@@ -210,6 +213,67 @@ export class SupportCaseController {
       res.status(400).json({
         success: false,
         error: error.message || 'Không thể cập nhật bằng chứng đối chất của người bán.',
+      });
+    }
+  }
+
+  /**
+   * POST /api/v1/support/cases
+   * Tiếp nhận hồ sơ khiếu nại mới từ Chat Service hoặc Buyer
+   */
+  public async createCase(req: Request, res: Response): Promise<void> {
+    try {
+      const user = (req as AuthenticatedRequest).user;
+      const {
+        caseId,
+        orderId,
+        orderCode,
+        customer,
+        userId,
+        reason,
+        type,
+        priority,
+        buyerEvidence,
+      } = req.body || {};
+
+      const id =
+        caseId || `cs_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+      const supportCase = new SupportCase({
+        id,
+        orderId: orderId || '',
+        orderCode: orderCode || orderId || '',
+        customer: customer || 'Khách hàng Nexus',
+        userId: userId || user?.sub || 'usr_buyer',
+        type: type || 'Yêu cầu trả hàng / hoàn tiền',
+        reason: reason || 'Khiếu nại từ khách hàng',
+        priority: priority || 'Cao',
+        status: 'PENDING',
+        buyerEvidence: buyerEvidence
+          ? {
+              photos: buyerEvidence.photos,
+              videos: buyerEvidence.videos,
+              note: buyerEvidence.note,
+              submittedAt: buyerEvidence.submittedAt
+                ? new Date(buyerEvidence.submittedAt)
+                : new Date(),
+            }
+          : undefined,
+        createdAt: new Date(),
+      });
+
+      if (this.supportCaseRepository) {
+        await this.supportCaseRepository.save(supportCase);
+      }
+
+      res.status(201).json({
+        success: true,
+        message: 'Tạo hồ sơ khiếu nại thành công.',
+        data: supportCase.toDto(),
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Không thể tạo hồ sơ khiếu nại.',
       });
     }
   }

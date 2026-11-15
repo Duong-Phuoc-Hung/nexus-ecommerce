@@ -67,7 +67,48 @@ export class RuleBasedLlmProvider implements ILanguageModelProvider {
       }
     }
 
-    // 2. Kịch bản Tra cứu Quy chế / Chính sách sàn Nexus v1.2
+    // 2. Kịch bản Context nhận diện từ trang Frontend (Product, Checkout, Auction)
+    const pageCtx = context.pageContext;
+    if (pageCtx && pageCtx.pageKind) {
+      if (
+        pageCtx.pageKind === 'CART_CHECKOUT' &&
+        (lower.includes('tổng tiền') ||
+          lower.includes('phí') ||
+          lower.includes('thanh toán') ||
+          lower.includes('giá'))
+      ) {
+        return {
+          content:
+            'Đơn hàng trong giỏ của bạn bao gồm: tiền hàng sản phẩm + phí vận chuyển tính theo địa chỉ nhận + giảm giá voucher (nếu có). Bạn có thể kiểm tra trạng thái thanh toán hoặc đổi phương thức thanh toán sang PayOS / COD.',
+          modelUsed: 'rule-based-fallback',
+          metadata: {
+            topic: 'checkout_context',
+            pageKind: pageCtx.pageKind,
+          },
+        };
+      }
+
+      if (
+        pageCtx.pageKind === 'PRODUCT_DETAIL' &&
+        (lower.includes('hàng') ||
+          lower.includes('sản phẩm') ||
+          lower.includes('bảo hành') ||
+          lower.includes('tồn kho'))
+      ) {
+        return {
+          content:
+            'Bạn đang xem chi tiết sản phẩm. Tất cả sản phẩm chính hãng trên sàn Nexus đều được kiểm định chất lượng và hỗ trợ đổi trả trong 7 ngày nếu lỗi phát sinh do người bán hoặc vận chuyển.',
+          modelUsed: 'rule-based-fallback',
+          metadata: {
+            topic: 'product_context',
+            pageKind: pageCtx.pageKind,
+            productId: pageCtx.productId,
+          },
+        };
+      }
+    }
+
+    // 3. Kịch bản Tra cứu Quy chế / Chính sách sàn Nexus v1.2
     if (this.policyRepo) {
       const isPolicyQuery =
         lower.includes('cọc') ||
