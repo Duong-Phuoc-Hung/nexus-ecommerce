@@ -7,6 +7,7 @@ import { IConversationRepository } from '../../../domain/repositories/IConversat
 import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
 import { ConversationNotFoundException } from '../../../domain/exceptions/ConversationNotFoundException';
 import { ChatForbiddenException } from '../../../domain/exceptions/ChatForbiddenException';
+import { DisputeArbiterAI } from '../../../infrastructure/ai/DisputeArbiterAI';
 
 export class ChatController {
   constructor(
@@ -15,6 +16,7 @@ export class ChatController {
     private readonly escalateDisputeUseCase: EscalateDisputeUseCase,
     private readonly conversationRepo: IConversationRepository,
     private readonly messageRepo: IChatMessageRepository,
+    private readonly disputeArbiterAi: DisputeArbiterAI = new DisputeArbiterAI(),
   ) {}
 
   /**
@@ -252,6 +254,36 @@ export class ChatController {
       res
         .status(400)
         .json({ success: false, error: error.message || 'Không thể tạo hồ sơ khiếu nại.' });
+    }
+  }
+
+  /**
+   * POST /api/v1/chat/dispute/analyze-evidence
+   * Task BE-05: AI Copilot Arbiter đối chiếu bằng chứng Người mua và Người bán
+   */
+  public async analyzeDisputeEvidence(req: Request, res: Response): Promise<void> {
+    try {
+      const { disputeId, orderId, orderAmount, disputeReason, buyerEvidence, sellerEvidence } =
+        req.body || {};
+
+      const result = await this.disputeArbiterAi.analyzeEvidence({
+        disputeId,
+        orderId,
+        orderAmount: typeof orderAmount === 'number' ? orderAmount : undefined,
+        disputeReason,
+        buyerEvidence,
+        sellerEvidence,
+      });
+
+      res.status(200).json({
+        success: true,
+        data: result,
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Không thể thẩm định đối soát bằng chứng tranh chấp.',
+      });
     }
   }
 }

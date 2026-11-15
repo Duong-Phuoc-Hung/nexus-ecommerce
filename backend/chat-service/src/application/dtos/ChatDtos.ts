@@ -73,3 +73,34 @@ export interface EscalateDisputeResult {
   evidenceCount: number;
   aiVerdict?: DamageVerdict;
 }
+
+export interface EvidenceItem {
+  photos?: string[];
+  videos?: string[];
+  note?: string;
+  submittedAt?: string;
+}
+
+export interface AnalyzeDisputeEvidenceInput {
+  disputeId?: string;
+  orderId?: string;
+  orderAmount?: number;
+  disputeReason?: string;
+  buyerEvidence?: EvidenceItem;
+  sellerEvidence?: EvidenceItem;
+}
+
+export interface SuggestedVerdict {
+  decision: 'REFUND_BUYER' | 'REJECT_BUYER' | 'REQUIRE_RETURN_FIRST';
+  liableParty: 'SELLER' | 'BUYER' | 'CARRIER';
+  refundAmount?: number;
+  note: string;
+}
+
+export interface DisputeAnalysisResult {
+  fault: 'LOGISTICS_DAMAGE' | 'SELLER_FAULT' | 'BUYER_FAULT' | 'INCONCLUSIVE' | string;
+  confidence: number;
+  recommendation: string;
+  reasoning: string;
+  suggestedVerdict: SuggestedVerdict;
+}

@@ -29,5 +29,10 @@ export function createChatRoutes(controller: ChatController): Router {
   // 6. Bàn giao khiếu nại kẹp khóa chống trùng Idempotency sang Support Staff (Kịch bản C)
   router.post('/escalate', requireAuth, (req, res) => controller.escalateDispute(req, res));
 
+  // 7. Thẩm định đối soát chứng cứ cho Support Staff (AI Copilot Arbiter - Task BE-05)
+  router.post('/dispute/analyze-evidence', requireAuth, (req, res) =>
+    controller.analyzeDisputeEvidence(req, res),
+  );
+
   return router;
 }
