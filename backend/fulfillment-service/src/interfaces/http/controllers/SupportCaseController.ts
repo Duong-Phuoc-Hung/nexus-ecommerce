@@ -3,6 +3,7 @@ import { ListSupportCasesUseCase } from '../../../application/use-cases/ListSupp
 import { ResolveSupportCaseUseCase } from '../../../application/use-cases/ResolveSupportCaseUseCase';
 import { GetDisputesUseCase } from '../../../application/use-cases/GetDisputesUseCase';
 import { IssueDisputeVerdictUseCase } from '../../../application/use-cases/IssueDisputeVerdictUseCase';
+import { SubmitSellerEvidenceUseCase } from '../../../application/use-cases/SubmitSellerEvidenceUseCase';
 import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
 
 export class SupportCaseController {
@@ -11,6 +12,7 @@ export class SupportCaseController {
     private readonly resolveSupportCaseUseCase: ResolveSupportCaseUseCase,
     private readonly getDisputesUseCase?: GetDisputesUseCase,
     private readonly issueDisputeVerdictUseCase?: IssueDisputeVerdictUseCase,
+    private readonly submitSellerEvidenceUseCase?: SubmitSellerEvidenceUseCase,
   ) {}
 
   /**
@@ -167,6 +169,47 @@ export class SupportCaseController {
       res.status(400).json({
         success: false,
         error: error.message || 'Không thể ban hành phán quyết trọng tài.',
+      });
+    }
+  }
+
+  /**
+   * POST /api/v1/support/disputes/:caseId/seller-evidence
+   * POST /api/v1/support/orders/:orderId/dispute-evidence
+   * Seller nộp bằng chứng đóng gói (video, ảnh niêm phong) để đối chất trọng tài
+   */
+  public async submitSellerEvidence(req: Request, res: Response): Promise<void> {
+    try {
+      if (!this.submitSellerEvidenceUseCase) {
+        res.status(500).json({
+          success: false,
+          error: 'SubmitSellerEvidenceUseCase not configured.',
+        });
+        return;
+      }
+
+      const caseIdOrOrderId = (req.params.caseId || req.params.orderId || req.params.id) as string;
+      const { videos, photos, note } = req.body || {};
+      const user = (req as AuthenticatedRequest).user;
+
+      const result = await this.submitSellerEvidenceUseCase.execute({
+        caseIdOrOrderId,
+        videos: Array.isArray(videos) ? videos : [],
+        photos: Array.isArray(photos) ? photos : [],
+        note: typeof note === 'string' ? note : undefined,
+        sellerId: user?.sub,
+        sellerRole: user?.role,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Nộp bằng chứng đóng gói thành công.',
+        data: result,
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Không thể cập nhật bằng chứng đối chất của người bán.',
       });
     }
   }

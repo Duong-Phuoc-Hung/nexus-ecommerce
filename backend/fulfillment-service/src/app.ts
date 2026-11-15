@@ -25,6 +25,7 @@ import { ListSupportCasesUseCase } from './application/use-cases/ListSupportCase
 import { ResolveSupportCaseUseCase } from './application/use-cases/ResolveSupportCaseUseCase';
 import { GetDisputesUseCase } from './application/use-cases/GetDisputesUseCase';
 import { IssueDisputeVerdictUseCase } from './application/use-cases/IssueDisputeVerdictUseCase';
+import { SubmitSellerEvidenceUseCase } from './application/use-cases/SubmitSellerEvidenceUseCase';
 import { CommerceOrderClient } from './infrastructure/clients/CommerceOrderClient';
 
 import { ShipmentController } from './interfaces/http/controllers/ShipmentController';
@@ -124,6 +125,7 @@ export function createApplication(): Application {
   const resolveSupportCaseUseCase = new ResolveSupportCaseUseCase(supportCaseRepository);
   const getDisputesUseCase = new GetDisputesUseCase(supportCaseRepository);
   const issueDisputeVerdictUseCase = new IssueDisputeVerdictUseCase(supportCaseRepository);
+  const submitSellerEvidenceUseCase = new SubmitSellerEvidenceUseCase(supportCaseRepository);
 
   // 5. Controllers
   const shipmentController = new ShipmentController(
@@ -146,6 +148,7 @@ export function createApplication(): Application {
     resolveSupportCaseUseCase,
     getDisputesUseCase,
     issueDisputeVerdictUseCase,
+    submitSellerEvidenceUseCase,
   );
 
   // 6. Routes

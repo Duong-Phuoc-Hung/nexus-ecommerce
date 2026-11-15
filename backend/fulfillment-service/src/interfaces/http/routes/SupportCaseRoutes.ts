@@ -31,5 +31,21 @@ export function createSupportCaseRoutes(controller: SupportCaseController): Rout
     (req, res) => controller.issueVerdict(req, res),
   );
 
+  // 5. POST /api/v1/support/disputes/:caseId/seller-evidence - Seller nộp video/ảnh đóng gói
+  router.post(
+    '/disputes/:caseId/seller-evidence',
+    requireAuth,
+    requireSupportCasePermission('SUBMIT_EVIDENCE'),
+    (req, res) => controller.submitSellerEvidence(req, res),
+  );
+
+  // 5.1 Alias hỗ trợ theo orderId: POST /api/v1/support/orders/:orderId/dispute-evidence
+  router.post(
+    '/orders/:orderId/dispute-evidence',
+    requireAuth,
+    requireSupportCasePermission('SUBMIT_EVIDENCE'),
+    (req, res) => controller.submitSellerEvidence(req, res),
+  );
+
   return router;
 }
