@@ -286,4 +286,73 @@ export class ChatController {
       });
     }
   }
+
+  /**
+   * POST /api/v1/chat/message
+   * Task BE-03: Endpoint thống nhất gửi tin nhắn chat (hỗ trợ cả conversationId hoặc orderId)
+   */
+  public async sendDirectMessage(req: Request, res: Response): Promise<void> {
+    try {
+      const user = (req as AuthenticatedRequest).user;
+      if (!user) {
+        res.status(401).json({ success: false, error: 'Unauthorized.' });
+        return;
+      }
+
+      let { conversationId, orderId, content, attachments, channelType } = req.body || {};
+
+      // Nếu chưa có conversationId nhưng có orderId -> Tự động tìm hoặc mở kênh AI_BOT
+      if (!conversationId && orderId) {
+        const conv = await this.getOrCreateConversationUseCase.execute(
+          {
+            orderId,
+            channelType: channelType || 'AI_BOT',
+            buyerId: user.sub,
+          },
+          user.sub,
+          user.role,
+        );
+        conversationId = conv.id;
+      }
+
+      if (!conversationId) {
+        res.status(400).json({
+          success: false,
+          error: 'Thiếu conversationId hoặc orderId để xác định cuộc hội thoại.',
+        });
+        return;
+      }
+
+      const result = await this.sendMessageUseCase.execute(
+        {
+          conversationId,
+          senderId: user.sub,
+          senderRole: (user.role as any) || 'BUYER',
+          content,
+          attachments,
+        },
+        user.sub,
+        user.role,
+      );
+
+      res.status(201).json({
+        success: true,
+        message: 'Gửi tin nhắn thành công.',
+        data: {
+          message: result.message.toDto(),
+          reply: result.reply ? result.reply.toDto() : null,
+        },
+      });
+    } catch (error: any) {
+      if (error instanceof ConversationNotFoundException) {
+        res.status(404).json({ success: false, error: error.message });
+        return;
+      }
+      if (error instanceof ChatForbiddenException) {
+        res.status(403).json({ success: false, error: error.message });
+        return;
+      }
+      res.status(400).json({ success: false, error: error.message || 'Không thể gửi tin nhắn.' });
+    }
+  }
 }

@@ -12,6 +12,7 @@ import { SendMessageUseCase } from './application/use-cases/SendMessageUseCase';
 import { QueryPolicyFaqUseCase } from './application/use-cases/QueryPolicyFaqUseCase';
 import { EscalateDisputeUseCase } from './application/use-cases/EscalateDisputeUseCase';
 import { DisputeArbiterAI } from './infrastructure/ai/DisputeArbiterAI';
+import { GeminiDamageAssessor } from './infrastructure/ai/GeminiDamageAssessor';
 import { ChatController } from './interfaces/http/controllers/ChatController';
 import { PolicyController } from './interfaces/http/controllers/PolicyController';
 import { createChatRoutes } from './interfaces/http/routes/ChatRoutes';
@@ -40,18 +41,21 @@ export function createApplication(): Application {
   const policyRepo = new InMemoryPolicyRepository();
   const idempotencyService = new RedisIdempotencyService();
   const orderTrackingTool = new OrderTrackingTool();
+  const damageAssessor = new GeminiDamageAssessor();
 
   // 2. Use Cases
   const getOrCreateConversationUseCase = new GetOrCreateConversationUseCase(conversationRepo);
+  const queryPolicyFaqUseCase = new QueryPolicyFaqUseCase(policyRepo);
+  const escalateDisputeUseCase = new EscalateDisputeUseCase(conversationRepo, idempotencyService);
   const sendMessageUseCase = new SendMessageUseCase(
     messageRepo,
     conversationRepo,
     orderTrackingTool,
     undefined,
     policyRepo,
+    damageAssessor,
+    escalateDisputeUseCase,
   );
-  const queryPolicyFaqUseCase = new QueryPolicyFaqUseCase(policyRepo);
-  const escalateDisputeUseCase = new EscalateDisputeUseCase(conversationRepo, idempotencyService);
 
   // 3. Controllers
   const disputeArbiterAi = new DisputeArbiterAI();
