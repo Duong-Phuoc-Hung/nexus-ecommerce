@@ -59,57 +59,74 @@ export class ExpiredOrderCleanupWorker {
         return { expiredOrdersCount: 0, releasedReservationsCount: 0 };
       }
 
+      let expiredOrdersCount = 0;
       let releasedReservationsCount = 0;
 
       for (const order of expiredOrders) {
-        const rawTimeline = Array.isArray(order.timeline) ? order.timeline : [];
-        const updatedTimeline = [
-          ...rawTimeline,
-          {
-            status: 'CANCELLED',
-            title: 'Đơn hàng tự động hủy do quá hạn thanh toán 15 phút',
-            timestamp: now.toISOString(),
-            note: 'Hết hạn phiên thanh toán 15 phút (SCRUM-173 Auto Cleanup)',
-          },
-        ];
+        const executeOrderCleanup = async (tx: any) => {
+          const rawTimeline = Array.isArray(order.timeline) ? order.timeline : [];
+          const updatedTimeline = [
+            ...rawTimeline,
+            {
+              status: 'CANCELLED',
+              title: 'Đơn hàng tự động hủy do quá hạn thanh toán 15 phút',
+              timestamp: now.toISOString(),
+              note: 'Hết hạn phiên thanh toán 15 phút (SCRUM-173 Auto Cleanup)',
+            },
+          ];
 
-        // 1. Cập nhật đơn hàng thành CANCELLED
-        await this.prisma.order.update({
-          where: { id: order.id },
-          data: {
-            status: 'CANCELLED',
-            timeline: updatedTimeline as any,
-            updatedAt: now,
-          },
-        });
+          // 1. Cập nhật đơn hàng thành CANCELLED với điều kiện trạng thái bảo vệ chống race condition
+          const updateResult = await tx.order.updateMany({
+            where: {
+              id: order.id,
+              status: { in: ['PENDING', 'PENDING_PAYMENT'] },
+            },
+            data: {
+              status: 'CANCELLED',
+              timeline: updatedTimeline as any,
+              updatedAt: now,
+            },
+          });
 
-        // 2. Nhả kho tạm thời (StockReservation ACTIVE -> RELEASED)
-        const reservationUpdate = await this.prisma.stockReservation.updateMany({
-          where: {
-            orderId: order.id,
-            status: 'ACTIVE',
-          },
-          data: {
-            status: 'RELEASED',
-          },
-        });
-        releasedReservationsCount += reservationUpdate?.count || 0;
+          // Chỉ khi trạng thái vẫn còn là PENDING / PENDING_PAYMENT và được hủy thành công
+          if (updateResult && updateResult.count > 0) {
+            expiredOrdersCount += updateResult.count;
 
-        // 3. Đánh dấu giao dịch thanh toán quá hạn nếu có
-        await this.prisma.payment.updateMany({
-          where: {
-            orderId: order.id,
-            status: 'PENDING',
-          },
-          data: {
-            status: 'FAILED',
-            updatedAt: now,
-          },
-        });
+            // 2. Nhả kho tạm thời (StockReservation ACTIVE -> RELEASED)
+            const reservationUpdate = await tx.stockReservation.updateMany({
+              where: {
+                orderId: order.id,
+                status: 'ACTIVE',
+              },
+              data: {
+                status: 'RELEASED',
+              },
+            });
+            releasedReservationsCount += reservationUpdate?.count || 0;
+
+            // 3. Đánh dấu giao dịch thanh toán quá hạn nếu có
+            await tx.payment.updateMany({
+              where: {
+                orderId: order.id,
+                status: 'PENDING',
+              },
+              data: {
+                status: 'FAILED',
+                updatedAt: now,
+              },
+            });
+          }
+        };
+
+        if (typeof this.prisma.$transaction === 'function') {
+          await this.prisma.$transaction(executeOrderCleanup);
+        } else {
+          await executeOrderCleanup(this.prisma);
+        }
       }
 
       return {
-        expiredOrdersCount: expiredOrders.length,
+        expiredOrdersCount,
         releasedReservationsCount,
       };
     } catch (error) {

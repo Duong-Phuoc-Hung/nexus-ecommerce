@@ -23,7 +23,7 @@ app.listen(PORT, () => {
   console.log('='.repeat(60));
 
   // SCRUM-173: Khởi động Background Cron Worker tự động hủy đơn quá hạn 15 phút
-  if (process.env.NODE_ENV !== 'test') {
+  if (process.env.NODE_ENV !== 'test' && process.env.USE_IN_MEMORY_DB !== 'true') {
     const cleanupWorker = new ExpiredOrderCleanupWorker();
     cleanupWorker.start(60000); // Quét mỗi 1 phút
     console.log(

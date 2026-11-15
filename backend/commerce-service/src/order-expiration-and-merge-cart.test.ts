@@ -197,6 +197,7 @@ test('SCRUM-173: ExpiredOrderCleanupWorker cancels expired orders and releases s
 
   // Mock Prisma Client
   const mockPrisma = {
+    $transaction: async (fn: (tx: any) => Promise<any>) => fn(mockPrisma),
     order: {
       findMany: async () => [
         {
@@ -205,9 +206,9 @@ test('SCRUM-173: ExpiredOrderCleanupWorker cancels expired orders and releases s
           timeline: [{ status: 'PENDING_PAYMENT', timestamp: past16Minutes.toISOString() }],
         },
       ],
-      update: async (args: any) => {
+      updateMany: async (args: any) => {
         updatedOrders.push(args);
-        return args;
+        return { count: 1 };
       },
     },
     stockReservation: {
@@ -231,9 +232,10 @@ test('SCRUM-173: ExpiredOrderCleanupWorker cancels expired orders and releases s
   assert.equal(result.expiredOrdersCount, 1);
   assert.equal(result.releasedReservationsCount, 2);
 
-  // Kiểm tra trạng thái đơn được đổi thành CANCELLED
+  // Kiểm tra trạng thái đơn được đổi thành CANCELLED với guard status
   assert.equal(updatedOrders.length, 1);
   assert.equal(updatedOrders[0].where.id, 'ord_expired_001');
+  assert.deepEqual(updatedOrders[0].where.status, { in: ['PENDING', 'PENDING_PAYMENT'] });
   assert.equal(updatedOrders[0].data.status, 'CANCELLED');
 
   // Kiểm tra timeline đã ghi nhận lý do hủy đơn
@@ -251,4 +253,44 @@ test('SCRUM-173: ExpiredOrderCleanupWorker cancels expired orders and releases s
   assert.equal(updatedPayments.length, 1);
   assert.equal(updatedPayments[0].where.orderId, 'ord_expired_001');
   assert.equal(updatedPayments[0].data.status, 'FAILED');
+});
+
+test('SCRUM-173: ExpiredOrderCleanupWorker race condition guard - skips releasing stock if order was already PAID', async () => {
+  const updatedReservations: any[] = [];
+  const updatedPayments: any[] = [];
+
+  const mockPrisma = {
+    $transaction: async (fn: (tx: any) => Promise<any>) => fn(mockPrisma),
+    order: {
+      findMany: async () => [
+        {
+          id: 'ord_already_paid',
+          orderCode: 'NX-ORD-PAID-001',
+          timeline: [],
+        },
+      ],
+      // Giả lập webhook PayOS vừa update PAID nên updateMany trả về count: 0 (không match PENDING/PENDING_PAYMENT)
+      updateMany: async () => ({ count: 0 }),
+    },
+    stockReservation: {
+      updateMany: async (args: any) => {
+        updatedReservations.push(args);
+        return { count: 1 };
+      },
+    },
+    payment: {
+      updateMany: async (args: any) => {
+        updatedPayments.push(args);
+        return { count: 1 };
+      },
+    },
+  };
+
+  const worker = new ExpiredOrderCleanupWorker(mockPrisma, 15);
+  const result = await worker.runCleanup();
+
+  assert.equal(result.expiredOrdersCount, 0);
+  assert.equal(result.releasedReservationsCount, 0);
+  assert.equal(updatedReservations.length, 0);
+  assert.equal(updatedPayments.length, 0);
 });
