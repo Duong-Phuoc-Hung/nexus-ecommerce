@@ -15,7 +15,80 @@ function getCachedMessages(conversationId: string): ChatMessageDto[] {
   if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(`${LOCAL_MESSAGES_KEY}:${conversationId}`);
-    return raw ? JSON.parse(raw) : [];
+    if (raw) return JSON.parse(raw);
+
+    // Nếu chưa có tin nhắn nào cho hội thoại hỗ trợ/khiếu nại, khởi tạo tin nhắn mở đầu mẫu
+    if (
+      conversationId.includes('support') ||
+      conversationId.includes('handover') ||
+      conversationId.includes('waiting') ||
+      conversationId.includes('dispute')
+    ) {
+      const isHandover = conversationId.includes('handover') || conversationId.includes('waiting');
+      const seedMessages: ChatMessageDto[] = isHandover
+        ? [
+            {
+              id: `msg_seed_1_${conversationId}`,
+              conversationId,
+              senderId: 'usr_buyer_demo',
+              senderRole: 'BUYER',
+              content:
+                'Chào sàn Nexus, đơn hàng NX-ORD-8017 của mình bưu tá giao trễ 3 ngày và khi nhận kiện hàng bị rách hộp.',
+              createdAt: new Date(Date.now() - 15 * 60000).toISOString(),
+            },
+            {
+              id: `msg_seed_2_${conversationId}`,
+              conversationId,
+              senderId: 'ai_bot',
+              senderRole: 'AI',
+              content:
+                'Nexus Bot đã tiếp nhận thông tin đối soát vận chuyển. Bạn có muốn chuyển giao hồ sơ này sang Chuyên viên CSKH (Support Staff) không?',
+              createdAt: new Date(Date.now() - 12 * 60000).toISOString(),
+            },
+            {
+              id: `msg_seed_3_${conversationId}`,
+              conversationId,
+              senderId: 'usr_buyer_demo',
+              senderRole: 'BUYER',
+              content: 'Có, nhờ chuyên viên sàn can thiệp hỗ trợ giúp mình với ạ!',
+              createdAt: new Date(Date.now() - 8 * 60000).toISOString(),
+            },
+            {
+              id: `msg_seed_4_${conversationId}`,
+              conversationId,
+              senderId: 'system',
+              senderRole: 'SYSTEM',
+              content:
+                '🤖 Bot AI đã chuyển tiếp ca hỗ trợ vào hàng đợi tiếp nhận của Chuyên viên CSKH sàn Nexus.',
+              createdAt: new Date(Date.now() - 5 * 60000).toISOString(),
+            },
+          ]
+        : [
+            {
+              id: `msg_seed_1_${conversationId}`,
+              conversationId,
+              senderId: 'usr_buyer_demo',
+              senderRole: 'BUYER',
+              content:
+                'Chào bộ phận Trọng tài Nexus, kiện hàng nhận được bị vỡ góc vỏ ngoài, em gửi kèm ảnh mở hộp nhờ sàn đối soát bưu cục giúp.',
+              createdAt: new Date(Date.now() - 30 * 60000).toISOString(),
+            },
+            {
+              id: `msg_seed_2_${conversationId}`,
+              conversationId,
+              senderId: 'system',
+              senderRole: 'SYSTEM',
+              content:
+                '📋 Hồ sơ khiếu nại đã được chuyển giao vào hàng đợi xử lý của Ban Trọng Tài Sàn Nexus. SLA phản hồi: 3 giờ.',
+              createdAt: new Date(Date.now() - 25 * 60000).toISOString(),
+            },
+          ];
+
+      saveCachedMessages(conversationId, seedMessages);
+      return seedMessages;
+    }
+
+    return [];
   } catch {
     return [];
   }
@@ -536,6 +609,44 @@ export const chatApi = {
         }
       }
 
+      // 4. Đảm bảo luôn có ca bàn giao Bot-to-Human Handover trong hàng đợi để CSKH xử lý
+      if (
+        !threads.some(
+          (t) =>
+            t.orderStatus === 'WAITING_STAFF' ||
+            t.disputeReason?.includes('Handover') ||
+            t.disputeReason?.includes('bàn giao'),
+        )
+      ) {
+        const demoHandoverId = 'conv_handover_waiting_staff';
+        const cached = getCachedMessages(demoHandoverId);
+        const lastMsg = cached.length > 0 ? cached[cached.length - 1] : undefined;
+
+        threads.unshift({
+          id: demoHandoverId,
+          conversationId: demoHandoverId,
+          orderId: 'NX-ORD-8017',
+          orderCode: 'NX-ORD-8017',
+          channelType: 'BUYER_SUPPORT',
+          customerName: 'Quốc Bảo (Chờ CSKH tiếp nhận)',
+          customerPhone: '0903112233',
+          orderStatus: 'WAITING_STAFF',
+          totalAmount: 2450000,
+          productTitle: 'Đơn khiếu nại giao chậm & vỡ hộp #CS-4018',
+          productQuantity: 1,
+          supportCaseId: 'CS-4018',
+          priority: 'URGENT',
+          slaMinutesRemaining: 18,
+          disputeReason:
+            'Khách hàng yêu cầu chuyển giao sang chuyên viên CSKH sàn (Bot-to-Human Handover): Đơn hàng giao chậm và vỏ hộp bị móp rách',
+          lastMessage:
+            lastMsg?.content || 'Có, nhờ chuyên viên sàn can thiệp hỗ trợ giúp mình với ạ!',
+          lastMessageTime: new Date(Date.now() - 5 * 60000).toISOString(),
+          lastMessageRole: 'BUYER',
+          unreadCount: 1,
+        });
+      }
+
       if (threads.length === 0) {
         return getFallbackSupportThreads();
       }
@@ -632,20 +743,21 @@ function getFallbackSupportThreads(): ChatThreadItem[] {
       orderId: '2',
       orderCode: 'NX-ORD-8017',
       channelType: 'BUYER_SUPPORT',
-      customerName: 'Quốc Bảo',
+      customerName: 'Quốc Bảo (Chờ CSKH tiếp nhận)',
       customerPhone: '0903112233',
-      orderStatus: 'SHIPPED',
+      orderStatus: 'WAITING_STAFF',
       totalAmount: 2450000,
       productTitle: 'Máy ảnh phim Retro 35mm Vintage',
       productQuantity: 1,
-      supportCaseId: 'cs_ord8017',
-      priority: 'HIGH',
-      slaMinutesRemaining: 95,
-      disputeReason: 'Bưu tá GHN báo phát không thành công 3 lần mà không gọi điện cho người mua',
-      lastMessage: 'Mình ở nhà cả ngày nhưng bưu tá không gọi mà lại cập nhật không liên lạc được.',
-      lastMessageTime: new Date(Date.now() - 90 * 60000).toISOString(),
+      supportCaseId: 'CS-4018',
+      priority: 'URGENT',
+      slaMinutesRemaining: 18,
+      disputeReason:
+        'Khách hàng yêu cầu chuyển giao sang chuyên viên CSKH sàn (Bot-to-Human Handover): Bưu tá GHN giao chậm và vỏ hộp bị móp rách',
+      lastMessage: 'Có, nhờ chuyên viên sàn can thiệp hỗ trợ giúp mình với ạ!',
+      lastMessageTime: new Date(Date.now() - 5 * 60000).toISOString(),
       lastMessageRole: 'BUYER',
-      unreadCount: 0,
+      unreadCount: 1,
     },
     {
       id: 'conv_support_03',

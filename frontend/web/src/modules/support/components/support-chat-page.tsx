@@ -190,6 +190,16 @@ export function SupportChatPage() {
     return true;
   });
 
+  // Khi đổi filterTab hoặc danh sách lọc thay đổi, tự động chọn ca đầu tiên nếu ca hiện tại không thuộc bộ lọc
+  useEffect(() => {
+    if (filteredThreads.length > 0) {
+      const isCurrentInFilter = filteredThreads.some((t) => t.id === selectedThreadId);
+      if (!isCurrentInFilter) {
+        setSelectedThreadId(filteredThreads[0].id);
+      }
+    }
+  }, [filterTab, filteredThreads, selectedThreadId]);
+
   return (
     <div
       style={{
@@ -491,7 +501,7 @@ export function SupportChatPage() {
             overflow: 'hidden',
           }}
         >
-          {activeThread ? (
+          {activeThread && filteredThreads.length > 0 ? (
             <>
               {/* Header của phòng chat */}
               <div
@@ -878,7 +888,7 @@ export function SupportChatPage() {
         </div>
 
         {/* CỘT 3: ACTION & POLICY COPILOT PANEL */}
-        {activeThread && showActionPanel && (
+        {activeThread && filteredThreads.length > 0 && showActionPanel && (
           <div
             style={{
               width: '300px',

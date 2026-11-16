@@ -262,7 +262,14 @@ export function SellerOrdersPage() {
       setActionNotice('Đơn hàng đã được hủy thành công.');
       setCancelDialogOpen(false);
     } catch (err) {
-      setActionError(userMessage(err));
+      const msg = userMessage(err);
+      if (msg.includes('SELLER') || msg.includes('không có quyền')) {
+        setActionError(
+          'Quy chế sàn: Tài khoản Người bán (Seller) không có thẩm quyền tự ý hủy đơn. Vui lòng liên hệ CSKH Sàn hoặc hướng dẫn Người mua bấm hủy.',
+        );
+      } else {
+        setActionError(msg);
+      }
     } finally {
       setCancelActing(false);
     }
@@ -775,14 +782,26 @@ export function SellerOrdersPage() {
 
             {/* 3. Nút Hủy đơn hàng */}
             {selectedOrder.status !== 'CANCELLED' && selectedOrder.status !== 'DELIVERED' && (
-              <button
-                type="button"
-                className="seller-button-danger"
-                disabled={cancelActing}
-                onClick={() => handleOpenCancelModal(selectedOrder.id)}
-              >
-                {cancelActing ? 'Đang xử lý…' : 'Hủy đơn hàng'}
-              </button>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="seller-button-danger"
+                  disabled={cancelActing || selectedOrder.status === 'IN_TRANSIT'}
+                  title={
+                    selectedOrder.status === 'IN_TRANSIT'
+                      ? 'Đơn hàng đang giao vận chuyển GHN. Người bán không thể tự ý hủy đơn.'
+                      : 'Người bán yêu cầu hủy đơn hàng'
+                  }
+                  onClick={() => handleOpenCancelModal(selectedOrder.id)}
+                >
+                  {cancelActing ? 'Đang xử lý…' : 'Hủy đơn hàng'}
+                </button>
+                {selectedOrder.status === 'IN_TRANSIT' && (
+                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                    (Đã bàn giao GHN — Chỉ Buyer/CSKH có quyền can thiệp hủy)
+                  </span>
+                )}
+              </div>
             )}
             {actionNotice && (
               <span style={{ color: '#24784f', fontSize: '0.75rem', fontWeight: 600 }}>
@@ -808,6 +827,11 @@ export function SellerOrdersPage() {
             Bạn đang yêu cầu hủy đơn hàng <strong>{cancelTargetId}</strong>. Vui lòng cung cấp lý do
             hủy để thông báo cho khách hàng:
           </DialogDescription>
+          <div className="rounded-lg bg-amber-50 p-2.5 text-xs text-amber-800 border border-amber-200 mt-2">
+            ⚠️ <strong>Quy chế sàn:</strong> Theo chính sách bảo vệ Người mua, Người bán chỉ được
+            yêu cầu hủy nếu có sự đồng thuận. Quyền hủy đơn thuộc về Người mua hoặc Bộ phận CSKH
+            sàn.
+          </div>
           <form onSubmit={handleConfirmCancel} className="mt-4 space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
