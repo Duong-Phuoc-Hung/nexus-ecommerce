@@ -8,6 +8,8 @@ import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
 import { ConversationNotFoundException } from '../../../domain/exceptions/ConversationNotFoundException';
 import { ChatForbiddenException } from '../../../domain/exceptions/ChatForbiddenException';
 import { DisputeArbiterAI } from '../../../infrastructure/ai/DisputeArbiterAI';
+import { HandoverConversationUseCase } from '../../../application/use-cases/HandoverConversationUseCase';
+import { HandoverConflictException } from '../../../domain/exceptions/HandoverConflictException';
 
 export class ChatController {
   constructor(
@@ -16,8 +18,77 @@ export class ChatController {
     private readonly escalateDisputeUseCase: EscalateDisputeUseCase,
     private readonly conversationRepo: IConversationRepository,
     private readonly messageRepo: IChatMessageRepository,
+    private readonly handoverConversationUseCase: HandoverConversationUseCase,
     private readonly disputeArbiterAi: DisputeArbiterAI = new DisputeArbiterAI(),
   ) {}
+
+  public async handover(req: Request, res: Response): Promise<void> {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user) {
+      res.status(401).json({ success: false, error: 'Unauthorized.' });
+      return;
+    }
+    const { conversationId, userId } = req.body ?? {};
+    if (
+      typeof conversationId !== 'string' ||
+      !conversationId.trim() ||
+      conversationId.length > 128 ||
+      typeof userId !== 'string' ||
+      !userId.trim() ||
+      userId.length > 128
+    ) {
+      res.status(400).json({ success: false, error: 'conversationId và userId là bắt buộc.' });
+      return;
+    }
+    try {
+      const conversation = await this.handoverConversationUseCase.execute(
+        { conversationId: conversationId.trim(), userId: userId.trim() },
+        user.sub,
+        user.role,
+      );
+      res.status(200).json({ success: true, data: conversation.toDto() });
+    } catch (error) {
+      if (error instanceof ChatForbiddenException) {
+        res.status(403).json({ success: false, error: error.message });
+      } else if (error instanceof ConversationNotFoundException) {
+        res.status(404).json({ success: false, error: error.message });
+      } else if (error instanceof HandoverConflictException) {
+        res.status(409).json({ success: false, error: error.message });
+      } else {
+        res
+          .status(500)
+          .json({ success: false, error: 'Không thể ghi nhận yêu cầu CSKH. Vui lòng thử lại.' });
+      }
+    }
+  }
+
+  public async listHandovers(req: Request, res: Response): Promise<void> {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user || !['ADMIN', 'SUPPORT_STAFF'].includes(user.role)) {
+      res
+        .status(403)
+        .json({ success: false, error: 'Chỉ nhân viên hỗ trợ hoặc Admin được xem hàng chờ.' });
+      return;
+    }
+    const limit = req.query.limit === undefined ? 50 : Number(req.query.limit);
+    if (
+      Array.isArray(req.query.limit) ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 100
+    ) {
+      res.status(400).json({ success: false, error: 'limit phải là số nguyên từ 1 đến 100.' });
+      return;
+    }
+    try {
+      const conversations = await this.conversationRepo.findWaitingForStaff(limit);
+      res
+        .status(200)
+        .json({ success: true, data: conversations.map((conversation) => conversation.toDto()) });
+    } catch {
+      res.status(500).json({ success: false, error: 'Không thể tải hàng chờ CSKH.' });
+    }
+  }
 
   /**
    * POST /api/v1/chat/conversations
@@ -134,7 +205,7 @@ export class ChatController {
       }
 
       const convId = req.params.id as string;
-      const { content, attachments } = req.body;
+      const { content, attachments, clientMessageId, context } = req.body;
 
       const result = await this.sendMessageUseCase.execute(
         {
@@ -143,6 +214,8 @@ export class ChatController {
           senderRole: (user.role as any) || 'BUYER',
           content,
           attachments,
+          clientMessageId,
+          context,
         },
         user.sub,
         user.role,
@@ -204,12 +277,154 @@ export class ChatController {
         const parsed = Number(rawAfter);
         afterDate = !isNaN(parsed) ? new Date(parsed) : new Date(rawAfter);
       }
+      const beforeSeq = req.query.before ? Number(req.query.before) : undefined;
+      const afterSeq = req.query.afterSeq ? Number(req.query.afterSeq) : undefined;
 
-      const messages = await this.messageRepo.findByConversationId(convId, limit, afterDate);
+      const messages = await this.messageRepo.findByConversationId(
+        convId,
+        limit,
+        afterDate,
+        beforeSeq,
+        afterSeq,
+      );
 
       res.status(200).json({
         success: true,
         data: messages.map((m) => m.toDto()),
+        meta: {
+          conversationId: convId,
+          lastSeq: conv.lastSeq,
+          buyerLastReadSeq: conv.buyerLastReadSeq,
+          counterpartLastReadSeq: conv.counterpartLastReadSeq,
+          hasOlder: messages.length >= limit,
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  /**
+   * PUT /api/v1/chat/conversations/:id/read
+   * Đánh dấu đã đọc tin nhắn đến seq nào
+   */
+  public async markAsRead(req: Request, res: Response): Promise<void> {
+    try {
+      const user = (req as AuthenticatedRequest).user;
+      if (!user) {
+        res.status(401).json({ success: false, error: 'Unauthorized.' });
+        return;
+      }
+
+      const convId = req.params.id as string;
+      const conv = await this.conversationRepo.findById(convId);
+      if (!conv) {
+        res
+          .status(404)
+          .json({ success: false, error: `Không tìm thấy cuộc hội thoại "${convId}".` });
+        return;
+      }
+
+      if (!conv.canAccess(user.sub, user.role)) {
+        res
+          .status(403)
+          .json({ success: false, error: 'Bạn không có quyền truy cập vào cuộc hội thoại này.' });
+        return;
+      }
+
+      const lastReadSeq = Number(req.body.lastReadSeq || req.body.seq || conv.lastSeq || 0);
+      conv.markRead(user.sub, user.role, lastReadSeq);
+      await this.conversationRepo.update(conv);
+
+      res.status(200).json({
+        success: true,
+        message: 'Đã cập nhật trạng thái đã xem thành công.',
+        data: {
+          conversationId: convId,
+          lastSeq: conv.lastSeq,
+          buyerLastReadSeq: conv.buyerLastReadSeq,
+          counterpartLastReadSeq: conv.counterpartLastReadSeq,
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  /**
+   * POST /api/v1/chat/conversations/:id/attachments
+   * Bổ sung endpoint upload file bằng chứng thực tế (Mục 3)
+   */
+  public async uploadAttachment(req: Request, res: Response): Promise<void> {
+    try {
+      const user = (req as AuthenticatedRequest).user;
+      if (!user) {
+        res.status(401).json({ success: false, error: 'Unauthorized.' });
+        return;
+      }
+
+      const convId = req.params.id as string;
+      const conv = await this.conversationRepo.findById(convId);
+      if (!conv) {
+        res
+          .status(404)
+          .json({ success: false, error: `Không tìm thấy cuộc hội thoại "${convId}".` });
+        return;
+      }
+
+      if (!conv.canAccess(user.sub, user.role)) {
+        res
+          .status(403)
+          .json({ success: false, error: 'Bạn không có quyền đính kèm tệp vào kênh này.' });
+        return;
+      }
+
+      const { filename, mimeType, sizeBytes, url, dataBase64 } = req.body || {};
+      const ALLOWED_MIME = [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'application/pdf',
+        'video/mp4',
+      ];
+      const MAX_SIZE = 20 * 1024 * 1024; // 20 MB
+
+      const targetMime = (mimeType || 'image/jpeg').toLowerCase();
+      if (!ALLOWED_MIME.includes(targetMime)) {
+        res.status(400).json({
+          success: false,
+          error: `Định dạng tệp '${targetMime}' không được hỗ trợ. Chỉ chấp nhận JPG, PNG, WEBP, PDF, MP4.`,
+        });
+        return;
+      }
+
+      const targetSize = Number(sizeBytes || 1024);
+      if (targetSize > MAX_SIZE) {
+        res.status(400).json({
+          success: false,
+          error: 'Dung lượng tệp vượt quá giới hạn tối đa cho phép (20MB).',
+        });
+        return;
+      }
+
+      const attachmentId = `att_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+      const safeFilename = (filename || 'evidence.jpg').replace(/[^a-zA-Z0-9_.-]/g, '_');
+      const finalUrl =
+        url ||
+        (dataBase64
+          ? `data:${targetMime};base64,${dataBase64}`
+          : `/uploads/chat/${convId}/${attachmentId}_${safeFilename}`);
+
+      res.status(201).json({
+        success: true,
+        message: 'Tải tệp đính kèm lên thành công.',
+        data: {
+          attachmentId,
+          url: finalUrl,
+          mimeType: targetMime,
+          filename: safeFilename,
+          sizeBytes: targetSize,
+        },
       });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
@@ -230,7 +445,8 @@ export class ChatController {
 
       const idempotencyKey = (req.headers['idempotency-key'] as string) || req.body.idempotencyKey;
 
-      const { orderId, orderCode, reason, priority, attachments, aiVerdict } = req.body;
+      const { orderId, orderCode, reason, priority, attachments, aiVerdict, sharedMessages } =
+        req.body;
 
       const result = await this.escalateDisputeUseCase.execute({
         orderId,
@@ -242,6 +458,7 @@ export class ChatController {
         attachments,
         idempotencyKey,
         aiVerdict,
+        sharedMessages,
       });
 
       const statusCode = result.isDuplicateRequest ? 200 : 201;

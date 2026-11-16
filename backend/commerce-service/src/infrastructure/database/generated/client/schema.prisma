@@ -197,11 +197,16 @@ model Payment {
   rawResponse Json? @map("raw_response")
 
   // Hỗ trợ cổng thanh toán PayOS (V2)
-  payosOrderCode BigInt?   @unique @map("payos_order_code")
-  paymentLinkId  String?   @map("payment_link_id") @db.VarChar(100)
-  checkoutUrl    String?   @map("checkout_url") @db.Text
-  expiresAt      DateTime? @map("expires_at") @db.Timestamptz()
-  paidAt         DateTime? @map("paid_at") @db.Timestamptz()
+  payosOrderCode      BigInt?   @unique @map("payos_order_code")
+  paymentLinkId       String?   @map("payment_link_id") @db.VarChar(100)
+  checkoutUrl         String?   @map("checkout_url") @db.Text
+  qrCode              String?   @map("qr_code") @db.Text
+  bankBin             String?   @map("bank_bin") @db.VarChar(20)
+  accountNumber       String?   @map("account_number") @db.VarChar(100)
+  accountName         String?   @map("account_name") @db.VarChar(255)
+  transferDescription String?   @map("transfer_description") @db.Text
+  expiresAt           DateTime? @map("expires_at") @db.Timestamptz()
+  paidAt              DateTime? @map("paid_at") @db.Timestamptz()
 
   // Thời gian tạo và cập nhật giao dịch
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()

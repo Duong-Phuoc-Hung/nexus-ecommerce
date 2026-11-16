@@ -9,6 +9,7 @@ export function createCartRoutes(controller: CartController): Router {
 
   router.get('/', ...buyerOnly, controller.getCart);
   router.post('/items', ...buyerOnly, controller.addItem);
+  router.post('/merge', ...buyerOnly, controller.mergeCart);
   router.put('/items/:id', ...buyerOnly, controller.updateItem);
   router.delete('/items/:id', ...buyerOnly, controller.removeItem);
   router.delete('/', ...buyerOnly, controller.clearCart);

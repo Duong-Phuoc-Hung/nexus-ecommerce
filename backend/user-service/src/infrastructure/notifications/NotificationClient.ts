@@ -1,10 +1,12 @@
 export class NotificationClient {
-  private baseUrl: string;
+  constructor(private readonly customBaseUrl?: string) {}
 
-  constructor() {
-    this.baseUrl =
+  private getBaseUrl(): string {
+    return (
+      this.customBaseUrl ||
       process.env.NOTIFICATION_SERVICE_URL ||
-      `http://localhost:${process.env.NOTIFICATION_SERVICE_PORT || 4006}`;
+      `http://localhost:${process.env.NOTIFICATION_SERVICE_PORT || 4006}`
+    );
   }
 
   /**
@@ -12,7 +14,7 @@ export class NotificationClient {
    */
   public async sendOtpEmail(email: string, otp: string, fullName?: string): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/v1/notifications/email/otp`, {
+      const response = await fetch(`${this.getBaseUrl()}/api/v1/notifications/email/otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, otp, fullName }),
@@ -43,7 +45,7 @@ export class NotificationClient {
    */
   public async sendWelcomeEmail(email: string, fullName: string): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/v1/notifications/email/welcome`, {
+      const response = await fetch(`${this.getBaseUrl()}/api/v1/notifications/email/welcome`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, fullName }),

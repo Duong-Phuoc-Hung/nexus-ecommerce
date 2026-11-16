@@ -19,6 +19,14 @@ export class DeleteAddressUseCase {
 
     const wasDefault = address.isDefault;
 
+    // Ràng buộc SCRUM-290: Không cho phép xóa địa chỉ mặc định duy nhất trong sổ địa chỉ
+    if (wasDefault) {
+      const userAddresses = await this.addressRepository.findByUserId(userId);
+      if (userAddresses.length <= 1) {
+        throw new Error('Không được phép xóa địa chỉ mặc định duy nhất trong sổ địa chỉ.');
+      }
+    }
+
     // 1. Xóa địa chỉ
     await this.addressRepository.delete(addressId);
 

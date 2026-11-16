@@ -1179,6 +1179,9 @@ export namespace Prisma {
     endTime: Date | null
     actualEndTime: Date | null
     status: string | null
+    cancelReason: string | null
+    cancelledBy: string | null
+    cancelledAt: Date | null
     winnerId: string | null
     createdAt: Date | null
     updatedAt: Date | null
@@ -1197,6 +1200,9 @@ export namespace Prisma {
     endTime: Date | null
     actualEndTime: Date | null
     status: string | null
+    cancelReason: string | null
+    cancelledBy: string | null
+    cancelledAt: Date | null
     winnerId: string | null
     createdAt: Date | null
     updatedAt: Date | null
@@ -1215,6 +1221,9 @@ export namespace Prisma {
     endTime: number
     actualEndTime: number
     status: number
+    cancelReason: number
+    cancelledBy: number
+    cancelledAt: number
     winnerId: number
     createdAt: number
     updatedAt: number
@@ -1249,6 +1258,9 @@ export namespace Prisma {
     endTime?: true
     actualEndTime?: true
     status?: true
+    cancelReason?: true
+    cancelledBy?: true
+    cancelledAt?: true
     winnerId?: true
     createdAt?: true
     updatedAt?: true
@@ -1267,6 +1279,9 @@ export namespace Prisma {
     endTime?: true
     actualEndTime?: true
     status?: true
+    cancelReason?: true
+    cancelledBy?: true
+    cancelledAt?: true
     winnerId?: true
     createdAt?: true
     updatedAt?: true
@@ -1285,6 +1300,9 @@ export namespace Prisma {
     endTime?: true
     actualEndTime?: true
     status?: true
+    cancelReason?: true
+    cancelledBy?: true
+    cancelledAt?: true
     winnerId?: true
     createdAt?: true
     updatedAt?: true
@@ -1390,6 +1408,9 @@ export namespace Prisma {
     endTime: Date
     actualEndTime: Date | null
     status: string
+    cancelReason: string | null
+    cancelledBy: string | null
+    cancelledAt: Date | null
     winnerId: string | null
     createdAt: Date
     updatedAt: Date
@@ -1427,6 +1448,9 @@ export namespace Prisma {
     endTime?: boolean
     actualEndTime?: boolean
     status?: boolean
+    cancelReason?: boolean
+    cancelledBy?: boolean
+    cancelledAt?: boolean
     winnerId?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -1449,6 +1473,9 @@ export namespace Prisma {
     endTime?: boolean
     actualEndTime?: boolean
     status?: boolean
+    cancelReason?: boolean
+    cancelledBy?: boolean
+    cancelledAt?: boolean
     winnerId?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -1467,6 +1494,9 @@ export namespace Prisma {
     endTime?: boolean
     actualEndTime?: boolean
     status?: boolean
+    cancelReason?: boolean
+    cancelledBy?: boolean
+    cancelledAt?: boolean
     winnerId?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -1500,6 +1530,9 @@ export namespace Prisma {
       endTime: Date
       actualEndTime: Date | null
       status: string
+      cancelReason: string | null
+      cancelledBy: string | null
+      cancelledAt: Date | null
       winnerId: string | null
       createdAt: Date
       updatedAt: Date
@@ -1911,6 +1944,9 @@ export namespace Prisma {
     readonly endTime: FieldRef<"AuctionRoom", 'DateTime'>
     readonly actualEndTime: FieldRef<"AuctionRoom", 'DateTime'>
     readonly status: FieldRef<"AuctionRoom", 'String'>
+    readonly cancelReason: FieldRef<"AuctionRoom", 'String'>
+    readonly cancelledBy: FieldRef<"AuctionRoom", 'String'>
+    readonly cancelledAt: FieldRef<"AuctionRoom", 'DateTime'>
     readonly winnerId: FieldRef<"AuctionRoom", 'String'>
     readonly createdAt: FieldRef<"AuctionRoom", 'DateTime'>
     readonly updatedAt: FieldRef<"AuctionRoom", 'DateTime'>
@@ -5325,6 +5361,9 @@ export namespace Prisma {
     endTime: 'endTime',
     actualEndTime: 'actualEndTime',
     status: 'status',
+    cancelReason: 'cancelReason',
+    cancelledBy: 'cancelledBy',
+    cancelledAt: 'cancelledAt',
     winnerId: 'winnerId',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
@@ -5513,6 +5552,9 @@ export namespace Prisma {
     endTime?: DateTimeFilter<"AuctionRoom"> | Date | string
     actualEndTime?: DateTimeNullableFilter<"AuctionRoom"> | Date | string | null
     status?: StringFilter<"AuctionRoom"> | string
+    cancelReason?: StringNullableFilter<"AuctionRoom"> | string | null
+    cancelledBy?: StringNullableFilter<"AuctionRoom"> | string | null
+    cancelledAt?: DateTimeNullableFilter<"AuctionRoom"> | Date | string | null
     winnerId?: StringNullableFilter<"AuctionRoom"> | string | null
     createdAt?: DateTimeFilter<"AuctionRoom"> | Date | string
     updatedAt?: DateTimeFilter<"AuctionRoom"> | Date | string
@@ -5534,6 +5576,9 @@ export namespace Prisma {
     endTime?: SortOrder
     actualEndTime?: SortOrderInput | SortOrder
     status?: SortOrder
+    cancelReason?: SortOrderInput | SortOrder
+    cancelledBy?: SortOrderInput | SortOrder
+    cancelledAt?: SortOrderInput | SortOrder
     winnerId?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -5558,6 +5603,9 @@ export namespace Prisma {
     endTime?: DateTimeFilter<"AuctionRoom"> | Date | string
     actualEndTime?: DateTimeNullableFilter<"AuctionRoom"> | Date | string | null
     status?: StringFilter<"AuctionRoom"> | string
+    cancelReason?: StringNullableFilter<"AuctionRoom"> | string | null
+    cancelledBy?: StringNullableFilter<"AuctionRoom"> | string | null
+    cancelledAt?: DateTimeNullableFilter<"AuctionRoom"> | Date | string | null
     winnerId?: StringNullableFilter<"AuctionRoom"> | string | null
     createdAt?: DateTimeFilter<"AuctionRoom"> | Date | string
     updatedAt?: DateTimeFilter<"AuctionRoom"> | Date | string
@@ -5579,6 +5627,9 @@ export namespace Prisma {
     endTime?: SortOrder
     actualEndTime?: SortOrderInput | SortOrder
     status?: SortOrder
+    cancelReason?: SortOrderInput | SortOrder
+    cancelledBy?: SortOrderInput | SortOrder
+    cancelledAt?: SortOrderInput | SortOrder
     winnerId?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -5605,6 +5656,9 @@ export namespace Prisma {
     endTime?: DateTimeWithAggregatesFilter<"AuctionRoom"> | Date | string
     actualEndTime?: DateTimeNullableWithAggregatesFilter<"AuctionRoom"> | Date | string | null
     status?: StringWithAggregatesFilter<"AuctionRoom"> | string
+    cancelReason?: StringNullableWithAggregatesFilter<"AuctionRoom"> | string | null
+    cancelledBy?: StringNullableWithAggregatesFilter<"AuctionRoom"> | string | null
+    cancelledAt?: DateTimeNullableWithAggregatesFilter<"AuctionRoom"> | Date | string | null
     winnerId?: StringNullableWithAggregatesFilter<"AuctionRoom"> | string | null
     createdAt?: DateTimeWithAggregatesFilter<"AuctionRoom"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"AuctionRoom"> | Date | string
@@ -5834,6 +5888,9 @@ export namespace Prisma {
     endTime: Date | string
     actualEndTime?: Date | string | null
     status?: string
+    cancelReason?: string | null
+    cancelledBy?: string | null
+    cancelledAt?: Date | string | null
     winnerId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -5855,6 +5912,9 @@ export namespace Prisma {
     endTime: Date | string
     actualEndTime?: Date | string | null
     status?: string
+    cancelReason?: string | null
+    cancelledBy?: string | null
+    cancelledAt?: Date | string | null
     winnerId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -5876,6 +5936,9 @@ export namespace Prisma {
     endTime?: DateTimeFieldUpdateOperationsInput | Date | string
     actualEndTime?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     status?: StringFieldUpdateOperationsInput | string
+    cancelReason?: NullableStringFieldUpdateOperationsInput | string | null
+    cancelledBy?: NullableStringFieldUpdateOperationsInput | string | null
+    cancelledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     winnerId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -5897,6 +5960,9 @@ export namespace Prisma {
     endTime?: DateTimeFieldUpdateOperationsInput | Date | string
     actualEndTime?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     status?: StringFieldUpdateOperationsInput | string
+    cancelReason?: NullableStringFieldUpdateOperationsInput | string | null
+    cancelledBy?: NullableStringFieldUpdateOperationsInput | string | null
+    cancelledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     winnerId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -5918,6 +5984,9 @@ export namespace Prisma {
     endTime: Date | string
     actualEndTime?: Date | string | null
     status?: string
+    cancelReason?: string | null
+    cancelledBy?: string | null
+    cancelledAt?: Date | string | null
     winnerId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -5936,6 +6005,9 @@ export namespace Prisma {
     endTime?: DateTimeFieldUpdateOperationsInput | Date | string
     actualEndTime?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     status?: StringFieldUpdateOperationsInput | string
+    cancelReason?: NullableStringFieldUpdateOperationsInput | string | null
+    cancelledBy?: NullableStringFieldUpdateOperationsInput | string | null
+    cancelledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     winnerId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -5954,6 +6026,9 @@ export namespace Prisma {
     endTime?: DateTimeFieldUpdateOperationsInput | Date | string
     actualEndTime?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     status?: StringFieldUpdateOperationsInput | string
+    cancelReason?: NullableStringFieldUpdateOperationsInput | string | null
+    cancelledBy?: NullableStringFieldUpdateOperationsInput | string | null
+    cancelledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     winnerId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -6297,6 +6372,9 @@ export namespace Prisma {
     endTime?: SortOrder
     actualEndTime?: SortOrder
     status?: SortOrder
+    cancelReason?: SortOrder
+    cancelledBy?: SortOrder
+    cancelledAt?: SortOrder
     winnerId?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -6322,6 +6400,9 @@ export namespace Prisma {
     endTime?: SortOrder
     actualEndTime?: SortOrder
     status?: SortOrder
+    cancelReason?: SortOrder
+    cancelledBy?: SortOrder
+    cancelledAt?: SortOrder
     winnerId?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -6340,6 +6421,9 @@ export namespace Prisma {
     endTime?: SortOrder
     actualEndTime?: SortOrder
     status?: SortOrder
+    cancelReason?: SortOrder
+    cancelledBy?: SortOrder
+    cancelledAt?: SortOrder
     winnerId?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -7294,6 +7378,9 @@ export namespace Prisma {
     endTime: Date | string
     actualEndTime?: Date | string | null
     status?: string
+    cancelReason?: string | null
+    cancelledBy?: string | null
+    cancelledAt?: Date | string | null
     winnerId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -7314,6 +7401,9 @@ export namespace Prisma {
     endTime: Date | string
     actualEndTime?: Date | string | null
     status?: string
+    cancelReason?: string | null
+    cancelledBy?: string | null
+    cancelledAt?: Date | string | null
     winnerId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -7350,6 +7440,9 @@ export namespace Prisma {
     endTime?: DateTimeFieldUpdateOperationsInput | Date | string
     actualEndTime?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     status?: StringFieldUpdateOperationsInput | string
+    cancelReason?: NullableStringFieldUpdateOperationsInput | string | null
+    cancelledBy?: NullableStringFieldUpdateOperationsInput | string | null
+    cancelledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     winnerId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -7370,6 +7463,9 @@ export namespace Prisma {
     endTime?: DateTimeFieldUpdateOperationsInput | Date | string
     actualEndTime?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     status?: StringFieldUpdateOperationsInput | string
+    cancelReason?: NullableStringFieldUpdateOperationsInput | string | null
+    cancelledBy?: NullableStringFieldUpdateOperationsInput | string | null
+    cancelledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     winnerId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -7390,6 +7486,9 @@ export namespace Prisma {
     endTime: Date | string
     actualEndTime?: Date | string | null
     status?: string
+    cancelReason?: string | null
+    cancelledBy?: string | null
+    cancelledAt?: Date | string | null
     winnerId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -7410,6 +7509,9 @@ export namespace Prisma {
     endTime: Date | string
     actualEndTime?: Date | string | null
     status?: string
+    cancelReason?: string | null
+    cancelledBy?: string | null
+    cancelledAt?: Date | string | null
     winnerId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -7446,6 +7548,9 @@ export namespace Prisma {
     endTime?: DateTimeFieldUpdateOperationsInput | Date | string
     actualEndTime?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     status?: StringFieldUpdateOperationsInput | string
+    cancelReason?: NullableStringFieldUpdateOperationsInput | string | null
+    cancelledBy?: NullableStringFieldUpdateOperationsInput | string | null
+    cancelledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     winnerId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -7466,6 +7571,9 @@ export namespace Prisma {
     endTime?: DateTimeFieldUpdateOperationsInput | Date | string
     actualEndTime?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     status?: StringFieldUpdateOperationsInput | string
+    cancelReason?: NullableStringFieldUpdateOperationsInput | string | null
+    cancelledBy?: NullableStringFieldUpdateOperationsInput | string | null
+    cancelledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     winnerId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -7486,6 +7594,9 @@ export namespace Prisma {
     endTime: Date | string
     actualEndTime?: Date | string | null
     status?: string
+    cancelReason?: string | null
+    cancelledBy?: string | null
+    cancelledAt?: Date | string | null
     winnerId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -7506,6 +7617,9 @@ export namespace Prisma {
     endTime: Date | string
     actualEndTime?: Date | string | null
     status?: string
+    cancelReason?: string | null
+    cancelledBy?: string | null
+    cancelledAt?: Date | string | null
     winnerId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -7542,6 +7656,9 @@ export namespace Prisma {
     endTime?: DateTimeFieldUpdateOperationsInput | Date | string
     actualEndTime?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     status?: StringFieldUpdateOperationsInput | string
+    cancelReason?: NullableStringFieldUpdateOperationsInput | string | null
+    cancelledBy?: NullableStringFieldUpdateOperationsInput | string | null
+    cancelledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     winnerId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -7562,6 +7679,9 @@ export namespace Prisma {
     endTime?: DateTimeFieldUpdateOperationsInput | Date | string
     actualEndTime?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     status?: StringFieldUpdateOperationsInput | string
+    cancelReason?: NullableStringFieldUpdateOperationsInput | string | null
+    cancelledBy?: NullableStringFieldUpdateOperationsInput | string | null
+    cancelledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     winnerId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string

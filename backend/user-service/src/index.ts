@@ -1,7 +1,6 @@
-import dotenv from 'dotenv';
+import './loadEnv';
 import { createApplication } from './app';
-
-dotenv.config();
+import { defaultOtpStore } from './infrastructure/cache/RedisOtpStore';
 
 const PORT = process.env.PORT
   ? parseInt(process.env.PORT, 10)
@@ -9,6 +8,7 @@ const PORT = process.env.PORT
     ? parseInt(process.env.USER_SERVICE_PORT, 10)
     : 4001;
 const app = createApplication();
+void defaultOtpStore.warmUp();
 
 app.listen(PORT, () => {
   console.log('='.repeat(60));

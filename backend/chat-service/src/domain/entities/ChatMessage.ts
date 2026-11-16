@@ -16,6 +16,8 @@ export interface ChatMessageProps {
   attachments?: ChatAttachment[];
   metadata?: Record<string, any>;
   createdAt?: Date;
+  seq?: number;
+  clientMessageId?: string;
 }
 
 /**
@@ -31,6 +33,8 @@ export class ChatMessage {
   private readonly _attachments?: ChatAttachment[];
   private readonly _metadata?: Record<string, any>;
   private readonly _createdAt: Date;
+  private _seq?: number;
+  private _clientMessageId?: string;
 
   constructor(props: ChatMessageProps) {
     if (!props.content && (!props.attachments || props.attachments.length === 0)) {
@@ -45,6 +49,9 @@ export class ChatMessage {
     this._attachments = props.attachments;
     this._metadata = props.metadata;
     this._createdAt = props.createdAt || new Date();
+    this._seq = props.seq;
+    this._clientMessageId =
+      props.clientMessageId || (props.metadata?.clientMessageId as string | undefined);
   }
 
   public get id(): string {
@@ -79,6 +86,18 @@ export class ChatMessage {
     return this._createdAt;
   }
 
+  public get seq(): number | undefined {
+    return this._seq;
+  }
+
+  public setSeq(seq: number): void {
+    this._seq = seq;
+  }
+
+  public get clientMessageId(): string | undefined {
+    return this._clientMessageId;
+  }
+
   public toDto() {
     return {
       id: this._id,
@@ -89,6 +108,8 @@ export class ChatMessage {
       attachments: this._attachments || [],
       metadata: this._metadata || null,
       createdAt: this._createdAt,
+      seq: this._seq,
+      clientMessageId: this._clientMessageId,
     };
   }
 }

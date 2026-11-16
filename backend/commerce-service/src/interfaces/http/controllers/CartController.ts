@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { CartService, CartValidationError } from '../../../application/cart/CartService';
 import {
   validateAddToCartInput,
+  validateMergeCartInput,
   validateUpdateCartItemInput,
 } from '../../../application/cart/dtos/AddToCartDto';
 import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
@@ -72,6 +73,21 @@ export class CartController {
       res.status(200).json({
         success: true,
         message: 'Đã xóa sạch giỏ hàng.',
+        data: cart,
+      });
+    } catch (error) {
+      this.handleError(res, error);
+    }
+  };
+
+  public mergeCart = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = this.getUserId(req);
+      const validatedInput = validateMergeCartInput(req.body);
+      const cart = await this.cartService.mergeCart(userId, validatedInput);
+      res.status(200).json({
+        success: true,
+        message: 'Đã gộp giỏ hàng thành công.',
         data: cart,
       });
     } catch (error) {
