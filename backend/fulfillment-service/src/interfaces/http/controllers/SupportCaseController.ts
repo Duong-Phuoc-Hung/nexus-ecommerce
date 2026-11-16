@@ -268,7 +268,7 @@ export class SupportCaseController {
       res.status(201).json({
         success: true,
         message: 'Tạo hồ sơ khiếu nại thành công.',
-        data: supportCase.toDto(),
+        data: supportCase.toResponseDto(),
       });
     } catch (error: any) {
       res.status(400).json({
