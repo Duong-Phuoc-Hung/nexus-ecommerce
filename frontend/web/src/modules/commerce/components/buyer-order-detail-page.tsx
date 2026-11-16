@@ -13,7 +13,15 @@ import { useSession } from '@/modules/auth/hooks/use-session';
 import { readAddresses } from '@/modules/user/utils/address-book';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { BuyerOrderConversationPanel } from './buyer-order-conversation-panel';
-import type { ComplaintCaseType } from '../types/order-conversation.types';
+import {
+  getOrderPaymentPresentation,
+  type LivePaymentStatusSnapshot,
+} from '../utils/order-payment-presentation';
+import type {
+  ComplaintCaseType,
+  OrderConversationCaseSummary,
+} from '../types/order-conversation.types';
+import { useBuyerAssistant } from '@/modules/chat/context/buyer-assistant-provider';
 import {
   ArrowLeft,
   Copy,
@@ -28,7 +36,6 @@ import {
   Package,
   Receipt,
   XCircle,
-  QrCode,
   Printer,
   Calendar,
   CheckCircle2,
@@ -51,48 +58,31 @@ const CANCEL_REASON_PRESETS = [
   'Lý do khác',
 ] as const;
 
-const RETURN_REASON_PRESETS = [
-  'Sản phẩm bị lỗi kỹ thuật, hư hỏng hoặc bể vỡ khi nhận',
-  'Giao sai mẫu mã, màu sắc hoặc thiếu phụ kiện đi kèm',
-  'Sản phẩm không đúng với mô tả trên gian hàng',
-  'Hàng có dấu hiệu đã qua sử dụng hoặc tem niêm phong rách',
-] as const;
+const CONFIRMED_CASES_STORAGE_KEY = 'nexus-order-confirmed-cases-v1';
 
-const COMPLAINT_CATEGORY_PRESETS = [
-  'Giao hàng chậm trễ / Kiện hàng bị kẹt trên hành trình',
-  'Vấn đề về thanh toán PayOS / Đối soát tiền hoàn',
-  'Người bán chậm phản hồi hoặc chuẩn bị hàng quá hạn',
-  'Thông tin vận đơn không khớp thực tế nhận hàng',
-  'Vấn đề khác cần Bộ phận Hỗ trợ (Support) can thiệp',
-] as const;
+const CASE_TYPE_LABELS: Record<ComplaintCaseType, string> = {
+  DAMAGED_ITEM: 'Báo hàng vỡ / Hư hỏng khi nhận',
+  WRONG_ITEM: 'Giao sai mẫu / Thiếu phụ kiện',
+  DELIVERY_ISSUE: 'Sự cố giao nhận / Vận đơn',
+  OTHER: 'Yêu cầu trả hàng / Hoàn tiền',
+};
 
-type SupportRequestType = 'RETURN' | 'COMPLAINT';
+const CASE_STATUS_LABELS: Record<OrderConversationCaseSummary['status'], string> = {
+  OPEN: 'Đã tiếp nhận',
+  INVESTIGATING: 'Đang xác minh',
+  ESCALATED_DISPUTE: 'Đang giải quyết khiếu nại',
+  RESOLVED: 'Đã xử lý xong',
+  REJECTED: 'Đã từ chối',
+};
 
-interface SavedOrderSupportDraft {
-  draftCode: string;
-  orderId: string;
-  type: SupportRequestType;
-  category: string;
-  selectedItems: Array<{
-    productId: string;
-    productName: string;
-    quantity: number;
-  }>;
-  description: string;
-  contactPhone: string;
-  createdAt: string;
-}
-
-const SUPPORT_DRAFT_STORAGE_KEY = 'nexus-order-support-drafts-v1';
-
-function readOrderSupportDrafts(orderId: string): SavedOrderSupportDraft[] {
+function readConfirmedOrderCases(orderId: string): OrderConversationCaseSummary[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = window.localStorage.getItem(SUPPORT_DRAFT_STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(CONFIRMED_CASES_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item): item is SavedOrderSupportDraft =>
+    return parsed.filter((item): item is OrderConversationCaseSummary =>
       Boolean(item && typeof item === 'object' && String(item.orderId) === String(orderId)),
     );
   } catch {
@@ -100,51 +90,25 @@ function readOrderSupportDrafts(orderId: string): SavedOrderSupportDraft[] {
   }
 }
 
-function saveOrderSupportDraft(draft: SavedOrderSupportDraft): SavedOrderSupportDraft[] {
-  if (typeof window === 'undefined') return [draft];
+function saveConfirmedOrderCase(
+  created: OrderConversationCaseSummary,
+): OrderConversationCaseSummary[] {
+  if (typeof window === 'undefined') return [created];
   try {
-    const raw = window.localStorage.getItem(SUPPORT_DRAFT_STORAGE_KEY);
-    const list: SavedOrderSupportDraft[] = raw ? JSON.parse(raw) : [];
-    const safeList = Array.isArray(list) ? list : [];
-    const next = [
-      draft,
-      ...safeList.filter(
-        (d) => !(String(d.orderId) === String(draft.orderId) && d.type === draft.type),
-      ),
-    ];
-    window.localStorage.setItem(SUPPORT_DRAFT_STORAGE_KEY, JSON.stringify(next));
-    return next.filter((d) => String(d.orderId) === String(draft.orderId));
+    const raw = window.sessionStorage.getItem(CONFIRMED_CASES_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    const safeList: OrderConversationCaseSummary[] = Array.isArray(parsed) ? parsed : [];
+    const next = [created, ...safeList.filter((c) => c.caseId !== created.caseId)].slice(0, 30);
+    window.sessionStorage.setItem(CONFIRMED_CASES_STORAGE_KEY, JSON.stringify(next));
+    return next.filter((c) => String(c.orderId) === String(created.orderId));
   } catch {
-    return [draft];
+    return [created];
   }
-}
-
-function formatSupportDraftForClipboard(draft: SavedOrderSupportDraft): string {
-  const title =
-    draft.type === 'RETURN'
-      ? '[NEXUS - YÊU CẦU TRẢ HÀNG / HOÀN TIỀN]'
-      : '[NEXUS - KHIẾU NẠI / HỖ TRỢ ĐƠN HÀNG]';
-  const lines = [
-    title,
-    `Mã phiếu chuẩn bị: ${draft.draftCode}`,
-    `Mã đơn hàng: #${draft.orderId}`,
-    `Phân loại: ${draft.category}`,
-    `SĐT liên hệ: ${draft.contactPhone}`,
-  ];
-  if (draft.type === 'RETURN' && draft.selectedItems.length > 0) {
-    lines.push(
-      `Sản phẩm yêu cầu trả: ${draft.selectedItems
-        .map((it) => `${it.productName} (#${it.productId} x${it.quantity})`)
-        .join('; ')}`,
-    );
-  }
-  lines.push(`Chi tiết mô tả: ${draft.description}`);
-  lines.push(`Thời gian ghi nhận: ${new Date(draft.createdAt).toLocaleString('vi-VN')}`);
-  return lines.join('\n');
 }
 
 export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
   const { user, phase } = useSession();
+  const { setPageOrderContext, collapseAssistant } = useBuyerAssistant();
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [error, setError] = useState('');
 
@@ -155,23 +119,18 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
   const [cancelValidationError, setCancelValidationError] = useState('');
   const [cancelling, setCancelling] = useState(false);
 
-  // Return / Complaint Modal state + FE Validation
-  const [supportModalType, setSupportModalType] = useState<SupportRequestType | null>(null);
-  const [supportCategory, setSupportCategory] = useState('');
-  const [supportDescription, setSupportDescription] = useState('');
-  const [supportContactPhone, setSupportContactPhone] = useState('');
-  const [returnItemQuantities, setReturnItemQuantities] = useState<Record<string, number>>({});
-  const [supportFieldErrors, setSupportFieldErrors] = useState<{
-    category?: string;
-    items?: string;
-    contactPhone?: string;
-    description?: string;
-  }>({});
-  const [savedDrafts, setSavedDrafts] = useState<SavedOrderSupportDraft[]>([]);
-  const [draftSavedBanner, setDraftSavedBanner] = useState('');
-  const [copiedDraftCode, setCopiedDraftCode] = useState('');
+  // Confirm Receipt state ("Tôi đã nhận hàng")
+  const [confirmReceiptDialogOpen, setConfirmReceiptDialogOpen] = useState(false);
+  const [confirmingReceipt, setConfirmingReceipt] = useState(false);
+  const [confirmReceiptError, setConfirmReceiptError] = useState('');
+  const [confirmReceiptNotice, setConfirmReceiptNotice] = useState('');
 
-  const [paying, setPaying] = useState(false);
+  // Hồ sơ khiếu nại / trả hàng đã được Fulfillment xác nhận (HTTP 201 + caseId thật)
+  const [confirmedCases, setConfirmedCases] = useState<OrderConversationCaseSummary[]>([]);
+
+  const [livePaymentStatus, setLivePaymentStatus] = useState<LivePaymentStatusSnapshot | null>(
+    null,
+  );
   const [copiedTracking, setCopiedTracking] = useState(false);
   const [copiedOrderId, setCopiedOrderId] = useState(false);
   const [productImages, setProductImages] = useState<Record<string, string>>({});
@@ -182,27 +141,34 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
   } | null>(null);
 
   useEffect(() => {
-    setSavedDrafts(readOrderSupportDrafts(orderId));
-  }, [orderId]);
+    setPageOrderContext(user?.role === 'BUYER' ? order : null);
+    return () => setPageOrderContext(null);
+  }, [order, setPageOrderContext, user?.role]);
 
-  const handlePayWithPayOs = async () => {
-    if (!order) return;
-    setPaying(true);
-    try {
-      const result = await commerceApi.getPaymentLink(order.id);
-      if (!result.checkoutUrl || !/^https:\/\//i.test(result.checkoutUrl)) {
-        throw new Error('Chưa nhận được liên kết thanh toán PayOS.');
-      }
-      sessionStorage.setItem('nexus-pending-payos-order', order.id);
-      window.location.assign(
-        '/checkout/result?method=PAYOS&orderId=' + encodeURIComponent(order.id),
-      );
-    } catch (reason) {
-      setError(userMessage(reason));
-    } finally {
-      setPaying(false);
+  useEffect(() => {
+    if (cancelDialogOpen || confirmReceiptDialogOpen) {
+      collapseAssistant();
     }
-  };
+  }, [cancelDialogOpen, collapseAssistant, confirmReceiptDialogOpen]);
+
+  useEffect(() => {
+    if (!order || user?.role !== 'BUYER') return;
+    if (order.status === 'CANCELLED' || order.status === 'REFUNDED') return;
+    const c = new AbortController();
+    commerceApi
+      .getPaymentStatus(order.internalId || order.id, c.signal)
+      .then((res) => {
+        if (!c.signal.aborted) setLivePaymentStatus(res);
+      })
+      .catch(() => {
+        // Giữ nguyên dữ liệu đơn nếu BE chưa trả hoặc mạng gián đoạn
+      });
+    return () => c.abort();
+  }, [order, user?.role]);
+
+  useEffect(() => {
+    setConfirmedCases(readConfirmedOrderCases(orderId));
+  }, [orderId]);
 
   const fetchOrderDetail = (signal?: AbortSignal) => {
     if (phase === 'loading' || !user || (user.role !== 'BUYER' && user.role !== 'SELLER')) return;
@@ -302,135 +268,57 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
     }
   };
 
-  const openSupportModal = (type: SupportRequestType, defaultPhone: string) => {
-    if (!order) return;
-    setSupportModalType(type);
-    setSupportFieldErrors({});
-    setDraftSavedBanner('');
-
-    const existingDraft = savedDrafts.find((d) => d.type === type);
-    if (existingDraft) {
-      setSupportCategory(existingDraft.category);
-      setSupportDescription(existingDraft.description);
-      setSupportContactPhone(existingDraft.contactPhone || defaultPhone);
-      const map: Record<string, number> = {};
-      for (const it of existingDraft.selectedItems) {
-        map[it.productId] = it.quantity;
-      }
-      setReturnItemQuantities(map);
-      return;
-    }
-
-    setSupportCategory('');
-    setSupportDescription('');
-    setSupportContactPhone(defaultPhone && defaultPhone !== '—' ? defaultPhone : '');
-    if (type === 'RETURN' && order.items?.length) {
-      const initialMap: Record<string, number> = {};
-      for (const item of order.items) {
-        initialMap[item.productId] = item.quantity;
-      }
-      setReturnItemQuantities(initialMap);
-    } else {
-      setReturnItemQuantities({});
-    }
+  const scrollToConversationSection = () => {
+    if (typeof document === 'undefined') return;
+    const el = document.getElementById('buyer-order-chat-section');
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const handleSubmitSupportDraft = async () => {
-    if (!order || !supportModalType) return;
-    const nextErrors: {
-      category?: string;
-      items?: string;
-      contactPhone?: string;
-      description?: string;
-    } = {};
+  const triggerOrderComplaintFlow = (caseType: ComplaintCaseType) => {
+    setConversationTrigger({
+      action: 'OPEN_CASE_MODAL',
+      caseType,
+      nonce: Date.now(),
+    });
+  };
 
-    if (!supportCategory.trim()) {
-      nextErrors.category =
-        supportModalType === 'RETURN'
-          ? 'Vui lòng chọn lý do yêu cầu trả hàng / hoàn tiền.'
-          : 'Vui lòng chọn phân loại vấn đề cần khiếu nại / hỗ trợ.';
-    }
+  const triggerSupportChat = () => {
+    setConversationTrigger({
+      action: 'OPEN_SUPPORT',
+      nonce: Date.now(),
+    });
+    scrollToConversationSection();
+  };
 
-    const selectedItems: Array<{ productId: string; productName: string; quantity: number }> = [];
-    if (supportModalType === 'RETURN') {
-      for (const item of order.items || []) {
-        const qty = Number(returnItemQuantities[item.productId] || 0);
-        if (qty > 0) {
-          if (!Number.isInteger(qty) || qty < 1 || qty > item.quantity) {
-            nextErrors.items = `Số lượng trả của "${item.productName || item.productId}" phải từ 1 đến ${item.quantity}.`;
-            break;
-          }
-          selectedItems.push({
-            productId: item.productId,
-            productName: item.productName || `Sản phẩm #${item.productId}`,
-            quantity: qty,
-          });
-        }
-      }
-      if (!nextErrors.items && selectedItems.length === 0) {
-        nextErrors.items = 'Vui lòng tích chọn ít nhất 1 sản phẩm trong đơn để yêu cầu trả hàng.';
-      }
-    }
+  const handleCaseCreated = (createdCase: OrderConversationCaseSummary) => {
+    setConfirmedCases(saveConfirmedOrderCase(createdCase));
+  };
 
-    const cleanPhone = supportContactPhone.trim().replace(/\s+/g, '');
-    if (!cleanPhone) {
-      nextErrors.contactPhone = 'Vui lòng nhập số điện thoại liên hệ để bộ phận Hỗ trợ xác minh.';
-    } else if (!/^(0|\+84)[35789]\d{8}$/.test(cleanPhone)) {
-      nextErrors.contactPhone =
-        'Số điện thoại không hợp lệ (gồm 10 chữ số chuẩn nhà mạng Việt Nam, ví dụ: 0912345678).';
-    }
-
-    const cleanDesc = supportDescription.trim();
-    if (!cleanDesc) {
-      nextErrors.description = 'Vui lòng nhập mô tả chi tiết tình trạng đơn hàng (không để trống).';
-    } else if (cleanDesc.length < 15) {
-      nextErrors.description = `Mô tả còn quá ngắn (${cleanDesc.length}/15 ký tự tối thiểu). Vui lòng nêu rõ tình trạng thực tế.`;
-    } else if (cleanDesc.length > 1000) {
-      nextErrors.description = 'Mô tả không được vượt quá 1000 ký tự.';
-    }
-
-    if (Object.keys(nextErrors).length > 0) {
-      setSupportFieldErrors(nextErrors);
-      return;
-    }
-
-    setSupportFieldErrors({});
-    const prefix = supportModalType === 'RETURN' ? 'RET' : 'SUP';
-    const draft: SavedOrderSupportDraft = {
-      draftCode: `${prefix}-${order.id}-${Date.now().toString().slice(-4)}`,
-      orderId: String(order.id),
-      type: supportModalType,
-      category: supportCategory.trim(),
-      selectedItems,
-      description: cleanDesc,
-      contactPhone: cleanPhone,
-      createdAt: new Date().toISOString(),
-    };
-
-    const updated = saveOrderSupportDraft(draft);
-    setSavedDrafts(updated);
-
+  const handleConfirmReceipt = async () => {
+    if (!order || confirmingReceipt) return;
+    setConfirmingReceipt(true);
+    setConfirmReceiptError('');
     try {
-      if (typeof navigator !== 'undefined' && navigator.clipboard) {
-        await navigator.clipboard.writeText(formatSupportDraftForClipboard(draft));
-      }
-      setDraftSavedBanner(
-        `Đã kiểm tra hợp lệ, lưu bản ghi ${draft.draftCode} và sao chép nội dung vào bộ nhớ tạm.`,
+      const updated = await commerceApi.confirmReceipt(order.internalId || order.id);
+      const confirmedAt = updated.buyerReceivedAt || new Date().toISOString();
+      setOrder((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: updated.status || prev.status,
+              buyerReceivedAt: confirmedAt,
+            }
+          : prev,
       );
-    } catch {
-      setDraftSavedBanner(`Đã kiểm tra hợp lệ và lưu bản ghi ${draft.draftCode} trên trình duyệt.`);
-    }
-  };
-
-  const copyDraftPayload = async (draft: SavedOrderSupportDraft) => {
-    try {
-      if (typeof navigator !== 'undefined' && navigator.clipboard) {
-        await navigator.clipboard.writeText(formatSupportDraftForClipboard(draft));
-        setCopiedDraftCode(draft.draftCode);
-        setTimeout(() => setCopiedDraftCode(''), 2000);
-      }
-    } catch {
-      // ignore clipboard error
+      setConfirmReceiptDialogOpen(false);
+      setConfirmReceiptNotice(
+        'Đã xác nhận nhận hàng thành công. Nếu sau này phát sinh lỗi sản phẩm, bạn vẫn có thể gửi Yêu cầu trả hàng / Khiếu nại.',
+      );
+      fetchOrderDetail();
+    } catch (e) {
+      setConfirmReceiptError(userMessage(e));
+    } finally {
+      setConfirmingReceipt(false);
     }
   };
 
@@ -526,6 +414,9 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
     user.role === 'BUYER' &&
     ['PENDING', 'PENDING_PAYMENT', 'CREATED', 'PLACED', 'PAID'].includes(order?.status ?? '');
   const canRequestReturn = user.role === 'BUYER' && isDelivered;
+  const buyerReceivedAt = order?.buyerReceivedAt ?? null;
+  const canConfirmReceipt =
+    user.role === 'BUYER' && isDelivered && !buyerReceivedAt && !isCancelled && !isRefunded;
   const displayStatus = isCancelled ? 'CANCELLED' : isRefunded ? 'REFUNDED' : order?.status;
 
   // Tính toán phân rã tiền theo snapshot SRS
@@ -573,11 +464,12 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
       })
     : order?.date || '—';
 
-  // Phương thức thanh toán
-  const isCod = order?.paymentMethod === 'COD';
-  const paymentMethodTitle = isCod
-    ? 'Thanh toán khi nhận hàng (COD)'
-    : 'Cổng thanh toán PayOS (VietQR 24/7)';
+  // Phương thức & trạng thái thanh toán dùng chung quy tắc với màn "Đơn hàng của tôi"
+  const paymentView = order ? getOrderPaymentPresentation(order, livePaymentStatus) : null;
+  const isCod = paymentView ? paymentView.methodKind === 'COD' : order?.paymentMethod === 'COD';
+  const effectiveIsPaid = paymentView ? paymentView.isPaid : isPaid;
+  const paymentMethodTitle =
+    paymentView?.methodLabel || (isCod ? 'Trả khi nhận hàng' : 'Chưa có thông tin thanh toán');
 
   // Các bước tiến trình chuẩn sàn TMĐT (Đặt đơn -> Thanh toán -> Vận chuyển -> Nhận hàng)
   const lifecycleSteps = [
@@ -590,9 +482,17 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
     },
     {
       key: 'PAID',
-      label: isCod ? 'Xác nhận đơn COD' : 'Đã thanh toán',
-      sub: isPaid ? 'Đã xác thực' : isCancelled ? 'Đã dừng' : 'Chờ xác nhận',
-      done: isPaid || isRefunded,
+      label: isCod ? 'Thu tiền khi nhận (COD)' : 'Thanh toán',
+      sub: effectiveIsPaid
+        ? isCod
+          ? 'Đã thu tiền'
+          : 'Đã thanh toán'
+        : isCancelled
+          ? 'Đã dừng'
+          : isCod
+            ? 'Trả khi nhận hàng'
+            : 'Chưa hoàn tất',
+      done: effectiveIsPaid || isRefunded,
       active: order?.status === 'PAID',
     },
     {
@@ -616,7 +516,9 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
         : isRefunded
           ? 'Hoàn tiền hoàn tất'
           : isDelivered
-            ? 'Đã nhận hàng'
+            ? buyerReceivedAt
+              ? `Đã xác nhận nhận (${new Date(buyerReceivedAt).toLocaleDateString('vi-VN')})`
+              : 'Vận đơn đã giao · Chờ xác nhận'
             : 'Dự kiến tiêu chuẩn',
       done: isDelivered || isCancelled || isRefunded,
       active: isDelivered || isCancelled || isRefunded,
@@ -701,26 +603,32 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
                 </div>
               </div>
 
-              {/* Cụm nút hành động chính được nhóm theo vòng đời đơn hàng (Shopee / Lazada / Tiki pattern) */}
+              {/* Cụm nút hành động chính được nhóm theo vòng đời đơn hàng */}
               <div aria-label="Thao tác đơn hàng" className="flex flex-wrap items-center gap-2">
-                {/* 1. Hành động chính theo trạng thái (Primary CTA) */}
-                {user.role === 'BUYER' && isPendingPayment && !isCod && (
+                {canConfirmReceipt && (
                   <Button
                     type="button"
-                    disabled={paying}
-                    className="h-10 rounded-xl bg-brand-dark px-4 font-semibold text-white hover:bg-brand-dark/90 shadow-xs"
-                    onClick={handlePayWithPayOs}
+                    className="h-10 rounded-xl bg-emerald-600 px-4 font-semibold text-white hover:bg-emerald-700 shadow-xs"
+                    onClick={() => {
+                      setConfirmReceiptError('');
+                      setConfirmReceiptDialogOpen(true);
+                    }}
                   >
-                    <QrCode aria-hidden="true" className="mr-1.5 size-4" />
-                    {paying ? 'Đang kết nối PayOS…' : 'Thanh toán ngay qua PayOS'}
+                    <CheckCircle2 aria-hidden="true" className="mr-1.5 size-4" />
+                    Tôi đã nhận hàng
                   </Button>
                 )}
 
                 {canRequestReturn && (
                   <Button
                     type="button"
-                    className="h-10 rounded-xl bg-brand-dark px-4 font-semibold text-white hover:bg-brand-dark/90 shadow-xs"
-                    onClick={() => openSupportModal('RETURN', recipientPhone)}
+                    variant={canConfirmReceipt ? 'outline' : 'default'}
+                    className={`h-10 rounded-xl px-4 font-semibold ${
+                      canConfirmReceipt
+                        ? 'border-brand/40 bg-white text-brand-dark hover:bg-brand-soft/40'
+                        : 'bg-brand-dark text-white hover:bg-brand-dark/90 shadow-xs'
+                    }`}
+                    onClick={() => triggerOrderComplaintFlow('OTHER')}
                   >
                     <RotateCcw aria-hidden="true" className="mr-1.5 size-4" />
                     Yêu cầu trả hàng / Hoàn tiền
@@ -733,7 +641,9 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
                     type="button"
                     variant="outline"
                     className="h-10 rounded-xl border-line bg-white text-stone-700 hover:bg-stone-50"
-                    onClick={() => openSupportModal('COMPLAINT', recipientPhone)}
+                    onClick={() =>
+                      triggerOrderComplaintFlow(isDelivered ? 'DAMAGED_ITEM' : 'DELIVERY_ISSUE')
+                    }
                   >
                     <LifeBuoy aria-hidden="true" className="mr-1.5 size-4 text-brand-dark" />
                     Khiếu nại / Hỗ trợ
@@ -765,7 +675,26 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
               </div>
             </div>
 
-            {/* Dải trạng thái tóm tắt (3 trạng thái chuẩn SRS: Đơn hàng, Thanh toán, Vận chuyển) */}
+            {confirmReceiptNotice && (
+              <div
+                role="status"
+                className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-950"
+              >
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
+                  <span>{confirmReceiptNotice}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConfirmReceiptNotice('')}
+                  className="text-emerald-800 hover:underline font-semibold shrink-0"
+                >
+                  Đóng
+                </button>
+              </div>
+            )}
+
+            {/* Dải trạng thái tóm tắt */}
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line/70 bg-stone-50/70 px-4 py-3 text-xs">
               <div className="flex flex-wrap items-center gap-2.5">
                 <span className="font-semibold text-stone-500">Trạng thái:</span>
@@ -773,37 +702,33 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
                   className={`rounded-full px-2.5 py-0.5 font-bold ${getOrderStatusBadgeClass(
                     displayStatus,
                     isCancelled,
-                    isPaid,
+                    effectiveIsPaid,
                   )}`}
                 >
-                  {isCancelled
-                    ? 'ĐÃ HỦY ĐƠN'
-                    : isRefunded
-                      ? 'ĐÃ HOÀN TIỀN'
-                      : isDelivered
-                        ? 'ĐÃ GIAO HÀNG'
-                        : isShipped
-                          ? 'ĐANG VẬN CHUYỂN'
-                          : isPaid
-                            ? 'ĐÃ THANH TOÁN'
-                            : formatOrderStatus(displayStatus)}
+                  {paymentView?.orderStatusLabel || 'Đang xử lý'}
                 </span>
 
                 <span className="text-stone-300">•</span>
 
                 <span className="inline-flex items-center gap-1 font-medium text-stone-700">
                   <CreditCard className="size-3.5 text-stone-400" />
-                  {isRefunded ? (
-                    <span className="font-semibold text-stone-700">Đã hoàn tiền</span>
-                  ) : isPaid ? (
-                    <span className="font-semibold text-emerald-700">
-                      Đã thanh toán ({isCod ? 'COD' : 'PayOS'})
-                    </span>
-                  ) : (
-                    <span className="font-semibold text-amber-700">
-                      {isCod ? 'Thanh toán khi nhận hàng (COD)' : 'Chờ thanh toán'}
-                    </span>
-                  )}
+                  <span
+                    className={`font-semibold ${
+                      effectiveIsPaid
+                        ? 'text-emerald-700'
+                        : paymentView?.moneyStatusTone === 'info'
+                          ? 'text-sky-800'
+                          : 'text-stone-700'
+                    }`}
+                  >
+                    {paymentView
+                      ? `${paymentView.methodLabel ? `${paymentView.methodLabel} · ` : ''}${paymentView.moneyStatusLabel}`
+                      : isRefunded
+                        ? 'Đã hoàn tiền'
+                        : isPaid
+                          ? 'Đã thanh toán'
+                          : 'Đã ghi nhận'}
+                  </span>
                 </span>
 
                 <span className="text-stone-300">•</span>
@@ -829,7 +754,9 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
                 {canCancel
                   ? 'Đơn chưa bàn giao vận chuyển — bạn vẫn có thể yêu cầu hủy đơn.'
                   : isDelivered
-                    ? 'Đơn đã giao thành công — bạn có thể yêu cầu trả hàng hoặc hỗ trợ nếu có vấn đề.'
+                    ? buyerReceivedAt
+                      ? `Bạn đã xác nhận nhận hàng lúc ${new Date(buyerReceivedAt).toLocaleString('vi-VN')}.`
+                      : 'Vận đơn đã giao — vui lòng kiểm tra hàng và xác nhận Tôi đã nhận hàng.'
                     : isShipped
                       ? 'Đơn đang trên đường giao — chức năng tự hủy đã khóa.'
                       : ''}
@@ -923,6 +850,7 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
                 order={order}
                 recipientName={recipientName}
                 recipientPhone={recipientPhone}
+                onCaseCreated={handleCaseCreated}
                 externalTrigger={conversationTrigger}
               />
             )}
@@ -955,12 +883,13 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
                       {user.role === 'BUYER' && (
                         <button
                           type="button"
-                          onClick={() =>
+                          onClick={() => {
                             setConversationTrigger({
                               action: 'OPEN_SELLER',
                               nonce: Date.now(),
-                            })
-                          }
+                            });
+                            scrollToConversationSection();
+                          }}
                           className="inline-flex items-center gap-1.5 rounded-xl border border-brand/30 bg-brand/5 px-3 py-1.5 text-xs font-semibold text-brand-dark hover:bg-brand/10 transition"
                         >
                           <MessageSquare className="size-3.5" />
@@ -1222,31 +1151,43 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
                     </div>
                   </div>
 
-                  {/* Thông tin phương thức & trạng thái thanh toán */}
+                  {/* Thông tin phương thức & tình trạng tiền */}
                   <div className="mt-5 rounded-xl bg-stone-50 p-3.5 border border-line/60 text-xs space-y-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <span className="text-muted">Phương thức:</span>
-                      <span className="font-semibold text-stone-900">{paymentMethodTitle}</span>
+                      <span className="font-semibold text-stone-900 text-right">
+                        {paymentMethodTitle}
+                      </span>
                     </div>
 
-                    <div className="flex items-center justify-between border-t border-line/50 pt-2">
-                      <span className="text-muted">Trạng thái tiền:</span>
-                      {isPaid ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800">
-                          <span className="size-1.5 rounded-full bg-emerald-600" />
-                          ĐÃ THANH TOÁN
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold text-amber-800">
-                          <span className="size-1.5 rounded-full bg-amber-500 animate-pulse" />
-                          CHỜ THANH TOÁN
-                        </span>
-                      )}
+                    <div className="flex items-center justify-between gap-2 border-t border-line/50 pt-2">
+                      <span className="text-muted">Tình trạng tiền:</span>
+                      <span
+                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
+                          effectiveIsPaid
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : paymentView?.moneyStatusTone === 'info'
+                              ? 'bg-sky-100 text-sky-900'
+                              : 'bg-stone-200/80 text-stone-700'
+                        }`}
+                      >
+                        <span
+                          className={`size-1.5 rounded-full ${
+                            effectiveIsPaid
+                              ? 'bg-emerald-600'
+                              : paymentView?.moneyStatusTone === 'info'
+                                ? 'bg-sky-600'
+                                : 'bg-stone-500'
+                          }`}
+                        />
+                        {paymentView?.moneyStatusLabel ||
+                          (isPaid ? 'Đã thanh toán' : 'Đã ghi nhận')}
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                {/* 2. TRUNG TÂM THAO TÁC HẬU MÃI & HỖ TRỢ ĐƠN HÀNG (Được sắp xếp hợp lý theo trạng thái) */}
+                {/* 2. TRUNG TÂM THAO TÁC HẬU MÃI & HỖ TRỢ ĐƠN HÀNG (Gắn thẳng quy trình Fulfillment & Support) */}
                 {user.role === 'BUYER' && (
                   <div className="rounded-2xl border border-line bg-white p-5 sm:p-6 shadow-xs">
                     <h2 className="font-bold text-stone-900 text-sm sm:text-base border-b border-line pb-3 flex items-center gap-2">
@@ -1265,22 +1206,48 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
                                 ? 'Đơn đã thanh toán và đang chờ chuẩn bị: Bạn có thể hủy đơn. Hệ thống sẽ ghi nhận lý do và chuyển sang đối soát hoàn tiền.'
                                 : 'Đơn chưa bàn giao vận chuyển: Bạn có thể hủy đơn trực tiếp và tồn kho sẽ được hoàn lại.'
                               : isDelivered
-                                ? 'Đơn hàng đã giao thành công: Chức năng hủy đơn đã đóng. Bạn có thể gửi Yêu cầu trả hàng / hoàn tiền hoặc Khiếu nại.'
+                                ? buyerReceivedAt
+                                  ? 'Bạn đã xác nhận nhận hàng. Nếu phát sinh lỗi kỹ thuật hoặc hư hỏng, bạn vẫn có thể mở hồ sơ trả hàng / khiếu nại.'
+                                  : 'Vận đơn đã giao thành công: Hãy kiểm tra kiện hàng và bấm Tôi đã nhận hàng, hoặc mở hồ sơ trả hàng / khiếu nại nếu có vấn đề.'
                                 : isShipped
-                                  ? 'Kiện hàng đang trên đường giao: Không thể tự hủy đơn. Nếu phát sinh sự cố giao nhận, vui lòng gửi Khiếu nại / Hỗ trợ.'
-                                  : 'Đơn hàng đã đóng. Bạn vẫn có thể gửi yêu cầu hỗ trợ nếu cần đối soát thanh toán.'}
+                                  ? 'Kiện hàng đang trên đường giao: Không thể tự hủy đơn. Nếu phát sinh sự cố giao nhận, hãy mở hồ sơ Khiếu nại hoặc nhắn Hỗ trợ.'
+                                  : 'Đơn hàng đã đóng. Bạn vẫn có thể nhắn Bộ phận Hỗ trợ nếu cần đối soát thanh toán.'}
                           </span>
                         </div>
                       </div>
 
-                      {/* Nhóm nút thao tác nhanh trong thẻ Hỗ trợ */}
+                      {isDelivered && buyerReceivedAt && (
+                        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-[11px] font-medium text-emerald-900 flex items-center gap-2">
+                          <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600" />
+                          <span>
+                            Đã xác nhận nhận hàng lúc{' '}
+                            {new Date(buyerReceivedAt).toLocaleString('vi-VN')}
+                          </span>
+                        </div>
+                      )}
+
+                      {canConfirmReceipt && (
+                        <Button
+                          type="button"
+                          className="w-full h-9 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-semibold justify-center"
+                          onClick={() => {
+                            setConfirmReceiptError('');
+                            setConfirmReceiptDialogOpen(true);
+                          }}
+                        >
+                          <CheckCircle2 className="mr-1.5 size-3.5" />
+                          Tôi đã nhận hàng
+                        </Button>
+                      )}
+
+                      {/* Nhóm nút thống nhất nối thẳng vào quy trình Fulfillment & Support */}
                       <div className="grid gap-2 pt-1 sm:grid-cols-2">
                         {canRequestReturn ? (
                           <Button
                             type="button"
                             variant="outline"
                             className="h-9 rounded-xl border-brand/40 text-brand-dark hover:bg-brand-soft/40 text-xs font-semibold justify-center"
-                            onClick={() => openSupportModal('RETURN', recipientPhone)}
+                            onClick={() => triggerOrderComplaintFlow('OTHER')}
                           >
                             <RotateCcw className="mr-1.5 size-3.5" />
                             Yêu cầu trả hàng
@@ -1289,12 +1256,11 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
                           <Button
                             type="button"
                             variant="outline"
-                            disabled
-                            title="Chỉ khả dụng khi đơn hàng ở trạng thái Đã giao (DELIVERED)"
-                            className="h-9 rounded-xl border-line text-stone-400 text-xs justify-center"
+                            className="h-9 rounded-xl border-line text-stone-700 hover:bg-stone-50 text-xs font-semibold justify-center"
+                            onClick={triggerSupportChat}
                           >
-                            <RotateCcw className="mr-1.5 size-3.5" />
-                            Trả hàng (Chờ giao)
+                            <MessageSquare className="mr-1.5 size-3.5 text-brand-dark" />
+                            Nhắn Bộ phận Hỗ trợ
                           </Button>
                         )}
 
@@ -1302,82 +1268,59 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
                           type="button"
                           variant="outline"
                           className="h-9 rounded-xl border-line text-stone-700 hover:bg-stone-50 text-xs font-semibold justify-center"
-                          onClick={() => openSupportModal('COMPLAINT', recipientPhone)}
-                        >
-                          <FileWarning className="mr-1.5 size-3.5 text-brand-dark" />
-                          Khiếu nại đơn hàng
-                        </Button>
-                      </div>
-
-                      <div className="pt-1">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="w-full h-9 rounded-xl border-brand/30 bg-brand/5 text-brand-dark hover:bg-brand/10 text-xs font-semibold justify-center"
                           onClick={() =>
-                            setConversationTrigger({
-                              action: 'OPEN_CASE_MODAL',
-                              caseType: isDelivered ? 'OTHER' : 'DAMAGED_ITEM',
-                              nonce: Date.now(),
-                            })
+                            triggerOrderComplaintFlow(
+                              isDelivered ? 'DAMAGED_ITEM' : 'DELIVERY_ISSUE',
+                            )
                           }
                         >
-                          <MessageSquare className="mr-1.5 size-3.5" />
-                          Mở hồ sơ Báo hàng vỡ / Khiếu nại (Có đính kèm & AI)
+                          <FileWarning className="mr-1.5 size-3.5 text-brand-dark" />
+                          Báo hàng vỡ / Khiếu nại
                         </Button>
                       </div>
 
-                      {/* Danh sách bản ghi yêu cầu đã chuẩn bị trên thiết bị */}
-                      {savedDrafts.length > 0 && (
+                      {/* Danh sách hồ sơ đã được Fulfillment tiếp nhận (chỉ hiển thị khi BE trả HTTP 201 + caseId thật) */}
+                      {confirmedCases.length > 0 && (
                         <div className="mt-3 space-y-2 border-t border-line pt-3">
                           <span className="block text-[11px] font-bold uppercase tracking-wider text-stone-500">
-                            Yêu cầu đã chuẩn bị cho đơn #{order.id}
+                            Hồ sơ hỗ trợ đã gửi cho đơn #{order.id}
                           </span>
-                          {savedDrafts.map((draft) => (
+                          {confirmedCases.map((c) => (
                             <div
-                              key={draft.draftCode}
-                              className="rounded-xl border border-line bg-stone-50/80 p-3 space-y-1.5"
+                              key={c.caseId}
+                              className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 space-y-1.5"
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <span className="font-mono text-[11px] font-bold text-brand-dark">
-                                  {draft.draftCode}
+                                  {c.caseId}
                                 </span>
-                                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                                  Bản nháp đối soát (Chờ API Ticket)
+                                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                                  {CASE_STATUS_LABELS[c.status] || 'Đã tiếp nhận'}
                                 </span>
                               </div>
-                              <p className="font-semibold text-stone-900">{draft.category}</p>
-                              {draft.selectedItems.length > 0 && (
+                              <p className="font-semibold text-stone-900">
+                                {CASE_TYPE_LABELS[c.type] || c.type}
+                              </p>
+                              {c.items.length > 0 && (
                                 <p className="text-[11px] text-stone-600">
-                                  SP trả:{' '}
-                                  {draft.selectedItems
+                                  Sản phẩm:{' '}
+                                  {c.items
                                     .map((it) => `${it.productName} (x${it.quantity})`)
                                     .join(', ')}
                                 </p>
                               )}
-                              <p className="text-[11px] text-muted line-clamp-2">
-                                {draft.description}
-                              </p>
+                              <p className="text-[11px] text-muted line-clamp-2">{c.description}</p>
                               <div className="flex items-center justify-between pt-1">
                                 <span className="text-[10px] text-muted">
-                                  {new Date(draft.createdAt).toLocaleString('vi-VN')}
+                                  {new Date(c.createdAt).toLocaleString('vi-VN')}
                                 </span>
                                 <button
                                   type="button"
-                                  onClick={() => copyDraftPayload(draft)}
+                                  onClick={triggerSupportChat}
                                   className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-dark hover:underline"
                                 >
-                                  {copiedDraftCode === draft.draftCode ? (
-                                    <>
-                                      <Check className="size-3 text-emerald-600" />
-                                      <span className="text-emerald-600">Đã chép phiếu</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Copy className="size-3" />
-                                      <span>Chép nội dung gửi Support</span>
-                                    </>
-                                  )}
+                                  <MessageSquare className="size-3" />
+                                  <span>Theo dõi trong chat Hỗ trợ</span>
                                 </button>
                               </div>
                             </div>
@@ -1526,268 +1469,60 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
         </DialogContent>
       </Dialog>
 
-      {/* HỘP THOẠI 2: YÊU CẦU TRẢ HÀNG HOẶC KHIẾU NẠI ĐƠN HÀNG (CÓ FE VALIDATION ĐẦY ĐỦ) */}
+      {/* HỘP THOẠI 2: XÁC NHẬN ĐÃ NHẬN HÀNG */}
       <Dialog
-        open={Boolean(supportModalType)}
+        open={confirmReceiptDialogOpen}
         onOpenChange={(open) => {
-          if (!open) {
-            setSupportModalType(null);
-            setSupportFieldErrors({});
-            setDraftSavedBanner('');
+          if (!confirmingReceipt) {
+            setConfirmReceiptDialogOpen(open);
+            if (!open) setConfirmReceiptError('');
           }
         }}
       >
-        <DialogContent className="max-w-xl p-6 max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-md p-6">
           <DialogTitle className="text-lg font-bold text-stone-900 flex items-center gap-2">
-            {supportModalType === 'RETURN' ? (
-              <>
-                <RotateCcw className="size-5 text-brand-dark" />
-                <span>Yêu cầu trả hàng / Hoàn tiền · Đơn #{order?.id}</span>
-              </>
-            ) : (
-              <>
-                <LifeBuoy className="size-5 text-brand-dark" />
-                <span>Khiếu nại / Hỗ trợ đơn hàng #{order?.id}</span>
-              </>
-            )}
+            <CheckCircle2 className="size-5 text-emerald-600" />
+            <span>Xác nhận đã nhận được hàng?</span>
           </DialogTitle>
-          <DialogDescription className="mt-1.5 text-xs leading-relaxed text-muted">
-            Điền đầy đủ thông tin bên dưới. Hệ thống sẽ kiểm tra tính hợp lệ trên trình duyệt, lưu
-            bản ghi đối soát cho đơn hàng và tạo nội dung chuẩn để gửi Bộ phận Hỗ trợ (Support).
-            <span className="mt-1 block text-amber-800 font-medium">
-              Lưu ý: API tạo ticket trả hàng/khiếu nại trực tiếp từ phía Buyer đang chờ kết nối
-              Backend; thao tác này chưa tự động hoàn tiền trên máy chủ.
-            </span>
+          <DialogDescription className="mt-2 text-xs leading-relaxed text-muted">
+            Bạn xác nhận đã nhận kiện hàng cho đơn{' '}
+            <strong className="font-mono text-stone-900">#{order?.id}</strong> và đã kiểm tra ngoại
+            quan cơ bản.
           </DialogDescription>
 
-          <div className="mt-4 space-y-4 text-xs sm:text-sm">
-            {/* Bước 1: Chọn phân loại lý do */}
-            <div>
-              <label
-                htmlFor="support-category-select"
-                className="block text-xs font-semibold text-stone-800 mb-1.5"
-              >
-                1.{' '}
-                {supportModalType === 'RETURN'
-                  ? 'Lý do yêu cầu trả hàng / hoàn tiền'
-                  : 'Phân loại vấn đề cần khiếu nại'}{' '}
-                <span className="text-red-600">*</span>
-              </label>
-              <select
-                id="support-category-select"
-                aria-invalid={Boolean(supportFieldErrors.category)}
-                className={`w-full rounded-xl border px-3 py-2.5 text-xs sm:text-sm bg-white focus:outline-none ${
-                  supportFieldErrors.category
-                    ? 'border-red-400 bg-red-50/30'
-                    : 'border-line focus:border-brand'
-                }`}
-                value={supportCategory}
-                onChange={(e) => {
-                  setSupportCategory(e.target.value);
-                  setSupportFieldErrors((prev) => ({ ...prev, category: undefined }));
-                  setDraftSavedBanner('');
-                }}
-              >
-                <option value="">-- Chọn phân loại lý do --</option>
-                {(supportModalType === 'RETURN'
-                  ? RETURN_REASON_PRESETS
-                  : COMPLAINT_CATEGORY_PRESETS
-                ).map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
-              {supportFieldErrors.category && (
-                <p role="alert" className="mt-1 text-xs font-medium text-red-600">
-                  {supportFieldErrors.category}
-                </p>
-              )}
-            </div>
-
-            {/* Bước 2 (Chỉ dành cho Trả hàng): Chọn sản phẩm và số lượng cần trả */}
-            {supportModalType === 'RETURN' && order?.items && (
-              <div>
-                <span className="block text-xs font-semibold text-stone-800 mb-1.5">
-                  2. Chọn sản phẩm và số lượng cần trả <span className="text-red-600">*</span>
-                </span>
-                <div className="divide-y divide-line rounded-xl border border-line bg-stone-50/60 px-3">
-                  {order.items.map((item) => {
-                    const currentQty = returnItemQuantities[item.productId] || 0;
-                    const checked = currentQty > 0;
-                    return (
-                      <div
-                        key={item.productId}
-                        className="flex items-center justify-between gap-3 py-2.5 text-xs"
-                      >
-                        <label className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0">
-                          <input
-                            type="checkbox"
-                            className="accent-brand-dark size-4"
-                            checked={checked}
-                            onChange={(e) => {
-                              const nextQty = e.target.checked ? item.quantity : 0;
-                              setReturnItemQuantities((prev) => ({
-                                ...prev,
-                                [item.productId]: nextQty,
-                              }));
-                              setSupportFieldErrors((prev) => ({ ...prev, items: undefined }));
-                              setDraftSavedBanner('');
-                            }}
-                          />
-                          <span className="font-semibold text-stone-800 truncate">
-                            {item.productName || `Sản phẩm #${item.productId}`}
-                          </span>
-                        </label>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <span className="text-muted">SL trả:</span>
-                          <input
-                            type="number"
-                            inputMode="numeric"
-                            min={0}
-                            max={item.quantity}
-                            disabled={!checked}
-                            value={currentQty}
-                            onKeyDown={(e) => {
-                              if (['-', '+', 'e', 'E', '.'].includes(e.key)) {
-                                e.preventDefault();
-                              }
-                            }}
-                            onChange={(e) => {
-                              const cleaned = e.target.value.replace(/\D/g, '');
-                              const val = cleaned ? parseInt(cleaned, 10) : 0;
-                              setReturnItemQuantities((prev) => ({
-                                ...prev,
-                                [item.productId]: Math.min(item.quantity, Math.max(0, val)),
-                              }));
-                              setSupportFieldErrors((prev) => ({ ...prev, items: undefined }));
-                              setDraftSavedBanner('');
-                            }}
-                            className="w-14 rounded-lg border border-line bg-white px-2 py-1 text-center font-mono text-xs disabled:bg-stone-100"
-                          />
-                          <span className="text-muted">/ {item.quantity}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                {supportFieldErrors.items && (
-                  <p role="alert" className="mt-1 text-xs font-medium text-red-600">
-                    {supportFieldErrors.items}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Bước 3: Số điện thoại liên hệ xác minh */}
-            <div>
-              <label
-                htmlFor="support-phone-input"
-                className="block text-xs font-semibold text-stone-800 mb-1"
-              >
-                {supportModalType === 'RETURN' ? '3.' : '2.'} Số điện thoại liên hệ xác minh{' '}
-                <span className="text-red-600">*</span>
-              </label>
-              <input
-                id="support-phone-input"
-                type="tel"
-                inputMode="tel"
-                aria-invalid={Boolean(supportFieldErrors.contactPhone)}
-                placeholder="Ví dụ: 0912345678"
-                value={supportContactPhone}
-                onKeyDown={(e) => {
-                  if (e.key === '-' || e.key === 'e' || e.key === 'E') {
-                    e.preventDefault();
-                  }
-                }}
-                onChange={(e) => {
-                  const withoutMinus = e.target.value.replace(/-/g, '');
-                  const hasPlus = withoutMinus.startsWith('+');
-                  const digits = withoutMinus.replace(/\D/g, '');
-                  const nextVal = hasPlus ? `+${digits.slice(0, 11)}` : digits.slice(0, 10);
-                  setSupportContactPhone(nextVal);
-                  setSupportFieldErrors((prev) => ({ ...prev, contactPhone: undefined }));
-                  setDraftSavedBanner('');
-                }}
-                className={`w-full rounded-xl border px-3 py-2 text-xs sm:text-sm font-mono focus:outline-none ${
-                  supportFieldErrors.contactPhone
-                    ? 'border-red-400 bg-red-50/30'
-                    : 'border-line bg-white focus:border-brand'
-                }`}
-              />
-              {supportFieldErrors.contactPhone && (
-                <p role="alert" className="mt-1 text-xs font-medium text-red-600">
-                  {supportFieldErrors.contactPhone}
-                </p>
-              )}
-            </div>
-
-            {/* Bước 4: Mô tả chi tiết vấn đề */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label
-                  htmlFor="support-description-input"
-                  className="block text-xs font-semibold text-stone-800"
-                >
-                  {supportModalType === 'RETURN' ? '4.' : '3.'} Mô tả chi tiết tình trạng thực tế{' '}
-                  <span className="text-red-600">*</span>
-                </label>
-                <span className="text-[11px] text-muted">
-                  {supportDescription.trim().length}/1000 ký tự (tối thiểu 15)
-                </span>
-              </div>
-              <textarea
-                id="support-description-input"
-                aria-invalid={Boolean(supportFieldErrors.description)}
-                rows={4}
-                maxLength={1000}
-                placeholder="Mô tả rõ tình trạng sản phẩm, mã vận đơn hoặc vấn đề thanh toán bạn đang gặp phải (ít nhất 15 ký tự)..."
-                value={supportDescription}
-                onChange={(e) => {
-                  setSupportDescription(e.target.value);
-                  setSupportFieldErrors((prev) => ({ ...prev, description: undefined }));
-                  setDraftSavedBanner('');
-                }}
-                className={`w-full rounded-xl border p-3 text-xs sm:text-sm focus:outline-none ${
-                  supportFieldErrors.description
-                    ? 'border-red-400 bg-red-50/30'
-                    : 'border-line bg-white focus:border-brand'
-                }`}
-              />
-              {supportFieldErrors.description && (
-                <p role="alert" className="mt-1 text-xs font-medium text-red-600">
-                  {supportFieldErrors.description}
-                </p>
-              )}
-            </div>
-
-            {draftSavedBanner && (
-              <div
-                role="status"
-                className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-medium text-emerald-900 flex items-center gap-2"
-              >
-                <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
-                <span>{draftSavedBanner}</span>
-              </div>
-            )}
+          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-xs text-emerald-950 leading-relaxed">
+            Nếu sau khi mở hộp phát sinh lỗi kỹ thuật, thiếu phụ kiện hoặc hư hỏng bên trong, bạn
+            vẫn có thể gửi <strong>Yêu cầu trả hàng / Khiếu nại</strong> ngay trên trang đơn hàng
+            này.
           </div>
 
-          <div className="mt-5 flex flex-wrap justify-end gap-2.5 border-t border-line pt-4">
+          {confirmReceiptError && (
+            <p
+              role="alert"
+              className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 flex items-start gap-2"
+            >
+              <AlertCircle className="size-4 shrink-0 text-red-600 mt-0.5" />
+              <span>{confirmReceiptError}</span>
+            </p>
+          )}
+
+          <div className="mt-5 flex justify-end gap-2.5">
             <Button
               type="button"
               variant="outline"
+              disabled={confirmingReceipt}
               className="rounded-xl text-xs sm:text-sm"
-              onClick={() => setSupportModalType(null)}
+              onClick={() => setConfirmReceiptDialogOpen(false)}
             >
-              Đóng
+              Kiểm tra lại
             </Button>
             <Button
               type="button"
-              className="rounded-xl bg-brand-dark text-white hover:bg-brand-dark/90 text-xs sm:text-sm font-semibold"
-              onClick={handleSubmitSupportDraft}
+              disabled={confirmingReceipt}
+              className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 text-xs sm:text-sm font-semibold"
+              onClick={handleConfirmReceipt}
             >
-              <Copy className="mr-1.5 size-3.5" />
-              Lưu yêu cầu & Sao chép nội dung
+              {confirmingReceipt ? 'Đang ghi nhận…' : 'Xác nhận đã nhận hàng'}
             </Button>
           </div>
         </DialogContent>

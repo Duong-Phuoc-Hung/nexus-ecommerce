@@ -8,6 +8,7 @@ import { formatPrice, type CatalogProduct } from '../api/catalog.factory';
 import { ApiError, userMessage } from '../../../lib/axios/http';
 import { StoreHeader } from '@/components/layout/store-header';
 import { useSession } from '@/modules/auth/hooks/use-session';
+import { useBuyerAssistant } from '@/modules/chat/context/buyer-assistant-provider';
 import { addCartProduct, addCartProductAsync } from '@/modules/commerce/utils/cart';
 import { FAVORITES_EVENT, hasFavorite, toggleFavorite } from '@/modules/commerce/utils/favorites';
 const conditions: Record<string, string> = {
@@ -26,6 +27,7 @@ export function ProductDetail({ productId }: { productId: string }) {
   const [cartNotice, setCartNotice] = useState('');
   const [favorite, setFavorite] = useState(false);
   const { user } = useSession();
+  const { setProductContext } = useBuyerAssistant();
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -61,6 +63,21 @@ export function ProductDetail({ productId }: { productId: string }) {
     window.addEventListener(FAVORITES_EVENT, sync);
     return () => window.removeEventListener(FAVORITES_EVENT, sync);
   }, [productId]);
+
+  useEffect(() => {
+    if (!product) {
+      setProductContext(null);
+      return;
+    }
+    setProductContext({
+      id: product.id,
+      title: product.title,
+      price: product.price ?? undefined,
+      stock: product.stockQuantity ?? null,
+      condition: product.condition ?? undefined,
+    });
+    return () => setProductContext(null);
+  }, [product, setProductContext]);
   return (
     <>
       <StoreHeader />

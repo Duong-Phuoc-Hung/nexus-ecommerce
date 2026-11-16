@@ -8,12 +8,22 @@ export interface OpenConversationInput {
   sellerId?: string;
 }
 
+export interface ChatPageContext {
+  pageKind?: string;
+  productId?: string;
+  auctionId?: string;
+  orderId?: string;
+  [key: string]: any;
+}
+
 export interface SendMessageInput {
   conversationId: string;
   senderId: string;
   senderRole: MessageSenderRole;
   content: string;
   attachments?: ChatAttachment[];
+  clientMessageId?: string;
+  context?: ChatPageContext;
 }
 
 export interface QueryPolicyFaqInput {
@@ -69,6 +79,7 @@ export interface EscalateDisputeInput {
   attachments?: ChatAttachment[];
   idempotencyKey?: string;
   aiVerdict?: DamageVerdict | AiVerdictDto;
+  sharedMessages?: string[];
 }
 
 export interface EscalateDisputeResult {
@@ -81,6 +92,7 @@ export interface EscalateDisputeResult {
   isDuplicateRequest: boolean;
   evidenceCount: number;
   aiVerdict?: DamageVerdict | AiVerdictDto;
+  sharedMessagesCount?: number;
 }
 
 export interface EvidenceItem {

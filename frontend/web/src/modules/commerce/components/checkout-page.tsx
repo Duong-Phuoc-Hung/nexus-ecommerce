@@ -6,6 +6,7 @@ import { StoreHeader } from '@/components/layout/store-header';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { useSession } from '@/modules/auth/hooks/use-session';
+import { useBuyerAssistant } from '@/modules/chat/context/buyer-assistant-provider';
 import { userMessage } from '@/lib/axios/http';
 import { AddressForm } from '@/modules/user/components/address-form';
 import {
@@ -39,6 +40,7 @@ function newIdempotencyKey(): string {
 
 export default function CheckoutPage() {
   const { user, phase } = useSession();
+  const { setCheckoutContext } = useBuyerAssistant();
   const [lines, setLines] = useState<CartLine[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -85,6 +87,29 @@ export default function CheckoutPage() {
 
   const selectedAddress = addresses.find((item) => item.id === selectedId);
   const subtotal = lines.reduce((total, line) => total + line.price * line.quantity, 0);
+
+  useEffect(() => {
+    setCheckoutContext({
+      stage: 'CHECKOUT',
+      itemsCount: lines.length,
+      subtotal,
+      shippingFee: quote?.shippingFee ?? null,
+      totalAmount: quote?.totalAmount ?? subtotal,
+      paymentMethod,
+      dialogOpen: addressDialog || addDialog || busy,
+    });
+    return () => setCheckoutContext(null);
+  }, [
+    addDialog,
+    addressDialog,
+    busy,
+    lines.length,
+    paymentMethod,
+    quote?.shippingFee,
+    quote?.totalAmount,
+    setCheckoutContext,
+    subtotal,
+  ]);
 
   // Kiểm tra tồn kho & số lượng
   const hasOutOfStock = lines.some((x) => x.stock !== null && x.stock === 0);

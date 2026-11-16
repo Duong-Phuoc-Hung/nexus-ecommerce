@@ -35,25 +35,40 @@ export function createChatRoutes(
     controller.sendMessage(req, res),
   );
 
-  // 5. Lấy danh sách tin nhắn (hỗ trợ ?after=<timestamp> cho Polling)
+  // 5. Lấy danh sách tin nhắn (hỗ trợ ?after=<timestamp>, ?before=<seq> cho Polling / Pagination)
   router.get('/conversations/:id/messages', requireAuth, protectHandover, (req, res) =>
     controller.getMessages(req, res),
+  );
+
+  // 5.1 Đánh dấu đã đọc tin nhắn theo seq (Mục 4)
+  router.put('/conversations/:id/read', requireAuth, (req, res) => controller.markAsRead(req, res));
+
+  // 5.2 Upload tệp đính kèm / ảnh bằng chứng khiếu nại (Mục 3)
+  router.post('/conversations/:id/attachments', requireAuth, (req, res) =>
+    controller.uploadAttachment(req, res),
   );
 
   // 6. Bàn giao khiếu nại kẹp khóa chống trùng Idempotency sang Support Staff (Kịch bản C)
   router.post('/escalate', requireAuth, (req, res) => controller.escalateDispute(req, res));
 
-  // 7. Alias routes cho phiên chat (hỗ trợ Support Staff Portal & Client gọi qua /sessions/:id/messages)
+  // 7. Alias routes cho phiên chat (hỗ trợ Support Staff Portal & Client gọi qua /sessions/:id)
   router.post('/sessions/:id/messages', requireAuth, (req, res) =>
     controller.sendMessage(req, res),
   );
   router.get('/sessions/:id/messages', requireAuth, (req, res) => controller.getMessages(req, res));
   router.get('/sessions/:id', requireAuth, (req, res) => controller.getConversation(req, res));
+  router.put('/sessions/:id/read', requireAuth, (req, res) => controller.markAsRead(req, res));
+  router.post('/sessions/:id/attachments', requireAuth, (req, res) =>
+    controller.uploadAttachment(req, res),
+  );
 
   // 8. Thẩm định đối soát chứng cứ cho Support Staff (AI Copilot Arbiter - Task BE-05)
   router.post('/dispute/analyze-evidence', requireAuth, (req, res) =>
     controller.analyzeDisputeEvidence(req, res),
   );
+
+  // 9. Task BE-03: Endpoint thống nhất gửi tin nhắn chat (hỗ trợ cả conversationId hoặc orderId)
+  router.post('/message', requireAuth, (req, res) => controller.sendDirectMessage(req, res));
 
   return router;
 }

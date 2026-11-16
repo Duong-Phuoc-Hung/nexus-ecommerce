@@ -1,10 +1,17 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
+import { Pool } from 'pg';
 import {
   InMemoryConversationRepository,
   InMemoryChatMessageRepository,
   InMemoryPolicyRepository,
 } from './infrastructure/database/InMemoryChatRepositories';
+import {
+  PostgresConversationRepository,
+  PostgresChatMessageRepository,
+} from './infrastructure/database/PostgresChatRepositories';
+import { IConversationRepository } from './domain/repositories/IConversationRepository';
+import { IChatMessageRepository } from './domain/repositories/IChatMessageRepository';
 import { RedisIdempotencyService } from './infrastructure/redis/RedisIdempotencyService';
 import { OrderTrackingTool } from './application/tools/OrderTrackingTool';
 import { GetOrCreateConversationUseCase } from './application/use-cases/GetOrCreateConversationUseCase';
@@ -40,24 +47,46 @@ export function createApplication(options: { damageAssessor?: IDamageAssessor } 
   });
 
   // 1. Repositories & Infrastructure
-  const conversationRepo = new InMemoryConversationRepository();
-  const messageRepo = new InMemoryChatMessageRepository();
+  const useInMemory =
+    process.env.NODE_ENV === 'test' ||
+    process.env.USE_IN_MEMORY_DB === 'true' ||
+    !process.env.CHAT_DB_URL;
+
+  let conversationRepo: IConversationRepository;
+  let messageRepo: IChatMessageRepository;
+
+  if (useInMemory) {
+    conversationRepo = new InMemoryConversationRepository();
+    messageRepo = new InMemoryChatMessageRepository();
+  } else {
+    const pool = new Pool({
+      connectionString:
+        process.env.CHAT_DB_URL ||
+        'postgresql://nexus_chat:nexus_password@localhost:5438/nexus_chat_db',
+    });
+    conversationRepo = new PostgresConversationRepository(pool);
+    messageRepo = new PostgresChatMessageRepository(pool);
+  }
+
   const policyRepo = new InMemoryPolicyRepository();
   const idempotencyService = new RedisIdempotencyService();
   const orderTrackingTool = new OrderTrackingTool();
+  const damageAssessor = new GeminiDamageAssessor();
 
   // 2. Use Cases
   const getOrCreateConversationUseCase = new GetOrCreateConversationUseCase(conversationRepo);
+  const queryPolicyFaqUseCase = new QueryPolicyFaqUseCase(policyRepo);
+  const escalateDisputeUseCase = new EscalateDisputeUseCase(conversationRepo, idempotencyService);
+  const handoverConversationUseCase = new HandoverConversationUseCase(conversationRepo);
   const sendMessageUseCase = new SendMessageUseCase(
     messageRepo,
     conversationRepo,
     orderTrackingTool,
     undefined,
     policyRepo,
+    damageAssessor,
+    escalateDisputeUseCase,
   );
-  const queryPolicyFaqUseCase = new QueryPolicyFaqUseCase(policyRepo);
-  const escalateDisputeUseCase = new EscalateDisputeUseCase(conversationRepo, idempotencyService);
-  const handoverConversationUseCase = new HandoverConversationUseCase(conversationRepo);
 
   // 3. Controllers
   const disputeArbiterAi = new DisputeArbiterAI();
@@ -70,9 +99,7 @@ export function createApplication(options: { damageAssessor?: IDamageAssessor } 
     handoverConversationUseCase,
     disputeArbiterAi,
   );
-  const damageController = new DamageAssessmentController(
-    options.damageAssessor ?? new GeminiDamageAssessor(),
-  );
+  const damageController = new DamageAssessmentController(options.damageAssessor ?? damageAssessor);
   const policyController = new PolicyController(queryPolicyFaqUseCase, policyRepo);
 
   // 4. Routes
