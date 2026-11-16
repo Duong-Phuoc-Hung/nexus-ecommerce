@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import './marketplace.css';
 import { SessionProvider } from '@/modules/auth/context/session-provider';
+import { BuyerAssistantWidget } from '@/modules/chat/components/buyer-assistant-widget';
+import { BuyerAssistantProvider } from '@/modules/chat/context/buyer-assistant-provider';
 import { StoreProvider } from '@/store/provider';
 
 export const metadata: Metadata = {
@@ -16,7 +18,12 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           Keep this exception at body; child components still receive hydration checks. */}
       <body suppressHydrationWarning>
         <StoreProvider>
-          <SessionProvider>{children}</SessionProvider>
+          <SessionProvider>
+            <BuyerAssistantProvider>
+              {children}
+              <BuyerAssistantWidget />
+            </BuyerAssistantProvider>
+          </SessionProvider>
         </StoreProvider>
       </body>
     </html>
