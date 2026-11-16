@@ -53,6 +53,21 @@ export class PostgresConversationRepository implements IConversationRepository {
     }
   }
 
+  public async findWaitingForStaff(limit: number): Promise<Conversation[]> {
+    try {
+      const res = await this.pool.query(
+        `SELECT * FROM chat_conversations 
+         WHERE channel_type = 'AI_BOT' AND status = 'WAITING_STAFF' 
+         ORDER BY updated_at ASC LIMIT $1`,
+        [limit],
+      );
+      return res.rows.map((row: any) => this.mapRowToConversation(row));
+    } catch (err: any) {
+      console.warn('[PostgresConversationRepository.findWaitingForStaff fallback]:', err.message);
+      return [];
+    }
+  }
+
   public async save(conversation: Conversation): Promise<void> {
     try {
       await this.pool.query(
