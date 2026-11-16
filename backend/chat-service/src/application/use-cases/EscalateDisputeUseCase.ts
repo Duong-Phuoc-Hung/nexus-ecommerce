@@ -90,6 +90,7 @@ export class EscalateDisputeUseCase {
           type: 'Yêu cầu trả hàng / hoàn tiền',
           priority: input.priority || 'Cao',
           aiVerdict: input.aiVerdict,
+          sharedMessages: input.sharedMessages,
           buyerEvidence: {
             photos: photos.length > 0 ? photos : undefined,
             videos: videos.length > 0 ? videos : undefined,
@@ -139,6 +140,7 @@ export class EscalateDisputeUseCase {
       isDuplicateRequest: false,
       evidenceCount: attachments.length,
       aiVerdict: input.aiVerdict,
+      sharedMessagesCount: input.sharedMessages?.length || 0,
     };
 
     // 5. Lưu khóa Idempotency vào bộ nhớ đệm (TTL 24h = 86400s)

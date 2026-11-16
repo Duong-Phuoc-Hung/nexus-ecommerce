@@ -70,16 +70,50 @@ export class InMemoryChatMessageRepository implements IChatMessageRepository {
     conversationId: string,
     limit: number = 50,
     after?: Date,
+    beforeSeq?: number,
+    afterSeq?: number,
   ): Promise<ChatMessage[]> {
     let list = this.messages.filter((m) => m.conversationId === conversationId);
     if (after) {
       list = list.filter((m) => m.createdAt.getTime() > after.getTime());
     }
+    if (typeof beforeSeq === 'number') {
+      list = list.filter((m) => (m.seq !== undefined ? m.seq < beforeSeq : true));
+    }
+    if (typeof afterSeq === 'number') {
+      list = list.filter((m) => (m.seq !== undefined ? m.seq > afterSeq : true));
+    }
     list.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
     return list.slice(0, limit);
   }
 
+  public async findByClientMessageId(
+    conversationId: string,
+    clientMessageId: string,
+  ): Promise<ChatMessage | null> {
+    if (!clientMessageId) return null;
+    const found = this.messages.find(
+      (m) => m.conversationId === conversationId && m.clientMessageId === clientMessageId,
+    );
+    return found || null;
+  }
+
+  public async getNextSeq(conversationId: string): Promise<number> {
+    const convMessages = this.messages.filter((m) => m.conversationId === conversationId);
+    let maxSeq = 0;
+    for (const m of convMessages) {
+      if (typeof m.seq === 'number' && m.seq > maxSeq) {
+        maxSeq = m.seq;
+      }
+    }
+    return maxSeq + 1;
+  }
+
   public async save(message: ChatMessage): Promise<void> {
+    if (typeof message.seq !== 'number') {
+      const nextSeq = await this.getNextSeq(message.conversationId);
+      message.setSeq(nextSeq);
+    }
     this.messages.push(message);
   }
 

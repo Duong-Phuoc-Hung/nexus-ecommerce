@@ -9,6 +9,7 @@ export interface ChatContext {
   userId: string;
   userRole?: string;
   previousMessages?: Array<{ sender: string; content: string }>;
+  pageContext?: Record<string, any>;
 }
 
 export interface AiReplyResult {

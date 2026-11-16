@@ -42,7 +42,24 @@ export class SendMessageUseCase {
       throw new ChatForbiddenException('Bạn không có quyền gửi tin nhắn trong kênh hội thoại này.');
     }
 
-    // 2. Lưu tin nhắn của người gửi
+    // 1.1 Chặn gửi tin nhắn nếu phòng chat đã đóng (CLOSED)
+    if (conv.isClosed()) {
+      throw new ChatForbiddenException('Cuộc hội thoại này đã đóng, không thể gửi thêm tin nhắn.');
+    }
+
+    // 1.2 Chống trùng tin nhắn (Idempotency) theo clientMessageId
+    if (input.clientMessageId) {
+      const existing = await this.messageRepo.findByClientMessageId(conv.id, input.clientMessageId);
+      if (existing) {
+        return { message: existing };
+      }
+    }
+
+    // 2. Tính số thứ tự seq và lưu tin nhắn của người gửi
+    const nextSeq = await this.messageRepo.getNextSeq(conv.id);
+    conv.incrementSeq();
+    await this.conversationRepo.update(conv);
+
     const userMessage = new ChatMessage({
       id: `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
       conversationId: conv.id,
@@ -50,6 +67,9 @@ export class SendMessageUseCase {
       senderRole: input.senderRole,
       content: input.content,
       attachments: input.attachments,
+      seq: nextSeq,
+      clientMessageId: input.clientMessageId,
+      metadata: input.context ? { context: input.context } : undefined,
     });
 
     await this.messageRepo.save(userMessage);
@@ -62,11 +82,16 @@ export class SendMessageUseCase {
         orderId: conv.orderId,
         userId: currentUserId,
         userRole: currentUserRole,
+        pageContext: input.context,
       });
 
       // A handover may complete while the external model is still generating a reply.
       const latest = await this.conversationRepo.findById(conv.id);
       if (!latest?.isBotActive) return { message: userMessage };
+
+      const aiSeq = await this.messageRepo.getNextSeq(conv.id);
+      conv.incrementSeq();
+      await this.conversationRepo.update(conv);
 
       aiReply = new ChatMessage({
         id: `msg_ai_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
@@ -74,6 +99,7 @@ export class SendMessageUseCase {
         senderId: 'SYSTEM_AI',
         senderRole: 'AI',
         content: aiResult.content,
+        seq: aiSeq,
         metadata: {
           model: aiResult.modelUsed,
           toolCalls: aiResult.toolCalls,

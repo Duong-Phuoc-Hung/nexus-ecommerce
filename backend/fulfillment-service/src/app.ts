@@ -149,6 +149,7 @@ export function createApplication(): Application {
     getDisputesUseCase,
     issueDisputeVerdictUseCase,
     submitSellerEvidenceUseCase,
+    supportCaseRepository,
   );
 
   // 6. Routes

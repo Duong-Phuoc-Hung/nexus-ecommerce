@@ -13,6 +13,9 @@ export interface ConversationProps {
   status?: string;
   createdAt?: Date;
   updatedAt?: Date;
+  lastSeq?: number;
+  buyerLastReadSeq?: number;
+  counterpartLastReadSeq?: number;
 }
 
 /**
@@ -29,6 +32,9 @@ export class Conversation {
   private _status: string;
   private readonly _createdAt: Date;
   private _updatedAt: Date;
+  private _lastSeq: number;
+  private _buyerLastReadSeq: number;
+  private _counterpartLastReadSeq: number;
 
   constructor(props: ConversationProps) {
     this._id = props.id;
@@ -40,6 +46,9 @@ export class Conversation {
     this._status = props.status || (props.channelType === 'AI_BOT' ? 'BOT_ACTIVE' : 'ACTIVE');
     this._createdAt = props.createdAt || new Date();
     this._updatedAt = props.updatedAt || new Date();
+    this._lastSeq = props.lastSeq || 0;
+    this._buyerLastReadSeq = props.buyerLastReadSeq || 0;
+    this._counterpartLastReadSeq = props.counterpartLastReadSeq || 0;
   }
 
   public get id(): string {
@@ -115,6 +124,43 @@ export class Conversation {
     this._updatedAt = new Date();
   }
 
+  public updateStatus(status: string): void {
+    this._status = status;
+    this._updatedAt = new Date();
+  }
+
+  public isClosed(): boolean {
+    return this._status === 'CLOSED';
+  }
+
+  public get lastSeq(): number {
+    return this._lastSeq;
+  }
+
+  public incrementSeq(): number {
+    this._lastSeq += 1;
+    this._updatedAt = new Date();
+    return this._lastSeq;
+  }
+
+  public get buyerLastReadSeq(): number {
+    return this._buyerLastReadSeq;
+  }
+
+  public get counterpartLastReadSeq(): number {
+    return this._counterpartLastReadSeq;
+  }
+
+  public markRead(userId: string, role: string, lastReadSeq: number): void {
+    const normalizedRole = (role || '').toUpperCase();
+    if (userId === this._buyerId || normalizedRole === 'BUYER') {
+      this._buyerLastReadSeq = Math.max(this._buyerLastReadSeq, lastReadSeq);
+    } else {
+      this._counterpartLastReadSeq = Math.max(this._counterpartLastReadSeq, lastReadSeq);
+    }
+    this._updatedAt = new Date();
+  }
+
   public get isBotActive(): boolean {
     return this._channelType === 'AI_BOT' && ['BOT_ACTIVE', 'ACTIVE'].includes(this._status);
   }
@@ -140,6 +186,9 @@ export class Conversation {
       sellerId: this._sellerId,
       supportCaseId: this._supportCaseId,
       status: this._status,
+      lastSeq: this._lastSeq,
+      buyerLastReadSeq: this._buyerLastReadSeq,
+      counterpartLastReadSeq: this._counterpartLastReadSeq,
       createdAt: this._createdAt,
       updatedAt: this._updatedAt,
     };
