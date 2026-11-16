@@ -64,9 +64,8 @@ export function loadRedisConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Re
     }
   }
 
-  // 1. Phân tích Host (Chuẩn hóa localhost thành 127.0.0.1 để chống lỗi socket hang IPv6 trên Windows Docker)
-  const rawHost = env.REDIS_HOST?.trim() || parsedHostFromUrl || '127.0.0.1';
-  const host = rawHost === 'localhost' ? '127.0.0.1' : rawHost;
+  // 1. Phân tích Host
+  const host = env.REDIS_HOST?.trim() || parsedHostFromUrl || 'localhost';
 
   if (!host || host.length === 0) {
     throw new RedisConfigError('REDIS_HOST không được để trống.', 'REDIS_HOST', host);
