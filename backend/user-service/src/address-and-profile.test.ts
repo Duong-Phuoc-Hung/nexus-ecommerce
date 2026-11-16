@@ -290,5 +290,37 @@ test('Profile & Address Book flow: CRUD addresses, 5 address limit, default prom
     const remainingDefaults = listJson4.data.filter((a: any) => a.isDefault);
     assert.equal(remainingDefaults.length, 1);
     assert.equal(remainingDefaults[0].id, addrId1); // addrId1 tạo sớm nhất nên được tự động thăng làm default!
+
+    // 13. SCRUM-290: Buyer B tạo 1 địa chỉ duy nhất (mặc định), sau đó thử xóa -> Bị chặn 400 Bad Request
+    const addResB = await fetch(`${baseUrl}/api/v1/users/me/addresses`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${tokenB}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        recipientName: 'Buyer B',
+        phone: '0977889900',
+        provinceCode: '01',
+        provinceName: 'Hà Nội',
+        wardCode: '001',
+        wardName: 'Phường Tràng Tiền',
+        street: '12 Tràng Tiền',
+      }),
+    });
+    assert.equal(addResB.status, 201);
+    const addJsonB = (await addResB.json()) as any;
+    assert.equal(addJsonB.data.isDefault, true);
+    const addrIdB = addJsonB.data.id;
+
+    // Thử xóa địa chỉ mặc định duy nhất này
+    const delOnlyRes = await fetch(`${baseUrl}/api/v1/users/me/addresses/${addrIdB}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${tokenB}` },
+    });
+    assert.equal(delOnlyRes.status, 400);
+    const delOnlyJson = (await delOnlyRes.json()) as any;
+    assert.equal(delOnlyJson.success, false);
+    assert.match(delOnlyJson.error, /Không được phép xóa địa chỉ mặc định duy nhất/);
   });
 });

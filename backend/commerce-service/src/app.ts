@@ -1,7 +1,9 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import { IOrderRepository } from './domain/repositories/IOrderRepository';
+import { ICartRepository } from './domain/repositories/ICartRepository';
 import { InMemoryOrderRepository } from './infrastructure/repositories/InMemoryOrderRepository';
+import { InMemoryCartRepository } from './infrastructure/repositories/InMemoryCartRepository';
 import { PostgresOrderRepository } from './infrastructure/repositories/PostgresOrderRepository';
 import { PostgresCartRepository } from './infrastructure/repositories/PostgresCartRepository';
 import { CartService } from './application/cart/CartService';
@@ -121,7 +123,10 @@ export function createApplication(adminOrderReader?: OrderReader): Application {
     },
   );
 
-  const cartRepository = new PostgresCartRepository(pool);
+  const cartRepository: ICartRepository =
+    process.env.USE_IN_MEMORY_DB === 'true'
+      ? new InMemoryCartRepository()
+      : new PostgresCartRepository(pool);
   const cartService = new CartService(cartRepository, catalogClient);
   const cartController = new CartController(cartService);
 
