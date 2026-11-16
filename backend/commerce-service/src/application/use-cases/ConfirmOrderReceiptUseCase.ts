@@ -30,7 +30,7 @@ export class ConfirmOrderReceiptUseCase {
     }
 
     order.confirmReceipt();
-    await this.orderRepository.save(order);
+    await this.orderRepository.update(order);
 
     return this.getOrderDetailUseCase.execute(order.id);
   }
