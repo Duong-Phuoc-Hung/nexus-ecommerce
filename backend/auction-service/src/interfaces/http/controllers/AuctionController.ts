@@ -33,6 +33,7 @@ export class AuctionController {
     try {
       const authUser = (req as AuthenticatedRequest).user;
       const isAdminOrStaff = authUser?.role === 'ADMIN' || authUser?.role === 'SUPPORT_STAFF';
+      const isSeller = authUser?.role === 'SELLER';
       const { status, sellerId, q } = req.query;
 
       // Kiểm tra tham số truy vấn lặp lại (Array) -> 400 Bad Request
@@ -44,11 +45,24 @@ export class AuctionController {
         return;
       }
 
-      const shouldFindAll = Boolean(status || sellerId || isAdminOrStaff);
+      // Xác định sellerId: Nếu là Seller đăng nhập thì tự động lấy danh sách của chính họ
+      const effectiveSellerId =
+        typeof sellerId === 'string' && sellerId.trim()
+          ? sellerId.trim()
+          : isSeller && authUser?.id
+            ? authUser.id
+            : undefined;
+
+      // Chuẩn hóa status: Nếu là 'ALL' thì coi như không lọc theo status
+      const rawStatus = typeof status === 'string' ? status.trim().toUpperCase() : undefined;
+      const filterStatus = rawStatus && rawStatus !== 'ALL' ? rawStatus : undefined;
+
+      // Nếu là Admin, Staff, Seller hoặc có truyền bộ lọc -> Lấy tất cả (kể cả SCHEDULED)
+      const shouldFindAll = Boolean(status || effectiveSellerId || isAdminOrStaff || isSeller);
       let auctions = shouldFindAll
         ? await this.auctionRepository.findAll({
-            status: typeof status === 'string' ? status : undefined,
-            sellerId: typeof sellerId === 'string' ? sellerId : undefined,
+            status: filterStatus,
+            sellerId: effectiveSellerId,
           })
         : await this.auctionRepository.findActiveAuctions();
 
