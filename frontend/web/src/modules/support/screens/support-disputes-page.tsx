@@ -172,17 +172,25 @@ export function SupportDisputesPage() {
 
   function handleApplyAiRecommendation() {
     if (!aiAnalysisResult) return;
-    if (aiAnalysisResult.recommendedVerdict === 'REFUND_BUYER') {
-      setDecision('REFUND_BUYER');
-      setLiableParty('CARRIER');
-    } else if (aiAnalysisResult.recommendedVerdict === 'REJECT_CLAIM') {
-      setDecision('REJECT_BUYER');
-      setLiableParty('BUYER');
+    const verdict = (aiAnalysisResult as any).suggestedVerdict;
+    if (verdict?.decision) {
+      setDecision(verdict.decision);
+      setLiableParty(verdict.liableParty || 'CARRIER');
+      if (verdict.refundAmount) setRefundAmount(verdict.refundAmount);
+      setVerdictNote(verdict.note || aiAnalysisResult.suggestedNote || '');
     } else {
-      setDecision('REFUND_BUYER');
-      setLiableParty('SELLER');
+      if (aiAnalysisResult.recommendedVerdict === 'REFUND_BUYER') {
+        setDecision('REFUND_BUYER');
+        setLiableParty('CARRIER');
+      } else if (aiAnalysisResult.recommendedVerdict === 'REJECT_CLAIM') {
+        setDecision('REJECT_BUYER');
+        setLiableParty('BUYER');
+      } else {
+        setDecision('REFUND_BUYER');
+        setLiableParty('SELLER');
+      }
+      setVerdictNote(aiAnalysisResult.suggestedNote || '');
     }
-    setVerdictNote(aiAnalysisResult.suggestedNote);
     setAiAppliedNotice('✓ Đã áp dụng đề xuất AI Copilot vào biên bản phán quyết thành công!');
     setTimeout(() => setAiAppliedNotice(null), 4000);
   }
@@ -808,7 +816,7 @@ export function SupportDisputesPage() {
                 Căn cứ & Ghi chú phán quyết (lưu vết Audit log):
               </label>
               <textarea
-                value={verdictNote}
+                value={verdictNote || ''}
                 onChange={(e) => setVerdictNote(e.target.value)}
                 rows={2}
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 outline-none focus:border-sky-500 resize-none"
@@ -827,7 +835,7 @@ export function SupportDisputesPage() {
               </button>
               <button
                 type="submit"
-                disabled={isSubmittingVerdict || !verdictNote.trim()}
+                disabled={isSubmittingVerdict || !(verdictNote || '').trim()}
                 className="rounded-lg bg-indigo-600 px-5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50"
               >
                 {isSubmittingVerdict ? 'Đang ban hành…' : 'Xác nhận ban hành phán quyết'}
