@@ -2,13 +2,15 @@ import { Router } from 'express';
 import { OrderController } from '../controllers/OrderController';
 import { requireAuth, requireOrderPermission } from '../../../infrastructure/security/auth';
 
+import { requireAuth as requireOrderReadAuth } from '../../../infrastructure/security/order-read-auth';
+
 export function createOrderRoutes(controller: OrderController): Router {
   const router = Router();
 
-  router.get('/', requireAuth, requireOrderPermission('LIST'), (req, res) =>
+  router.get('/', requireOrderReadAuth, requireOrderPermission('LIST'), (req, res) =>
     controller.listOrders(req, res),
   );
-  router.get('/:id', requireAuth, requireOrderPermission('VIEW'), (req, res) =>
+  router.get('/:id', requireOrderReadAuth, requireOrderPermission('VIEW'), (req, res) =>
     controller.getById(req, res),
   );
   router.post('/:id/cancel', requireAuth, requireOrderPermission('CANCEL'), (req, res) =>

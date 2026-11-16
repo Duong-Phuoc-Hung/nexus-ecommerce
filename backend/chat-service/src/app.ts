@@ -23,8 +23,13 @@ import { ChatController } from './interfaces/http/controllers/ChatController';
 import { PolicyController } from './interfaces/http/controllers/PolicyController';
 import { createChatRoutes } from './interfaces/http/routes/ChatRoutes';
 import { createPolicyRoutes } from './interfaces/http/routes/PolicyRoutes';
+import { GeminiDamageAssessor } from './infrastructure/ai/GeminiDamageAssessor';
+import { IDamageAssessor } from './application/ports/IDamageAssessor';
+import { HandoverConversationUseCase } from './application/use-cases/HandoverConversationUseCase';
+import { DamageAssessmentController } from './interfaces/http/controllers/DamageAssessmentController';
+import { verifyHandoverParticipant } from './infrastructure/security/chat-task-auth';
 
-export function createApplication(): Application {
+export function createApplication(options: { damageAssessor?: IDamageAssessor } = {}): Application {
   const app = express();
 
   app.use(cors());
@@ -78,6 +83,7 @@ export function createApplication(): Application {
   );
   const queryPolicyFaqUseCase = new QueryPolicyFaqUseCase(policyRepo);
   const escalateDisputeUseCase = new EscalateDisputeUseCase(conversationRepo, idempotencyService);
+  const handoverConversationUseCase = new HandoverConversationUseCase(conversationRepo);
 
   // 3. Controllers
   const disputeArbiterAi = new DisputeArbiterAI();
@@ -87,12 +93,20 @@ export function createApplication(): Application {
     escalateDisputeUseCase,
     conversationRepo,
     messageRepo,
+    handoverConversationUseCase,
     disputeArbiterAi,
+  );
+  const damageController = new DamageAssessmentController(
+    options.damageAssessor ?? new GeminiDamageAssessor(),
   );
   const policyController = new PolicyController(queryPolicyFaqUseCase, policyRepo);
 
   // 4. Routes
-  const chatRoutes = createChatRoutes(chatController);
+  const chatRoutes = createChatRoutes(
+    chatController,
+    damageController,
+    verifyHandoverParticipant(conversationRepo),
+  );
   const policyRoutes = createPolicyRoutes(policyController);
 
   app.use('/api/v1/chat', chatRoutes);

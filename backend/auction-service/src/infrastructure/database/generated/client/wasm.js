@@ -135,6 +135,9 @@ exports.Prisma.AuctionRoomScalarFieldEnum = {
   endTime: 'endTime',
   actualEndTime: 'actualEndTime',
   status: 'status',
+  cancelReason: 'cancelReason',
+  cancelledBy: 'cancelledBy',
+  cancelledAt: 'cancelledAt',
   winnerId: 'winnerId',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'

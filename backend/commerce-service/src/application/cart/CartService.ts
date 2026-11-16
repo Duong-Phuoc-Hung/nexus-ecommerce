@@ -1,6 +1,12 @@
 import { CatalogProduct, ICatalogClient } from '../checkout/ports';
 import { ICartRepository } from '../../domain/repositories/ICartRepository';
-import { AddToCartInputDto, CartDto, CartItemDto, CartValidationError } from './dtos/AddToCartDto';
+import {
+  AddToCartInputDto,
+  CartDto,
+  CartItemDto,
+  CartValidationError,
+  MergeCartInputDto,
+} from './dtos/AddToCartDto';
 
 export { CartValidationError } from './dtos/AddToCartDto';
 
@@ -197,6 +203,51 @@ export class CartService {
   public async clearCart(userId: string): Promise<CartDto> {
     const cart = await this.repository.getOrCreateCart(userId);
     await this.repository.clearCart(cart.id);
+    return this.getCart(userId);
+  }
+
+  /**
+   * SCRUM-167: Gộp giỏ hàng khách (Guest Cart từ LocalStorage) vào giỏ hàng tài khoản DB khi Buyer đăng nhập.
+   * - Tự động đối chiếu tồn kho và giới hạn mua tối đa của sản phẩm.
+   * - Nếu sản phẩm đã có trong giỏ hàng DB: cộng dồn số lượng.
+   * - Nếu sản phẩm chưa có trong giỏ: thêm mới vào giỏ hàng.
+   */
+  public async mergeCart(userId: string, input: MergeCartInputDto): Promise<CartDto> {
+    const cart = await this.repository.getOrCreateCart(userId);
+
+    for (const item of input.items) {
+      let product: CatalogProduct | null = null;
+      try {
+        product = await this.catalog.findProduct(item.productId);
+      } catch {
+        continue; // Bỏ qua sản phẩm lỗi kết nối để không làm đứt luồng gộp giỏ
+      }
+
+      if (!product || product.status !== 'ACTIVE' || product.sellerId === userId) {
+        continue;
+      }
+
+      const availableStock = typeof product.stockQuantity === 'number' ? product.stockQuantity : 0;
+      if (availableStock <= 0) {
+        continue;
+      }
+
+      const currentItems = await this.repository.getCartItems(cart.id);
+      const existingItem = currentItems.find((it) => it.productId === product!.id);
+
+      if (existingItem) {
+        const combinedQty = Math.min(existingItem.quantity + item.quantity, availableStock, 999);
+        if (combinedQty !== existingItem.quantity) {
+          await this.repository.updateItemQuantity(cart.id, existingItem.id, combinedQty);
+        }
+      } else {
+        const initialQty = Math.min(item.quantity, availableStock, 999);
+        if (initialQty > 0) {
+          await this.repository.addItem(cart.id, product.id, initialQty, product.price);
+        }
+      }
+    }
+
     return this.getCart(userId);
   }
 }

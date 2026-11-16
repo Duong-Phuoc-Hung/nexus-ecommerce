@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import test from 'node:test';
 import { createApplication } from './app';
+import { OtpRedisClient, RedisOtpStore } from './infrastructure/cache/RedisOtpStore';
 
 async function withUserServer<T>(run: (baseUrl: string) => Promise<T>): Promise<T> {
   process.env.NODE_ENV = 'test';
@@ -248,4 +250,138 @@ test('POST /api/v1/auth/register: Brute-force OTP protection locks and destroys 
     assert.equal(lockedJson.success, false);
     assert.match(lockedJson.error, /Mã xác thực OTP không chính xác/);
   });
+});
+
+function createMockRedisClient(options?: {
+  connectDelayMs?: number;
+  failInitialConnect?: boolean;
+}) {
+  const emitter = new EventEmitter();
+  const data = new Map<string, string>();
+  let connected = false;
+
+  const client: OtpRedisClient & {
+    data: Map<string, string>;
+    simulateReady: () => void;
+  } = {
+    data,
+    get status() {
+      return connected ? 'ready' : 'wait';
+    },
+    on(event: string, listener: (...args: any[]) => void) {
+      return emitter.on(event, listener);
+    },
+    simulateReady() {
+      connected = true;
+      emitter.emit('ready');
+    },
+    async connect() {
+      if (options?.connectDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, options.connectDelayMs));
+      }
+      if (options?.failInitialConnect) {
+        throw new Error('Redis temporarily unavailable');
+      }
+      connected = true;
+      emitter.emit('ready');
+    },
+    disconnect() {
+      connected = false;
+      emitter.emit('end');
+    },
+    async ttl(key: string) {
+      return data.has(key) ? 60 : -2;
+    },
+    async set(key: string, value: string) {
+      if (!connected) throw new Error('Redis disconnected');
+      data.set(key, value);
+      return 'OK';
+    },
+    async get(key: string) {
+      if (!connected) throw new Error('Redis disconnected');
+      return data.get(key) ?? null;
+    },
+    async incr(key: string) {
+      if (!connected) throw new Error('Redis disconnected');
+      const next = Number(data.get(key) || '0') + 1;
+      data.set(key, String(next));
+      return next;
+    },
+    async expire() {
+      return 1;
+    },
+    async del(key: string) {
+      return data.delete(key) ? 1 : 0;
+    },
+  };
+
+  return client;
+}
+
+test('RedisOtpStore: Awaits in-flight lazy connect so first OTP is persisted and verified on 1st attempt', async () => {
+  const mockRedis = createMockRedisClient({ connectDelayMs: 30 });
+  const store = new RedisOtpStore({
+    enableRedisInTest: true,
+    createClient: () => mockRedis,
+  });
+
+  try {
+    await store.saveOtp('first.race@nexus.vn', '654321', 300);
+    assert.equal(
+      mockRedis.data.get('otp:register:first.race@nexus.vn'),
+      '654321',
+      'Lần gửi OTP đầu tiên phải đợi connect() xong và ghi được vào Redis',
+    );
+    assert.equal(await store.verifyAndConsumeOtp('first.race@nexus.vn', '654321'), true);
+    assert.equal(await store.verifyAndConsumeOtp('first.race@nexus.vn', '654321'), false);
+  } finally {
+    store.close();
+  }
+});
+
+test('RedisOtpStore: Falls back to RAM when OTP was saved offline and Redis reconnects before verify', async () => {
+  const mockRedis = createMockRedisClient({ failInitialConnect: true });
+  const store = new RedisOtpStore({
+    enableRedisInTest: true,
+    createClient: () => mockRedis,
+  });
+
+  try {
+    // 1. Khi gửi OTP lần 1, Redis đang chết -> lưu vào RAM fallback
+    await store.saveOtp('recover.race@nexus.vn', '112233', 300);
+    assert.equal(mockRedis.data.has('otp:register:recover.race@nexus.vn'), false);
+
+    // 2. Trước khi user nhập OTP, Redis kết nối lại thành công -> get(key) trên Redis trả null
+    mockRedis.simulateReady();
+
+    // 3. Xác thực lần 1 vẫn phải fallback xuống RAM tìm đúng mã hợp lệ (và tiêu thụ 1 lần)
+    assert.equal(await store.verifyAndConsumeOtp('recover.race@nexus.vn', '112233'), true);
+    assert.equal(await store.verifyAndConsumeOtp('recover.race@nexus.vn', '112233'), false);
+  } finally {
+    store.close();
+  }
+});
+
+test('RedisOtpStore: Rejects RAM replay after Redis authoritative OTP expires or is consumed elsewhere', async () => {
+  const mockRedis = createMockRedisClient();
+  const store = new RedisOtpStore({
+    enableRedisInTest: true,
+    createClient: () => mockRedis,
+  });
+
+  try {
+    await store.saveOtp('shared.redis@nexus.vn', '889900', 300);
+    assert.equal(mockRedis.data.get('otp:register:shared.redis@nexus.vn'), '889900');
+
+    // Giả lập OTP hết hạn hoặc đã bị instance khác tiêu thụ trên Redis
+    mockRedis.data.delete('otp:register:shared.redis@nexus.vn');
+
+    assert.equal(
+      await store.verifyAndConsumeOtp('shared.redis@nexus.vn', '889900'),
+      false,
+      'Không được dùng lại bản RAM cũ nếu Redis đã lưu thành công trước đó và nay key đã bị xóa',
+    );
+  } finally {
+    store.close();
+  }
 });

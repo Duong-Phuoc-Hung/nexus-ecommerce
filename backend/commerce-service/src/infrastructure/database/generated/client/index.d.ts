@@ -5865,6 +5865,11 @@ export namespace Prisma {
     payosOrderCode: bigint | null
     paymentLinkId: string | null
     checkoutUrl: string | null
+    qrCode: string | null
+    bankBin: string | null
+    accountNumber: string | null
+    accountName: string | null
+    transferDescription: string | null
     expiresAt: Date | null
     paidAt: Date | null
     createdAt: Date | null
@@ -5883,6 +5888,11 @@ export namespace Prisma {
     payosOrderCode: bigint | null
     paymentLinkId: string | null
     checkoutUrl: string | null
+    qrCode: string | null
+    bankBin: string | null
+    accountNumber: string | null
+    accountName: string | null
+    transferDescription: string | null
     expiresAt: Date | null
     paidAt: Date | null
     createdAt: Date | null
@@ -5902,6 +5912,11 @@ export namespace Prisma {
     payosOrderCode: number
     paymentLinkId: number
     checkoutUrl: number
+    qrCode: number
+    bankBin: number
+    accountNumber: number
+    accountName: number
+    transferDescription: number
     expiresAt: number
     paidAt: number
     createdAt: number
@@ -5934,6 +5949,11 @@ export namespace Prisma {
     payosOrderCode?: true
     paymentLinkId?: true
     checkoutUrl?: true
+    qrCode?: true
+    bankBin?: true
+    accountNumber?: true
+    accountName?: true
+    transferDescription?: true
     expiresAt?: true
     paidAt?: true
     createdAt?: true
@@ -5952,6 +5972,11 @@ export namespace Prisma {
     payosOrderCode?: true
     paymentLinkId?: true
     checkoutUrl?: true
+    qrCode?: true
+    bankBin?: true
+    accountNumber?: true
+    accountName?: true
+    transferDescription?: true
     expiresAt?: true
     paidAt?: true
     createdAt?: true
@@ -5971,6 +5996,11 @@ export namespace Prisma {
     payosOrderCode?: true
     paymentLinkId?: true
     checkoutUrl?: true
+    qrCode?: true
+    bankBin?: true
+    accountNumber?: true
+    accountName?: true
+    transferDescription?: true
     expiresAt?: true
     paidAt?: true
     createdAt?: true
@@ -6077,6 +6107,11 @@ export namespace Prisma {
     payosOrderCode: bigint | null
     paymentLinkId: string | null
     checkoutUrl: string | null
+    qrCode: string | null
+    bankBin: string | null
+    accountNumber: string | null
+    accountName: string | null
+    transferDescription: string | null
     expiresAt: Date | null
     paidAt: Date | null
     createdAt: Date
@@ -6115,6 +6150,11 @@ export namespace Prisma {
     payosOrderCode?: boolean
     paymentLinkId?: boolean
     checkoutUrl?: boolean
+    qrCode?: boolean
+    bankBin?: boolean
+    accountNumber?: boolean
+    accountName?: boolean
+    transferDescription?: boolean
     expiresAt?: boolean
     paidAt?: boolean
     createdAt?: boolean
@@ -6135,6 +6175,11 @@ export namespace Prisma {
     payosOrderCode?: boolean
     paymentLinkId?: boolean
     checkoutUrl?: boolean
+    qrCode?: boolean
+    bankBin?: boolean
+    accountNumber?: boolean
+    accountName?: boolean
+    transferDescription?: boolean
     expiresAt?: boolean
     paidAt?: boolean
     createdAt?: boolean
@@ -6155,6 +6200,11 @@ export namespace Prisma {
     payosOrderCode?: boolean
     paymentLinkId?: boolean
     checkoutUrl?: boolean
+    qrCode?: boolean
+    bankBin?: boolean
+    accountNumber?: boolean
+    accountName?: boolean
+    transferDescription?: boolean
     expiresAt?: boolean
     paidAt?: boolean
     createdAt?: boolean
@@ -6186,6 +6236,11 @@ export namespace Prisma {
       payosOrderCode: bigint | null
       paymentLinkId: string | null
       checkoutUrl: string | null
+      qrCode: string | null
+      bankBin: string | null
+      accountNumber: string | null
+      accountName: string | null
+      transferDescription: string | null
       expiresAt: Date | null
       paidAt: Date | null
       createdAt: Date
@@ -6596,6 +6651,11 @@ export namespace Prisma {
     readonly payosOrderCode: FieldRef<"Payment", 'BigInt'>
     readonly paymentLinkId: FieldRef<"Payment", 'String'>
     readonly checkoutUrl: FieldRef<"Payment", 'String'>
+    readonly qrCode: FieldRef<"Payment", 'String'>
+    readonly bankBin: FieldRef<"Payment", 'String'>
+    readonly accountNumber: FieldRef<"Payment", 'String'>
+    readonly accountName: FieldRef<"Payment", 'String'>
+    readonly transferDescription: FieldRef<"Payment", 'String'>
     readonly expiresAt: FieldRef<"Payment", 'DateTime'>
     readonly paidAt: FieldRef<"Payment", 'DateTime'>
     readonly createdAt: FieldRef<"Payment", 'DateTime'>
@@ -10857,6 +10917,11 @@ export namespace Prisma {
     payosOrderCode: 'payosOrderCode',
     paymentLinkId: 'paymentLinkId',
     checkoutUrl: 'checkoutUrl',
+    qrCode: 'qrCode',
+    bankBin: 'bankBin',
+    accountNumber: 'accountNumber',
+    accountName: 'accountName',
+    transferDescription: 'transferDescription',
     expiresAt: 'expiresAt',
     paidAt: 'paidAt',
     createdAt: 'createdAt',
@@ -11409,6 +11474,11 @@ export namespace Prisma {
     payosOrderCode?: BigIntNullableFilter<"Payment"> | bigint | number | null
     paymentLinkId?: StringNullableFilter<"Payment"> | string | null
     checkoutUrl?: StringNullableFilter<"Payment"> | string | null
+    qrCode?: StringNullableFilter<"Payment"> | string | null
+    bankBin?: StringNullableFilter<"Payment"> | string | null
+    accountNumber?: StringNullableFilter<"Payment"> | string | null
+    accountName?: StringNullableFilter<"Payment"> | string | null
+    transferDescription?: StringNullableFilter<"Payment"> | string | null
     expiresAt?: DateTimeNullableFilter<"Payment"> | Date | string | null
     paidAt?: DateTimeNullableFilter<"Payment"> | Date | string | null
     createdAt?: DateTimeFilter<"Payment"> | Date | string
@@ -11429,6 +11499,11 @@ export namespace Prisma {
     payosOrderCode?: SortOrderInput | SortOrder
     paymentLinkId?: SortOrderInput | SortOrder
     checkoutUrl?: SortOrderInput | SortOrder
+    qrCode?: SortOrderInput | SortOrder
+    bankBin?: SortOrderInput | SortOrder
+    accountNumber?: SortOrderInput | SortOrder
+    accountName?: SortOrderInput | SortOrder
+    transferDescription?: SortOrderInput | SortOrder
     expiresAt?: SortOrderInput | SortOrder
     paidAt?: SortOrderInput | SortOrder
     createdAt?: SortOrder
@@ -11452,6 +11527,11 @@ export namespace Prisma {
     rawResponse?: JsonNullableFilter<"Payment">
     paymentLinkId?: StringNullableFilter<"Payment"> | string | null
     checkoutUrl?: StringNullableFilter<"Payment"> | string | null
+    qrCode?: StringNullableFilter<"Payment"> | string | null
+    bankBin?: StringNullableFilter<"Payment"> | string | null
+    accountNumber?: StringNullableFilter<"Payment"> | string | null
+    accountName?: StringNullableFilter<"Payment"> | string | null
+    transferDescription?: StringNullableFilter<"Payment"> | string | null
     expiresAt?: DateTimeNullableFilter<"Payment"> | Date | string | null
     paidAt?: DateTimeNullableFilter<"Payment"> | Date | string | null
     createdAt?: DateTimeFilter<"Payment"> | Date | string
@@ -11472,6 +11552,11 @@ export namespace Prisma {
     payosOrderCode?: SortOrderInput | SortOrder
     paymentLinkId?: SortOrderInput | SortOrder
     checkoutUrl?: SortOrderInput | SortOrder
+    qrCode?: SortOrderInput | SortOrder
+    bankBin?: SortOrderInput | SortOrder
+    accountNumber?: SortOrderInput | SortOrder
+    accountName?: SortOrderInput | SortOrder
+    transferDescription?: SortOrderInput | SortOrder
     expiresAt?: SortOrderInput | SortOrder
     paidAt?: SortOrderInput | SortOrder
     createdAt?: SortOrder
@@ -11499,6 +11584,11 @@ export namespace Prisma {
     payosOrderCode?: BigIntNullableWithAggregatesFilter<"Payment"> | bigint | number | null
     paymentLinkId?: StringNullableWithAggregatesFilter<"Payment"> | string | null
     checkoutUrl?: StringNullableWithAggregatesFilter<"Payment"> | string | null
+    qrCode?: StringNullableWithAggregatesFilter<"Payment"> | string | null
+    bankBin?: StringNullableWithAggregatesFilter<"Payment"> | string | null
+    accountNumber?: StringNullableWithAggregatesFilter<"Payment"> | string | null
+    accountName?: StringNullableWithAggregatesFilter<"Payment"> | string | null
+    transferDescription?: StringNullableWithAggregatesFilter<"Payment"> | string | null
     expiresAt?: DateTimeNullableWithAggregatesFilter<"Payment"> | Date | string | null
     paidAt?: DateTimeNullableWithAggregatesFilter<"Payment"> | Date | string | null
     createdAt?: DateTimeWithAggregatesFilter<"Payment"> | Date | string
@@ -12151,6 +12241,11 @@ export namespace Prisma {
     payosOrderCode?: bigint | number | null
     paymentLinkId?: string | null
     checkoutUrl?: string | null
+    qrCode?: string | null
+    bankBin?: string | null
+    accountNumber?: string | null
+    accountName?: string | null
+    transferDescription?: string | null
     expiresAt?: Date | string | null
     paidAt?: Date | string | null
     createdAt?: Date | string
@@ -12171,6 +12266,11 @@ export namespace Prisma {
     payosOrderCode?: bigint | number | null
     paymentLinkId?: string | null
     checkoutUrl?: string | null
+    qrCode?: string | null
+    bankBin?: string | null
+    accountNumber?: string | null
+    accountName?: string | null
+    transferDescription?: string | null
     expiresAt?: Date | string | null
     paidAt?: Date | string | null
     createdAt?: Date | string
@@ -12189,6 +12289,11 @@ export namespace Prisma {
     payosOrderCode?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
     paymentLinkId?: NullableStringFieldUpdateOperationsInput | string | null
     checkoutUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    qrCode?: NullableStringFieldUpdateOperationsInput | string | null
+    bankBin?: NullableStringFieldUpdateOperationsInput | string | null
+    accountNumber?: NullableStringFieldUpdateOperationsInput | string | null
+    accountName?: NullableStringFieldUpdateOperationsInput | string | null
+    transferDescription?: NullableStringFieldUpdateOperationsInput | string | null
     expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     paidAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -12209,6 +12314,11 @@ export namespace Prisma {
     payosOrderCode?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
     paymentLinkId?: NullableStringFieldUpdateOperationsInput | string | null
     checkoutUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    qrCode?: NullableStringFieldUpdateOperationsInput | string | null
+    bankBin?: NullableStringFieldUpdateOperationsInput | string | null
+    accountNumber?: NullableStringFieldUpdateOperationsInput | string | null
+    accountName?: NullableStringFieldUpdateOperationsInput | string | null
+    transferDescription?: NullableStringFieldUpdateOperationsInput | string | null
     expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     paidAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -12228,6 +12338,11 @@ export namespace Prisma {
     payosOrderCode?: bigint | number | null
     paymentLinkId?: string | null
     checkoutUrl?: string | null
+    qrCode?: string | null
+    bankBin?: string | null
+    accountNumber?: string | null
+    accountName?: string | null
+    transferDescription?: string | null
     expiresAt?: Date | string | null
     paidAt?: Date | string | null
     createdAt?: Date | string
@@ -12246,6 +12361,11 @@ export namespace Prisma {
     payosOrderCode?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
     paymentLinkId?: NullableStringFieldUpdateOperationsInput | string | null
     checkoutUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    qrCode?: NullableStringFieldUpdateOperationsInput | string | null
+    bankBin?: NullableStringFieldUpdateOperationsInput | string | null
+    accountNumber?: NullableStringFieldUpdateOperationsInput | string | null
+    accountName?: NullableStringFieldUpdateOperationsInput | string | null
+    transferDescription?: NullableStringFieldUpdateOperationsInput | string | null
     expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     paidAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -12265,6 +12385,11 @@ export namespace Prisma {
     payosOrderCode?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
     paymentLinkId?: NullableStringFieldUpdateOperationsInput | string | null
     checkoutUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    qrCode?: NullableStringFieldUpdateOperationsInput | string | null
+    bankBin?: NullableStringFieldUpdateOperationsInput | string | null
+    accountNumber?: NullableStringFieldUpdateOperationsInput | string | null
+    accountName?: NullableStringFieldUpdateOperationsInput | string | null
+    transferDescription?: NullableStringFieldUpdateOperationsInput | string | null
     expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     paidAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -13130,6 +13255,11 @@ export namespace Prisma {
     payosOrderCode?: SortOrder
     paymentLinkId?: SortOrder
     checkoutUrl?: SortOrder
+    qrCode?: SortOrder
+    bankBin?: SortOrder
+    accountNumber?: SortOrder
+    accountName?: SortOrder
+    transferDescription?: SortOrder
     expiresAt?: SortOrder
     paidAt?: SortOrder
     createdAt?: SortOrder
@@ -13154,6 +13284,11 @@ export namespace Prisma {
     payosOrderCode?: SortOrder
     paymentLinkId?: SortOrder
     checkoutUrl?: SortOrder
+    qrCode?: SortOrder
+    bankBin?: SortOrder
+    accountNumber?: SortOrder
+    accountName?: SortOrder
+    transferDescription?: SortOrder
     expiresAt?: SortOrder
     paidAt?: SortOrder
     createdAt?: SortOrder
@@ -13172,6 +13307,11 @@ export namespace Prisma {
     payosOrderCode?: SortOrder
     paymentLinkId?: SortOrder
     checkoutUrl?: SortOrder
+    qrCode?: SortOrder
+    bankBin?: SortOrder
+    accountNumber?: SortOrder
+    accountName?: SortOrder
+    transferDescription?: SortOrder
     expiresAt?: SortOrder
     paidAt?: SortOrder
     createdAt?: SortOrder
@@ -14130,6 +14270,11 @@ export namespace Prisma {
     payosOrderCode?: bigint | number | null
     paymentLinkId?: string | null
     checkoutUrl?: string | null
+    qrCode?: string | null
+    bankBin?: string | null
+    accountNumber?: string | null
+    accountName?: string | null
+    transferDescription?: string | null
     expiresAt?: Date | string | null
     paidAt?: Date | string | null
     createdAt?: Date | string
@@ -14148,6 +14293,11 @@ export namespace Prisma {
     payosOrderCode?: bigint | number | null
     paymentLinkId?: string | null
     checkoutUrl?: string | null
+    qrCode?: string | null
+    bankBin?: string | null
+    accountNumber?: string | null
+    accountName?: string | null
+    transferDescription?: string | null
     expiresAt?: Date | string | null
     paidAt?: Date | string | null
     createdAt?: Date | string
@@ -14280,6 +14430,11 @@ export namespace Prisma {
     payosOrderCode?: BigIntNullableFilter<"Payment"> | bigint | number | null
     paymentLinkId?: StringNullableFilter<"Payment"> | string | null
     checkoutUrl?: StringNullableFilter<"Payment"> | string | null
+    qrCode?: StringNullableFilter<"Payment"> | string | null
+    bankBin?: StringNullableFilter<"Payment"> | string | null
+    accountNumber?: StringNullableFilter<"Payment"> | string | null
+    accountName?: StringNullableFilter<"Payment"> | string | null
+    transferDescription?: StringNullableFilter<"Payment"> | string | null
     expiresAt?: DateTimeNullableFilter<"Payment"> | Date | string | null
     paidAt?: DateTimeNullableFilter<"Payment"> | Date | string | null
     createdAt?: DateTimeFilter<"Payment"> | Date | string
@@ -14833,6 +14988,11 @@ export namespace Prisma {
     payosOrderCode?: bigint | number | null
     paymentLinkId?: string | null
     checkoutUrl?: string | null
+    qrCode?: string | null
+    bankBin?: string | null
+    accountNumber?: string | null
+    accountName?: string | null
+    transferDescription?: string | null
     expiresAt?: Date | string | null
     paidAt?: Date | string | null
     createdAt?: Date | string
@@ -14898,6 +15058,11 @@ export namespace Prisma {
     payosOrderCode?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
     paymentLinkId?: NullableStringFieldUpdateOperationsInput | string | null
     checkoutUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    qrCode?: NullableStringFieldUpdateOperationsInput | string | null
+    bankBin?: NullableStringFieldUpdateOperationsInput | string | null
+    accountNumber?: NullableStringFieldUpdateOperationsInput | string | null
+    accountName?: NullableStringFieldUpdateOperationsInput | string | null
+    transferDescription?: NullableStringFieldUpdateOperationsInput | string | null
     expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     paidAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -14916,6 +15081,11 @@ export namespace Prisma {
     payosOrderCode?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
     paymentLinkId?: NullableStringFieldUpdateOperationsInput | string | null
     checkoutUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    qrCode?: NullableStringFieldUpdateOperationsInput | string | null
+    bankBin?: NullableStringFieldUpdateOperationsInput | string | null
+    accountNumber?: NullableStringFieldUpdateOperationsInput | string | null
+    accountName?: NullableStringFieldUpdateOperationsInput | string | null
+    transferDescription?: NullableStringFieldUpdateOperationsInput | string | null
     expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     paidAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -14934,6 +15104,11 @@ export namespace Prisma {
     payosOrderCode?: NullableBigIntFieldUpdateOperationsInput | bigint | number | null
     paymentLinkId?: NullableStringFieldUpdateOperationsInput | string | null
     checkoutUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    qrCode?: NullableStringFieldUpdateOperationsInput | string | null
+    bankBin?: NullableStringFieldUpdateOperationsInput | string | null
+    accountNumber?: NullableStringFieldUpdateOperationsInput | string | null
+    accountName?: NullableStringFieldUpdateOperationsInput | string | null
+    transferDescription?: NullableStringFieldUpdateOperationsInput | string | null
     expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     paidAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string

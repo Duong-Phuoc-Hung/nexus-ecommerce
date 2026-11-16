@@ -1,3 +1,5 @@
+import { HandoverConflictException } from '../exceptions/HandoverConflictException';
+
 export type ChannelType = 'AI_BOT' | 'BUYER_SELLER' | 'BUYER_SUPPORT';
 export type MessageSenderRole = 'BUYER' | 'SELLER' | 'SUPPORT_STAFF' | 'AI' | 'SYSTEM';
 
@@ -41,7 +43,7 @@ export class Conversation {
     this._buyerId = props.buyerId;
     this._sellerId = props.sellerId;
     this._supportCaseId = props.supportCaseId;
-    this._status = props.status || 'ACTIVE';
+    this._status = props.status || (props.channelType === 'AI_BOT' ? 'BOT_ACTIVE' : 'ACTIVE');
     this._createdAt = props.createdAt || new Date();
     this._updatedAt = props.updatedAt || new Date();
     this._lastSeq = props.lastSeq || 0;
@@ -95,7 +97,10 @@ export class Conversation {
 
     // 1. Quản trị viên và Support Staff có quyền vào kênh BUYER_SUPPORT để giải quyết khiếu nại
     if (normalizedRole === 'ADMIN' || normalizedRole === 'SUPPORT_STAFF') {
-      return this._channelType === 'BUYER_SUPPORT';
+      return (
+        this._channelType === 'BUYER_SUPPORT' ||
+        (this._channelType === 'AI_BOT' && this._status === 'WAITING_STAFF')
+      );
     }
 
     // 2. Buyer sở hữu đơn hàng có quyền vào tất cả các kênh của đơn mình
@@ -154,6 +159,22 @@ export class Conversation {
       this._counterpartLastReadSeq = Math.max(this._counterpartLastReadSeq, lastReadSeq);
     }
     this._updatedAt = new Date();
+  }
+
+  public get isBotActive(): boolean {
+    return this._channelType === 'AI_BOT' && ['BOT_ACTIVE', 'ACTIVE'].includes(this._status);
+  }
+
+  public requestHumanHandover(): boolean {
+    if (this._channelType !== 'AI_BOT') {
+      throw new HandoverConflictException('Chỉ hội thoại AI_BOT được chuyển từ bot sang CSKH.');
+    }
+    if (this._status === 'WAITING_STAFF') return false;
+    if (!this.isBotActive)
+      throw new HandoverConflictException('Hội thoại không còn ở trạng thái bot đang hỗ trợ.');
+    this._status = 'WAITING_STAFF';
+    this._updatedAt = new Date();
+    return true;
   }
 
   public toDto() {

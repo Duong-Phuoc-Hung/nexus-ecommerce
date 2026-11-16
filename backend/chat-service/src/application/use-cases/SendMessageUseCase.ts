@@ -76,7 +76,7 @@ export class SendMessageUseCase {
 
     // 3. Xử lý phản hồi tự động nếu là kênh AI_BOT qua AI Engine (với Graceful Fallback)
     let aiReply: ChatMessage | undefined;
-    if (conv.channelType === 'AI_BOT') {
+    if (conv.isBotActive) {
       const aiResult = await this.llmProvider.generateReply(input.content || '', {
         conversationId: conv.id,
         orderId: conv.orderId,
@@ -84,6 +84,10 @@ export class SendMessageUseCase {
         userRole: currentUserRole,
         pageContext: input.context,
       });
+
+      // A handover may complete while the external model is still generating a reply.
+      const latest = await this.conversationRepo.findById(conv.id);
+      if (!latest?.isBotActive) return { message: userMessage };
 
       const aiSeq = await this.messageRepo.getNextSeq(conv.id);
       conv.incrementSeq();
