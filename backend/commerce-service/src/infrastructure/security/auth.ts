@@ -35,6 +35,7 @@ export function verifyJwtToken(token: string): AuthenticatedUser | null {
     const candidateSecrets = [
       process.env.JWT_ACCESS_SECRET,
       process.env.JWT_SECRET,
+      'your_super_secret_jwt_access_key_min_32_characters_here',
       'nexus_super_secret_jwt_access_key_min_32_chars_local_dev',
       'nexus-dev-secret',
     ].filter(Boolean) as string[];
