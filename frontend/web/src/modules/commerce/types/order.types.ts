@@ -1,5 +1,7 @@
 export type OrderSummary = {
   id: string;
+  internalId?: string;
+  orderCode?: string;
   buyer: string;
   email: string;
   seller: string;
@@ -8,10 +10,15 @@ export type OrderSummary = {
   total: number;
   totalAmount: number;
   status: string;
+  orderStatus?: string;
   tracking: string;
   itemsCount: number;
   createdAt: string;
   updatedAt: string;
+  paymentMethod?: string | null;
+  paymentStatus?: string | null;
+  amountDue?: number | null;
+  buyerReceivedAt?: string | null;
 };
 
 export type OrderShippingAddress = {
@@ -30,7 +37,7 @@ export type OrderDetail = OrderSummary & {
   subtotal?: number;
   shippingFee?: number;
   discountAmount?: number;
-  paymentMethod?: string;
+  paymentMethod?: string | null;
   shippingAddress?: OrderShippingAddress;
   timeline: { status: string; title: string; timestamp: string; note?: string }[];
   items: {
