@@ -3499,6 +3499,86 @@ export const chatSpec = {
         },
       },
     },
+    '/api/v1/chat/message': {
+      post: {
+        tags: ['Chat & Messages'],
+        summary:
+          'Gửi tin nhắn trực tiếp (Hỗ trợ Fast-Path tra cứu vận đơn & Vision-Path khiếu nại kiện hàng hư hỏng)',
+        description: `${PRIVATE} Task BE-03: Gửi tin nhắn chat thông minh. Cho phép truyền 'conversationId' hoặc 'orderId'. Nếu gửi kèm hình ảnh sản phẩm nứt vỡ, hệ thống AI Vision sẽ tự động giám định (GeminiDamageAssessor), tạo vé khiếu nại (EscalateDisputeUseCase) và phản hồi an ủi khách hàng kèm mã caseId.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  conversationId: { type: 'string', example: 'conv_a1b2c3d4e5f6' },
+                  orderId: { type: 'string', example: 'NX-ORD-8021' },
+                  channelType: {
+                    type: 'string',
+                    enum: ['AI_BOT', 'BUYER_SELLER', 'BUYER_SUPPORT'],
+                    default: 'AI_BOT',
+                  },
+                  content: {
+                    type: 'string',
+                    example: 'Shop ơi kiện hàng bị nứt vỡ màn hình to quá!',
+                  },
+                  attachments: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        url: {
+                          type: 'string',
+                          example: 'https://cdn.nexus.vn/evidence/box-dent.png',
+                        },
+                        filename: { type: 'string', example: 'box-dent.png' },
+                        mimeType: { type: 'string', example: 'image/png' },
+                        sizeBytes: { type: 'number', example: 81920 },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: jsonResponse('Gửi tin nhắn và xử lý AI thành công', {
+            success: true,
+            message: 'Gửi tin nhắn thành công.',
+            data: {
+              message: {
+                id: 'msg_001',
+                conversationId: 'conv_a1b2c3d4e5f6',
+                senderId: 'usr_buyer_01',
+                senderRole: 'BUYER',
+                content: 'Shop ơi kiện hàng bị nứt vỡ màn hình to quá!',
+              },
+              reply: {
+                id: 'msg_ai_002',
+                conversationId: 'conv_a1b2c3d4e5f6',
+                senderId: 'SYSTEM_AI',
+                senderRole: 'AI',
+                content:
+                  'Chào bạn, Nexus AI rất tiếc về sự cố sản phẩm không nguyên vẹn của bạn. Hệ thống đã tự động lập hồ sơ khiếu nại mã #cs_12345...',
+                metadata: {
+                  model: 'gemini-1.5-flash-vision',
+                  is_damaged: true,
+                  caseId: 'cs_12345',
+                  escalated: true,
+                },
+              },
+            },
+          }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy cuộc hội thoại', 'Conversation not found.'),
+        },
+      },
+    },
+
     '/api/v1/chat/conversations/{id}/messages': {
       post: {
         tags: ['Chat & Messages'],

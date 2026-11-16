@@ -67,5 +67,8 @@ export function createChatRoutes(
     controller.analyzeDisputeEvidence(req, res),
   );
 
+  // 9. Task BE-03: Endpoint thống nhất gửi tin nhắn chat (hỗ trợ cả conversationId hoặc orderId)
+  router.post('/message', requireAuth, (req, res) => controller.sendDirectMessage(req, res));
+
   return router;
 }

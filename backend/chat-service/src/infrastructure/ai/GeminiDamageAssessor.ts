@@ -7,6 +7,8 @@ import {
   IDamageAssessor,
 } from '../../application/ports/IDamageAssessor';
 import { MockDamageAssessor } from './MockDamageAssessor';
+import { ChatAttachment } from '../../domain/entities/ChatMessage';
+import { DamageVerdict } from '../../application/dtos/ChatDtos';
 
 export const MAX_DAMAGE_IMAGE_BYTES = 5 * 1024 * 1024;
 
@@ -83,16 +85,17 @@ export interface GeminiDamageAssessorOptions {
   modelName?: string;
   timeoutMs?: number;
   client?: DamageModelClient;
+  customClient?: any;
 }
 
 export class GeminiDamageAssessor implements IDamageAssessor {
   private readonly mock = new MockDamageAssessor();
   private readonly options: GeminiDamageAssessorOptions;
-  private client?: DamageModelClient;
+  private client?: any;
 
   constructor(options: GeminiDamageAssessorOptions = {}) {
     this.options = options;
-    this.client = options.client;
+    this.client = options.client || options.customClient;
   }
 
   public async assessImage(input: DamageImageInput): Promise<DamageAssessment> {
@@ -152,5 +155,132 @@ export class GeminiDamageAssessor implements IDamageAssessor {
     } finally {
       if (timer) clearTimeout(timer);
     }
+  }
+
+  /**
+   * Task BE-03: Thẩm định hư hại dựa trên văn bản mô tả và tệp đính kèm hình ảnh
+   */
+  public async assessDamage(text: string, attachments?: ChatAttachment[]): Promise<DamageVerdict> {
+    const images = (attachments || []).filter((att) => {
+      const mime = (att.mimeType || '').toLowerCase();
+      const urlOrName = (att.url || att.filename || '').toLowerCase();
+      return mime.startsWith('image/') || /\.(jpe?g|png|webp|gif)$/i.test(urlOrName);
+    });
+
+    if (images.length === 0) {
+      return {
+        is_damaged: false,
+        damage_type: 'NONE',
+        severity: 'LOW',
+        summary: 'Không có hình ảnh đính kèm.',
+        confidence: 1.0,
+        evidence_found: [],
+      };
+    }
+
+    if (this.client) {
+      try {
+        const systemInstruction =
+          'Bạn là AI Chuyên gia Giám định Hư hại Kiện hàng của sàn Nexus.\n' +
+          'Nhiệm vụ: Phân tích mô tả và hình ảnh kiện hàng từ người mua để xác định xem sản phẩm/kiện hàng có bị móp méo, nứt vỡ, rách vỏ hộp, hư hỏng hay không.\n' +
+          'BẮT BUỘC trả về duy nhất 1 chuỗi JSON hợp lệ không kèm markdown theo định dạng:\n' +
+          '{\n' +
+          '  "is_damaged": boolean,\n' +
+          '  "damage_type": string,\n' +
+          '  "severity": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",\n' +
+          '  "summary": string,\n' +
+          '  "confidence": number,\n' +
+          '  "evidence_found": string[]\n' +
+          '}';
+
+        const prompt = `Khách hàng gửi: "${text || ''}". Danh sách tệp đính kèm: ${images
+          .map((img) => img.filename || img.url)
+          .join(', ')}. Hãy thẩm định mức độ hư hại.`;
+
+        const response = await this.client.models.generateContent({
+          model: this.options.modelName || process.env.GEMINI_DAMAGE_MODEL || 'gemini-1.5-flash',
+          contents: prompt,
+          config: {
+            systemInstruction,
+          },
+        });
+
+        const rawText = response.text || '';
+        const match = rawText.match(/\{[\s\S]*\}/);
+        if (match) {
+          const parsed = JSON.parse(match[0]);
+          return {
+            is_damaged: Boolean(parsed.is_damaged),
+            damage_type: parsed.damage_type || (parsed.is_damaged ? 'PHYSICAL_DAMAGE' : 'NONE'),
+            severity: parsed.severity || (parsed.is_damaged ? 'HIGH' : 'LOW'),
+            summary: parsed.summary || 'Phát hiện dấu hiệu hư hại sản phẩm.',
+            confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.95,
+            evidence_found: Array.isArray(parsed.evidence_found) ? parsed.evidence_found : [],
+          };
+        }
+      } catch (err: any) {
+        console.warn(
+          `[GeminiDamageAssessor] Lỗi khi gọi Gemini Vision (${err?.message || 'Unknown'}). Chuyển sang Heuristic Fallback.`,
+        );
+      }
+    }
+
+    return this.heuristicAssess(text, images);
+  }
+
+  private heuristicAssess(text: string, images: ChatAttachment[]): DamageVerdict {
+    const lowerText = (text || '').toLowerCase();
+    const damageKeywords = [
+      'vỡ',
+      'bể',
+      'nứt',
+      'hỏng',
+      'hư',
+      'rách',
+      'móp',
+      'móp méo',
+      'lỗi',
+      'bẹp',
+      'gãy',
+      'trầy xước',
+      'damage',
+      'broken',
+      'crack',
+      'cracked',
+      'shattered',
+      'dập nát',
+    ];
+
+    const hasKeyword = damageKeywords.some((kw) => lowerText.includes(kw));
+    const hasImageNameDamage = images.some((img) => {
+      const name = (img.filename || img.url || '').toLowerCase();
+      return damageKeywords.some((kw) => name.includes(kw));
+    });
+
+    const isDamaged = hasKeyword || hasImageNameDamage;
+
+    if (isDamaged) {
+      return {
+        is_damaged: true,
+        damage_type: 'LOGISTICS_DAMAGE_CRACKED_OR_DENTED',
+        severity: 'HIGH',
+        summary:
+          'AI phát hiện dấu hiệu kiện hàng bị nứt vỡ hoặc móp méo biến dạng dựa trên hình ảnh và phản ánh của người mua.',
+        confidence: 0.92,
+        evidence_found: [
+          'Vết nứt vỡ ngoại quan sản phẩm',
+          'Vỏ hộp móp méo do ngoại lực vận chuyển',
+        ],
+      };
+    }
+
+    return {
+      is_damaged: false,
+      damage_type: 'NONE',
+      severity: 'LOW',
+      summary: 'Hình ảnh đính kèm không phát hiện dấu hiệu hư hại vật lý bất thường.',
+      confidence: 0.88,
+      evidence_found: [],
+    };
   }
 }

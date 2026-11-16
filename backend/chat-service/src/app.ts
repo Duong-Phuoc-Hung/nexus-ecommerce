@@ -71,19 +71,22 @@ export function createApplication(options: { damageAssessor?: IDamageAssessor } 
   const policyRepo = new InMemoryPolicyRepository();
   const idempotencyService = new RedisIdempotencyService();
   const orderTrackingTool = new OrderTrackingTool();
+  const damageAssessor = new GeminiDamageAssessor();
 
   // 2. Use Cases
   const getOrCreateConversationUseCase = new GetOrCreateConversationUseCase(conversationRepo);
+  const queryPolicyFaqUseCase = new QueryPolicyFaqUseCase(policyRepo);
+  const escalateDisputeUseCase = new EscalateDisputeUseCase(conversationRepo, idempotencyService);
+  const handoverConversationUseCase = new HandoverConversationUseCase(conversationRepo);
   const sendMessageUseCase = new SendMessageUseCase(
     messageRepo,
     conversationRepo,
     orderTrackingTool,
     undefined,
     policyRepo,
+    damageAssessor,
+    escalateDisputeUseCase,
   );
-  const queryPolicyFaqUseCase = new QueryPolicyFaqUseCase(policyRepo);
-  const escalateDisputeUseCase = new EscalateDisputeUseCase(conversationRepo, idempotencyService);
-  const handoverConversationUseCase = new HandoverConversationUseCase(conversationRepo);
 
   // 3. Controllers
   const disputeArbiterAi = new DisputeArbiterAI();
@@ -96,9 +99,7 @@ export function createApplication(options: { damageAssessor?: IDamageAssessor } 
     handoverConversationUseCase,
     disputeArbiterAi,
   );
-  const damageController = new DamageAssessmentController(
-    options.damageAssessor ?? new GeminiDamageAssessor(),
-  );
+  const damageController = new DamageAssessmentController(options.damageAssessor ?? damageAssessor);
   const policyController = new PolicyController(queryPolicyFaqUseCase, policyRepo);
 
   // 4. Routes
