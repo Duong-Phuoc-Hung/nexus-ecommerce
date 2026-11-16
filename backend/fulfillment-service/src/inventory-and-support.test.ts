@@ -278,6 +278,64 @@ test('Support Cases API: GET /api/v1/support/cases and POST /api/v1/support/case
       }),
     });
     assert.equal(invalidResolveRes.status, 400);
+
+    // 4. BUYER tạo khiếu nại kèm Idempotency-Key
+    const createCaseRes1 = await fetch(`${baseUrl}/api/v1/support/cases`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${buyerToken}`,
+        'Idempotency-Key': 'idemp_key_buyer_123',
+      },
+      body: JSON.stringify({
+        orderId: 'ORD-BUYER-001',
+        reason: 'Hàng bị nứt vỡ trong quá trình vận chuyển',
+      }),
+    });
+    assert.equal(createCaseRes1.status, 201);
+    const createdCaseJson1 = (await createCaseRes1.json()) as any;
+    assert.equal(createdCaseJson1.success, true);
+    assert.equal(createdCaseJson1.data.id, 'idemp_key_buyer_123');
+
+    // 5. BUYER gửi lại cùng Idempotency-Key (Idempotent) -> 200 OK và không tạo trùng
+    const createCaseRes2 = await fetch(`${baseUrl}/api/v1/support/cases`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${buyerToken}`,
+        'Idempotency-Key': 'idemp_key_buyer_123',
+      },
+      body: JSON.stringify({
+        orderId: 'ORD-BUYER-001',
+        reason: 'Hàng bị nứt vỡ trong quá trình vận chuyển',
+      }),
+    });
+    assert.equal(createCaseRes2.status, 200);
+    const createdCaseJson2 = (await createCaseRes2.json()) as any;
+    assert.equal(createdCaseJson2.data.id, 'idemp_key_buyer_123');
+
+    // 6. BUYER tra cứu khiếu nại theo đơn hàng (GET /support/cases?orderId=... và alias /support/orders/:id/cases)
+    const buyerOrderCasesRes = await fetch(
+      `${baseUrl}/api/v1/support/cases?orderId=ORD-BUYER-001`,
+      {
+        headers: { Authorization: `Bearer ${buyerToken}` },
+      },
+    );
+    assert.equal(buyerOrderCasesRes.status, 200);
+    const buyerOrderCasesJson = (await buyerOrderCasesRes.json()) as any;
+    assert.equal(buyerOrderCasesJson.success, true);
+    assert.equal(buyerOrderCasesJson.data.length, 1);
+    assert.equal(buyerOrderCasesJson.data[0].id, 'idemp_key_buyer_123');
+
+    const buyerOrderCasesAliasRes = await fetch(
+      `${baseUrl}/api/v1/support/orders/ORD-BUYER-001/cases`,
+      {
+        headers: { Authorization: `Bearer ${buyerToken}` },
+      },
+    );
+    assert.equal(buyerOrderCasesAliasRes.status, 200);
+    const buyerOrderCasesAliasJson = (await buyerOrderCasesAliasRes.json()) as any;
+    assert.equal(buyerOrderCasesAliasJson.data.length, 1);
   });
 });
 

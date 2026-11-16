@@ -9,6 +9,7 @@ import { RequestRefundUseCase } from '../../../application/use-cases/RequestRefu
 import { ExecuteRefundUseCase } from '../../../application/use-cases/ExecuteRefundUseCase';
 import { GetRefundStatusUseCase } from '../../../application/use-cases/GetRefundStatusUseCase';
 import { UpdateOrderStatusUseCase } from '../../../application/use-cases/UpdateOrderStatusUseCase';
+import { ConfirmOrderReceiptUseCase } from '../../../application/use-cases/ConfirmOrderReceiptUseCase';
 import { OrderNotFoundException } from '../../../domain/exceptions/OrderNotFoundException';
 import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
 
@@ -24,6 +25,7 @@ export class OrderController {
     private readonly executeRefundUseCase?: ExecuteRefundUseCase,
     private readonly getRefundStatusUseCase?: GetRefundStatusUseCase,
     private readonly updateOrderStatusUseCase?: UpdateOrderStatusUseCase,
+    private readonly confirmOrderReceiptUseCase?: ConfirmOrderReceiptUseCase,
     private readonly adminReads?: {
       search: SearchOrdersUseCase;
       detail: GetOrderDetailUseCase;
@@ -524,6 +526,97 @@ export class OrderController {
         success: false,
         error: error.message || 'Không thể cập nhật trạng thái đơn hàng.',
       });
+    }
+  }
+
+  public async confirmReceipt(req: Request, res: Response): Promise<void> {
+    try {
+      if (!this.confirmOrderReceiptUseCase) {
+        res
+          .status(500)
+          .json({ success: false, error: 'ConfirmOrderReceiptUseCase not configured.' });
+        return;
+      }
+
+      const authenticatedUser = (req as AuthenticatedRequest).user;
+      if (!authenticatedUser || !authenticatedUser.sub) {
+        res.status(401).json({ success: false, error: 'Authentication required.' });
+        return;
+      }
+
+      const orderId = req.params.id as string;
+      const updatedOrder = await this.confirmOrderReceiptUseCase.execute({
+        orderId,
+        buyerId: authenticatedUser.sub,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Xác nhận đã nhận hàng thành công.',
+        data: updatedOrder,
+      });
+    } catch (error: any) {
+      if (error instanceof OrderNotFoundException) {
+        res.status(404).json({ success: false, error: error.message });
+        return;
+      }
+      if (error.message?.includes('không có quyền')) {
+        res.status(403).json({ success: false, error: error.message });
+        return;
+      }
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Không thể xác nhận nhận hàng.',
+      });
+    }
+  }
+
+  public async getOrderCases(req: Request, res: Response): Promise<void> {
+    try {
+      const orderId = req.params.id as string;
+      const authenticatedUser = (req as AuthenticatedRequest).user;
+      const existingOrder = await this.getOrderDetailUseCase.execute(orderId);
+
+      // Chống IDOR: Buyer chỉ được xem case của đơn mình
+      if (authenticatedUser?.role === 'BUYER' && existingOrder.buyerId !== authenticatedUser.sub) {
+        res.status(403).json({
+          success: false,
+          error: 'Bạn không có quyền truy cập khiếu nại của đơn hàng này.',
+        });
+        return;
+      }
+
+      const fulfillmentUrl = (
+        process.env.FULFILLMENT_SERVICE_URL ||
+        `http://127.0.0.1:${process.env.FULFILLMENT_SERVICE_PORT || 4005}`
+      ).replace(/\/$/, '');
+
+      const response = await fetch(
+        `${fulfillmentUrl}/api/v1/support/cases?orderId=${encodeURIComponent(orderId)}`,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: req.headers.authorization || '',
+            'x-user-id': authenticatedUser?.sub || '',
+            'x-user-role': authenticatedUser?.role || '',
+          },
+        },
+      );
+
+      if (!response.ok) {
+        res.status(response.status).json(
+          await response.json().catch(() => ({
+            success: false,
+            data: [],
+          })),
+        );
+        return;
+      }
+
+      const json = await response.json();
+      res.status(200).json(json);
+    } catch {
+      res.status(200).json({ success: true, data: [] });
     }
   }
 }

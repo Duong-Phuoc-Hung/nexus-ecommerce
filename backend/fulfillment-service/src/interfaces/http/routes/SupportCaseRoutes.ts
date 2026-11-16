@@ -10,6 +10,12 @@ export function createSupportCaseRoutes(controller: SupportCaseController): Rout
     controller.listCases(req, res),
   );
 
+  // 1.0 Alias: GET /api/v1/support/orders/:id/cases - Lấy danh sách khiếu nại theo đơn hàng
+  router.get('/orders/:id/cases', requireAuth, requireSupportCasePermission('VIEW'), (req, res) => {
+    req.query.orderId = req.params.id;
+    controller.listCases(req, res);
+  });
+
   // 1.1 POST /api/v1/support/cases - Tiếp nhận tạo khiếu nại mới từ Buyer / Chatbot
   router.post('/cases', requireAuth, (req, res) => controller.createCase(req, res));
 

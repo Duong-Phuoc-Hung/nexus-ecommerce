@@ -2,6 +2,7 @@ import { SupportCase } from '../entities/SupportCase';
 
 export interface SupportCaseSearchCriteria {
   userId?: string;
+  orderId?: string;
   status?: string;
   priority?: string;
   query?: string;

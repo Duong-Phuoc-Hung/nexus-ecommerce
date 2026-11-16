@@ -24,14 +24,22 @@ export class SupportCaseController {
    */
   public async listCases(req: Request, res: Response): Promise<void> {
     try {
-      const userId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
+      const user = (req as AuthenticatedRequest).user;
+      let userId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
+      const orderId = typeof req.query.orderId === 'string' ? req.query.orderId : undefined;
       const status = typeof req.query.status === 'string' ? req.query.status : undefined;
       const priority = typeof req.query.priority === 'string' ? req.query.priority : undefined;
       const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 10;
 
+      // Bảo vệ chống IDOR: Nếu là BUYER thì bắt buộc chỉ tra cứu case của chính mình
+      if (user?.role === 'BUYER') {
+        userId = user.sub;
+      }
+
       const result = await this.listSupportCasesUseCase.execute({
         userId,
+        orderId,
         status,
         priority,
         page,
@@ -234,10 +242,27 @@ export class SupportCaseController {
         type,
         priority,
         buyerEvidence,
+        idempotencyKey: bodyIdempotencyKey,
       } = req.body || {};
 
+      const headerIdempotencyKey = req.headers['idempotency-key'] as string | undefined;
+      const idempotencyKey = bodyIdempotencyKey || headerIdempotencyKey;
       const id =
-        caseId || `cs_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+        caseId ||
+        idempotencyKey ||
+        `cs_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+
+      if (this.supportCaseRepository) {
+        const existing = await this.supportCaseRepository.findById(id);
+        if (existing) {
+          res.status(200).json({
+            success: true,
+            message: 'Hồ sơ khiếu nại đã được tiếp nhận trước đó (Idempotent).',
+            data: existing.toResponseDto(),
+          });
+          return;
+        }
+      }
       const supportCase = new SupportCase({
         id,
         orderId: orderId || '',

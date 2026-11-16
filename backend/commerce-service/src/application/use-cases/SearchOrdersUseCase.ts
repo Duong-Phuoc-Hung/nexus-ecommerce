@@ -72,6 +72,7 @@ export class SearchOrdersUseCase {
           timestamp: t.timestamp.toISOString(),
           note: t.note,
         })),
+        buyerReceivedAt: order.buyerReceivedAt?.toISOString() || null,
         createdAt: order.createdAt.toISOString(),
         updatedAt: order.updatedAt.toISOString(),
       };

@@ -53,6 +53,7 @@ export class GetOrderDetailUseCase {
         note: t.note,
       })),
       paymentTransactionId: order.paymentTransactionId,
+      buyerReceivedAt: order.buyerReceivedAt?.toISOString() || null,
       createdAt: order.createdAt.toISOString(),
       updatedAt: order.updatedAt.toISOString(),
     };

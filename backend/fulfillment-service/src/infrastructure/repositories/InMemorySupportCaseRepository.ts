@@ -31,6 +31,12 @@ export class InMemorySupportCaseRepository implements ISupportCaseRepository {
       items = items.filter((c) => c.userId.toLowerCase() === criteria.userId!.trim().toLowerCase());
     }
 
+    if (criteria.orderId && criteria.orderId.trim()) {
+      items = items.filter(
+        (c) => c.orderId.toLowerCase() === criteria.orderId!.trim().toLowerCase(),
+      );
+    }
+
     if (criteria.status && criteria.status.trim()) {
       items = items.filter((c) => c.status.toLowerCase() === criteria.status!.trim().toLowerCase());
     }

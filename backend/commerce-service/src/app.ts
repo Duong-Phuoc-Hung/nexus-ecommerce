@@ -23,6 +23,7 @@ import { RequestRefundUseCase } from './application/use-cases/RequestRefundUseCa
 import { ExecuteRefundUseCase } from './application/use-cases/ExecuteRefundUseCase';
 import { GetRefundStatusUseCase } from './application/use-cases/GetRefundStatusUseCase';
 import { UpdateOrderStatusUseCase } from './application/use-cases/UpdateOrderStatusUseCase';
+import { ConfirmOrderReceiptUseCase } from './application/use-cases/ConfirmOrderReceiptUseCase';
 import { OrderController } from './interfaces/http/controllers/OrderController';
 import { createOrderRoutes } from './interfaces/http/routes/OrderRoutes';
 import { createCheckoutRoutes } from './interfaces/http/routes/CheckoutRoutes';
@@ -105,6 +106,10 @@ export function createApplication(adminOrderReader?: OrderReader): Application {
     getOrderDetailUseCase,
     catalogClient,
   );
+  const confirmOrderReceiptUseCase = new ConfirmOrderReceiptUseCase(
+    orderRepository,
+    getOrderDetailUseCase,
+  );
 
   const orderController = new OrderController(
     getOrderDetailUseCase,
@@ -117,6 +122,7 @@ export function createApplication(adminOrderReader?: OrderReader): Application {
     executeRefundUseCase,
     getRefundStatusUseCase,
     updateOrderStatusUseCase,
+    confirmOrderReceiptUseCase,
     adminOrderReader && {
       search: new SearchOrdersUseCase(adminOrderReader),
       detail: new GetOrderDetailUseCase(adminOrderReader),

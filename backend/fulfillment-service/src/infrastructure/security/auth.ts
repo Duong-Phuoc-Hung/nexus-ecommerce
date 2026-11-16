@@ -223,6 +223,16 @@ export function requireSupportCasePermission(action: 'VIEW' | 'RESOLVE' | 'SUBMI
       return next();
     }
 
+    // BUYER chỉ có quyền xem (VIEW) khiếu nại gắn với đơn hàng cụ thể (chống xem trộm toàn sàn)
+    if (action === 'VIEW' && normalizedRole === 'BUYER' && (req.query.orderId || req.params.id)) {
+      return next();
+    }
+
+    // BUYER chỉ có quyền xem (VIEW) khiếu nại gắn với đơn hàng cụ thể (chống xem trộm toàn sàn)
+    if (action === 'VIEW' && normalizedRole === 'BUYER' && (req.query.orderId || req.params.id)) {
+      return next();
+    }
+
     // SELLER và BUYER có quyền nộp chứng cứ đối chất (SUBMIT_EVIDENCE)
     if (
       action === 'SUBMIT_EVIDENCE' &&
