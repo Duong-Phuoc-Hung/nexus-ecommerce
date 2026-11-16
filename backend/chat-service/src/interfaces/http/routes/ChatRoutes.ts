@@ -1,15 +1,29 @@
-import { Router } from 'express';
+import { RequestHandler, Router } from 'express';
 import { ChatController } from '../controllers/ChatController';
 import { requireAuth } from '../../../infrastructure/security/auth';
+import { requireChatTaskAuth } from '../../../infrastructure/security/chat-task-auth';
+import { DamageAssessmentController } from '../controllers/DamageAssessmentController';
 
-export function createChatRoutes(controller: ChatController): Router {
+export function createChatRoutes(
+  controller: ChatController,
+  damageController: DamageAssessmentController,
+  protectHandover: RequestHandler,
+): Router {
   const router = Router();
+
+  router.post('/assess-image', requireChatTaskAuth, (req, res) =>
+    damageController.assessImage(req, res),
+  );
+  router.post('/handover', requireChatTaskAuth, (req, res) => controller.handover(req, res));
+  router.get('/handover', requireChatTaskAuth, (req, res) => controller.listHandovers(req, res));
 
   // 1. Mở hoặc tìm phòng chat theo orderId và channelType
   router.post('/conversations', requireAuth, (req, res) => controller.openConversation(req, res));
 
   // 2. Chi tiết phòng chat
-  router.get('/conversations/:id', requireAuth, (req, res) => controller.getConversation(req, res));
+  router.get('/conversations/:id', requireAuth, protectHandover, (req, res) =>
+    controller.getConversation(req, res),
+  );
 
   // 3. Danh sách các phòng chat thuộc về đơn hàng mà người dùng có quyền
   router.get('/orders/:orderId/conversations', requireAuth, (req, res) =>
@@ -17,12 +31,12 @@ export function createChatRoutes(controller: ChatController): Router {
   );
 
   // 4. Gửi tin nhắn vào cuộc hội thoại
-  router.post('/conversations/:id/messages', requireAuth, (req, res) =>
+  router.post('/conversations/:id/messages', requireAuth, protectHandover, (req, res) =>
     controller.sendMessage(req, res),
   );
 
   // 5. Lấy danh sách tin nhắn (hỗ trợ ?after=<timestamp> cho Polling)
-  router.get('/conversations/:id/messages', requireAuth, (req, res) =>
+  router.get('/conversations/:id/messages', requireAuth, protectHandover, (req, res) =>
     controller.getMessages(req, res),
   );
 
