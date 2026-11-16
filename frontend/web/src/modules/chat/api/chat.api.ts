@@ -77,7 +77,7 @@ export const chatApi = {
   },
 
   /**
-   * Lấy lịch sử tin nhắn trong phòng chat
+   * Lấy lịch sử tin nhắn trong phòng chat (hỗ trợ cả route chuẩn /conversations và alias /sessions)
    */
   async getMessages(
     conversationId: string,
@@ -89,9 +89,16 @@ export const chatApi = {
 
     const queryStr = params.toString() ? `?${params}` : '';
     try {
-      const res = await requestApi(
-        `/chat/conversations/${encodeURIComponent(conversationId)}/messages${queryStr}`,
-      );
+      let res;
+      try {
+        res = await requestApi(
+          `/chat/conversations/${encodeURIComponent(conversationId)}/messages${queryStr}`,
+        );
+      } catch {
+        res = await requestApi(
+          `/chat/sessions/${encodeURIComponent(conversationId)}/messages${queryStr}`,
+        );
+      }
       const remote = unwrap<ChatMessageDto[]>(res);
       if (Array.isArray(remote) && remote.length > 0) {
         saveCachedMessages(conversationId, remote);
@@ -105,7 +112,7 @@ export const chatApi = {
   },
 
   /**
-   * Gửi tin nhắn vào phòng chat
+   * Gửi tin nhắn vào phòng chat (hỗ trợ cả route chuẩn /conversations và alias /sessions)
    */
   async sendMessage(
     conversationId: string,
@@ -113,13 +120,21 @@ export const chatApi = {
     senderRole: 'SELLER' | 'SUPPORT_STAFF' | 'BUYER' = 'SELLER',
   ): Promise<{ message: ChatMessageDto; reply?: ChatMessageDto | null }> {
     try {
-      const res = await requestApi(
-        `/chat/conversations/${encodeURIComponent(conversationId)}/messages`,
-        {
+      let res;
+      try {
+        res = await requestApi(
+          `/chat/conversations/${encodeURIComponent(conversationId)}/messages`,
+          {
+            method: 'POST',
+            body: payload,
+          },
+        );
+      } catch {
+        res = await requestApi(`/chat/sessions/${encodeURIComponent(conversationId)}/messages`, {
           method: 'POST',
           body: payload,
-        },
-      );
+        });
+      }
       const data = unwrap<{ message: ChatMessageDto; reply?: ChatMessageDto | null }>(res);
 
       const cached = getCachedMessages(conversationId);
@@ -143,6 +158,19 @@ export const chatApi = {
       cached.push(localMsg);
       saveCachedMessages(conversationId, cached);
       return { message: localMsg };
+    }
+  },
+
+  /**
+   * Lấy danh sách hàng đợi chuyển giao Bot sang CSKH người thật (Task BE-04)
+   * GET /api/v1/chat/handover?limit=50
+   */
+  async getHandoverQueue(limit = 50): Promise<ConversationDto[]> {
+    try {
+      const res = await requestApi(`/chat/handover?limit=${limit}`);
+      return unwrap<ConversationDto[]>(res);
+    } catch {
+      return [];
     }
   },
 
@@ -308,64 +336,160 @@ export const chatApi = {
 
   /**
    * Tải danh sách các ca khiếu nại và chat hỗ trợ cho Support Staff
+   * Tích hợp hàng đợi Handover thực tế từ Backend (Task BE-04: GET /chat/handover)
+   * và Danh sách tranh chấp Trọng tài (Fulfillment Service: GET /support/disputes)
    */
   async getSupportThreads(): Promise<ChatThreadItem[]> {
     try {
-      const ordersRes = await requestApi('/orders?limit=20');
-      const ordersData = (ordersRes as any)?.data?.items || (ordersRes as any)?.data || [];
-
       const threads: ChatThreadItem[] = [];
       const priorityList: Array<'URGENT' | 'HIGH' | 'MEDIUM'> = ['URGENT', 'HIGH', 'MEDIUM'];
 
-      for (let i = 0; i < ordersData.length; i++) {
-        const ord = ordersData[i];
-        const orderId = String(ord.id || '');
-        const orderCode = String(ord.orderCode || orderId);
-        const customerName = String(
-          ord.buyerName || ord.shippingAddress?.fullName || 'Trần Thế Thiện',
-        );
-        const customerPhone = String(ord.shippingAddress?.phone || '0963433678');
-        const firstItem = ord.items?.[0] || {};
-        const productTitle = String(
-          firstItem.productTitle || firstItem.title || 'Mô hình LEGO Icons NASA Apollo 11',
-        );
-        const convId = `conv_buyer_support_${orderId}`;
+      // 1. Thử lấy hàng đợi bàn giao từ Bot AI sang Người thật (Task BE-04: GET /api/v1/chat/handover)
+      try {
+        const handovers = await this.getHandoverQueue(20);
+        if (Array.isArray(handovers) && handovers.length > 0) {
+          for (const h of handovers) {
+            const hId = h.id;
+            const orderId = h.orderId || 'NX-ORD-HANDOVER';
+            const cached = getCachedMessages(hId);
+            const lastMsg = cached.length > 0 ? cached[cached.length - 1] : undefined;
 
-        const cached = getCachedMessages(convId);
-        const lastMsg = cached.length > 0 ? cached[cached.length - 1] : undefined;
+            threads.push({
+              id: hId,
+              conversationId: hId,
+              orderId,
+              orderCode: orderId,
+              channelType: h.channelType || 'BUYER_SUPPORT',
+              customerName: `Khách hàng (${h.buyerId ? h.buyerId.slice(-6) : 'Handover'})`,
+              customerPhone: '0963433678',
+              orderStatus: 'WAITING_STAFF',
+              totalAmount: 1250000,
+              productTitle: 'Yêu cầu gặp chuyên viên CSKH sàn',
+              productQuantity: 1,
+              supportCaseId: `cs_ho_${hId.slice(0, 6)}`,
+              priority: 'URGENT',
+              slaMinutesRemaining: 15,
+              disputeReason:
+                'Khách hàng yêu cầu chuyển giao sang chuyên viên CSKH (Bot-to-Human Handover)',
+              lastMessage:
+                lastMsg?.content || 'Đang kết nối chuyên viên hỗ trợ... Vui lòng giữ máy.',
+              lastMessageTime: h.updatedAt || h.createdAt || new Date().toISOString(),
+              lastMessageRole: 'BUYER',
+              unreadCount: 1,
+            });
+          }
+        }
+      } catch {
+        // Bỏ qua nếu endpoint handover chưa khởi tạo
+      }
 
-        const priority = priorityList[i % priorityList.length];
-        const slaMinutes = priority === 'URGENT' ? 42 : priority === 'HIGH' ? 115 : 170;
+      // 2. Thử lấy danh sách tranh chấp thực tế từ Fulfillment (/api/v1/support/disputes)
+      try {
+        const disputesRes = await requestApi('/support/disputes?limit=20');
+        const disputesData =
+          (disputesRes as any)?.data?.items ||
+          (disputesRes as any)?.data ||
+          (disputesRes as any)?.items ||
+          [];
+        if (Array.isArray(disputesData) && disputesData.length > 0) {
+          for (const d of disputesData) {
+            const orderId = String(d.orderId || d.orderCode || d.order || 'NX-ORD-DISPUTE');
+            const convId = `conv_buyer_support_${orderId}`;
+            // Tránh trùng lặp id
+            if (threads.some((t) => t.id === convId || t.orderId === orderId)) continue;
 
-        threads.push({
-          id: convId,
-          conversationId: convId,
-          orderId,
-          orderCode,
-          channelType: 'BUYER_SUPPORT',
-          customerName,
-          customerPhone,
-          orderStatus: ord.status || 'PROCESSING',
-          totalAmount: Number(ord.totalAmount || 30001),
-          productTitle,
-          productQuantity: Number(firstItem.quantity || 1),
-          supportCaseId: `cs_${orderId.slice(0, 6)}`,
-          priority,
-          slaMinutesRemaining: slaMinutes,
-          disputeReason:
-            i === 0
-              ? 'Hàng bị nứt vỡ góc khi mở hộp, bưu tá giao trễ 2 ngày'
-              : i === 1
-                ? 'Sản phẩm không đúng mô tả hình ảnh, yêu cầu trả hàng'
-                : 'Khách khiếu nại chưa nhận được hàng nhưng đơn báo đã giao',
-          lastMessage:
-            lastMsg?.content ||
-            'Em gửi kèm ảnh chụp gói hàng bị móp góc, nhờ bên Sàn kiểm tra giúp em với ạ.',
-          lastMessageTime:
-            lastMsg?.createdAt || new Date(Date.now() - (i + 1) * 3600000).toISOString(),
-          lastMessageRole: lastMsg?.senderRole || 'BUYER',
-          unreadCount: lastMsg?.senderRole === 'BUYER' ? 1 : 0,
-        });
+            const cached = getCachedMessages(convId);
+            const lastMsg = cached.length > 0 ? cached[cached.length - 1] : undefined;
+
+            threads.push({
+              id: convId,
+              conversationId: convId,
+              orderId,
+              orderCode: String(d.orderCode || orderId),
+              channelType: 'BUYER_SUPPORT',
+              customerName: String(d.customer || 'Người mua khiếu nại'),
+              customerPhone: '0963433678',
+              orderStatus: d.status || 'UNDER_ARBITRATION',
+              totalAmount: 2450000,
+              productTitle: `Đơn khiếu nại #${d.caseId || d.id}`,
+              productQuantity: 1,
+              supportCaseId: String(d.caseId || d.id),
+              priority: d.isSlaOverdue ? 'URGENT' : d.priority === 'HIGH' ? 'HIGH' : 'MEDIUM',
+              slaMinutesRemaining:
+                typeof d.slaRemainingHours === 'number'
+                  ? Math.max(0, Math.round(d.slaRemainingHours * 60))
+                  : 45,
+              disputeReason:
+                d.reason || 'Sản phẩm có dấu hiệu nứt vỡ trong quá trình bưu tá giao hàng',
+              lastMessage:
+                lastMsg?.content || 'Hồ sơ tranh chấp đã được chuyển sang bộ phận Trọng tài.',
+              lastMessageTime: d.createdAt || new Date().toISOString(),
+              lastMessageRole: 'BUYER',
+              unreadCount: 1,
+            });
+          }
+        }
+      } catch {
+        // Bỏ qua nếu disputes API chưa khả dụng
+      }
+
+      // 3. Nếu chưa đủ hội thoại, bổ sung từ danh sách đơn hàng
+      if (threads.length < 5) {
+        const ordersRes = await requestApi('/orders?limit=20');
+        const ordersData = (ordersRes as any)?.data?.items || (ordersRes as any)?.data || [];
+
+        for (let i = 0; i < ordersData.length && threads.length < 10; i++) {
+          const ord = ordersData[i];
+          const orderId = String(ord.id || '');
+          if (threads.some((t) => t.orderId === orderId)) continue;
+
+          const orderCode = String(ord.orderCode || orderId);
+          const customerName = String(
+            ord.buyerName || ord.shippingAddress?.fullName || 'Trần Thế Thiện',
+          );
+          const customerPhone = String(ord.shippingAddress?.phone || '0963433678');
+          const firstItem = ord.items?.[0] || {};
+          const productTitle = String(
+            firstItem.productTitle || firstItem.title || 'Mô hình LEGO Icons NASA Apollo 11',
+          );
+          const convId = `conv_buyer_support_${orderId}`;
+
+          const cached = getCachedMessages(convId);
+          const lastMsg = cached.length > 0 ? cached[cached.length - 1] : undefined;
+
+          const priority = priorityList[i % priorityList.length];
+          const slaMinutes = priority === 'URGENT' ? 42 : priority === 'HIGH' ? 115 : 170;
+
+          threads.push({
+            id: convId,
+            conversationId: convId,
+            orderId,
+            orderCode,
+            channelType: 'BUYER_SUPPORT',
+            customerName,
+            customerPhone,
+            orderStatus: ord.status || 'PROCESSING',
+            totalAmount: Number(ord.totalAmount || 30001),
+            productTitle,
+            productQuantity: Number(firstItem.quantity || 1),
+            supportCaseId: `cs_${orderId.slice(0, 6)}`,
+            priority,
+            slaMinutesRemaining: slaMinutes,
+            disputeReason:
+              i === 0
+                ? 'Hàng bị nứt vỡ góc khi mở hộp, bưu tá giao trễ 2 ngày'
+                : i === 1
+                  ? 'Sản phẩm không đúng mô tả hình ảnh, yêu cầu trả hàng'
+                  : 'Khách khiếu nại chưa nhận được hàng nhưng đơn báo đã giao',
+            lastMessage:
+              lastMsg?.content ||
+              'Em gửi kèm ảnh chụp gói hàng bị móp góc, nhờ bên Sàn kiểm tra giúp em với ạ.',
+            lastMessageTime:
+              lastMsg?.createdAt || new Date(Date.now() - (i + 1) * 3600000).toISOString(),
+            lastMessageRole: lastMsg?.senderRole || 'BUYER',
+            unreadCount: lastMsg?.senderRole === 'BUYER' ? 1 : 0,
+          });
+        }
       }
 
       if (threads.length === 0) {
