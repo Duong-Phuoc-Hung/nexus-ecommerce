@@ -3,7 +3,7 @@ import { OrderNotFoundException } from '../../domain/exceptions/OrderNotFoundExc
 import { OrderDetailDto } from '../dtos/OrderDetailDto';
 
 export class GetOrderDetailUseCase {
-  constructor(private readonly orderRepository: IOrderRepository) {}
+  constructor(private readonly orderRepository: Pick<IOrderRepository, 'findById'>) {}
 
   public async execute(orderId: string): Promise<OrderDetailDto> {
     const order = await this.orderRepository.findById(orderId);

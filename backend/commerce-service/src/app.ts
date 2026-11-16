@@ -9,6 +9,7 @@ import { CartController } from './interfaces/http/controllers/CartController';
 import { createCartRoutes } from './interfaces/http/routes/CartRoutes';
 import { HttpCatalogClient } from './infrastructure/clients/HttpCatalogClient';
 import { getCommerceDbPool } from './infrastructure/database/pgPool';
+import { PostgresAdminOrderReader } from './infrastructure/repositories/PostgresAdminOrderReader';
 import { PrismaClientWrapper } from './infrastructure/database/PrismaClient';
 import { GetOrderDetailUseCase } from './application/use-cases/GetOrderDetailUseCase';
 import { SearchOrdersUseCase } from './application/use-cases/SearchOrdersUseCase';
@@ -26,7 +27,9 @@ import { createCheckoutRoutes } from './interfaces/http/routes/CheckoutRoutes';
 import { GhnCarrierClient } from './infrastructure/clients/GhnCarrierClient';
 import { PayOsGateway } from './infrastructure/clients/PayOsGateway';
 
-export function createApplication(): Application {
+type OrderReader = Pick<IOrderRepository, 'search' | 'findById'>;
+
+export function createApplication(adminOrderReader?: OrderReader): Application {
   const app = express();
 
   app.use(cors());
@@ -60,6 +63,7 @@ export function createApplication(): Application {
   } else {
     const prisma = PrismaClientWrapper.getInstance();
     const pgOrderRepo = new PostgresOrderRepository(pool, prisma);
+    adminOrderReader ??= new PostgresAdminOrderReader(prisma);
 
     // Kiểm soát nạp dữ liệu mẫu (Auto-Seeding):
     // - Vô hiệu hóa hoàn toàn khi chạy Production hoặc khi đặt ENABLE_AUTO_SEED=false.
@@ -111,6 +115,10 @@ export function createApplication(): Application {
     executeRefundUseCase,
     getRefundStatusUseCase,
     updateOrderStatusUseCase,
+    adminOrderReader && {
+      search: new SearchOrdersUseCase(adminOrderReader),
+      detail: new GetOrderDetailUseCase(adminOrderReader),
+    },
   );
 
   const cartRepository = new PostgresCartRepository(pool);
