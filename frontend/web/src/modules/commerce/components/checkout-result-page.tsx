@@ -2,45 +2,50 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  CheckCircle2,
-  Clock3,
-  RefreshCw,
-  XCircle,
-  PackageCheck,
-  ShoppingBag,
   ArrowRight,
+  CheckCircle2,
+  Loader2,
+  PackageCheck,
   Receipt,
+  ShoppingBag,
+  ShoppingCart,
+  XCircle,
 } from 'lucide-react';
 import { StoreHeader } from '@/components/layout/store-header';
-import { Button } from '@/components/ui/button';
 import { useSession } from '@/modules/auth/hooks/use-session';
+import { useBuyerAssistant } from '@/modules/chat/context/buyer-assistant-provider';
 import { commerceApi } from '../api/commerce.api';
 import { takePendingPayosCart } from '../utils/cart-selection';
 import { readCart, writeCart } from '../utils/cart';
+import { formatVndCurrency } from '../utils/order-payment-presentation';
 
 type PaymentStatusData = {
   orderId: string;
   orderCode?: number;
   orderStatus: string;
   paymentStatus: string;
+  paymentMethod?: string | null;
   amount: number;
+  amountDue?: number | null;
   currency: string;
   paidAt: string | null;
   expiresAt: string;
   expired: boolean;
-  checkoutUrl?: string | null;
 };
 
 export function CheckoutResultPage() {
   const { user, phase } = useSession();
+  const { setCheckoutContext } = useBuyerAssistant();
   const params = useSearchParams();
+
   const [pendingOrderId, setPendingOrderId] = useState('');
-  const orderId = params?.get('orderId') || pendingOrderId;
+  const orderId = params?.get('orderId') || pendingOrderId || params?.get('orderCode') || '';
   const methodParam = params?.get('method') || '';
   const statusParam = params?.get('status') || '';
   const cancelParam = params?.get('cancel') || params?.get('cancelled') || '';
+  const isCancelReturn = cancelParam === 'true' || statusParam === 'CANCELLED';
 
   const [loading, setLoading] = useState(false);
   const [statusData, setStatusData] = useState<PaymentStatusData | null>(null);
@@ -49,48 +54,32 @@ export function CheckoutResultPage() {
     setPendingOrderId(sessionStorage.getItem('nexus-pending-payos-order') || '');
   }, []);
 
-  const fetchStatus = async () => {
+  const fetchStatus = useCallback(async () => {
     if (!orderId || user?.role !== 'BUYER') return;
     setLoading(true);
     try {
       const data = await commerceApi.getPaymentStatus(orderId);
       setStatusData(data);
     } catch {
-      // Giữ trạng thái xác nhận gần nhất; lỗi mạng tạm thời không đổi kết quả thanh toán.
+      // Giữ trạng thái gần nhất khi mạng tạm gián đoạn
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchStatus();
   }, [orderId, user?.role]);
 
-  const isCod = methodParam === 'COD' || statusData?.orderStatus === 'PLACED';
-  const isPaid = statusData?.paymentStatus === 'PAID' || statusData?.orderStatus === 'PAID';
-  const isExpired = !isPaid && (statusData?.expired || statusData?.orderStatus === 'EXPIRED');
-  // Trạng thái hủy phải lấy từ BE. Tham số cancel trên URL (PayOS redirect) chỉ là gợi ý khi
-  // chưa có dữ liệu BE; nếu BE vẫn báo chờ thanh toán thì Buyer vẫn được quét lại mã.
-  const isCancelled =
-    !isPaid &&
-    (statusData
-      ? statusData.orderStatus === 'CANCELLED'
-      : statusParam === 'CANCELLED' || cancelParam === 'true');
-  const isTerminal =
-    isPaid || isCod || Boolean(isExpired) || statusData?.orderStatus === 'CANCELLED';
-  const awaitingPayment = !isPaid && !isCod && !isExpired && !isCancelled;
-
   useEffect(() => {
-    if (!orderId || user?.role !== 'BUYER' || isTerminal) return;
-    const timer = window.setInterval(() => {
-      commerceApi
-        .getPaymentStatus(orderId)
-        .then(setStatusData)
-        .catch(() => {});
-    }, 4000);
-    return () => window.clearInterval(timer);
-  }, [orderId, user?.role, isTerminal]);
+    void fetchStatus();
+  }, [fetchStatus]);
 
+  const isCod =
+    methodParam === 'COD' ||
+    statusData?.paymentMethod?.toUpperCase() === 'COD' ||
+    statusData?.orderStatus === 'PLACED';
+  const isPaid = statusData?.paymentStatus === 'PAID' || statusData?.orderStatus === 'PAID';
+  const isExpired =
+    !isPaid && Boolean(statusData?.expired || statusData?.orderStatus === 'EXPIRED');
+
+  // Nếu từ PayOS trả về và đơn đã PAID -> dọn session + giỏ hàng đã mua
   useEffect(() => {
     if (!isPaid || !orderId) return;
     if (sessionStorage.getItem('nexus-pending-payos-order') === orderId) {
@@ -102,185 +91,185 @@ export function CheckoutResultPage() {
     writeCart(readCart().filter((line) => !ids.has(line.productId)));
   }, [isPaid, orderId]);
 
-  // Chỉ hiển thị số tiền do API trả về, không lấy từ tham số URL (có thể bị sửa tay).
-  const displayAmount = statusData?.amount ?? null;
+  const displayAmount = statusData?.amountDue ?? statusData?.amount ?? null;
+  const effectiveOrderId = statusData?.orderId || orderId;
+  const displayOrderCode = statusData?.orderCode ? String(statusData.orderCode) : effectiveOrderId;
+
+  useEffect(() => {
+    setCheckoutContext({
+      stage: 'RESULT',
+      itemsCount: 0,
+      subtotal: displayAmount ?? 0,
+      totalAmount: displayAmount,
+      paymentMethod: methodParam || (isCod ? 'COD' : 'PAYOS'),
+      orderId: effectiveOrderId || undefined,
+      paymentStatus: statusData?.paymentStatus,
+      orderStatus: statusData?.orderStatus,
+    });
+    return () => setCheckoutContext(null);
+  }, [
+    displayAmount,
+    effectiveOrderId,
+    isCod,
+    methodParam,
+    setCheckoutContext,
+    statusData?.orderStatus,
+    statusData?.paymentStatus,
+  ]);
+
+  const isSuccess = isPaid || isCod;
 
   return (
     <>
       <StoreHeader />
-      <main className="nexus-container flex min-h-[calc(100dvh-80px)] items-center justify-center px-3 py-2 sm:px-4">
-        {/* Bố cục gọn cho màn hình lớn; màn hình nhỏ vẫn cuộn để không che thông tin. */}
-        <div className="relative my-auto w-full max-w-4xl overflow-hidden rounded-2xl border border-stone-200/90 bg-white p-3 text-center shadow-lg sm:p-4">
-          {/* Biểu tượng trạng thái */}
-          {isPaid ? (
-            <div className="relative mx-auto grid size-12 sm:size-14 place-items-center rounded-2xl bg-emerald-50 text-emerald-600 shadow-inner ring-4 ring-emerald-500/10">
-              <CheckCircle2 aria-hidden="true" className="size-7 sm:size-8" />
+      <main className="nexus-container flex min-h-[calc(100dvh-80px)] items-center justify-center px-3 py-6 sm:px-4">
+        <div className="relative my-auto w-full max-w-xl overflow-hidden rounded-3xl border border-stone-200/90 bg-white p-6 sm:p-8 text-center shadow-lg">
+          {loading && !statusData && !isCod && !isCancelReturn ? (
+            <div className="py-8 flex flex-col items-center gap-3 text-sm text-muted">
+              <Loader2 className="size-8 animate-spin text-brand-dark" />
+              <span>Đang xác nhận kết quả thanh toán…</span>
             </div>
-          ) : isCod ? (
-            <span className="mx-auto grid size-12 sm:size-14 place-items-center rounded-2xl bg-blue-50 text-blue-600">
-              <PackageCheck aria-hidden="true" className="size-6 sm:size-7" />
-            </span>
-          ) : isCancelled || isExpired ? (
-            <span className="mx-auto grid size-12 sm:size-14 place-items-center rounded-2xl bg-red-50 text-red-600">
-              <XCircle aria-hidden="true" className="size-6 sm:size-7" />
-            </span>
-          ) : awaitingPayment ? null : (
-            <span className="mx-auto grid size-10 sm:size-12 place-items-center rounded-2xl bg-blue-50 text-blue-700">
-              <Clock3 aria-hidden="true" className="size-5 sm:size-6" />
-            </span>
-          )}
-
-          {!awaitingPayment && (
-            <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-brand-dark">
-              NEXUS · KẾT QUẢ ĐẶT HÀNG
-            </p>
-          )}
-
-          <h1 className="mt-0.5 text-lg sm:text-xl font-bold tracking-tight text-stone-900">
-            {isPaid
-              ? 'Thanh toán thành công qua PayOS!'
-              : isCod
-                ? 'Đặt hàng thành công (COD)'
-                : isExpired
-                  ? 'Đơn hàng đã hết hạn thanh toán'
-                  : isCancelled
-                    ? 'Đơn hàng đã bị hủy'
-                    : 'Đơn hàng đang chờ thanh toán'}
-          </h1>
-
-          <p className="mx-auto mt-0.5 max-w-md text-xs leading-relaxed text-muted">
-            {phase === 'loading'
-              ? 'Đang kiểm tra phiên đăng nhập.'
-              : user?.role !== 'BUYER'
-                ? 'Đăng nhập tài khoản Buyer để xem đơn hàng của bạn.'
-                : isPaid
-                  ? 'Giao dịch chuyển khoản PayOS của bạn đã được xác nhận thành công. Người bán sẽ sớm chuẩn bị và giao hàng đến bạn.'
-                  : isCod
-                    ? 'Đơn hàng đã được lưu trên hệ thống. Bạn sẽ kiểm tra và thanh toán tiền mặt trực tiếp cho bưu tá khi nhận hàng.'
-                    : isExpired
-                      ? 'Thời gian chờ thanh toán đã kết thúc. Vui lòng đặt lại đơn hàng mới.'
-                      : isCancelled
-                        ? 'Đơn hàng đã hủy và giải phóng tồn kho. Bạn có thể quay lại mua sắm.'
-                        : 'Bạn có thể tiếp tục thanh toán trên PayOS hoặc kiểm tra trạng thái đơn hàng.'}
-          </p>
-
-          {/* Khung tóm tắt chi tiết giao dịch */}
-          {isPaid && orderId && (
-            <div className="mt-3 space-y-2 rounded-xl border border-emerald-200/90 bg-emerald-50/60 p-3 sm:p-3.5 text-left text-xs sm:text-[13px]">
-              <div className="flex items-center justify-between">
-                <span className="text-muted">Mã đơn hàng:</span>
-                <strong className="font-mono text-brand-dark font-bold text-sm sm:text-base">
-                  #{orderId}
-                </strong>
-              </div>
-              <div className="flex items-center justify-between border-t border-emerald-100/90 pt-1.5">
-                <span className="text-muted">Phương thức thanh toán:</span>
-                <span className="font-semibold text-emerald-800">
-                  Cổng thanh toán PayOS (VietQR)
-                </span>
-              </div>
-              <div className="flex items-center justify-between border-t border-emerald-100/90 pt-1.5">
-                <span className="text-muted">Trạng thái giao dịch:</span>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
-                  <span className="size-1.5 rounded-full bg-emerald-600 animate-pulse" />
-                  ĐÃ THANH TOÁN
-                </span>
-              </div>
-              {displayAmount ? (
-                <div className="flex items-center justify-between border-t border-emerald-100/90 pt-1.5">
-                  <span className="text-muted">Số tiền đã trả:</span>
-                  <strong className="text-sm sm:text-base font-bold text-emerald-700">
-                    {new Intl.NumberFormat('vi-VN').format(displayAmount)} ₫
-                  </strong>
+          ) : (
+            <>
+              {isPaid ? (
+                <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-emerald-50 text-emerald-600 ring-4 ring-emerald-500/10">
+                  <CheckCircle2 aria-hidden="true" className="size-8" />
                 </div>
-              ) : null}
-            </div>
-          )}
+              ) : isCod ? (
+                <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-sky-50 text-sky-600 ring-4 ring-sky-500/10">
+                  <PackageCheck aria-hidden="true" className="size-8" />
+                </div>
+              ) : (
+                <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-red-50 text-red-600 ring-4 ring-red-500/10">
+                  <XCircle aria-hidden="true" className="size-8" />
+                </div>
+              )}
 
-          {/* Badge mã đơn & trạng thái khi chưa thanh toán */}
-          {!isPaid && orderId && (
-            <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-              <div className="inline-flex items-center gap-1.5 rounded-xl bg-stone-50 px-2.5 py-1 text-xs font-medium text-stone-700">
-                <span>Mã đơn:</span>
-                <strong className="font-mono text-brand-dark">#{orderId}</strong>
-              </div>
-              <div className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">
-                <span className="size-1.5 rounded-full bg-amber-500 animate-pulse" />
-                {isExpired ? 'ĐÃ HẾT HẠN' : isCancelled ? 'ĐÃ HỦY' : 'CHỜ THANH TOÁN'}
-              </div>
-            </div>
-          )}
+              <p className="mt-3 text-[11px] font-bold uppercase tracking-widest text-brand-dark">
+                NEXUS · KẾT QUẢ ĐẶT HÀNG
+              </p>
 
-          {/* Khu vực nút hành động - Bố trí gọn gàng trong cùng khung */}
-          <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-            {awaitingPayment &&
-              user?.role === 'BUYER' &&
-              (statusData?.checkoutUrl && /^https:\/\//i.test(statusData.checkoutUrl) ? (
-                <a
-                  href={statusData.checkoutUrl}
-                  className="inline-flex min-h-11 items-center justify-center rounded-xl bg-brand-dark px-4 text-sm font-semibold text-white hover:bg-brand-dark/90"
-                >
-                  Tiếp tục thanh toán trên PayOS
-                </a>
-              ) : orderId ? (
-                <Link
-                  href={`/account/orders/${encodeURIComponent(orderId)}`}
-                  className="inline-flex min-h-11 items-center justify-center rounded-xl bg-brand-dark px-4 text-sm font-semibold text-white hover:bg-brand-dark/90"
-                >
-                  Xem đơn để tiếp tục thanh toán
-                </Link>
-              ) : null)}
-            {!isPaid && !isCod && !isExpired && !isCancelled && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={fetchStatus}
-                disabled={loading}
-                className="h-8 sm:h-9 rounded-xl px-3.5 text-xs font-semibold"
-              >
-                <RefreshCw
-                  aria-hidden="true"
-                  className={`mr-1.5 size-3.5 ${loading ? 'animate-spin' : ''}`}
-                />
-                Làm mới trạng thái
-              </Button>
-            )}
+              <h1 className="mt-1.5 text-xl sm:text-2xl font-bold tracking-tight text-stone-900">
+                {isPaid
+                  ? 'Thanh toán thành công!'
+                  : isCod
+                    ? 'Đặt hàng thành công (COD)'
+                    : isExpired
+                      ? 'Phiên thanh toán đã hết hạn'
+                      : 'Thanh toán chưa hoàn tất'}
+              </h1>
 
-            {user?.role === 'BUYER' ? (
-              <>
-                <Link
-                  href="/account/orders"
-                  className="inline-flex h-8 sm:h-9 items-center justify-center rounded-xl bg-brand-dark px-3.5 text-xs font-semibold text-white shadow-xs hover:bg-brand-dark/90 transition"
+              <p className="mx-auto mt-2 max-w-md text-xs sm:text-sm leading-relaxed text-muted">
+                {phase === 'loading'
+                  ? 'Đang kiểm tra phiên đăng nhập.'
+                  : user?.role !== 'BUYER'
+                    ? 'Đăng nhập tài khoản Buyer để xem đơn hàng của bạn.'
+                    : isPaid
+                      ? 'Giao dịch PayOS của bạn đã được xác nhận thành công. Người bán sẽ sớm chuẩn bị và giao hàng đến bạn.'
+                      : isCod
+                        ? 'Đơn hàng đã được ghi nhận. Bạn sẽ kiểm tra sản phẩm và thanh toán tiền mặt trực tiếp khi nhận hàng.'
+                        : 'Giao dịch chưa được hoàn tất. Bạn có thể quay lại giỏ hàng để đặt lại hoặc xem danh sách đơn hàng.'}
+              </p>
+
+              {isSuccess && effectiveOrderId && (
+                <div
+                  className={`mt-5 space-y-2 rounded-2xl border p-4 text-left text-xs sm:text-sm ${
+                    isPaid ? 'border-emerald-200 bg-emerald-50/50' : 'border-line bg-stone-50/80'
+                  }`}
                 >
-                  <Receipt className="mr-1.5 size-3.5" />
-                  Xem danh sách đơn mua
-                </Link>
-                {orderId && isPaid && (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-muted">Mã đơn hàng:</span>
+                    <strong className="font-mono font-bold text-stone-900">
+                      #{displayOrderCode}
+                    </strong>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 border-t border-line/60 pt-2">
+                    <span className="text-muted">Phương thức:</span>
+                    <span className="font-semibold text-stone-900">
+                      {isCod ? 'Trả khi nhận hàng (COD)' : 'Chuyển khoản PayOS'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 border-t border-line/60 pt-2">
+                    <span className="text-muted">Tình trạng tiền:</span>
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                        isPaid ? 'bg-emerald-100 text-emerald-800' : 'bg-sky-100 text-sky-900'
+                      }`}
+                    >
+                      <span
+                        className={`size-1.5 rounded-full ${
+                          isPaid ? 'bg-emerald-600' : 'bg-sky-600'
+                        }`}
+                      />
+                      {isPaid
+                        ? 'Đã thanh toán'
+                        : displayAmount
+                          ? `Cần trả ${formatVndCurrency(displayAmount)} khi nhận`
+                          : 'Trả khi nhận hàng'}
+                    </span>
+                  </div>
+
+                  {displayAmount !== null && isPaid && (
+                    <div className="flex items-center justify-between gap-2 border-t border-line/60 pt-2">
+                      <span className="text-muted">Số tiền đã trả:</span>
+                      <strong className="font-mono text-sm sm:text-base font-bold text-emerald-700">
+                        {formatVndCurrency(displayAmount)}
+                      </strong>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
+                {user?.role === 'BUYER' ? (
+                  <>
+                    {isSuccess && effectiveOrderId ? (
+                      <Link
+                        href={`/account/orders/${encodeURIComponent(effectiveOrderId)}`}
+                        className="inline-flex h-10 items-center justify-center rounded-xl bg-brand-dark px-4 text-xs sm:text-sm font-semibold text-white hover:bg-brand-dark/90 transition"
+                      >
+                        Xem chi tiết đơn này
+                        <ArrowRight className="ml-1.5 size-4" />
+                      </Link>
+                    ) : (
+                      <Link
+                        href="/cart"
+                        className="inline-flex h-10 items-center justify-center rounded-xl bg-brand-dark px-4 text-xs sm:text-sm font-semibold text-white hover:bg-brand-dark/90 transition"
+                      >
+                        <ShoppingCart className="mr-1.5 size-4" />
+                        Quay lại giỏ hàng
+                      </Link>
+                    )}
+
+                    <Link
+                      href="/account/orders"
+                      className="inline-flex h-10 items-center justify-center rounded-xl border border-line bg-white px-4 text-xs sm:text-sm font-semibold text-stone-800 hover:bg-stone-50 transition"
+                    >
+                      <Receipt className="mr-1.5 size-4" />
+                      Đơn hàng của tôi
+                    </Link>
+                  </>
+                ) : (
                   <Link
-                    href={`/account/orders/${encodeURIComponent(orderId)}`}
-                    className="inline-flex h-8 sm:h-9 items-center justify-center rounded-xl border border-brand bg-white px-3.5 text-xs font-semibold text-brand-dark hover:bg-brand-soft/40 transition"
+                    href="/login?next=%2Faccount%2Forders"
+                    className="inline-flex h-10 items-center justify-center rounded-xl bg-brand-dark px-5 text-xs sm:text-sm font-semibold text-white hover:bg-brand-dark/90 transition"
                   >
-                    Xem chi tiết đơn này <ArrowRight className="ml-1 size-3.5" />
+                    Đăng nhập Buyer
                   </Link>
                 )}
-              </>
-            ) : (
-              <Link
-                href="/login?next=%2Faccount%2Forders"
-                className="inline-flex h-8 sm:h-9 items-center justify-center rounded-xl bg-brand-dark px-3.5 text-xs font-semibold text-white hover:bg-brand-dark/90 transition"
-              >
-                Đăng nhập Buyer
-              </Link>
-            )}
 
-            <Link
-              href="/products"
-              className="inline-flex h-8 sm:h-9 items-center justify-center rounded-xl border border-line bg-white px-3 text-xs font-medium text-stone-700 hover:bg-stone-50 transition"
-            >
-              <ShoppingBag className="mr-1.5 size-3.5" />
-              Tiếp tục mua sắm
-            </Link>
-          </div>
+                <Link
+                  href="/products"
+                  className="inline-flex h-10 items-center justify-center rounded-xl border border-line bg-white px-4 text-xs sm:text-sm font-medium text-stone-600 hover:bg-stone-50 transition"
+                >
+                  <ShoppingBag className="mr-1.5 size-4" />
+                  Tiếp tục mua sắm
+                </Link>
+              </div>
+            </>
+          )}
         </div>
       </main>
     </>

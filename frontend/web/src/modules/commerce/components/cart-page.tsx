@@ -3,12 +3,14 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { StoreHeader } from '@/components/layout/store-header';
 import { useSession } from '@/modules/auth/hooks/use-session';
+import { useBuyerAssistant } from '@/modules/chat/context/buyer-assistant-provider';
 import { readCart, syncCartFromServer, writeCart, type CartLine } from '../utils/cart';
 import { cartApi } from '../api/cart.api';
 import { readCheckoutSelection, writeCheckoutSelection } from '../utils/cart-selection';
 const cash = (n: number) => `${new Intl.NumberFormat('vi-VN').format(n)} ₫`;
 export default function CartPage() {
   const { user } = useSession();
+  const { setCheckoutContext } = useBuyerAssistant();
   const [lines, setLines] = useState<CartLine[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [quantityErrors, setQuantityErrors] = useState<Record<string, string>>({});
@@ -87,6 +89,16 @@ export default function CartPage() {
   };
   const selectedLines = lines.filter((line) => selectedIds.includes(line.productId));
   const total = selectedLines.reduce((sum, line) => sum + line.price * line.quantity, 0);
+
+  useEffect(() => {
+    setCheckoutContext({
+      stage: 'CART',
+      itemsCount: selectedLines.length,
+      subtotal: total,
+      totalAmount: total,
+    });
+    return () => setCheckoutContext(null);
+  }, [selectedLines.length, setCheckoutContext, total]);
   return (
     <>
       <StoreHeader />

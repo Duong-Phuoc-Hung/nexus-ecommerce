@@ -4,6 +4,7 @@ import type { OrderDetail, OrderSummary, PageResult } from '../types/order.types
 
 type Row = Record<string, unknown>;
 const object = (x: unknown): Row => (x && typeof x === 'object' ? (x as Row) : {});
+
 function pageOf<T>(raw: unknown, key: string): PageResult<T> {
   const root = object(raw);
   const data = root.data;
@@ -21,6 +22,7 @@ function pageOf<T>(raw: unknown, key: string): PageResult<T> {
     totalPages: Number(p.totalPages ?? root.totalPages ?? 1),
   };
 }
+
 export function createCommerceApi(request: RequestApi) {
   return {
     async listOrders(
@@ -60,6 +62,21 @@ export function createCommerceApi(request: RequestApi) {
         await request(`/orders/${encodeURIComponent(id)}/refund`, {
           method: 'POST',
           body: { reason },
+        }),
+      );
+    },
+    async requestRefund(id: string, reason: string, evidenceUrls?: string[]) {
+      return unwrap<OrderDetail>(
+        await request(`/orders/${encodeURIComponent(id)}/refund/request`, {
+          method: 'POST',
+          body: { reason, evidenceUrls },
+        }),
+      );
+    },
+    async confirmReceipt(id: string) {
+      return unwrap<OrderDetail>(
+        await request(`/orders/${encodeURIComponent(id)}/confirm-receipt`, {
+          method: 'POST',
         }),
       );
     },
@@ -172,7 +189,9 @@ export function createCommerceApi(request: RequestApi) {
         orderCode?: number;
         orderStatus: string;
         paymentStatus: string;
+        paymentMethod?: string | null;
         amount: number;
+        amountDue?: number | null;
         currency: string;
         paidAt: string | null;
         expiresAt: string;
@@ -188,4 +207,5 @@ export function createCommerceApi(request: RequestApi) {
     },
   };
 }
+
 export const commerceApi = createCommerceApi(requestApi);

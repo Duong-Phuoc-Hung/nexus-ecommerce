@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { StoreHeader } from '@/components/layout/store-header';
 import { useSession } from '@/modules/auth/hooks/use-session';
+import { useBuyerAssistant } from '@/modules/chat/context/buyer-assistant-provider';
 import { appConfig } from '@/configs/app.config';
 import {
   auctionApi,
@@ -37,6 +38,7 @@ export function AuctionDetail({ id }: { id: string }) {
   const requestVersion = useRef(0);
   const [imageOpen, setImageOpen] = useState(false);
   const { user, phase } = useSession();
+  const { setAuctionContext } = useBuyerAssistant();
   const [auction, setAuction] = useState<Auction | null>(null),
     [error, setError] = useState('');
   const [now, setNow] = useState(0),
@@ -80,6 +82,22 @@ export function AuctionDetail({ id }: { id: string }) {
     const timer = setInterval(() => setNow(Date.now() + offset), 1000);
     return () => clearInterval(timer);
   }, [offset]);
+
+  useEffect(() => {
+    if (!auction) {
+      setAuctionContext(null);
+      return;
+    }
+    setAuctionContext({
+      id: auction.id,
+      title: auction.title,
+      status: auction.status,
+      currentPrice: currentPrice(auction),
+      endAt: auction.endAt,
+      startAt: auction.startAt,
+    });
+    return () => setAuctionContext(null);
+  }, [auction, setAuctionContext]);
   const allowed =
     process.env.NODE_ENV === 'development' &&
     appConfig.auctionSource === 'mock' &&
