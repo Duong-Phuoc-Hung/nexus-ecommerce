@@ -280,22 +280,25 @@ test('Support Cases API: GET /api/v1/support/cases and POST /api/v1/support/case
     assert.equal(invalidResolveRes.status, 400);
 
     // 4. BUYER tạo khiếu nại kèm Idempotency-Key
+    const testOrderId = '019335ef-9689-73e4-8f4b-22240954b9d0';
+    const testIdempotencyKey = '019335ef-9689-73e4-8f4b-22240954b9aa';
+
     const createCaseRes1 = await fetch(`${baseUrl}/api/v1/support/cases`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${buyerToken}`,
-        'Idempotency-Key': 'idemp_key_buyer_123',
+        'Idempotency-Key': testIdempotencyKey,
       },
       body: JSON.stringify({
-        orderId: 'ORD-BUYER-001',
+        orderId: testOrderId,
         reason: 'Hàng bị nứt vỡ trong quá trình vận chuyển',
       }),
     });
     assert.equal(createCaseRes1.status, 201);
     const createdCaseJson1 = (await createCaseRes1.json()) as any;
     assert.equal(createdCaseJson1.success, true);
-    assert.equal(createdCaseJson1.data.id, 'idemp_key_buyer_123');
+    assert.equal(createdCaseJson1.data.id, testIdempotencyKey);
 
     // 5. BUYER gửi lại cùng Idempotency-Key (Idempotent) -> 200 OK và không tạo trùng
     const createCaseRes2 = await fetch(`${baseUrl}/api/v1/support/cases`, {
@@ -303,20 +306,20 @@ test('Support Cases API: GET /api/v1/support/cases and POST /api/v1/support/case
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${buyerToken}`,
-        'Idempotency-Key': 'idemp_key_buyer_123',
+        'Idempotency-Key': testIdempotencyKey,
       },
       body: JSON.stringify({
-        orderId: 'ORD-BUYER-001',
+        orderId: testOrderId,
         reason: 'Hàng bị nứt vỡ trong quá trình vận chuyển',
       }),
     });
     assert.equal(createCaseRes2.status, 200);
     const createdCaseJson2 = (await createCaseRes2.json()) as any;
-    assert.equal(createdCaseJson2.data.id, 'idemp_key_buyer_123');
+    assert.equal(createdCaseJson2.data.id, testIdempotencyKey);
 
     // 6. BUYER tra cứu khiếu nại theo đơn hàng (GET /support/cases?orderId=... và alias /support/orders/:id/cases)
     const buyerOrderCasesRes = await fetch(
-      `${baseUrl}/api/v1/support/cases?orderId=ORD-BUYER-001`,
+      `${baseUrl}/api/v1/support/cases?orderId=${testOrderId}`,
       {
         headers: { Authorization: `Bearer ${buyerToken}` },
       },
@@ -325,10 +328,10 @@ test('Support Cases API: GET /api/v1/support/cases and POST /api/v1/support/case
     const buyerOrderCasesJson = (await buyerOrderCasesRes.json()) as any;
     assert.equal(buyerOrderCasesJson.success, true);
     assert.equal(buyerOrderCasesJson.data.length, 1);
-    assert.equal(buyerOrderCasesJson.data[0].id, 'idemp_key_buyer_123');
+    assert.equal(buyerOrderCasesJson.data[0].id, testIdempotencyKey);
 
     const buyerOrderCasesAliasRes = await fetch(
-      `${baseUrl}/api/v1/support/orders/ORD-BUYER-001/cases`,
+      `${baseUrl}/api/v1/support/orders/${testOrderId}/cases`,
       {
         headers: { Authorization: `Bearer ${buyerToken}` },
       },

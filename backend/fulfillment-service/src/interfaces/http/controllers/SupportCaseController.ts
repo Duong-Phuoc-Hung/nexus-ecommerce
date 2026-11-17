@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { Request, Response } from 'express';
 import { ListSupportCasesUseCase } from '../../../application/use-cases/ListSupportCasesUseCase';
 import { ResolveSupportCaseUseCase } from '../../../application/use-cases/ResolveSupportCaseUseCase';
@@ -247,10 +248,7 @@ export class SupportCaseController {
 
       const headerIdempotencyKey = req.headers['idempotency-key'] as string | undefined;
       const idempotencyKey = bodyIdempotencyKey || headerIdempotencyKey;
-      const id =
-        caseId ||
-        idempotencyKey ||
-        `cs_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+      const id = caseId || idempotencyKey || crypto.randomUUID();
 
       if (this.supportCaseRepository) {
         const existing = await this.supportCaseRepository.findById(id);
