@@ -76,7 +76,7 @@ export class PostgresAuctionRepository implements IAuctionRepository {
   public async findAll(filters?: { status?: string; sellerId?: string }): Promise<Auction[]> {
     try {
       const where: any = {};
-      if (filters?.status) where.status = filters.status;
+      if (filters?.status && filters.status.toUpperCase() !== 'ALL') where.status = filters.status;
       if (filters?.sellerId) where.sellerId = filters.sellerId;
 
       const records = await this.prisma.auctionRoom.findMany({
@@ -86,7 +86,8 @@ export class PostgresAuctionRepository implements IAuctionRepository {
       return records.map((r: any) => this.mapModelToAuction(r));
     } catch {
       let items = Array.from(this.fallbackMemory.values());
-      if (filters?.status) items = items.filter((a) => a.status === filters.status);
+      if (filters?.status && filters.status.toUpperCase() !== 'ALL')
+        items = items.filter((a) => a.status === filters.status);
       if (filters?.sellerId) items = items.filter((a) => a.sellerId === filters.sellerId);
       return items;
     }
