@@ -1,3 +1,7 @@
+export function canOpenPostDeliveryCase(status?: string | null): boolean {
+  return status === 'DELIVERED' || status === 'COMPLETED';
+}
+
 /**
  * Tiện ích chuyển đổi mã trạng thái đơn hàng (tiếng Anh) sang tiếng Việt thân thiện với người dùng
  */
@@ -51,6 +55,14 @@ export function formatOrderStatus(status?: string): string {
     case 'ĐÃ_HOÀN_TIỀN':
     case 'ĐÃ HOÀN TIỀN':
       return 'ĐÃ HOÀN TIỀN';
+    case 'REFUND_REQUESTED':
+    case 'ĐANG_YÊU_CẦU_HOÀN_TIỀN':
+    case 'ĐANG YÊU CẦU HOÀN TIỀN':
+    case 'ĐANG GIẢI QUYẾT KHIẾU NẠI':
+      return 'Đang giải quyết khiếu nại';
+    case 'APPROVED_REFUND':
+    case 'ĐÃ DUYỆT HOÀN TIỀN':
+      return 'Đã duyệt hoàn tiền';
     case 'REFUND_CANCELLED':
     case 'TỪ_CHỐI_HOÀN_TIỀN':
     case 'TỪ CHỐI HOÀN TIỀN':
@@ -102,7 +114,18 @@ export function getOrderStatusBadgeClass(
       return 'border border-indigo-200 bg-indigo-50 text-indigo-700';
     case 'DELIVERED':
     case 'ĐÃ GIAO HÀNG':
+    case 'COMPLETED':
+    case 'HOÀN TẤT':
       return 'border border-emerald-200 bg-emerald-50 text-emerald-700';
+    case 'REFUNDED':
+    case 'ĐÃ HOÀN TIỀN':
+    case 'APPROVED_REFUND':
+    case 'ĐÃ DUYỆT HOÀN TIỀN':
+      return 'border border-emerald-200 bg-emerald-50 text-emerald-700';
+    case 'REFUND_REQUESTED':
+    case 'ĐANG YÊU CẦU HOÀN TIỀN':
+    case 'ĐANG GIẢI QUYẾT KHIẾU NẠI':
+      return 'border border-amber-300 bg-amber-50 text-amber-900';
     case 'PENDING':
     case 'PENDING_PAYMENT':
     case 'CREATED':

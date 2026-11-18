@@ -21,7 +21,7 @@ import {
   X,
 } from 'lucide-react';
 import { useSession } from '@/modules/auth/hooks/use-session';
-import { formatOrderStatus } from '@/modules/commerce/utils/order-status';
+import { canOpenPostDeliveryCase, formatOrderStatus } from '@/modules/commerce/utils/order-status';
 import type { OrderDetail } from '@/modules/commerce/types/order.types';
 import { buyerAssistantApi } from '../api/buyer-assistant.api';
 import { useBuyerAssistant } from '../context/buyer-assistant-provider';
@@ -473,12 +473,16 @@ export function BuyerAssistantWidget() {
                   orderId: activeOrder.id,
                   variant: 'primary',
                 },
-                {
-                  label: 'Mở bản xem trước khiếu nại',
-                  action: 'OPEN_COMPLAINT',
-                  orderId: activeOrder.id,
-                  variant: 'secondary',
-                },
+                ...(canOpenPostDeliveryCase(activeOrder.status)
+                  ? [
+                      {
+                        label: 'Mở bản xem trước khiếu nại',
+                        action: 'OPEN_COMPLAINT' as const,
+                        orderId: activeOrder.id,
+                        variant: 'secondary' as const,
+                      },
+                    ]
+                  : []),
               ],
             });
             return;
@@ -494,7 +498,7 @@ export function BuyerAssistantWidget() {
             const canCancel = ['PENDING', 'PENDING_PAYMENT', 'CREATED', 'PLACED', 'PAID'].includes(
               st,
             );
-            const isDelivered = st === 'DELIVERED';
+            const isDelivered = canOpenPostDeliveryCase(st);
             appendAssistantMessage({
               text: canCancel
                 ? `Đơn #${activeOrder.id} hiện ở trạng thái "${formatOrderStatus(st)}". Bạn có thể mở trang chi tiết đơn để xem điều kiện hoàn tiền và tự bấm xác nhận hủy.`
