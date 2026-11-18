@@ -266,7 +266,7 @@ export class SupportCaseController {
         orderId: orderId || '',
         orderCode: orderCode || orderId || '',
         customer: customer || 'Khách hàng Nexus',
-        userId: userId || user?.sub || 'usr_buyer',
+        userId: userId || user?.sub || '01a15822-43b8-78c3-a246-16bff78bc6e8',
         type: type || 'Yêu cầu trả hàng / hoàn tiền',
         reason: reason || 'Khiếu nại từ khách hàng',
         priority: priority || 'Cao',

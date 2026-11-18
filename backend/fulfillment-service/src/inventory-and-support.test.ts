@@ -279,8 +279,8 @@ test('Support Cases API: GET /api/v1/support/cases and POST /api/v1/support/case
     });
     assert.equal(invalidResolveRes.status, 400);
 
-    // 4. BUYER tạo khiếu nại kèm Idempotency-Key
-    const testOrderId = '019335ef-9689-73e4-8f4b-22240954b9d0';
+    // 4. BUYER tạo khiếu nại kèm Idempotency-Key trên đơn thật có sẵn trong DB (NX-ORD-8009)
+    const testOrderId = 'NX-ORD-8009';
     const testIdempotencyKey = '019335ef-9689-73e4-8f4b-22240954b9aa';
 
     const createCaseRes1 = await fetch(`${baseUrl}/api/v1/support/cases`, {
