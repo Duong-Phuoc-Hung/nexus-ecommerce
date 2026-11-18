@@ -161,6 +161,25 @@ export function SellerOrdersPage() {
         note: evidenceNote.trim() || undefined,
       });
 
+      if (typeof window !== 'undefined') {
+        const evidenceData = {
+          photos,
+          videos,
+          note: evidenceNote.trim(),
+          submittedAt: new Date().toISOString(),
+        };
+        localStorage.setItem(
+          `nexus_seller_evidence_${selectedOrder.id}`,
+          JSON.stringify(evidenceData),
+        );
+        if ((selectedOrder as any).orderCode) {
+          localStorage.setItem(
+            `nexus_seller_evidence_${(selectedOrder as any).orderCode}`,
+            JSON.stringify(evidenceData),
+          );
+        }
+      }
+
       setSelectedOrder((prev) => {
         if (!prev) return prev;
         const copy: any = { ...prev };
@@ -203,9 +222,18 @@ export function SellerOrdersPage() {
         controller.signal,
       )
       .then((page) => {
-        // Gắn cờ khiếu nại đối soát cho đơn ord_01hqz555abc (ca khiếu nại CS-4021 với Support)
+        // Gắn cờ khiếu nại đối soát cho đơn ord_01hqz555abc hoặc các đơn có lưu cờ khiếu nại
         const enhanced = (page.items || []).map((it) => {
-          if (it.id === 'ord_01hqz555abc' || it.status === 'REFUND_REQUESTED') {
+          let isDisputed = it.id === 'ord_01hqz555abc' || it.status === 'REFUND_REQUESTED';
+          if (typeof window !== 'undefined') {
+            const cachedDispute =
+              localStorage.getItem(`nexus_order_dispute_${it.id}`) ||
+              localStorage.getItem(`nexus_order_dispute_${(it as any).orderCode}`);
+            if (cachedDispute) {
+              isDisputed = true;
+            }
+          }
+          if (isDisputed) {
             return { ...it, status: 'REFUND_REQUESTED' };
           }
           return it;
@@ -223,15 +251,49 @@ export function SellerOrdersPage() {
     setActionError('');
     try {
       const detail = await ordersApi.getById(orderId);
-      // Gắn cờ đối soát cho đơn khiếu nại (đặc biệt là ord_01hqz555abc gắn liền với ca khiếu nại CS-4021 của Support)
-      if (orderId === 'ord_01hqz555abc' || detail.status === 'REFUND_REQUESTED') {
+      // Gắn cờ đối soát cho đơn khiếu nại
+      let isDisputed = orderId === 'ord_01hqz555abc' || detail.status === 'REFUND_REQUESTED';
+      let cachedSummary: string | null = null;
+      if (typeof window !== 'undefined') {
+        const cachedDispute =
+          localStorage.getItem(`nexus_order_dispute_${orderId}`) ||
+          localStorage.getItem(`nexus_order_dispute_${(detail as any).orderCode}`) ||
+          localStorage.getItem(`nexus_order_dispute_${detail.id}`);
+        if (cachedDispute) {
+          isDisputed = true;
+          try {
+            const parsed = JSON.parse(cachedDispute);
+            cachedSummary = parsed.disputeInfo?.summary || null;
+          } catch {}
+        }
+      }
+      if (isDisputed) {
         (detail as any).status = 'REFUND_REQUESTED';
         (detail as any).disputeInfo = {
           summary:
+            cachedSummary ||
             'AI phát hiện kiện hàng bị nứt vỡ góc màn hình đường kính > 5cm và vỏ hộp móp rách nghiêm trọng theo ảnh bưu tá cung cấp (Mã sự cố #CS-4021). Yêu cầu Người bán đối soát video đóng gói trước 24h.',
           riskLevel: 'HIGH',
         };
       }
+
+      // Kiểm tra phán quyết trọng tài cho đơn hàng từ kết quả phân xử thực tế
+      let verdict: any = null;
+      if (typeof window !== 'undefined') {
+        const cached =
+          localStorage.getItem(`nexus_dispute_verdict_${orderId}`) ||
+          localStorage.getItem(`nexus_dispute_verdict_${(detail as any).orderCode}`) ||
+          localStorage.getItem(`nexus_dispute_verdict_${detail.id}`);
+        if (cached) {
+          try {
+            verdict = JSON.parse(cached);
+          } catch {}
+        }
+      }
+      if (verdict) {
+        (detail as any).disputeVerdict = verdict;
+      }
+
       setSelectedOrder(detail);
     } catch (err) {
       setActionError(userMessage(err));
@@ -443,15 +505,44 @@ export function SellerOrdersPage() {
                   <button
                     type="button"
                     onClick={() => {
+                      const updatedDisputeInfo = {
+                        summary:
+                          'AI phát hiện kiện hàng bị nứt vỡ góc khi mở hộp, bưu tá giao trễ 2 ngày theo phản ánh của người mua (Mã ca: #CS-4021). Yêu cầu Người bán đối soát video đóng gói trước 24h.',
+                        riskLevel: 'HIGH',
+                      };
                       setSelectedOrder({
                         ...selectedOrder,
                         status: 'REFUND_REQUESTED',
-                        disputeInfo: {
-                          summary:
-                            'AI phát hiện kiện hàng bị nứt vỡ góc khi mở hộp, bưu tá giao trễ 2 ngày theo phản ánh của người mua (Mã ca: #CS-4021). Yêu cầu Người bán đối soát video đóng gói trước 24h.',
-                          riskLevel: 'HIGH',
-                        },
+                        disputeInfo: updatedDisputeInfo,
                       } as any);
+
+                      // Cập nhật ngay mảng items để bảng đơn hàng bên trên hiện tag đỏ "Khiếu nại / REFUND_REQUESTED"
+                      setItems((prev) =>
+                        prev.map((it) =>
+                          it.id === selectedOrder.id || (it as any).orderCode === selectedOrder.id
+                            ? { ...it, status: 'REFUND_REQUESTED' }
+                            : it,
+                        ),
+                      );
+
+                      if (typeof window !== 'undefined') {
+                        localStorage.setItem(
+                          `nexus_order_dispute_${selectedOrder.id}`,
+                          JSON.stringify({
+                            status: 'REFUND_REQUESTED',
+                            disputeInfo: updatedDisputeInfo,
+                          }),
+                        );
+                        if ((selectedOrder as any).orderCode) {
+                          localStorage.setItem(
+                            `nexus_order_dispute_${(selectedOrder as any).orderCode}`,
+                            JSON.stringify({
+                              status: 'REFUND_REQUESTED',
+                              disputeInfo: updatedDisputeInfo,
+                            }),
+                          );
+                        }
+                      }
                     }}
                     style={{
                       background: '#fff7ed',
@@ -478,17 +569,16 @@ export function SellerOrdersPage() {
             </div>
           </div>
 
-          {/* Task FE-05: Thẻ Cảnh Báo Đối Soát AI trên Màn Hình Seller */}
-          {(selectedOrder.status === 'REFUND_REQUESTED' ||
-            Boolean((selectedOrder as any).disputeInfo)) && (
+          {/* Thẻ Kết Quả Phán Quyết Trọng Tài Sàn dành cho Người Bán */}
+          {(selectedOrder as any).disputeVerdict && (
             <div
               style={{
-                background: '#fff7ed',
-                border: '2px solid #ea580c',
+                background: '#f0fdf4',
+                border: '2px solid #16a34a',
                 borderRadius: '10px',
                 padding: '16px 20px',
                 marginBottom: '20px',
-                boxShadow: '0 4px 12px rgba(234, 88, 12, 0.1)',
+                boxShadow: '0 4px 12px rgba(22, 163, 74, 0.08)',
               }}
             >
               <div
@@ -502,37 +592,37 @@ export function SellerOrdersPage() {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '1.4rem' }}>⚠️</span>
-                  <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#9a3412' }}>
-                    AI phát hiện kiện hàng bị nứt vỡ (Mức độ: CAO). Mời Shop nộp video đóng gói để
-                    đối soát!
+                  <span style={{ fontSize: '1.4rem' }}>🛡️</span>
+                  <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#166534' }}>
+                    {(selectedOrder as any).disputeVerdict.status === 'REJECTED'
+                      ? 'Trọng tài Sàn đã giải quyết: Bác bỏ khiếu nại của Người mua (Shop đúng)'
+                      : 'Trọng tài Sàn đã hoàn tất phân xử khiếu nại'}
                   </h3>
                 </div>
                 <span
                   style={{
-                    background: '#fed7aa',
-                    color: '#9a3412',
+                    background: '#dcfce7',
+                    color: '#15803d',
                     fontSize: '0.7rem',
                     fontWeight: 700,
                     padding: '3px 8px',
                     borderRadius: '20px',
-                    border: '1px solid #fdba74',
+                    border: '1px solid #86efac',
                   }}
                 >
-                  ⚡ ĐỘ NGUY CƠ: CAO
+                  ✓ ĐÃ PHÂN XỬ XONG · BẢO VỆ SHOP
                 </span>
               </div>
 
-              {/* Trích dẫn câu tóm tắt của AI: {order.disputeInfo.summary} */}
               <div
                 style={{
-                  background: '#ffedd5',
-                  borderLeft: '4px solid #ea580c',
+                  background: '#dcfce7',
+                  borderLeft: '4px solid #16a34a',
                   padding: '10px 14px',
                   borderRadius: '0 6px 6px 0',
-                  margin: '10px 0 14px',
+                  margin: '10px 0 12px',
                   fontSize: '0.8rem',
-                  color: '#7c2d12',
+                  color: '#14532d',
                   lineHeight: 1.5,
                 }}
               >
@@ -541,94 +631,195 @@ export function SellerOrdersPage() {
                     fontWeight: 600,
                     fontSize: '0.72rem',
                     textTransform: 'uppercase',
-                    color: '#c2410c',
+                    color: '#15803d',
                     marginBottom: '2px',
                   }}
                 >
-                  🤖 Trích dẫn tóm tắt phân tích tự động từ AI Chatbot:
+                  ⚖️ Căn cứ phán quyết từ Trọng tài & AI Copilot Sàn Nexus:
                 </div>
-                <em>
-                  "
-                  {(selectedOrder as any)?.disputeInfo?.summary ||
-                    'AI phát hiện kiện hàng xuất hiện vết nứt vỡ góc màn hình đường kính > 5cm và vỏ hộp móp rách nghiêm trọng theo ảnh bưu tá cung cấp. Yêu cầu Người bán đối soát video đóng gói trước 24h.'}
-                  "
-                </em>
+                <em>"{(selectedOrder as any).disputeVerdict.note}"</em>
               </div>
 
-              {/* Nhóm nút bấm hành động của Task FE-05 */}
               <div
                 style={{
                   display: 'flex',
                   flexWrap: 'wrap',
-                  gap: '10px',
-                  alignItems: 'center',
+                  gap: '14px',
+                  fontSize: '0.72rem',
+                  color: '#166534',
+                  fontWeight: 500,
                 }}
               >
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEvidenceModalOpen(true);
-                    setEvidenceSuccess(false);
-                  }}
-                  style={{
-                    background: '#ea580c',
-                    color: '#ffffff',
-                    border: 'none',
-                    borderRadius: '6px',
-                    padding: '8px 16px',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    boxShadow: '0 2px 4px rgba(234, 88, 12, 0.25)',
-                  }}
-                >
-                  <span>📹</span> Nộp Bằng Chứng Đóng Gói
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPolicyModalOpen(true)}
-                  style={{
-                    background: '#ffffff',
-                    color: '#c2410c',
-                    border: '1px solid #fdba74',
-                    borderRadius: '6px',
-                    padding: '8px 14px',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                  }}
-                >
-                  <span>🤖</span> Hỏi AI quy định đối soát
-                </button>
-
-                <Link
-                  href="/seller/chat"
-                  style={{
-                    background: '#f8fafc',
-                    color: '#475569',
-                    border: '1px solid #cbd5e1',
-                    borderRadius: '6px',
-                    padding: '8px 14px',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    textDecoration: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                  }}
-                >
-                  <span>💬</span> Mở phòng chat đối soát
-                </Link>
+                <span>
+                  Hồ sơ tranh chấp:{' '}
+                  <strong>
+                    #{(selectedOrder as any).disputeVerdict.caseId || 'CS-ARBITRATION'}
+                  </strong>
+                </span>
+                <span>
+                  • Quyền lợi Người bán: <strong>Được bảo toàn 100% doanh thu đơn hàng</strong>
+                </span>
+                <span>
+                  • Điểm uy tín: <strong>Giữ nguyên điểm uy tín cao (100 điểm)</strong>
+                </span>
               </div>
             </div>
           )}
+
+          {/* Task FE-05: Thẻ Cảnh Báo Đối Soát AI trên Màn Hình Seller */}
+          {!(selectedOrder as any).disputeVerdict &&
+            (selectedOrder.status === 'REFUND_REQUESTED' ||
+              Boolean((selectedOrder as any).disputeInfo)) && (
+              <div
+                style={{
+                  background: '#fff7ed',
+                  border: '2px solid #ea580c',
+                  borderRadius: '10px',
+                  padding: '16px 20px',
+                  marginBottom: '20px',
+                  boxShadow: '0 4px 12px rgba(234, 88, 12, 0.1)',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '8px',
+                    flexWrap: 'wrap',
+                    gap: '8px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '1.4rem' }}>⚠️</span>
+                    <h3
+                      style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#9a3412' }}
+                    >
+                      AI phát hiện kiện hàng bị nứt vỡ (Mức độ: CAO). Mời Shop nộp video đóng gói để
+                      đối soát!
+                    </h3>
+                  </div>
+                  <span
+                    style={{
+                      background: '#fed7aa',
+                      color: '#9a3412',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      padding: '3px 8px',
+                      borderRadius: '20px',
+                      border: '1px solid #fdba74',
+                    }}
+                  >
+                    ⚡ ĐỘ NGUY CƠ: CAO
+                  </span>
+                </div>
+
+                {/* Trích dẫn câu tóm tắt của AI: {order.disputeInfo.summary} */}
+                <div
+                  style={{
+                    background: '#ffedd5',
+                    borderLeft: '4px solid #ea580c',
+                    padding: '10px 14px',
+                    borderRadius: '0 6px 6px 0',
+                    margin: '10px 0 14px',
+                    fontSize: '0.8rem',
+                    color: '#7c2d12',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontWeight: 600,
+                      fontSize: '0.72rem',
+                      textTransform: 'uppercase',
+                      color: '#c2410c',
+                      marginBottom: '2px',
+                    }}
+                  >
+                    🤖 Trích dẫn tóm tắt phân tích tự động từ AI Chatbot:
+                  </div>
+                  <em>
+                    "
+                    {(selectedOrder as any)?.disputeInfo?.summary ||
+                      'AI phát hiện kiện hàng xuất hiện vết nứt vỡ góc màn hình đường kính > 5cm và vỏ hộp móp rách nghiêm trọng theo ảnh bưu tá cung cấp. Yêu cầu Người bán đối soát video đóng gói trước 24h.'}
+                    "
+                  </em>
+                </div>
+
+                {/* Nhóm nút bấm hành động của Task FE-05 */}
+                <div
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '10px',
+                    alignItems: 'center',
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEvidenceModalOpen(true);
+                      setEvidenceSuccess(false);
+                    }}
+                    style={{
+                      background: '#ea580c',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '8px 16px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 2px 4px rgba(234, 88, 12, 0.25)',
+                    }}
+                  >
+                    <span>📹</span> Nộp Bằng Chứng Đóng Gói
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPolicyModalOpen(true)}
+                    style={{
+                      background: '#ffffff',
+                      color: '#c2410c',
+                      border: '1px solid #fdba74',
+                      borderRadius: '6px',
+                      padding: '8px 14px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <span>🤖</span> Hỏi AI quy định đối soát
+                  </button>
+
+                  <Link
+                    href="/seller/chat"
+                    style={{
+                      background: '#f8fafc',
+                      color: '#475569',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '6px',
+                      padding: '8px 14px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      textDecoration: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <span>💬</span> Mở phòng chat đối soát
+                  </Link>
+                </div>
+              </div>
+            )}
 
           <div
             style={{
@@ -749,26 +940,23 @@ export function SellerOrdersPage() {
               paddingTop: '15px',
             }}
           >
-            {/* 1. Nút Xác nhận đóng gói & Bàn giao ĐVVC (Chỉ hiển thị khi đơn chưa xuất kho và chưa hủy) */}
-            {selectedOrder.status !== 'CANCELLED' &&
-              selectedOrder.status !== 'DELIVERED' &&
-              selectedOrder.status !== 'SHIPPED' &&
-              selectedOrder.status !== 'REFUNDED' && (
-                <button
-                  type="button"
-                  className="seller-button seller-button-primary"
-                  disabled={dispatchActing}
-                  onClick={() => handleConfirmDispatch(selectedOrder.id)}
-                  style={{
-                    background: '#059669',
-                    borderColor: '#059669',
-                    color: '#ffffff',
-                  }}
-                  title="Xác nhận đóng gói hoàn tất và gọi tài xế ĐVVC đến lấy hàng"
-                >
-                  {dispatchActing ? 'Đang điều phối…' : '✓ Xác nhận & Bàn giao ĐVVC'}
-                </button>
-              )}
+            {/* 1. Nút Xác nhận đóng gói & Bàn giao ĐVVC (Chỉ hiển thị khi đơn đang chuẩn bị hàng: PAID hoặc PROCESSING) */}
+            {(selectedOrder.status === 'PAID' || selectedOrder.status === 'PROCESSING') && (
+              <button
+                type="button"
+                className="seller-button seller-button-primary"
+                disabled={dispatchActing}
+                onClick={() => handleConfirmDispatch(selectedOrder.id)}
+                style={{
+                  background: '#059669',
+                  borderColor: '#059669',
+                  color: '#ffffff',
+                }}
+                title="Xác nhận đóng gói hoàn tất và gọi tài xế ĐVVC đến lấy hàng"
+              >
+                {dispatchActing ? 'Đang điều phối…' : '✓ Xác nhận & Bàn giao ĐVVC'}
+              </button>
+            )}
 
             {/* 2. Nút In phiếu gửi hàng / Vận đơn điện tử */}
             <button

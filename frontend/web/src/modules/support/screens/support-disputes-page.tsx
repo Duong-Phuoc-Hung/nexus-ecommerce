@@ -243,11 +243,51 @@ export function SupportDisputesPage() {
   }, [disputes]);
 
   function handleOpenArbitration(item: DisputeItem) {
-    setSelectedDispute(item);
-    setDecision(item.verdict?.decision || 'REFUND_BUYER');
-    setRefundAmount(item.verdict?.refundAmount || 550000);
-    setLiableParty(item.verdict?.liableParty || 'SELLER');
-    setVerdictNote(item.verdict?.note || 'Xác nhận bằng chứng đối chiếu hợp lệ theo quy chế sàn.');
+    let enhanced: DisputeItem = { ...item };
+    if (typeof window !== 'undefined') {
+      const orderKey = item.orderId || item.orderCode || item.order;
+      // 1. Kiểm tra bằng chứng đóng gói của Seller đã nộp từ màn hình Người bán
+      const cachedSellerEv =
+        localStorage.getItem(`nexus_seller_evidence_${orderKey}`) ||
+        localStorage.getItem(`nexus_seller_evidence_${item.id}`) ||
+        localStorage.getItem(`nexus_seller_evidence_${item.caseId}`);
+      if (cachedSellerEv) {
+        try {
+          const parsed = JSON.parse(cachedSellerEv);
+          enhanced.sellerEvidence = {
+            ...enhanced.sellerEvidence,
+            photos: parsed.photos?.length ? parsed.photos : enhanced.sellerEvidence?.photos || [],
+            videos: parsed.videos?.length ? parsed.videos : enhanced.sellerEvidence?.videos || [],
+            note: parsed.note || enhanced.sellerEvidence?.note,
+            submittedAt: parsed.submittedAt || enhanced.sellerEvidence?.submittedAt,
+          };
+        } catch {}
+      }
+
+      // 2. Kiểm tra bằng chứng mở hộp của Buyer nếu chưa có
+      const cachedBuyerEv =
+        localStorage.getItem(`nexus_buyer_evidence_${orderKey}`) ||
+        localStorage.getItem(`nexus_buyer_evidence_${item.id}`);
+      if (cachedBuyerEv) {
+        try {
+          const parsed = JSON.parse(cachedBuyerEv);
+          enhanced.buyerEvidence = {
+            ...enhanced.buyerEvidence,
+            photos: parsed.photos?.length ? parsed.photos : enhanced.buyerEvidence?.photos || [],
+            note: parsed.note || enhanced.buyerEvidence?.note,
+            submittedAt: parsed.submittedAt || enhanced.buyerEvidence?.submittedAt,
+          };
+        } catch {}
+      }
+    }
+
+    setSelectedDispute(enhanced);
+    setDecision(enhanced.verdict?.decision || 'REFUND_BUYER');
+    setRefundAmount(enhanced.verdict?.refundAmount || 30001);
+    setLiableParty(enhanced.verdict?.liableParty || 'CARRIER');
+    setVerdictNote(
+      enhanced.verdict?.note || 'Xác nhận bằng chứng đối chiếu hợp lệ theo quy chế sàn.',
+    );
     setVerdictError(null);
     setAiAnalysisResult(null);
     setAiAppliedNotice(null);
@@ -267,6 +307,45 @@ export function SupportDisputesPage() {
         liableParty,
         note: verdictNote.trim(),
       });
+
+      const orderKey =
+        selectedDispute.orderId || selectedDispute.orderCode || selectedDispute.order;
+      if (typeof window !== 'undefined') {
+        const verdictPayload = {
+          caseId: updated.caseId || updated.id || selectedDispute.caseId || selectedDispute.id,
+          orderId: orderKey,
+          status:
+            decision === 'REFUND_BUYER'
+              ? 'RESOLVED'
+              : decision === 'REJECT_BUYER'
+                ? 'REJECTED'
+                : 'RESOLVED',
+          decision,
+          refundAmount: decision === 'REFUND_BUYER' ? Number(refundAmount) || 30001 : 0,
+          liableParty,
+          resolutionNote: verdictNote.trim(),
+          note: verdictNote.trim(),
+          resolvedBy: 'Chuyên viên Hỗ trợ Sàn Nexus',
+          resolvedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        if (orderKey) {
+          localStorage.setItem(`nexus_dispute_verdict_${orderKey}`, JSON.stringify(verdictPayload));
+        }
+        if (selectedDispute.orderId) {
+          localStorage.setItem(
+            `nexus_dispute_verdict_${selectedDispute.orderId}`,
+            JSON.stringify(verdictPayload),
+          );
+        }
+        if (selectedDispute.orderCode) {
+          localStorage.setItem(
+            `nexus_dispute_verdict_${selectedDispute.orderCode}`,
+            JSON.stringify(verdictPayload),
+          );
+        }
+      }
 
       setSelectedDispute(updated);
       setDisputes((prev) =>

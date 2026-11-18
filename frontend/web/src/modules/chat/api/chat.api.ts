@@ -420,10 +420,26 @@ export const chatApi = {
         const productTitle = String(firstItem.productTitle || firstItem.title || 'Sản phẩm Nexus');
         const productQuantity = Number(firstItem.quantity || 1);
         const totalAmount = Number(ord.totalAmount || 30001);
-        const convId = `conv_buyer_seller_${orderId}`;
+
+        // Chuẩn hóa lấy ID phòng chat thực tế từ Backend hoặc fallback
+        let convId = `conv_buyer_seller_${orderId}`;
+        try {
+          const convRes = await chatApi.openConversation({
+            orderId,
+            channelType: 'BUYER_SELLER',
+            sellerId: ord.sellerId || ord.seller || undefined,
+          });
+          if (convRes?.id) {
+            convId = convRes.id;
+          }
+        } catch {
+          // Fallback giữ nguyên convId
+        }
 
         const cached = getCachedMessages(convId);
-        const lastMsg = cached.length > 0 ? cached[cached.length - 1] : undefined;
+        const fallbackCached = getCachedMessages(`conv_buyer_seller_${orderId}`);
+        const allCached = cached.length > 0 ? cached : fallbackCached;
+        const lastMsg = allCached.length > 0 ? allCached[allCached.length - 1] : undefined;
 
         threads.push({
           id: convId,
@@ -511,12 +527,24 @@ export const chatApi = {
         if (Array.isArray(disputesData) && disputesData.length > 0) {
           for (const d of disputesData) {
             const orderId = String(d.orderId || d.orderCode || d.order || 'NX-ORD-DISPUTE');
-            const convId = `conv_buyer_support_${orderId}`;
+            let convId = `conv_buyer_support_${orderId}`;
+            try {
+              const convRes = await chatApi.openConversation({
+                orderId,
+                channelType: 'BUYER_SUPPORT',
+              });
+              if (convRes?.id) {
+                convId = convRes.id;
+              }
+            } catch {}
+
             // Tránh trùng lặp id
             if (threads.some((t) => t.id === convId || t.orderId === orderId)) continue;
 
             const cached = getCachedMessages(convId);
-            const lastMsg = cached.length > 0 ? cached[cached.length - 1] : undefined;
+            const fallbackCached = getCachedMessages(`conv_buyer_support_${orderId}`);
+            const allCached = cached.length > 0 ? cached : fallbackCached;
+            const lastMsg = allCached.length > 0 ? allCached[allCached.length - 1] : undefined;
 
             threads.push({
               id: convId,
@@ -569,10 +597,22 @@ export const chatApi = {
           const productTitle = String(
             firstItem.productTitle || firstItem.title || 'Mô hình LEGO Icons NASA Apollo 11',
           );
-          const convId = `conv_buyer_support_${orderId}`;
+          const convIdPrefix = `conv_buyer_support_${orderId}`;
+          let convId = convIdPrefix;
+          try {
+            const convRes = await chatApi.openConversation({
+              orderId,
+              channelType: 'BUYER_SUPPORT',
+            });
+            if (convRes?.id) {
+              convId = convRes.id;
+            }
+          } catch {}
 
           const cached = getCachedMessages(convId);
-          const lastMsg = cached.length > 0 ? cached[cached.length - 1] : undefined;
+          const fallbackCached = getCachedMessages(convIdPrefix);
+          const allCached = cached.length > 0 ? cached : fallbackCached;
+          const lastMsg = allCached.length > 0 ? allCached[allCached.length - 1] : undefined;
 
           const priority = priorityList[i % priorityList.length];
           const slaMinutes = priority === 'URGENT' ? 42 : priority === 'HIGH' ? 115 : 170;
