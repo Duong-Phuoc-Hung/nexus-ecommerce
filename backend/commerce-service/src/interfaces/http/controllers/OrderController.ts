@@ -586,6 +586,18 @@ export class OrderController {
         return;
       }
 
+      // Chống IDOR: Seller chỉ được xem case của đơn hàng thuộc gian hàng của mình
+      if (
+        authenticatedUser?.role === 'SELLER' &&
+        existingOrder.sellerId !== authenticatedUser.sub
+      ) {
+        res.status(403).json({
+          success: false,
+          error: 'Bạn không có quyền truy cập khiếu nại của đơn hàng thuộc người bán khác.',
+        });
+        return;
+      }
+
       const fulfillmentUrl = (
         process.env.FULFILLMENT_SERVICE_URL ||
         `http://127.0.0.1:${process.env.FULFILLMENT_SERVICE_PORT || 4005}`
@@ -615,8 +627,15 @@ export class OrderController {
 
       const json = await response.json();
       res.status(200).json(json);
-    } catch {
-      res.status(200).json({ success: true, data: [] });
+    } catch (error: any) {
+      if (error instanceof OrderNotFoundException) {
+        res.status(404).json({ success: false, error: error.message });
+        return;
+      }
+      res.status(502).json({
+        success: false,
+        error: 'Không thể kết nối đến dịch vụ khiếu nại (Fulfillment Service).',
+      });
     }
   }
 }

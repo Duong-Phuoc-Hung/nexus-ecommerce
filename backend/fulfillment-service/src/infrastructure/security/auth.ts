@@ -224,7 +224,11 @@ export function requireSupportCasePermission(action: 'VIEW' | 'RESOLVE' | 'SUBMI
     }
 
     // BUYER chỉ có quyền xem (VIEW) khiếu nại gắn với đơn hàng cụ thể (chống xem trộm toàn sàn)
-    if (action === 'VIEW' && normalizedRole === 'BUYER' && (req.query.orderId || req.params.id)) {
+    if (
+      action === 'VIEW' &&
+      normalizedRole === 'BUYER' &&
+      (req.query.orderId || req.params.id || req.params.orderId)
+    ) {
       return next();
     }
 

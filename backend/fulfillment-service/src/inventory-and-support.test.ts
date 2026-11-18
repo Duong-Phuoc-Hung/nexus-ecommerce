@@ -339,6 +339,34 @@ test('Support Cases API: GET /api/v1/support/cases and POST /api/v1/support/case
     assert.equal(buyerOrderCasesAliasRes.status, 200);
     const buyerOrderCasesAliasJson = (await buyerOrderCasesAliasRes.json()) as any;
     assert.equal(buyerOrderCasesAliasJson.data.length, 1);
+
+    // 7. Người dùng khác cố tình dùng Idempotency-Key để đọc trộm case người khác -> Chặn 403 Forbidden
+    const otherBuyerToken = createTestToken({
+      sub: '01a15822-43b8-78c3-a246-16bff78bc6ff',
+      email: 'other_buyer@test.com',
+      role: 'BUYER',
+    });
+    const leakAttemptRes = await fetch(`${baseUrl}/api/v1/support/cases`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${otherBuyerToken}`,
+        'Idempotency-Key': testIdempotencyKey,
+      },
+      body: JSON.stringify({
+        orderId: testOrderId,
+        reason: 'Cố tình đọc trộm',
+      }),
+    });
+    assert.equal(leakAttemptRes.status, 403);
+
+    // 8. Tra cứu theo alias /cases/by-order/:orderId (tương thích cả 2 nhánh)
+    const byOrderAliasRes = await fetch(`${baseUrl}/api/v1/support/cases/by-order/${testOrderId}`, {
+      headers: { Authorization: `Bearer ${buyerToken}` },
+    });
+    assert.equal(byOrderAliasRes.status, 200);
+    const byOrderAliasJson = (await byOrderAliasRes.json()) as any;
+    assert.equal(byOrderAliasJson.data.length, 1);
   });
 });
 

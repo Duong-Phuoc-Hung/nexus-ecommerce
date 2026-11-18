@@ -233,6 +233,14 @@ export class SupportCaseController {
   public async createCase(req: Request, res: Response): Promise<void> {
     try {
       const user = (req as AuthenticatedRequest).user;
+      if (!user || !user.sub) {
+        res.status(401).json({
+          success: false,
+          error: 'Yêu cầu đăng nhập để tạo hồ sơ khiếu nại.',
+        });
+        return;
+      }
+
       const {
         caseId,
         orderId,
@@ -253,6 +261,19 @@ export class SupportCaseController {
       if (this.supportCaseRepository) {
         const existing = await this.supportCaseRepository.findById(id);
         if (existing) {
+          // Vá lỗ hổng bảo mật rò rỉ thông tin cá nhân:
+          // Bắt buộc kiểm tra quyền sở hữu (chính chủ hoặc Staff/Admin)
+          const isOwner = existing.userId.toLowerCase() === user.sub.toLowerCase();
+          const isStaffOrAdmin = user.role === 'ADMIN' || user.role === 'SUPPORT_STAFF';
+
+          if (!isOwner && !isStaffOrAdmin) {
+            res.status(403).json({
+              success: false,
+              error: 'Bạn không có quyền truy cập hồ sơ khiếu nại này.',
+            });
+            return;
+          }
+
           res.status(200).json({
             success: true,
             message: 'Hồ sơ khiếu nại đã được tiếp nhận trước đó (Idempotent).',
@@ -261,12 +282,16 @@ export class SupportCaseController {
           return;
         }
       }
+
+      // BUYER chỉ có quyền tạo khiếu nại cho chính mình (chống mạo danh userId người khác)
+      const effectiveUserId = user.role === 'BUYER' ? user.sub : userId || user.sub;
+
       const supportCase = new SupportCase({
         id,
         orderId: orderId || '',
         orderCode: orderCode || orderId || '',
         customer: customer || 'Khách hàng Nexus',
-        userId: userId || user?.sub || '01a15822-43b8-78c3-a246-16bff78bc6e8',
+        userId: effectiveUserId,
         type: type || 'Yêu cầu trả hàng / hoàn tiền',
         reason: reason || 'Khiếu nại từ khách hàng',
         priority: priority || 'Cao',
