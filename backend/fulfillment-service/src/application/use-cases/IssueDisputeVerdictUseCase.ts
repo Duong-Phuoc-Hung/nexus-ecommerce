@@ -61,7 +61,9 @@ export class IssueDisputeVerdictUseCase {
   ) {
     const commerceUrl = (
       process.env.COMMERCE_SERVICE_URL ||
-      `http://127.0.0.1:${process.env.COMMERCE_SERVICE_PORT || 4003}`
+      (process.env.NODE_ENV === 'production' || process.env.DOCKER_ENV
+        ? 'http://commerce-service:4003'
+        : `http://localhost:${process.env.COMMERCE_SERVICE_PORT || 4003}`)
     ).replace(/\/$/, '');
 
     try {
@@ -74,40 +76,61 @@ export class IssueDisputeVerdictUseCase {
         'x-user-role': 'SUPPORT_STAFF',
       };
 
+      let response: Response | undefined;
+
       if (decision === 'REFUND_BUYER') {
-        await fetch(`${commerceUrl}/api/v1/orders/${encodeURIComponent(orderId)}/refund/execute`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            refundAmount: amount,
-            reason: `Phán quyết trọng tài chấp thuận hoàn tiền: ${reason || 'Hoàn tiền cho người mua'}`,
-          }),
-          signal: controller.signal,
-        }).catch(() => null);
+        response = await fetch(
+          `${commerceUrl}/api/v1/orders/${encodeURIComponent(orderId)}/refund/execute`,
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              refundAmount: amount,
+              reason: `Phán quyết trọng tài chấp thuận hoàn tiền: ${reason || 'Hoàn tiền cho người mua'}`,
+            }),
+            signal: controller.signal,
+          },
+        );
       } else if (decision === 'REJECT_BUYER') {
-        await fetch(`${commerceUrl}/api/v1/orders/${encodeURIComponent(orderId)}/refund/cancel`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            reason: `Phán quyết trọng tài từ chối khiếu nại: ${reason || 'Bác bỏ yêu cầu hoàn tiền'}`,
-          }),
-          signal: controller.signal,
-        }).catch(() => null);
+        response = await fetch(
+          `${commerceUrl}/api/v1/orders/${encodeURIComponent(orderId)}/refund/cancel`,
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              reason: `Phán quyết trọng tài từ chối khiếu nại: ${reason || 'Bác bỏ yêu cầu hoàn tiền'}`,
+            }),
+            signal: controller.signal,
+          },
+        );
       } else if (decision === 'REQUIRE_RETURN_FIRST') {
-        await fetch(`${commerceUrl}/api/v1/orders/${encodeURIComponent(orderId)}/status`, {
-          method: 'PATCH',
-          headers,
-          body: JSON.stringify({
-            status: 'RETURN_PENDING',
-            note: `Phán quyết yêu cầu người mua trả hàng hoàn tiền: ${reason || 'Chờ nhận lại kiện hàng'}`,
-          }),
-          signal: controller.signal,
-        }).catch(() => null);
+        response = await fetch(
+          `${commerceUrl}/api/v1/orders/${encodeURIComponent(orderId)}/status`,
+          {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({
+              status: 'RETURN_PENDING',
+              note: `Phán quyết yêu cầu người mua trả hàng hoàn tiền: ${reason || 'Chờ nhận lại kiện hàng'}`,
+            }),
+            signal: controller.signal,
+          },
+        );
       }
 
       clearTimeout(timer);
+
+      if (response && !response.ok) {
+        const errorText = await response.text().catch(() => '');
+        console.error(
+          `[IssueDisputeVerdictUseCase] Đồng bộ phán quyết sang Commerce Service (${commerceUrl}) thất bại [HTTP ${response.status}]: ${errorText}`,
+        );
+      }
     } catch (err: any) {
-      console.warn('[IssueDisputeVerdictUseCase] Commerce refund sync notice:', err.message);
+      console.error(
+        `[IssueDisputeVerdictUseCase] Lỗi kết nối khi đồng bộ phán quyết sang Commerce Service (${commerceUrl}):`,
+        err.message,
+      );
     }
   }
 }

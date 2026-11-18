@@ -92,44 +92,6 @@ export class ChatController {
   }
 
   /**
-   * Helper tìm kiếm hoặc tự động cấp phát phòng chat (Auto-provision) khi truy cập theo Thread ID chuẩn
-   * Giải quyết dứt điểm lỗi 404 lặp lại do Polling phòng chat rỗng
-   */
-  private async findOrProvisionConversation(
-    convId: string,
-    user: { sub: string; role?: string },
-  ): Promise<Conversation> {
-    let conv = await this.conversationRepo.findById(convId);
-    if (!conv) {
-      const isSupport = convId.includes('support');
-      const isSeller = convId.includes('seller');
-      const channelType: ChannelType = isSupport
-        ? 'BUYER_SUPPORT'
-        : isSeller
-          ? 'BUYER_SELLER'
-          : 'AI_BOT';
-
-      const orderId =
-        convId.replace(/^conv_(?:buyer_support|buyer_seller|ai_bot)_/i, '') || 'default_order';
-
-      const normalizedRole = (user.role || '').toUpperCase();
-      const buyerId = normalizedRole === 'BUYER' ? user.sub : 'buyer_demo_01';
-      const sellerId = normalizedRole === 'SELLER' ? user.sub : 'seller_demo_01';
-
-      conv = new Conversation({
-        id: convId,
-        orderId,
-        channelType,
-        buyerId,
-        sellerId,
-        status: 'ACTIVE',
-      });
-      await this.conversationRepo.save(conv);
-    }
-    return conv;
-  }
-
-  /**
    * POST /api/v1/chat/conversations
    * Mở hoặc tìm phòng chat theo orderId và channelType (AI_BOT, BUYER_SELLER, BUYER_SUPPORT)
    */
@@ -181,7 +143,13 @@ export class ChatController {
       }
 
       const convId = req.params.id as string;
-      const conv = await this.findOrProvisionConversation(convId, user);
+      const conv = await this.conversationRepo.findById(convId);
+      if (!conv) {
+        res
+          .status(404)
+          .json({ success: false, error: `Không tìm thấy cuộc hội thoại với mã "${convId}".` });
+        return;
+      }
 
       if (!conv.canAccess(user.sub, user.role)) {
         res.status(403).json({
@@ -238,7 +206,6 @@ export class ChatController {
       }
 
       const convId = req.params.id as string;
-      await this.findOrProvisionConversation(convId, user);
       const { content, attachments, clientMessageId, context } = req.body;
 
       const result = await this.sendMessageUseCase.execute(
@@ -289,7 +256,13 @@ export class ChatController {
       }
 
       const convId = req.params.id as string;
-      const conv = await this.findOrProvisionConversation(convId, user);
+      const conv = await this.conversationRepo.findById(convId);
+      if (!conv) {
+        res
+          .status(404)
+          .json({ success: false, error: `Không tìm thấy cuộc hội thoại với mã "${convId}".` });
+        return;
+      }
 
       if (!conv.canAccess(user.sub, user.role)) {
         res

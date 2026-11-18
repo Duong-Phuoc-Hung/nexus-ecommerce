@@ -24,6 +24,29 @@ export class SupportCaseController {
    */
   public async listCases(req: Request, res: Response): Promise<void> {
     try {
+      const orderId =
+        typeof req.query.orderId === 'string'
+          ? req.query.orderId
+          : typeof req.query.order_id === 'string'
+            ? req.query.order_id
+            : undefined;
+
+      // Hỗ trợ tra cứu theo orderId qua query parameter: GET /api/v1/support/cases?orderId=... (Chuẩn REST thống nhất)
+      if (orderId && this.supportCaseRepository) {
+        const found = await this.supportCaseRepository.findByOrderId(orderId);
+        res.status(200).json({
+          success: true,
+          data: found ? [found.toResponseDto()] : [],
+          pagination: {
+            total: found ? 1 : 0,
+            page: 1,
+            limit: 10,
+            totalPages: found ? 1 : 0,
+          },
+        });
+        return;
+      }
+
       const userId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
       const status = typeof req.query.status === 'string' ? req.query.status : undefined;
       const priority = typeof req.query.priority === 'string' ? req.query.priority : undefined;
@@ -339,30 +362,45 @@ export class SupportCaseController {
 
     const commerceUrl = (
       process.env.COMMERCE_SERVICE_URL ||
-      `http://127.0.0.1:${process.env.COMMERCE_SERVICE_PORT || 4003}`
+      (process.env.NODE_ENV === 'production' || process.env.DOCKER_ENV
+        ? 'http://commerce-service:4003'
+        : `http://localhost:${process.env.COMMERCE_SERVICE_PORT || 4003}`)
     ).replace(/\/$/, '');
 
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 3000);
 
-      await fetch(`${commerceUrl}/api/v1/orders/${encodeURIComponent(orderId)}/refund/request`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': requesterId || 'usr_buyer',
-          'x-user-role': 'BUYER',
+      const response = await fetch(
+        `${commerceUrl}/api/v1/orders/${encodeURIComponent(orderId)}/refund/request`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': requesterId || 'usr_buyer',
+            'x-user-role': 'BUYER',
+          },
+          body: JSON.stringify({
+            reason: reason || 'Khách hàng tạo khiếu nại yêu cầu trả hàng / hoàn tiền',
+            evidenceUrls: Array.isArray(evidenceUrls) ? evidenceUrls : [],
+          }),
+          signal: controller.signal,
         },
-        body: JSON.stringify({
-          reason: reason || 'Khách hàng tạo khiếu nại yêu cầu trả hàng / hoàn tiền',
-          evidenceUrls: Array.isArray(evidenceUrls) ? evidenceUrls : [],
-        }),
-        signal: controller.signal,
-      }).catch(() => null);
+      );
 
       clearTimeout(timer);
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        console.error(
+          `[SupportCaseController] Đồng bộ yêu cầu hoàn tiền sang Commerce Service (${commerceUrl}) thất bại [HTTP ${response.status}]: ${errorText}`,
+        );
+      }
     } catch (err: any) {
-      console.warn('[SupportCaseController] Sync refund request to commerce notice:', err.message);
+      console.error(
+        `[SupportCaseController] Lỗi kết nối khi đồng bộ yêu cầu hoàn tiền sang Commerce Service (${commerceUrl}):`,
+        err.message,
+      );
     }
   }
 }

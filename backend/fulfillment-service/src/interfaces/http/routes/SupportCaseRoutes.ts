@@ -14,6 +14,10 @@ export function createSupportCaseRoutes(controller: SupportCaseController): Rout
   router.get('/cases/by-order/:orderId', requireAuth, (req, res) =>
     controller.getCaseByOrderId(req, res),
   );
+  router.get('/orders/:id/cases', requireAuth, (req, res) => controller.getCaseByOrderId(req, res));
+  router.get('/orders/:orderId/cases', requireAuth, (req, res) =>
+    controller.getCaseByOrderId(req, res),
+  );
 
   // 1.2 POST /api/v1/support/cases - Tiếp nhận tạo khiếu nại mới từ Buyer / Chatbot
   router.post('/cases', requireAuth, (req, res) => controller.createCase(req, res));
