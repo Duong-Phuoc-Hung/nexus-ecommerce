@@ -40,37 +40,70 @@ export class IssueDisputeVerdictUseCase {
     caseItem.issueVerdict(verdict, input.arbitratorId);
     await this.supportCaseRepository.save(caseItem);
 
-    // Nếu phán quyết là hoàn tiền cho khách, đồng bộ tự động sang commerce-service nếu có kết nối
-    if (input.decision === 'REFUND_BUYER') {
-      await this.notifyCommerceService(caseItem.orderId, input.refundAmount, input.note);
-    }
+    // Đồng bộ trạng thái phán quyết sang commerce-service
+    await this.notifyCommerceService(
+      caseItem.orderId,
+      input.decision,
+      input.refundAmount,
+      input.note,
+      input.arbitratorId,
+    );
 
     return caseItem.toDisputeDto();
   }
 
-  private async notifyCommerceService(orderId: string, amount?: number, reason?: string) {
+  private async notifyCommerceService(
+    orderId: string,
+    decision: 'REFUND_BUYER' | 'REJECT_BUYER' | 'REQUIRE_RETURN_FIRST',
+    amount?: number,
+    reason?: string,
+    arbitratorId?: string,
+  ) {
     const commerceUrl = (
       process.env.COMMERCE_SERVICE_URL ||
-      `http://127.0.0.1:${process.env.COMMERCE_SERVICE_PORT || 4004}`
+      `http://127.0.0.1:${process.env.COMMERCE_SERVICE_PORT || 4003}`
     ).replace(/\/$/, '');
 
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 2000);
+      const timer = setTimeout(() => controller.abort(), 3000);
 
-      await fetch(`${commerceUrl}/api/v1/orders/${encodeURIComponent(orderId)}/refund/execute`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': 'usr_support_arbitrator',
-          'x-user-role': 'SUPPORT_STAFF',
-        },
-        body: JSON.stringify({
-          refundAmount: amount,
-          reason: `Phán quyết trọng tài: ${reason || 'Chấp thuận hoàn tiền cho người mua'}`,
-        }),
-        signal: controller.signal,
-      }).catch(() => null);
+      const headers = {
+        'Content-Type': 'application/json',
+        'x-user-id': arbitratorId || 'usr_support_arbitrator',
+        'x-user-role': 'SUPPORT_STAFF',
+      };
+
+      if (decision === 'REFUND_BUYER') {
+        await fetch(`${commerceUrl}/api/v1/orders/${encodeURIComponent(orderId)}/refund/execute`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            refundAmount: amount,
+            reason: `Phán quyết trọng tài chấp thuận hoàn tiền: ${reason || 'Hoàn tiền cho người mua'}`,
+          }),
+          signal: controller.signal,
+        }).catch(() => null);
+      } else if (decision === 'REJECT_BUYER') {
+        await fetch(`${commerceUrl}/api/v1/orders/${encodeURIComponent(orderId)}/refund/cancel`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            reason: `Phán quyết trọng tài từ chối khiếu nại: ${reason || 'Bác bỏ yêu cầu hoàn tiền'}`,
+          }),
+          signal: controller.signal,
+        }).catch(() => null);
+      } else if (decision === 'REQUIRE_RETURN_FIRST') {
+        await fetch(`${commerceUrl}/api/v1/orders/${encodeURIComponent(orderId)}/status`, {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({
+            status: 'RETURN_PENDING',
+            note: `Phán quyết yêu cầu người mua trả hàng hoàn tiền: ${reason || 'Chờ nhận lại kiện hàng'}`,
+          }),
+          signal: controller.signal,
+        }).catch(() => null);
+      }
 
       clearTimeout(timer);
     } catch (err: any) {

@@ -335,9 +335,10 @@ export class PostgresShipmentRepository implements IShipmentRepository {
           status: row.status,
         };
       });
-    } catch (e) {
+    } catch (e: any) {
       console.warn(
-        '[PostgresShipmentRepository] Error calculating live support stats, using baseline defaults',
+        '[PostgresShipmentRepository] Error calculating live support stats, using baseline defaults:',
+        e?.message || e,
       );
     }
 

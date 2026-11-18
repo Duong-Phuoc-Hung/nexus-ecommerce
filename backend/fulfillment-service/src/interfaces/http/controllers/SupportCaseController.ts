@@ -265,6 +265,14 @@ export class SupportCaseController {
         await this.supportCaseRepository.save(supportCase);
       }
 
+      // Đồng bộ trạng thái REFUND_REQUESTED sang commerce-service (SRS 2.3)
+      this.syncRefundRequestToCommerce(
+        supportCase.orderId,
+        supportCase.reason,
+        buyerEvidence?.photos || [],
+        user?.sub,
+      );
+
       res.status(201).json({
         success: true,
         message: 'Tạo hồ sơ khiếu nại thành công.',
@@ -275,6 +283,86 @@ export class SupportCaseController {
         success: false,
         error: error.message || 'Không thể tạo hồ sơ khiếu nại.',
       });
+    }
+  }
+
+  /**
+   * GET /api/v1/support/cases/by-order/:orderId
+   * Tra cứu hồ sơ khiếu nại & phán quyết theo orderId (Dành cho Buyer Portal & Seller đối soát)
+   */
+  public async getCaseByOrderId(req: Request, res: Response): Promise<void> {
+    try {
+      if (!this.supportCaseRepository) {
+        res.status(500).json({ success: false, error: 'SupportCaseRepository not configured.' });
+        return;
+      }
+
+      const orderId = (
+        typeof req.params.orderId === 'string'
+          ? req.params.orderId
+          : String(req.params.orderId || '')
+      ).trim();
+      if (!orderId) {
+        res.status(400).json({ success: false, error: 'orderId không được để trống.' });
+        return;
+      }
+
+      const found = await this.supportCaseRepository.findByOrderId(orderId);
+      if (!found) {
+        res.status(404).json({
+          success: false,
+          error: `Không tìm thấy hồ sơ khiếu nại cho đơn hàng "${orderId}".`,
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: found.toDisputeDto(),
+      });
+    } catch (error: any) {
+      console.error('[SupportCaseController.getCaseByOrderId Error]:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Không thể tra cứu hồ sơ khiếu nại theo đơn hàng.',
+      });
+    }
+  }
+
+  private async syncRefundRequestToCommerce(
+    orderId: string,
+    reason?: string,
+    evidenceUrls?: string[],
+    requesterId?: string,
+  ): Promise<void> {
+    if (!orderId) return;
+
+    const commerceUrl = (
+      process.env.COMMERCE_SERVICE_URL ||
+      `http://127.0.0.1:${process.env.COMMERCE_SERVICE_PORT || 4003}`
+    ).replace(/\/$/, '');
+
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3000);
+
+      await fetch(`${commerceUrl}/api/v1/orders/${encodeURIComponent(orderId)}/refund/request`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': requesterId || 'usr_buyer',
+          'x-user-role': 'BUYER',
+        },
+        body: JSON.stringify({
+          reason: reason || 'Khách hàng tạo khiếu nại yêu cầu trả hàng / hoàn tiền',
+          evidenceUrls: Array.isArray(evidenceUrls) ? evidenceUrls : [],
+        }),
+        signal: controller.signal,
+      }).catch(() => null);
+
+      clearTimeout(timer);
+    } catch (err: any) {
+      console.warn('[SupportCaseController] Sync refund request to commerce notice:', err.message);
     }
   }
 }
