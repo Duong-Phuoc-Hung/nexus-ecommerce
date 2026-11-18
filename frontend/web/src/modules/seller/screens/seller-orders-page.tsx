@@ -216,7 +216,7 @@ export function SellerOrdersPage() {
         {
           sellerId: user?.id,
           q: search.trim() || undefined,
-          status: status !== 'ALL' ? status : undefined,
+          status: status !== 'ALL' && status !== 'REFUND_REQUESTED' ? status : undefined,
           limit: 50,
         },
         controller.signal,
@@ -225,20 +225,32 @@ export function SellerOrdersPage() {
         // Gắn cờ khiếu nại đối soát cho đơn ord_01hqz555abc hoặc các đơn có lưu cờ khiếu nại
         const enhanced = (page.items || []).map((it) => {
           let isDisputed = it.id === 'ord_01hqz555abc' || it.status === 'REFUND_REQUESTED';
+          let disputeSummary: string | null = null;
           if (typeof window !== 'undefined') {
             const cachedDispute =
               localStorage.getItem(`nexus_order_dispute_${it.id}`) ||
               localStorage.getItem(`nexus_order_dispute_${(it as any).orderCode}`);
             if (cachedDispute) {
               isDisputed = true;
+              try {
+                const parsed = JSON.parse(cachedDispute);
+                disputeSummary = parsed.reason || parsed.disputeInfo?.summary || null;
+              } catch {}
             }
           }
-          if (isDisputed) {
-            return { ...it, status: 'REFUND_REQUESTED' };
-          }
-          return it;
+          return {
+            ...it,
+            isDisputed,
+            hasDispute: isDisputed,
+            disputeSummary,
+            status: isDisputed ? 'REFUND_REQUESTED' : it.status,
+          };
         });
-        setItems(enhanced);
+        const finalItems =
+          status === 'REFUND_REQUESTED'
+            ? enhanced.filter((it) => it.isDisputed || it.status === 'REFUND_REQUESTED')
+            : enhanced;
+        setItems(finalItems);
       })
       .catch((err) => !controller.signal.aborted && setError(userMessage(err)))
       .finally(() => !controller.signal.aborted && setLoading(false));

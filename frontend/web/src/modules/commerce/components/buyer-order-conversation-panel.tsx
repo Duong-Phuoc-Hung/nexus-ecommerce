@@ -766,6 +766,25 @@ export function BuyerOrderConversationPanel({
       if (result.conversation) {
         setConversation(result.conversation);
       }
+      if (typeof window !== 'undefined') {
+        const buyerEvidenceData = {
+          photos: caseAttachments
+            .filter((a) => a.mimeType?.startsWith('image/'))
+            .map((a) => a.previewUrl),
+          videos: caseAttachments
+            .filter((a) => a.mimeType?.startsWith('video/'))
+            .map((a) => a.previewUrl),
+          note: caseDescription.trim(),
+          submittedAt: new Date().toISOString(),
+        };
+        localStorage.setItem(`nexus_buyer_evidence_${order.id}`, JSON.stringify(buyerEvidenceData));
+        if (order.orderCode) {
+          localStorage.setItem(
+            `nexus_buyer_evidence_${order.orderCode}`,
+            JSON.stringify(buyerEvidenceData),
+          );
+        }
+      }
       setMessages((prev) => {
         const exists = prev.some(
           (m) => m.clientMessageId === result.confirmationMessage.clientMessageId,

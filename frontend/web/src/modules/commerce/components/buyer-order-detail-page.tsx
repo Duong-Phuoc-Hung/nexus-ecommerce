@@ -292,6 +292,33 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
 
   const handleCaseCreated = (createdCase: OrderConversationCaseSummary) => {
     setConfirmedCases(saveConfirmedOrderCase(createdCase));
+    if (typeof window !== 'undefined') {
+      const disputePayload = {
+        orderId: String(order?.id || createdCase.orderId),
+        orderCode: order?.orderCode || String(order?.id || createdCase.orderId),
+        caseId: createdCase.caseId,
+        customer:
+          recipientName && recipientName !== '—' ? recipientName : order?.buyer || 'Tran Che Thien',
+        type: CASE_TYPE_LABELS[createdCase.type] || createdCase.type,
+        reason: createdCase.description,
+        status: 'PENDING',
+        createdAt: createdCase.createdAt || new Date().toISOString(),
+      };
+      localStorage.setItem(
+        `nexus_order_dispute_${createdCase.orderId}`,
+        JSON.stringify(disputePayload),
+      );
+      if (order?.id) {
+        localStorage.setItem(`nexus_order_dispute_${order.id}`, JSON.stringify(disputePayload));
+      }
+      if (order?.orderCode) {
+        localStorage.setItem(
+          `nexus_order_dispute_${order.orderCode}`,
+          JSON.stringify(disputePayload),
+        );
+      }
+      window.dispatchEvent(new Event('storage'));
+    }
   };
 
   const handleConfirmReceipt = async () => {

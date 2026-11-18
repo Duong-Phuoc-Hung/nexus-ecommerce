@@ -200,6 +200,90 @@ export function SupportDisputesPage() {
     setTimeout(() => setToastMessage(null), 4000);
   }
 
+  function syncDisputesWithLocalStorage(baseList: DisputeItem[]): DisputeItem[] {
+    let list = [...baseList];
+    if (typeof window === 'undefined') return list;
+
+    const localDisputes: DisputeItem[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('nexus_order_dispute_')) {
+        try {
+          const val = JSON.parse(localStorage.getItem(key) || '{}');
+          if (
+            val &&
+            val.orderId &&
+            !list.some(
+              (d: DisputeItem) =>
+                d.orderId === val.orderId ||
+                d.orderCode === val.orderId ||
+                d.orderCode === val.orderCode ||
+                d.caseId === val.caseId,
+            )
+          ) {
+            const orderKey = val.orderId;
+            const buyerEvRaw =
+              localStorage.getItem(`nexus_buyer_evidence_${orderKey}`) ||
+              (val.orderCode
+                ? localStorage.getItem(`nexus_buyer_evidence_${val.orderCode}`)
+                : null);
+            const sellerEvRaw =
+              localStorage.getItem(`nexus_seller_evidence_${orderKey}`) ||
+              (val.orderCode
+                ? localStorage.getItem(`nexus_seller_evidence_${val.orderCode}`)
+                : null);
+            const buyerEv = buyerEvRaw ? JSON.parse(buyerEvRaw) : undefined;
+            const sellerEv = sellerEvRaw ? JSON.parse(sellerEvRaw) : undefined;
+            const verdictRaw =
+              localStorage.getItem(`nexus_dispute_verdict_${orderKey}`) ||
+              (val.orderCode
+                ? localStorage.getItem(`nexus_dispute_verdict_${val.orderCode}`)
+                : null);
+            const verdict = verdictRaw ? JSON.parse(verdictRaw) : undefined;
+
+            localDisputes.push({
+              id: val.caseId || `CS-${val.orderId}`,
+              caseId: val.caseId || `CS-${val.orderId}`,
+              orderId: val.orderId,
+              order: val.orderCode || val.orderId,
+              orderCode: val.orderCode || val.orderId,
+              customer: val.customer || 'Tran Che Thien',
+              userId: val.userId || 'usr_buyer',
+              type: val.type || 'Báo hàng vỡ / Hư hỏng khi nhận',
+              reason: val.reason || 'Hàng bị vỡ / móp méo nặng khi mở hộp',
+              priority: 'Khẩn cấp',
+              status: verdict ? 'RESOLVED' : val.status || 'PENDING',
+              slaDeadline: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+              slaRemainingHours: 24,
+              isSlaOverdue: false,
+              buyerEvidence: buyerEv,
+              sellerEvidence: sellerEv,
+              verdict,
+              createdAt: val.createdAt || new Date().toISOString(),
+            });
+          }
+        } catch {}
+      }
+    }
+
+    list = [...localDisputes, ...list];
+
+    return list.map((d: DisputeItem) => {
+      const orderKey = d.orderId || d.orderCode || d.order;
+      const verdictRaw =
+        localStorage.getItem(`nexus_dispute_verdict_${orderKey}`) ||
+        localStorage.getItem(`nexus_dispute_verdict_${d.caseId}`) ||
+        localStorage.getItem(`nexus_dispute_verdict_${d.id}`);
+      if (verdictRaw) {
+        try {
+          const v = JSON.parse(verdictRaw);
+          return { ...d, verdict: v, status: 'RESOLVED' as const };
+        } catch {}
+      }
+      return d;
+    });
+  }
+
   const fetchDisputes = async () => {
     setLoading(true);
     setError('');
@@ -209,15 +293,11 @@ export function SupportDisputesPage() {
         q: search.trim() || undefined,
         limit: 50,
       });
-      const items = Array.isArray(res) ? res : (res as any)?.items || [];
-      if (items.length > 0) {
-        setDisputes(items);
-      } else {
-        setDisputes(FALLBACK_DISPUTES);
-      }
+      const items: DisputeItem[] = Array.isArray(res) ? res : (res as any)?.items || [];
+      const baseList = items.length > 0 ? items : [...FALLBACK_DISPUTES];
+      setDisputes(syncDisputesWithLocalStorage(baseList));
     } catch {
-      // Fallback demo disputes so support staff can always preview and test arbitration modal
-      setDisputes(FALLBACK_DISPUTES);
+      setDisputes(syncDisputesWithLocalStorage([...FALLBACK_DISPUTES]));
     } finally {
       setLoading(false);
     }
@@ -228,17 +308,30 @@ export function SupportDisputesPage() {
   }, [search, statusFilter]);
 
   const filteredDisputes = useMemo(() => {
-    if (statusFilter === 'OVERDUE') {
-      return disputes.filter((d) => d.isSlaOverdue || d.slaRemainingHours <= 0);
-    }
-    return disputes;
+    return disputes.filter((d) => {
+      const isResolved = d.status === 'RESOLVED' || Boolean(d.verdict);
+      if (statusFilter === 'RESOLVED') {
+        return isResolved;
+      }
+      if (statusFilter === 'PENDING') {
+        return !isResolved && !d.isSlaOverdue && d.slaRemainingHours > 0;
+      }
+      if (statusFilter === 'OVERDUE') {
+        return !isResolved && (d.isSlaOverdue || d.slaRemainingHours <= 0);
+      }
+      return true;
+    });
   }, [disputes, statusFilter]);
 
   const metrics = useMemo(() => {
     const total = disputes.length;
-    const pending = disputes.filter((d) => d.status === 'PENDING').length;
-    const overdue = disputes.filter((d) => d.isSlaOverdue || d.slaRemainingHours <= 0).length;
     const resolved = disputes.filter((d) => d.status === 'RESOLVED' || Boolean(d.verdict)).length;
+    const pending = disputes.filter(
+      (d) => d.status !== 'RESOLVED' && !d.verdict && !d.isSlaOverdue && d.slaRemainingHours > 0,
+    ).length;
+    const overdue = disputes.filter(
+      (d) => d.status !== 'RESOLVED' && !d.verdict && (d.isSlaOverdue || d.slaRemainingHours <= 0),
+    ).length;
     return { total, pending, overdue, resolved };
   }, [disputes]);
 
@@ -310,26 +403,26 @@ export function SupportDisputesPage() {
 
       const orderKey =
         selectedDispute.orderId || selectedDispute.orderCode || selectedDispute.order;
-      if (typeof window !== 'undefined') {
-        const verdictPayload = {
-          caseId: updated.caseId || updated.id || selectedDispute.caseId || selectedDispute.id,
-          orderId: orderKey,
-          status:
-            decision === 'REFUND_BUYER'
-              ? 'RESOLVED'
-              : decision === 'REJECT_BUYER'
-                ? 'REJECTED'
-                : 'RESOLVED',
-          decision,
-          refundAmount: decision === 'REFUND_BUYER' ? Number(refundAmount) || 30001 : 0,
-          liableParty,
-          resolutionNote: verdictNote.trim(),
-          note: verdictNote.trim(),
-          resolvedBy: 'Chuyên viên Hỗ trợ Sàn Nexus',
-          resolvedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
+      const verdictPayload = {
+        caseId: updated.caseId || updated.id || selectedDispute.caseId || selectedDispute.id,
+        orderId: orderKey,
+        status:
+          decision === 'REFUND_BUYER'
+            ? 'RESOLVED'
+            : decision === 'REJECT_BUYER'
+              ? 'REJECTED'
+              : 'RESOLVED',
+        decision,
+        refundAmount: decision === 'REFUND_BUYER' ? Number(refundAmount) || 30001 : 0,
+        liableParty,
+        resolutionNote: verdictNote.trim(),
+        note: verdictNote.trim(),
+        resolvedBy: 'Chuyên viên Hỗ trợ Sàn Nexus',
+        resolvedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
 
+      if (typeof window !== 'undefined') {
         if (orderKey) {
           localStorage.setItem(`nexus_dispute_verdict_${orderKey}`, JSON.stringify(verdictPayload));
         }
@@ -347,9 +440,22 @@ export function SupportDisputesPage() {
         }
       }
 
-      setSelectedDispute(updated);
+      const resolvedItem: DisputeItem = {
+        ...selectedDispute,
+        ...updated,
+        status: 'RESOLVED',
+        verdict: verdictPayload as any,
+      };
+      setSelectedDispute(resolvedItem);
       setDisputes((prev) =>
-        prev.map((d) => (d.caseId === updated.caseId || d.id === updated.id ? updated : d)),
+        prev.map((d) =>
+          d.caseId === resolvedItem.caseId ||
+          d.id === resolvedItem.id ||
+          d.orderId === resolvedItem.orderId ||
+          (resolvedItem.orderCode && d.orderCode === resolvedItem.orderCode)
+            ? resolvedItem
+            : d,
+        ),
       );
       showToast(
         `✓ Đã ban hành phán quyết [${decision}] thành công cho hồ sơ ${updated.caseId || updated.id}.`,
