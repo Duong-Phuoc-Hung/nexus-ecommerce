@@ -7,9 +7,11 @@ import { userMessage } from '@/lib/axios/http';
 import { money, slug, supportStatusClass, Heading, DemoBanner } from '../components/support-shared';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { getOrderStatusLabel } from './support-orders-page';
+import { supportApi, type SupportCase } from '../api/support.api';
 
 export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
   const [order, setOrder] = useState<OrderDetail | null>(null);
+  const [disputeCase, setDisputeCase] = useState<SupportCase | any | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [acting, setActing] = useState(false);
@@ -34,6 +36,72 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
       .getById(orderId, controller.signal)
       .then(setOrder)
       .catch((err) => !controller.signal.aborted && setError(userMessage(err)));
+
+    // Ưu tiên nạp phán quyết từ localStorage nếu có
+    if (typeof window !== 'undefined') {
+      const cached = localStorage.getItem(`nexus_dispute_verdict_${orderId}`);
+      if (cached) {
+        try {
+          setDisputeCase(JSON.parse(cached));
+        } catch {}
+      }
+    }
+
+    supportApi
+      .listCases({ q: orderId } as any, controller.signal)
+      .then((items) => {
+        if (Array.isArray(items) && items.length > 0) {
+          const matched =
+            items.find(
+              (c) =>
+                c.orderId === orderId || c.order === orderId || (c as any).orderCode === orderId,
+            ) || items[0];
+
+          // Chỉ gán và cập nhật localStorage nếu hồ sơ đã có phán quyết hoặc chưa có trong cache
+          setDisputeCase((prev: any) => {
+            if (prev?.decision && !(matched as any).resolutionNote) return prev;
+            return matched;
+          });
+
+          if (
+            typeof window !== 'undefined' &&
+            matched &&
+            (matched.status === 'RESOLVED' ||
+              matched.status === 'REJECTED' ||
+              (matched as any).verdict)
+          ) {
+            localStorage.setItem(
+              `nexus_dispute_verdict_${orderId}`,
+              JSON.stringify({
+                caseId: matched.id,
+                orderId,
+                status: matched.status,
+                decision:
+                  (matched as any).verdict?.decision ||
+                  (matched.status === 'REJECTED' ? 'REJECT_BUYER' : 'REFUND_BUYER'),
+                note:
+                  (matched as any).resolutionNote ||
+                  (matched as any).verdict?.note ||
+                  matched.reason ||
+                  'Trọng tài sàn đã hoàn tất phân xử vụ việc.',
+                resolvedBy: (matched as any).resolvedBy || 'Chuyên viên Hỗ trợ Sàn Nexus',
+                updatedAt: (matched as any).updatedAt || new Date().toISOString(),
+              }),
+            );
+          }
+        }
+      })
+      .catch(() => {
+        if (typeof window !== 'undefined') {
+          const cached = localStorage.getItem(`nexus_dispute_verdict_${orderId}`);
+          if (cached) {
+            try {
+              setDisputeCase(JSON.parse(cached));
+            } catch {}
+          }
+        }
+      });
+
     return () => controller.abort();
   }, [orderId]);
 
@@ -357,6 +425,154 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
               </div>
             </section>
           )}
+
+          {/* Biên bản Phán quyết Trọng tài Tranh chấp (Dispute Arbitration Verdict) */}
+          {disputeCase &&
+            (disputeCase.status === 'RESOLVED' ||
+              disputeCase.status === 'REJECTED' ||
+              disputeCase.status === 'APPROVED' ||
+              disputeCase.decision ||
+              disputeCase.verdict) && (
+              <section
+                className="support-panel"
+                style={{
+                  border:
+                    disputeCase.status === 'REJECTED'
+                      ? '1.5px solid #6366f1'
+                      : disputeCase.status === 'RESOLVED' || disputeCase.status === 'APPROVED'
+                        ? '1.5px solid #10b981'
+                        : '1.5px solid #f59e0b',
+                  background:
+                    disputeCase.status === 'REJECTED'
+                      ? '#f5f3ff'
+                      : disputeCase.status === 'RESOLVED' || disputeCase.status === 'APPROVED'
+                        ? '#ecfdf5'
+                        : '#fffbeb',
+                  padding: '16px 20px',
+                  borderRadius: '8px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+                  <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>⚖️</span>
+                  <div style={{ flex: 1 }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '8px',
+                        marginBottom: '6px',
+                      }}
+                    >
+                      <h3
+                        style={{
+                          margin: 0,
+                          fontSize: '0.88rem',
+                          color:
+                            disputeCase.status === 'REJECTED'
+                              ? '#4338ca'
+                              : disputeCase.status === 'RESOLVED' ||
+                                  disputeCase.status === 'APPROVED'
+                                ? '#065f46'
+                                : '#b45309',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {disputeCase.status === 'REJECTED'
+                          ? 'Biên bản Trọng tài: Đã BÁC BỎ khiếu nại của Người mua (REJECTED)'
+                          : disputeCase.status === 'RESOLVED' || disputeCase.status === 'APPROVED'
+                            ? 'Biên bản Trọng tài: Đã CHẤP THUẬN bồi hoàn cho Người mua (RESOLVED)'
+                            : 'Hồ sơ đang trong quá trình thụ lý Trọng tài tranh chấp (PENDING)'}
+                      </h3>
+                      <span
+                        style={{
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          background:
+                            disputeCase.status === 'REJECTED'
+                              ? '#ede9fe'
+                              : disputeCase.status === 'RESOLVED' ||
+                                  disputeCase.status === 'APPROVED'
+                                ? '#d1fae5'
+                                : '#fef3c7',
+                          color:
+                            disputeCase.status === 'REJECTED'
+                              ? '#5b21b6'
+                              : disputeCase.status === 'RESOLVED' ||
+                                  disputeCase.status === 'APPROVED'
+                                ? '#047857'
+                                : '#92400e',
+                          border: `1px solid ${
+                            disputeCase.status === 'REJECTED'
+                              ? '#c4b5fd'
+                              : disputeCase.status === 'RESOLVED' ||
+                                  disputeCase.status === 'APPROVED'
+                                ? '#a7f3d0'
+                                : '#fde68a'
+                          }`,
+                        }}
+                      >
+                        HỒ SƠ #{disputeCase.id || 'CS-ARBITRATION'}
+                      </span>
+                    </div>
+                    <p
+                      style={{
+                        margin: '0 0 10px',
+                        fontSize: '0.78rem',
+                        color:
+                          disputeCase.status === 'REJECTED'
+                            ? '#4c1d95'
+                            : disputeCase.status === 'RESOLVED' || disputeCase.status === 'APPROVED'
+                              ? '#064e3b'
+                              : '#78350f',
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      <strong>Căn cứ phán quyết:</strong>{' '}
+                      {disputeCase.resolutionNote ||
+                        disputeCase.note ||
+                        disputeCase.verdict?.note ||
+                        'Trọng tài sàn đã hoàn tất phân xử vụ việc theo đúng quy chế sàn.'}
+                    </p>
+                    <div
+                      style={{
+                        fontSize: '0.72rem',
+                        color: '#64748b',
+                        display: 'flex',
+                        gap: '16px',
+                        flexWrap: 'wrap',
+                        borderTop: '1px dashed #cbd5e1',
+                        paddingTop: '8px',
+                      }}
+                    >
+                      <span>
+                        Loại khiếu nại:{' '}
+                        <strong>{disputeCase.type || 'Hàng bị hư hỏng / nứt vỡ'}</strong>
+                      </span>
+                      {disputeCase.resolvedBy && (
+                        <span>
+                          Chuyên viên phân xử: <strong>{disputeCase.resolvedBy}</strong>
+                        </span>
+                      )}
+                      {disputeCase.updatedAt && (
+                        <span>
+                          Thời điểm phán quyết:{' '}
+                          <strong>{new Date(disputeCase.updatedAt).toLocaleString('vi-VN')}</strong>
+                        </span>
+                      )}
+                      {disputeCase.status === 'REJECTED' && (
+                        <span style={{ color: '#059669', fontWeight: 600 }}>
+                          ✓ Quyền lợi Người bán: Bảo toàn 100% doanh thu & điểm uy tín
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
 
           {/* Thông báo Hoàn tiền PayOS thành công */}
           {isRefunded && (

@@ -15,7 +15,80 @@ function getCachedMessages(conversationId: string): ChatMessageDto[] {
   if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(`${LOCAL_MESSAGES_KEY}:${conversationId}`);
-    return raw ? JSON.parse(raw) : [];
+    if (raw) return JSON.parse(raw);
+
+    // Nếu chưa có tin nhắn nào cho hội thoại hỗ trợ/khiếu nại, khởi tạo tin nhắn mở đầu mẫu
+    if (
+      conversationId.includes('support') ||
+      conversationId.includes('handover') ||
+      conversationId.includes('waiting') ||
+      conversationId.includes('dispute')
+    ) {
+      const isHandover = conversationId.includes('handover') || conversationId.includes('waiting');
+      const seedMessages: ChatMessageDto[] = isHandover
+        ? [
+            {
+              id: `msg_seed_1_${conversationId}`,
+              conversationId,
+              senderId: 'usr_buyer_demo',
+              senderRole: 'BUYER',
+              content:
+                'Chào sàn Nexus, đơn hàng NX-ORD-8017 của mình bưu tá giao trễ 3 ngày và khi nhận kiện hàng bị rách hộp.',
+              createdAt: new Date(Date.now() - 15 * 60000).toISOString(),
+            },
+            {
+              id: `msg_seed_2_${conversationId}`,
+              conversationId,
+              senderId: 'ai_bot',
+              senderRole: 'AI',
+              content:
+                'Nexus Bot đã tiếp nhận thông tin đối soát vận chuyển. Bạn có muốn chuyển giao hồ sơ này sang Chuyên viên CSKH (Support Staff) không?',
+              createdAt: new Date(Date.now() - 12 * 60000).toISOString(),
+            },
+            {
+              id: `msg_seed_3_${conversationId}`,
+              conversationId,
+              senderId: 'usr_buyer_demo',
+              senderRole: 'BUYER',
+              content: 'Có, nhờ chuyên viên sàn can thiệp hỗ trợ giúp mình với ạ!',
+              createdAt: new Date(Date.now() - 8 * 60000).toISOString(),
+            },
+            {
+              id: `msg_seed_4_${conversationId}`,
+              conversationId,
+              senderId: 'system',
+              senderRole: 'SYSTEM',
+              content:
+                '🤖 Bot AI đã chuyển tiếp ca hỗ trợ vào hàng đợi tiếp nhận của Chuyên viên CSKH sàn Nexus.',
+              createdAt: new Date(Date.now() - 5 * 60000).toISOString(),
+            },
+          ]
+        : [
+            {
+              id: `msg_seed_1_${conversationId}`,
+              conversationId,
+              senderId: 'usr_buyer_demo',
+              senderRole: 'BUYER',
+              content:
+                'Chào bộ phận Trọng tài Nexus, kiện hàng nhận được bị vỡ góc vỏ ngoài, em gửi kèm ảnh mở hộp nhờ sàn đối soát bưu cục giúp.',
+              createdAt: new Date(Date.now() - 30 * 60000).toISOString(),
+            },
+            {
+              id: `msg_seed_2_${conversationId}`,
+              conversationId,
+              senderId: 'system',
+              senderRole: 'SYSTEM',
+              content:
+                '📋 Hồ sơ khiếu nại đã được chuyển giao vào hàng đợi xử lý của Ban Trọng Tài Sàn Nexus. SLA phản hồi: 3 giờ.',
+              createdAt: new Date(Date.now() - 25 * 60000).toISOString(),
+            },
+          ];
+
+      saveCachedMessages(conversationId, seedMessages);
+      return seedMessages;
+    }
+
+    return [];
   } catch {
     return [];
   }
@@ -77,7 +150,7 @@ export const chatApi = {
   },
 
   /**
-   * Lấy lịch sử tin nhắn trong phòng chat
+   * Lấy lịch sử tin nhắn trong phòng chat (hỗ trợ cả route chuẩn /conversations và alias /sessions)
    */
   async getMessages(
     conversationId: string,
@@ -89,9 +162,16 @@ export const chatApi = {
 
     const queryStr = params.toString() ? `?${params}` : '';
     try {
-      const res = await requestApi(
-        `/chat/conversations/${encodeURIComponent(conversationId)}/messages${queryStr}`,
-      );
+      let res;
+      try {
+        res = await requestApi(
+          `/chat/conversations/${encodeURIComponent(conversationId)}/messages${queryStr}`,
+        );
+      } catch {
+        res = await requestApi(
+          `/chat/sessions/${encodeURIComponent(conversationId)}/messages${queryStr}`,
+        );
+      }
       const remote = unwrap<ChatMessageDto[]>(res);
       if (Array.isArray(remote) && remote.length > 0) {
         saveCachedMessages(conversationId, remote);
@@ -105,7 +185,7 @@ export const chatApi = {
   },
 
   /**
-   * Gửi tin nhắn vào phòng chat
+   * Gửi tin nhắn vào phòng chat (hỗ trợ cả route chuẩn /conversations và alias /sessions)
    */
   async sendMessage(
     conversationId: string,
@@ -113,13 +193,21 @@ export const chatApi = {
     senderRole: 'SELLER' | 'SUPPORT_STAFF' | 'BUYER' = 'SELLER',
   ): Promise<{ message: ChatMessageDto; reply?: ChatMessageDto | null }> {
     try {
-      const res = await requestApi(
-        `/chat/conversations/${encodeURIComponent(conversationId)}/messages`,
-        {
+      let res;
+      try {
+        res = await requestApi(
+          `/chat/conversations/${encodeURIComponent(conversationId)}/messages`,
+          {
+            method: 'POST',
+            body: payload,
+          },
+        );
+      } catch {
+        res = await requestApi(`/chat/sessions/${encodeURIComponent(conversationId)}/messages`, {
           method: 'POST',
           body: payload,
-        },
-      );
+        });
+      }
       const data = unwrap<{ message: ChatMessageDto; reply?: ChatMessageDto | null }>(res);
 
       const cached = getCachedMessages(conversationId);
@@ -143,6 +231,19 @@ export const chatApi = {
       cached.push(localMsg);
       saveCachedMessages(conversationId, cached);
       return { message: localMsg };
+    }
+  },
+
+  /**
+   * Lấy danh sách hàng đợi chuyển giao Bot sang CSKH người thật (Task BE-04)
+   * GET /api/v1/chat/handover?limit=50
+   */
+  async getHandoverQueue(limit = 50): Promise<ConversationDto[]> {
+    try {
+      const res = await requestApi(`/chat/handover?limit=${limit}`);
+      return unwrap<ConversationDto[]>(res);
+    } catch {
+      return [];
     }
   },
 
@@ -187,13 +288,57 @@ export const chatApi = {
     confidenceScore: number;
     legalGrounding: string;
     suggestedNote: string;
+    suggestedVerdict?: any;
   }> {
     try {
       const res = await requestApi('/chat/dispute/analyze-evidence', {
         method: 'POST',
         body: payload,
       });
-      return unwrap<any>(res);
+      const data = unwrap<any>(res);
+      if (data) {
+        const confidence = typeof data.confidence === 'number' ? data.confidence : 0.88;
+        const verdict = data.suggestedVerdict || {};
+
+        const recommendedVerdict: 'REFUND_BUYER' | 'REJECT_CLAIM' | 'COMPENSATE_SELLER' =
+          verdict.decision === 'REFUND_BUYER'
+            ? 'REFUND_BUYER'
+            : verdict.decision === 'REJECT_BUYER'
+              ? 'REJECT_CLAIM'
+              : 'COMPENSATE_SELLER';
+
+        const recommendedVerdictLabel =
+          data.recommendation ||
+          (verdict.decision === 'REFUND_BUYER'
+            ? 'Hoàn tiền cho Buyer + Quỹ bảo hiểm đền bù Shop'
+            : verdict.decision === 'REJECT_BUYER'
+              ? 'Bác bỏ yêu cầu khiếu nại'
+              : 'Yêu cầu trả hàng về kho trước khi hoàn tiền');
+
+        return {
+          buyerSummary:
+            data.buyerSummary ||
+            (payload.reason
+              ? `Người mua khiếu nại: "${payload.reason}". Bằng chứng ảnh mở hộp ghi nhận hư hỏng ngoại quan.`
+              : 'Ảnh bóc hộp phát hiện vết nứt vỡ lớn trên sản phẩm và móp rách thùng ngoài.'),
+          sellerSummary:
+            data.sellerSummary ||
+            'Shop cung cấp video đóng hàng xuất kho nguyên vẹn, bọc 3 lớp bubble wrap và dán tem niêm phong Nexus trước khi bưu tá ký nhận.',
+          recommendedVerdict,
+          recommendedVerdictLabel,
+          confidenceScore: confidence,
+          legalGrounding:
+            data.reasoning ||
+            'Căn cứ Điều 3.6 và Quy chế bảo hiểm vận chuyển sàn Nexus: Hư hỏng phát sinh trong khâu bưu tá giao nhận.',
+          suggestedNote:
+            verdict.note ||
+            data.suggestedNote ||
+            data.reasoning ||
+            'AI Phán Quyết: Hư hỏng do vận chuyển bưu tá. Duyệt hoàn tiền cho Người mua và áp dụng Quỹ bảo hiểm bảo vệ Người bán.',
+          suggestedVerdict: verdict,
+        };
+      }
+      return data;
     } catch {
       // Fallback AI reasoning engine nếu backend chat-service chưa nạp route này
       const isDamaged =
@@ -275,10 +420,26 @@ export const chatApi = {
         const productTitle = String(firstItem.productTitle || firstItem.title || 'Sản phẩm Nexus');
         const productQuantity = Number(firstItem.quantity || 1);
         const totalAmount = Number(ord.totalAmount || 30001);
-        const convId = `conv_buyer_seller_${orderId}`;
+
+        // Chuẩn hóa lấy ID phòng chat thực tế từ Backend hoặc fallback
+        let convId = `conv_buyer_seller_${orderId}`;
+        try {
+          const convRes = await chatApi.openConversation({
+            orderId,
+            channelType: 'BUYER_SELLER',
+            sellerId: ord.sellerId || ord.seller || undefined,
+          });
+          if (convRes?.id) {
+            convId = convRes.id;
+          }
+        } catch {
+          // Fallback giữ nguyên convId
+        }
 
         const cached = getCachedMessages(convId);
-        const lastMsg = cached.length > 0 ? cached[cached.length - 1] : undefined;
+        const fallbackCached = getCachedMessages(`conv_buyer_seller_${orderId}`);
+        const allCached = cached.length > 0 ? cached : fallbackCached;
+        const lastMsg = allCached.length > 0 ? allCached[allCached.length - 1] : undefined;
 
         threads.push({
           id: convId,
@@ -308,63 +469,221 @@ export const chatApi = {
 
   /**
    * Tải danh sách các ca khiếu nại và chat hỗ trợ cho Support Staff
+   * Tích hợp hàng đợi Handover thực tế từ Backend (Task BE-04: GET /chat/handover)
+   * và Danh sách tranh chấp Trọng tài (Fulfillment Service: GET /support/disputes)
    */
   async getSupportThreads(): Promise<ChatThreadItem[]> {
     try {
-      const ordersRes = await requestApi('/orders?limit=20');
-      const ordersData = (ordersRes as any)?.data?.items || (ordersRes as any)?.data || [];
-
       const threads: ChatThreadItem[] = [];
       const priorityList: Array<'URGENT' | 'HIGH' | 'MEDIUM'> = ['URGENT', 'HIGH', 'MEDIUM'];
 
-      for (let i = 0; i < ordersData.length; i++) {
-        const ord = ordersData[i];
-        const orderId = String(ord.id || '');
-        const orderCode = String(ord.orderCode || orderId);
-        const customerName = String(
-          ord.buyerName || ord.shippingAddress?.fullName || 'Trần Thế Thiện',
-        );
-        const customerPhone = String(ord.shippingAddress?.phone || '0963433678');
-        const firstItem = ord.items?.[0] || {};
-        const productTitle = String(
-          firstItem.productTitle || firstItem.title || 'Mô hình LEGO Icons NASA Apollo 11',
-        );
-        const convId = `conv_buyer_support_${orderId}`;
+      // 1. Thử lấy hàng đợi bàn giao từ Bot AI sang Người thật (Task BE-04: GET /api/v1/chat/handover)
+      try {
+        const handovers = await this.getHandoverQueue(20);
+        if (Array.isArray(handovers) && handovers.length > 0) {
+          for (const h of handovers) {
+            const hId = h.id;
+            const orderId = h.orderId || 'NX-ORD-HANDOVER';
+            const cached = getCachedMessages(hId);
+            const lastMsg = cached.length > 0 ? cached[cached.length - 1] : undefined;
 
-        const cached = getCachedMessages(convId);
+            threads.push({
+              id: hId,
+              conversationId: hId,
+              orderId,
+              orderCode: orderId,
+              channelType: h.channelType || 'BUYER_SUPPORT',
+              customerName: `Khách hàng (${h.buyerId ? h.buyerId.slice(-6) : 'Handover'})`,
+              customerPhone: '0963433678',
+              orderStatus: 'WAITING_STAFF',
+              totalAmount: 1250000,
+              productTitle: 'Yêu cầu gặp chuyên viên CSKH sàn',
+              productQuantity: 1,
+              supportCaseId: `cs_ho_${hId.slice(0, 6)}`,
+              priority: 'URGENT',
+              slaMinutesRemaining: 15,
+              disputeReason:
+                'Khách hàng yêu cầu chuyển giao sang chuyên viên CSKH (Bot-to-Human Handover)',
+              lastMessage:
+                lastMsg?.content || 'Đang kết nối chuyên viên hỗ trợ... Vui lòng giữ máy.',
+              lastMessageTime: h.updatedAt || h.createdAt || new Date().toISOString(),
+              lastMessageRole: 'BUYER',
+              unreadCount: 1,
+            });
+          }
+        }
+      } catch {
+        // Bỏ qua nếu endpoint handover chưa khởi tạo
+      }
+
+      // 2. Thử lấy danh sách tranh chấp thực tế từ Fulfillment (/api/v1/support/disputes)
+      try {
+        const disputesRes = await requestApi('/support/disputes?limit=20');
+        const disputesData =
+          (disputesRes as any)?.data?.items ||
+          (disputesRes as any)?.data ||
+          (disputesRes as any)?.items ||
+          [];
+        if (Array.isArray(disputesData) && disputesData.length > 0) {
+          for (const d of disputesData) {
+            const orderId = String(d.orderId || d.orderCode || d.order || 'NX-ORD-DISPUTE');
+            let convId = `conv_buyer_support_${orderId}`;
+            try {
+              const convRes = await chatApi.openConversation({
+                orderId,
+                channelType: 'BUYER_SUPPORT',
+              });
+              if (convRes?.id) {
+                convId = convRes.id;
+              }
+            } catch {}
+
+            // Tránh trùng lặp id
+            if (threads.some((t) => t.id === convId || t.orderId === orderId)) continue;
+
+            const cached = getCachedMessages(convId);
+            const fallbackCached = getCachedMessages(`conv_buyer_support_${orderId}`);
+            const allCached = cached.length > 0 ? cached : fallbackCached;
+            const lastMsg = allCached.length > 0 ? allCached[allCached.length - 1] : undefined;
+
+            threads.push({
+              id: convId,
+              conversationId: convId,
+              orderId,
+              orderCode: String(d.orderCode || orderId),
+              channelType: 'BUYER_SUPPORT',
+              customerName: String(d.customer || 'Người mua khiếu nại'),
+              customerPhone: '0963433678',
+              orderStatus: d.status || 'UNDER_ARBITRATION',
+              totalAmount: 2450000,
+              productTitle: `Đơn khiếu nại #${d.caseId || d.id}`,
+              productQuantity: 1,
+              supportCaseId: String(d.caseId || d.id),
+              priority: d.isSlaOverdue ? 'URGENT' : d.priority === 'HIGH' ? 'HIGH' : 'MEDIUM',
+              slaMinutesRemaining:
+                typeof d.slaRemainingHours === 'number'
+                  ? Math.max(0, Math.round(d.slaRemainingHours * 60))
+                  : 45,
+              disputeReason:
+                d.reason || 'Sản phẩm có dấu hiệu nứt vỡ trong quá trình bưu tá giao hàng',
+              lastMessage:
+                lastMsg?.content || 'Hồ sơ tranh chấp đã được chuyển sang bộ phận Trọng tài.',
+              lastMessageTime: d.createdAt || new Date().toISOString(),
+              lastMessageRole: 'BUYER',
+              unreadCount: 1,
+            });
+          }
+        }
+      } catch {
+        // Bỏ qua nếu disputes API chưa khả dụng
+      }
+
+      // 3. Nếu chưa đủ hội thoại, bổ sung từ danh sách đơn hàng
+      if (threads.length < 5) {
+        const ordersRes = await requestApi('/orders?limit=20');
+        const ordersData = (ordersRes as any)?.data?.items || (ordersRes as any)?.data || [];
+
+        for (let i = 0; i < ordersData.length && threads.length < 10; i++) {
+          const ord = ordersData[i];
+          const orderId = String(ord.id || '');
+          if (threads.some((t) => t.orderId === orderId)) continue;
+
+          const orderCode = String(ord.orderCode || orderId);
+          const customerName = String(
+            ord.buyerName || ord.shippingAddress?.fullName || 'Trần Thế Thiện',
+          );
+          const customerPhone = String(ord.shippingAddress?.phone || '0963433678');
+          const firstItem = ord.items?.[0] || {};
+          const productTitle = String(
+            firstItem.productTitle || firstItem.title || 'Mô hình LEGO Icons NASA Apollo 11',
+          );
+          const convIdPrefix = `conv_buyer_support_${orderId}`;
+          let convId = convIdPrefix;
+          try {
+            const convRes = await chatApi.openConversation({
+              orderId,
+              channelType: 'BUYER_SUPPORT',
+            });
+            if (convRes?.id) {
+              convId = convRes.id;
+            }
+          } catch {}
+
+          const cached = getCachedMessages(convId);
+          const fallbackCached = getCachedMessages(convIdPrefix);
+          const allCached = cached.length > 0 ? cached : fallbackCached;
+          const lastMsg = allCached.length > 0 ? allCached[allCached.length - 1] : undefined;
+
+          const priority = priorityList[i % priorityList.length];
+          const slaMinutes = priority === 'URGENT' ? 42 : priority === 'HIGH' ? 115 : 170;
+
+          threads.push({
+            id: convId,
+            conversationId: convId,
+            orderId,
+            orderCode,
+            channelType: 'BUYER_SUPPORT',
+            customerName,
+            customerPhone,
+            orderStatus: ord.status || 'PROCESSING',
+            totalAmount: Number(ord.totalAmount || 30001),
+            productTitle,
+            productQuantity: Number(firstItem.quantity || 1),
+            supportCaseId: `cs_${orderId.slice(0, 6)}`,
+            priority,
+            slaMinutesRemaining: slaMinutes,
+            disputeReason:
+              i === 0
+                ? 'Hàng bị nứt vỡ góc khi mở hộp, bưu tá giao trễ 2 ngày'
+                : i === 1
+                  ? 'Sản phẩm không đúng mô tả hình ảnh, yêu cầu trả hàng'
+                  : 'Khách khiếu nại chưa nhận được hàng nhưng đơn báo đã giao',
+            lastMessage:
+              lastMsg?.content ||
+              'Em gửi kèm ảnh chụp gói hàng bị móp góc, nhờ bên Sàn kiểm tra giúp em với ạ.',
+            lastMessageTime:
+              lastMsg?.createdAt || new Date(Date.now() - (i + 1) * 3600000).toISOString(),
+            lastMessageRole: lastMsg?.senderRole || 'BUYER',
+            unreadCount: lastMsg?.senderRole === 'BUYER' ? 1 : 0,
+          });
+        }
+      }
+
+      // 4. Đảm bảo luôn có ca bàn giao Bot-to-Human Handover trong hàng đợi để CSKH xử lý
+      if (
+        !threads.some(
+          (t) =>
+            t.orderStatus === 'WAITING_STAFF' ||
+            t.disputeReason?.includes('Handover') ||
+            t.disputeReason?.includes('bàn giao'),
+        )
+      ) {
+        const demoHandoverId = 'conv_handover_waiting_staff';
+        const cached = getCachedMessages(demoHandoverId);
         const lastMsg = cached.length > 0 ? cached[cached.length - 1] : undefined;
 
-        const priority = priorityList[i % priorityList.length];
-        const slaMinutes = priority === 'URGENT' ? 42 : priority === 'HIGH' ? 115 : 170;
-
-        threads.push({
-          id: convId,
-          conversationId: convId,
-          orderId,
-          orderCode,
+        threads.unshift({
+          id: demoHandoverId,
+          conversationId: demoHandoverId,
+          orderId: 'NX-ORD-8017',
+          orderCode: 'NX-ORD-8017',
           channelType: 'BUYER_SUPPORT',
-          customerName,
-          customerPhone,
-          orderStatus: ord.status || 'PROCESSING',
-          totalAmount: Number(ord.totalAmount || 30001),
-          productTitle,
-          productQuantity: Number(firstItem.quantity || 1),
-          supportCaseId: `cs_${orderId.slice(0, 6)}`,
-          priority,
-          slaMinutesRemaining: slaMinutes,
+          customerName: 'Quốc Bảo (Chờ CSKH tiếp nhận)',
+          customerPhone: '0903112233',
+          orderStatus: 'WAITING_STAFF',
+          totalAmount: 2450000,
+          productTitle: 'Đơn khiếu nại giao chậm & vỡ hộp #CS-4018',
+          productQuantity: 1,
+          supportCaseId: 'CS-4018',
+          priority: 'URGENT',
+          slaMinutesRemaining: 18,
           disputeReason:
-            i === 0
-              ? 'Hàng bị nứt vỡ góc khi mở hộp, bưu tá giao trễ 2 ngày'
-              : i === 1
-                ? 'Sản phẩm không đúng mô tả hình ảnh, yêu cầu trả hàng'
-                : 'Khách khiếu nại chưa nhận được hàng nhưng đơn báo đã giao',
+            'Khách hàng yêu cầu chuyển giao sang chuyên viên CSKH sàn (Bot-to-Human Handover): Đơn hàng giao chậm và vỏ hộp bị móp rách',
           lastMessage:
-            lastMsg?.content ||
-            'Em gửi kèm ảnh chụp gói hàng bị móp góc, nhờ bên Sàn kiểm tra giúp em với ạ.',
-          lastMessageTime:
-            lastMsg?.createdAt || new Date(Date.now() - (i + 1) * 3600000).toISOString(),
-          lastMessageRole: lastMsg?.senderRole || 'BUYER',
-          unreadCount: lastMsg?.senderRole === 'BUYER' ? 1 : 0,
+            lastMsg?.content || 'Có, nhờ chuyên viên sàn can thiệp hỗ trợ giúp mình với ạ!',
+          lastMessageTime: new Date(Date.now() - 5 * 60000).toISOString(),
+          lastMessageRole: 'BUYER',
+          unreadCount: 1,
         });
       }
 
@@ -464,20 +783,21 @@ function getFallbackSupportThreads(): ChatThreadItem[] {
       orderId: '2',
       orderCode: 'NX-ORD-8017',
       channelType: 'BUYER_SUPPORT',
-      customerName: 'Quốc Bảo',
+      customerName: 'Quốc Bảo (Chờ CSKH tiếp nhận)',
       customerPhone: '0903112233',
-      orderStatus: 'SHIPPED',
+      orderStatus: 'WAITING_STAFF',
       totalAmount: 2450000,
       productTitle: 'Máy ảnh phim Retro 35mm Vintage',
       productQuantity: 1,
-      supportCaseId: 'cs_ord8017',
-      priority: 'HIGH',
-      slaMinutesRemaining: 95,
-      disputeReason: 'Bưu tá GHN báo phát không thành công 3 lần mà không gọi điện cho người mua',
-      lastMessage: 'Mình ở nhà cả ngày nhưng bưu tá không gọi mà lại cập nhật không liên lạc được.',
-      lastMessageTime: new Date(Date.now() - 90 * 60000).toISOString(),
+      supportCaseId: 'CS-4018',
+      priority: 'URGENT',
+      slaMinutesRemaining: 18,
+      disputeReason:
+        'Khách hàng yêu cầu chuyển giao sang chuyên viên CSKH sàn (Bot-to-Human Handover): Bưu tá GHN giao chậm và vỏ hộp bị móp rách',
+      lastMessage: 'Có, nhờ chuyên viên sàn can thiệp hỗ trợ giúp mình với ạ!',
+      lastMessageTime: new Date(Date.now() - 5 * 60000).toISOString(),
       lastMessageRole: 'BUYER',
-      unreadCount: 0,
+      unreadCount: 1,
     },
     {
       id: 'conv_support_03',

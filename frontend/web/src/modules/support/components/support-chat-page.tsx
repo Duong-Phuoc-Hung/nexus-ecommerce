@@ -19,7 +19,7 @@ export function SupportChatPage() {
   const [selectedThreadId, setSelectedThreadId] = useState<string>('');
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
   const [inputText, setInputText] = useState('');
-  const [filterTab, setFilterTab] = useState<'ALL' | 'URGENT' | 'ACTIVE'>('ALL');
+  const [filterTab, setFilterTab] = useState<'ALL' | 'HANDOVER' | 'URGENT' | 'ACTIVE'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -179,10 +179,26 @@ export function SupportChatPage() {
       (t.supportCaseId && t.supportCaseId.toLowerCase().includes(searchQuery.toLowerCase()));
 
     if (!matchQuery) return false;
+    if (filterTab === 'HANDOVER')
+      return (
+        t.orderStatus === 'WAITING_STAFF' ||
+        t.disputeReason?.includes('Handover') ||
+        t.disputeReason?.includes('bàn giao')
+      );
     if (filterTab === 'URGENT') return t.priority === 'URGENT';
     if (filterTab === 'ACTIVE') return t.orderStatus !== 'DELIVERED';
     return true;
   });
+
+  // Khi đổi filterTab hoặc danh sách lọc thay đổi, tự động chọn ca đầu tiên nếu ca hiện tại không thuộc bộ lọc
+  useEffect(() => {
+    if (filteredThreads.length > 0) {
+      const isCurrentInFilter = filteredThreads.some((t) => t.id === selectedThreadId);
+      if (!isCurrentInFilter) {
+        setSelectedThreadId(filteredThreads[0].id);
+      }
+    }
+  }, [filterTab, filteredThreads, selectedThreadId]);
 
   return (
     <div
@@ -299,7 +315,8 @@ export function SupportChatPage() {
           >
             {[
               { id: 'ALL', label: 'Tất cả' },
-              { id: 'URGENT', label: '🔴 Khẩn cấp' },
+              { id: 'HANDOVER', label: '🎧 Chờ CSKH' },
+              { id: 'URGENT', label: '🔴 Khẩn' },
               { id: 'ACTIVE', label: 'Đang xử lý' },
             ].map((tab) => (
               <button
@@ -417,9 +434,29 @@ export function SupportChatPage() {
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
                       }}
                     >
-                      {item.customerName}
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {item.customerName}
+                      </span>
+                      {item.orderStatus === 'WAITING_STAFF' && (
+                        <span
+                          style={{
+                            fontSize: '9.5px',
+                            fontWeight: 700,
+                            padding: '1px 5px',
+                            borderRadius: '4px',
+                            background: '#dbeafe',
+                            color: '#1e40af',
+                            flexShrink: 0,
+                          }}
+                        >
+                          🎧 CHỜ CSKH
+                        </span>
+                      )}
                     </div>
                     <div
                       style={{
@@ -464,7 +501,7 @@ export function SupportChatPage() {
             overflow: 'hidden',
           }}
         >
-          {activeThread ? (
+          {activeThread && filteredThreads.length > 0 ? (
             <>
               {/* Header của phòng chat */}
               <div
@@ -851,7 +888,7 @@ export function SupportChatPage() {
         </div>
 
         {/* CỘT 3: ACTION & POLICY COPILOT PANEL */}
-        {activeThread && showActionPanel && (
+        {activeThread && filteredThreads.length > 0 && showActionPanel && (
           <div
             style={{
               width: '300px',

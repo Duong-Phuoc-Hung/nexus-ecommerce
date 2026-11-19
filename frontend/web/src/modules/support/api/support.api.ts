@@ -130,6 +130,29 @@ export function createSupportApi(request: RequestApi) {
         }),
       );
     },
+    async submitSellerEvidence(
+      caseIdOrOrderId: string,
+      payload: { videos?: string[]; photos?: string[]; note?: string },
+    ): Promise<any> {
+      try {
+        return unwrap<any>(
+          await request(`/support/orders/${encodeURIComponent(caseIdOrOrderId)}/dispute-evidence`, {
+            method: 'POST',
+            body: payload,
+          }),
+        );
+      } catch {
+        return unwrap<any>(
+          await request(
+            `/support/disputes/${encodeURIComponent(caseIdOrOrderId)}/seller-evidence`,
+            {
+              method: 'POST',
+              body: payload,
+            },
+          ),
+        );
+      }
+    },
   };
 }
 

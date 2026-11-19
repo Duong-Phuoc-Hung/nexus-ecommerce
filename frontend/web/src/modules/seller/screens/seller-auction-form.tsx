@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { sellerProductsApi, type BackendProduct } from '../api/seller-products.api';
 import { sellerAuctionsApi } from '../api/seller-auctions.api';
 import { userMessage } from '@/lib/axios/http';
@@ -24,6 +24,13 @@ export function SellerAuctionForm() {
   const [error, setError] = useState('');
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  const defaultStartDateTime = useMemo(() => {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - 2);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -112,6 +119,13 @@ export function SellerAuctionForm() {
       : new Date().toISOString();
     const endIso = new Date(new Date(startIso).getTime() + duration * 3600 * 1000).toISOString();
 
+    if (new Date(endIso).getTime() <= Date.now()) {
+      setSubmitting(false);
+      return setError(
+        'Thời gian kết thúc phiên đấu giá phải ở tương lai. Vui lòng chọn thời gian bắt đầu gần hiện tại hơn hoặc tăng thời lượng phiên (giờ).',
+      );
+    }
+
     try {
       // 1. Gọi trực tiếp API thật POST /api/v1/auctions (Auction Service / SRS 3.5.1)
       const created = await sellerAuctionsApi.create({
@@ -138,6 +152,22 @@ export function SellerAuctionForm() {
         router.push('/seller/auctions');
       }, 1000);
     } catch (err: any) {
+      const errMsg =
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        err?.message ||
+        userMessage(err);
+      if (
+        typeof errMsg === 'string' &&
+        (errMsg.includes('tương lai') ||
+          errMsg.includes('thời gian') ||
+          errMsg.includes('trước') ||
+          errMsg.includes('không hợp lệ'))
+      ) {
+        setSubmitting(false);
+        return setError(errMsg);
+      }
+
       // Dự phòng lưu local nếu service local chưa mount DB
       const auctionId = `AUC-${Date.now().toString().slice(-6)}`;
       const newAuction = {
@@ -352,7 +382,16 @@ export function SellerAuctionForm() {
 
           <label className="seller-form-full">
             Thời gian bắt đầu *
-            <input name="start" type="datetime-local" required />
+            <input
+              name="start"
+              type="datetime-local"
+              defaultValue={defaultStartDateTime}
+              required
+            />
+            <small style={{ color: '#6b7280', marginTop: '4px', display: 'block' }}>
+              Mặc định đặt trước 2 phút để phiên mở ngay lập tức (ACTIVE). Nếu muốn lên lịch phiên
+              trong tương lai (SCHEDULED), bạn hãy chọn ngày giờ sau thời điểm hiện tại.
+            </small>
           </label>
         </div>
 

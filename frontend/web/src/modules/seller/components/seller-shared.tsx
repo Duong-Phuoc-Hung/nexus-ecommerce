@@ -149,7 +149,9 @@ export function OrdersTable({
                         GHN
                       </span>
                     )}
-                    {item.status === 'REFUND_REQUESTED' && (
+                    {(item.status === 'REFUND_REQUESTED' ||
+                      (item as any).hasDispute ||
+                      (item as any).isDisputed) && (
                       <span
                         title="Đang có yêu cầu hoàn tiền hoặc khiếu nại"
                         style={{
@@ -162,7 +164,7 @@ export function OrdersTable({
                           fontWeight: 600,
                         }}
                       >
-                        Khiếu nại
+                        ⚠️ Khiếu nại
                       </span>
                     )}
                   </div>
