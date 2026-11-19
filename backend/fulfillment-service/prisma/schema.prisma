@@ -248,6 +248,12 @@ model SupportCase {
   // ID nhân viên Support / Trọng tài viên xử lý vụ việc
   resolvedBy     String?   @map("resolved_by") @db.VarChar(50)
 
+  // BẰNG CHỨNG & PHÁN QUYẾT KHIẾU NẠI (SRS 2.3, 2.6)
+  buyerEvidence  Json?     @map("buyer_evidence")
+  sellerEvidence Json?     @map("seller_evidence")
+  verdict        Json?     @map("verdict")
+  slaDeadline    DateTime? @map("sla_deadline") @db.Timestamptz()
+
   // Thời gian tạo và cập nhật khiếu nại
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()

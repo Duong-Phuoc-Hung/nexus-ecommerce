@@ -16,26 +16,35 @@ export function createApplication(): Application {
   app.use(cors());
   app.use(express.json());
 
+  const normalizeUrl = (url: string) => url.replace('http://localhost:', 'http://127.0.0.1:');
+
   const SERVICE_ENDPOINTS = {
-    user:
-      process.env.USER_SERVICE_URL || `http://localhost:${process.env.USER_SERVICE_PORT || 4001}`,
-    catalog:
+    user: normalizeUrl(
+      process.env.USER_SERVICE_URL || `http://127.0.0.1:${process.env.USER_SERVICE_PORT || 4001}`,
+    ),
+    catalog: normalizeUrl(
       process.env.CATALOG_SERVICE_URL ||
-      `http://localhost:${process.env.CATALOG_SERVICE_PORT || 4002}`,
-    commerce:
+        `http://127.0.0.1:${process.env.CATALOG_SERVICE_PORT || 4002}`,
+    ),
+    commerce: normalizeUrl(
       process.env.COMMERCE_SERVICE_URL ||
-      `http://localhost:${process.env.COMMERCE_SERVICE_PORT || 4003}`,
-    auction:
+        `http://127.0.0.1:${process.env.COMMERCE_SERVICE_PORT || 4003}`,
+    ),
+    auction: normalizeUrl(
       process.env.AUCTION_SERVICE_URL ||
-      `http://localhost:${process.env.AUCTION_SERVICE_PORT || 4004}`,
-    fulfillment:
+        `http://127.0.0.1:${process.env.AUCTION_SERVICE_PORT || 4004}`,
+    ),
+    fulfillment: normalizeUrl(
       process.env.FULFILLMENT_SERVICE_URL ||
-      `http://localhost:${process.env.FULFILLMENT_SERVICE_PORT || 4005}`,
-    chat:
-      process.env.CHAT_SERVICE_URL || `http://localhost:${process.env.CHAT_SERVICE_PORT || 4008}`,
-    notification:
+        `http://127.0.0.1:${process.env.FULFILLMENT_SERVICE_PORT || 4005}`,
+    ),
+    chat: normalizeUrl(
+      process.env.CHAT_SERVICE_URL || `http://127.0.0.1:${process.env.CHAT_SERVICE_PORT || 4008}`,
+    ),
+    notification: normalizeUrl(
       process.env.NOTIFICATION_SERVICE_URL ||
-      `http://localhost:${process.env.NOTIFICATION_SERVICE_PORT || 4006}`,
+        `http://127.0.0.1:${process.env.NOTIFICATION_SERVICE_PORT || 4006}`,
+    ),
   };
 
   app.get('/health', (_req: Request, res: Response) => {
@@ -208,6 +217,7 @@ export function createApplication(): Application {
     createProxy('Notification Service', SERVICE_ENDPOINTS.notification),
   );
   app.use('/api/v1/chat', createProxy('Chat Service', SERVICE_ENDPOINTS.chat));
+  app.use('/api/v1/conversations', createProxy('Chat Service', SERVICE_ENDPOINTS.chat));
 
   return app;
 }

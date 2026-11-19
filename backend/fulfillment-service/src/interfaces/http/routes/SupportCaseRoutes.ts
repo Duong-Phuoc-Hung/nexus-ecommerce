@@ -10,24 +10,24 @@ export function createSupportCaseRoutes(controller: SupportCaseController): Rout
     controller.listCases(req, res),
   );
 
-  // 1.0 Alias: GET /api/v1/support/orders/:id/cases - Lấy danh sách khiếu nại theo đơn hàng
-  router.get('/orders/:id/cases', requireAuth, requireSupportCasePermission('VIEW'), (req, res) => {
-    req.query.orderId = req.params.id;
-    controller.listCases(req, res);
-  });
-
-  // 1.0b Alias: GET /api/v1/support/cases/by-order/:orderId - Tương thích route của nhánh Hưng
+  // 1.1 GET /api/v1/support/cases/by-order/:orderId - Tra cứu khiếu nại theo đơn hàng (Buyer/Seller Portal)
   router.get(
     '/cases/by-order/:orderId',
     requireAuth,
     requireSupportCasePermission('VIEW'),
-    (req, res) => {
-      req.query.orderId = req.params.orderId;
-      controller.listCases(req, res);
-    },
+    (req, res) => controller.getCaseByOrderId(req, res),
+  );
+  router.get('/orders/:id/cases', requireAuth, requireSupportCasePermission('VIEW'), (req, res) =>
+    controller.getCaseByOrderId(req, res),
+  );
+  router.get(
+    '/orders/:orderId/cases',
+    requireAuth,
+    requireSupportCasePermission('VIEW'),
+    (req, res) => controller.getCaseByOrderId(req, res),
   );
 
-  // 1.1 POST /api/v1/support/cases - Tiếp nhận tạo khiếu nại mới từ Buyer / Chatbot
+  // 1.2 POST /api/v1/support/cases - Tiếp nhận tạo khiếu nại mới từ Buyer / Chatbot
   router.post('/cases', requireAuth, (req, res) => controller.createCase(req, res));
 
   // 2. POST /api/v1/support/cases/:id/resolve - Cập nhật kết quả giải quyết khiếu nại

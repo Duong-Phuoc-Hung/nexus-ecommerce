@@ -89,4 +89,53 @@ test('Fulfillment Persistence Integration Test Suite', async (t) => {
       assert.ok(summary.metrics.highPriorityCount >= 1);
     },
   );
+
+  await t.test(
+    '6. PostgresSupportCaseRepository: findByOrderId và lưu trữ buyer/seller evidence & verdict',
+    async () => {
+      const found = await supportRepo.findByOrderId('NX-ORD-8021');
+      assert.ok(found !== null, 'Should find case by orderId NX-ORD-8021');
+      assert.ok(found.orderCode === 'NX-ORD-8021' || found.orderId === 'NX-ORD-8021');
+
+      // Test saving custom evidence and verdict
+      found.submitBuyerEvidence({
+        photos: ['https://storage.nexus.vn/evidence/test_broken.jpg'],
+        videos: [],
+        note: 'Hộp rách góc và móp sản phẩm bên trong',
+      });
+      found.submitSellerEvidence({
+        photos: ['https://storage.nexus.vn/evidence/seller_pack.jpg'],
+        videos: ['https://storage.nexus.vn/evidence/pack.mp4'],
+        note: 'Video đóng gói chuẩn niêm phong',
+      });
+      found.issueVerdict(
+        {
+          decision: 'REFUND_BUYER',
+          refundAmount: 320000,
+          liableParty: 'SELLER',
+          note: 'Chấp thuận hoàn tiền do hàng móp vỡ trong quá trình giao',
+        },
+        'usr_arbitrator_test',
+      );
+
+      await supportRepo.save(found);
+
+      const reloaded = await supportRepo.findByOrderId('NX-ORD-8021');
+      assert.ok(reloaded !== null);
+      assert.equal(reloaded.status, 'RESOLVED');
+      assert.ok(reloaded.buyerEvidence);
+      assert.equal(
+        reloaded.buyerEvidence.photos?.[0],
+        'https://storage.nexus.vn/evidence/test_broken.jpg',
+      );
+      assert.ok(reloaded.sellerEvidence);
+      assert.equal(
+        reloaded.sellerEvidence.photos?.[0],
+        'https://storage.nexus.vn/evidence/seller_pack.jpg',
+      );
+      assert.ok(reloaded.verdict);
+      assert.equal(reloaded.verdict.decision, 'REFUND_BUYER');
+      assert.equal(reloaded.verdict.refundAmount, 320000);
+    },
+  );
 });

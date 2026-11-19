@@ -27,7 +27,45 @@ export class SupportCaseController {
     try {
       const user = (req as AuthenticatedRequest).user;
       let userId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
-      const orderId = typeof req.query.orderId === 'string' ? req.query.orderId : undefined;
+      const orderId =
+        typeof req.query.orderId === 'string'
+          ? req.query.orderId
+          : typeof req.query.order_id === 'string'
+            ? req.query.order_id
+            : undefined;
+
+      // Bảo vệ chống IDOR: Nếu là BUYER thì bắt buộc chỉ tra cứu case của chính mình
+      if (user?.role === 'BUYER') {
+        userId = user.sub;
+      }
+
+      // Hỗ trợ tra cứu theo orderId qua query parameter: GET /api/v1/support/cases?orderId=... (Chuẩn REST thống nhất)
+      if (orderId && this.supportCaseRepository) {
+        const found = await this.supportCaseRepository.findByOrderId(orderId);
+        if (
+          found &&
+          user?.role === 'BUYER' &&
+          found.userId.toLowerCase() !== user.sub.toLowerCase()
+        ) {
+          res.status(403).json({
+            success: false,
+            error: 'Bạn không có quyền truy cập khiếu nại của đơn hàng này.',
+          });
+          return;
+        }
+
+        res.status(200).json({
+          success: true,
+          data: found ? [found.toResponseDto()] : [],
+          pagination: {
+            total: found ? 1 : 0,
+            page: 1,
+            limit: 10,
+            totalPages: found ? 1 : 0,
+          },
+        });
+        return;
+      }
       const status = typeof req.query.status === 'string' ? req.query.status : undefined;
       const priority = typeof req.query.priority === 'string' ? req.query.priority : undefined;
       const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
@@ -313,6 +351,14 @@ export class SupportCaseController {
         await this.supportCaseRepository.save(supportCase);
       }
 
+      // Đồng bộ trạng thái REFUND_REQUESTED sang commerce-service (SRS 2.3)
+      this.syncRefundRequestToCommerce(
+        supportCase.orderId,
+        supportCase.reason,
+        buyerEvidence?.photos || [],
+        user?.sub,
+      );
+
       res.status(201).json({
         success: true,
         message: 'Tạo hồ sơ khiếu nại thành công.',
@@ -323,6 +369,116 @@ export class SupportCaseController {
         success: false,
         error: error.message || 'Không thể tạo hồ sơ khiếu nại.',
       });
+    }
+  }
+
+  /**
+   * GET /api/v1/support/cases/by-order/:orderId
+   * Tra cứu hồ sơ khiếu nại & phán quyết theo orderId (Dành cho Buyer Portal & Seller đối soát)
+   */
+  public async getCaseByOrderId(req: Request, res: Response): Promise<void> {
+    try {
+      if (!this.supportCaseRepository) {
+        res.status(500).json({ success: false, error: 'SupportCaseRepository not configured.' });
+        return;
+      }
+
+      const orderId = (
+        typeof req.params.orderId === 'string' && req.params.orderId
+          ? req.params.orderId
+          : typeof req.params.id === 'string' && req.params.id
+            ? req.params.id
+            : String(req.params.orderId || req.params.id || '')
+      ).trim();
+      if (!orderId) {
+        res.status(400).json({ success: false, error: 'orderId không được để trống.' });
+        return;
+      }
+
+      const user = (req as AuthenticatedRequest).user;
+      const found = await this.supportCaseRepository.findByOrderId(orderId);
+      if (!found) {
+        res.status(404).json({
+          success: false,
+          error: `Không tìm thấy hồ sơ khiếu nại cho đơn hàng "${orderId}".`,
+        });
+        return;
+      }
+
+      if (
+        found &&
+        user?.role === 'BUYER' &&
+        found.userId.toLowerCase() !== user.sub.toLowerCase()
+      ) {
+        res.status(403).json({
+          success: false,
+          error: 'Bạn không có quyền truy cập khiếu nại của đơn hàng này.',
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: found.toDisputeDto(),
+      });
+    } catch (error: any) {
+      console.error('[SupportCaseController.getCaseByOrderId Error]:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Không thể tra cứu hồ sơ khiếu nại theo đơn hàng.',
+      });
+    }
+  }
+
+  private async syncRefundRequestToCommerce(
+    orderId: string,
+    reason?: string,
+    evidenceUrls?: string[],
+    requesterId?: string,
+  ): Promise<void> {
+    if (!orderId) return;
+
+    const commerceUrl = (
+      process.env.COMMERCE_SERVICE_URL ||
+      (process.env.NODE_ENV === 'production' || process.env.DOCKER_ENV
+        ? 'http://commerce-service:4003'
+        : `http://localhost:${process.env.COMMERCE_SERVICE_PORT || 4003}`)
+    ).replace(/\/$/, '');
+
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3000);
+
+      const response = await fetch(
+        `${commerceUrl}/api/v1/orders/${encodeURIComponent(orderId)}/refund/request`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': requesterId || 'usr_buyer',
+            'x-user-role': 'BUYER',
+          },
+          body: JSON.stringify({
+            reason: reason || 'Khách hàng tạo khiếu nại yêu cầu trả hàng / hoàn tiền',
+            evidenceUrls: Array.isArray(evidenceUrls) ? evidenceUrls : [],
+          }),
+          signal: controller.signal,
+        },
+      );
+
+      clearTimeout(timer);
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        console.error(
+          `[SupportCaseController] Đồng bộ yêu cầu hoàn tiền sang Commerce Service (${commerceUrl}) thất bại [HTTP ${response.status}]: ${errorText}`,
+        );
+      }
+    } catch (err: any) {
+      console.error(
+        `[SupportCaseController] Lỗi kết nối khi đồng bộ yêu cầu hoàn tiền sang Commerce Service (${commerceUrl}):`,
+        err.message,
+      );
     }
   }
 }
