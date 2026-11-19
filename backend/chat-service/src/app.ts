@@ -111,6 +111,7 @@ export function createApplication(options: { damageAssessor?: IDamageAssessor } 
   const policyRoutes = createPolicyRoutes(policyController);
 
   app.use('/api/v1/chat', chatRoutes);
+  app.use('/api/v1', chatRoutes);
   app.use('/api/v1/chat', policyRoutes);
 
   return app;

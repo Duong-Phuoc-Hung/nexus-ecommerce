@@ -6,7 +6,8 @@ export type MessageAuthorRole = 'BUYER' | 'SELLER' | 'SUPPORT_STAFF' | 'AI';
 
 export type AssistIntent = 'TRACK_SHIPMENT' | 'POLICY_FAQ' | 'DRAFT_COMPLAINT';
 
-export type ComplaintCaseType = 'DAMAGED_ITEM' | 'WRONG_ITEM' | 'DELIVERY_ISSUE' | 'OTHER';
+export type ComplaintCaseType =
+  'DAMAGED_ITEM' | 'WRONG_ITEM' | 'DELIVERY_ISSUE' | 'RETURN_REQUEST' | 'OTHER';
 
 export interface ConversationAttachment {
   attachmentId: string;
@@ -46,9 +47,22 @@ export interface OrderMessage {
   deliveryError?: string;
 }
 
+export type DisputeVerdictDecision =
+  'REFUND_BUYER' | 'REJECT_BUYER' | 'REQUIRE_RETURN_FIRST' | (string & {});
+
+export interface OrderDisputeVerdict {
+  decision: DisputeVerdictDecision;
+  note: string;
+  refundAmount?: number | null;
+  refundChannel?: string | null;
+  issuedAt?: string | null;
+}
+
 export interface OrderConversationCaseSummary {
   caseId: string;
   orderId: string;
+  orderCode?: string;
+  buyerId?: string;
   conversationId: string;
   type: ComplaintCaseType;
   status: 'OPEN' | 'INVESTIGATING' | 'ESCALATED_DISPUTE' | 'RESOLVED' | 'REJECTED';
@@ -60,9 +74,14 @@ export interface OrderConversationCaseSummary {
   description: string;
   contactPhone: string;
   attachmentIds: string[];
+  verdict?: OrderDisputeVerdict | null;
+  slaDeadlineAt?: string | null;
   resolutionSummary?: string;
   resolvedAt?: string;
+  refundRequestStatus?: 'SUBMITTED' | 'FAILED';
+  refundRequestError?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface OrderConversation {

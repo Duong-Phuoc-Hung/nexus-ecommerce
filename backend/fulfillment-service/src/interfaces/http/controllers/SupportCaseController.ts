@@ -24,6 +24,29 @@ export class SupportCaseController {
    */
   public async listCases(req: Request, res: Response): Promise<void> {
     try {
+      const orderId =
+        typeof req.query.orderId === 'string'
+          ? req.query.orderId
+          : typeof req.query.order_id === 'string'
+            ? req.query.order_id
+            : undefined;
+
+      // Hỗ trợ tra cứu theo orderId qua query parameter: GET /api/v1/support/cases?orderId=... (Chuẩn REST thống nhất)
+      if (orderId && this.supportCaseRepository) {
+        const found = await this.supportCaseRepository.findByOrderId(orderId);
+        res.status(200).json({
+          success: true,
+          data: found ? [found.toResponseDto()] : [],
+          pagination: {
+            total: found ? 1 : 0,
+            page: 1,
+            limit: 10,
+            totalPages: found ? 1 : 0,
+          },
+        });
+        return;
+      }
+
       const userId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
       const status = typeof req.query.status === 'string' ? req.query.status : undefined;
       const priority = typeof req.query.priority === 'string' ? req.query.priority : undefined;
@@ -265,6 +288,14 @@ export class SupportCaseController {
         await this.supportCaseRepository.save(supportCase);
       }
 
+      // Đồng bộ trạng thái REFUND_REQUESTED sang commerce-service (SRS 2.3)
+      this.syncRefundRequestToCommerce(
+        supportCase.orderId,
+        supportCase.reason,
+        buyerEvidence?.photos || [],
+        user?.sub,
+      );
+
       res.status(201).json({
         success: true,
         message: 'Tạo hồ sơ khiếu nại thành công.',
@@ -275,6 +306,101 @@ export class SupportCaseController {
         success: false,
         error: error.message || 'Không thể tạo hồ sơ khiếu nại.',
       });
+    }
+  }
+
+  /**
+   * GET /api/v1/support/cases/by-order/:orderId
+   * Tra cứu hồ sơ khiếu nại & phán quyết theo orderId (Dành cho Buyer Portal & Seller đối soát)
+   */
+  public async getCaseByOrderId(req: Request, res: Response): Promise<void> {
+    try {
+      if (!this.supportCaseRepository) {
+        res.status(500).json({ success: false, error: 'SupportCaseRepository not configured.' });
+        return;
+      }
+
+      const orderId = (
+        typeof req.params.orderId === 'string'
+          ? req.params.orderId
+          : String(req.params.orderId || '')
+      ).trim();
+      if (!orderId) {
+        res.status(400).json({ success: false, error: 'orderId không được để trống.' });
+        return;
+      }
+
+      const found = await this.supportCaseRepository.findByOrderId(orderId);
+      if (!found) {
+        res.status(404).json({
+          success: false,
+          error: `Không tìm thấy hồ sơ khiếu nại cho đơn hàng "${orderId}".`,
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: found.toDisputeDto(),
+      });
+    } catch (error: any) {
+      console.error('[SupportCaseController.getCaseByOrderId Error]:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Không thể tra cứu hồ sơ khiếu nại theo đơn hàng.',
+      });
+    }
+  }
+
+  private async syncRefundRequestToCommerce(
+    orderId: string,
+    reason?: string,
+    evidenceUrls?: string[],
+    requesterId?: string,
+  ): Promise<void> {
+    if (!orderId) return;
+
+    const commerceUrl = (
+      process.env.COMMERCE_SERVICE_URL ||
+      (process.env.NODE_ENV === 'production' || process.env.DOCKER_ENV
+        ? 'http://commerce-service:4003'
+        : `http://localhost:${process.env.COMMERCE_SERVICE_PORT || 4003}`)
+    ).replace(/\/$/, '');
+
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3000);
+
+      const response = await fetch(
+        `${commerceUrl}/api/v1/orders/${encodeURIComponent(orderId)}/refund/request`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': requesterId || 'usr_buyer',
+            'x-user-role': 'BUYER',
+          },
+          body: JSON.stringify({
+            reason: reason || 'Khách hàng tạo khiếu nại yêu cầu trả hàng / hoàn tiền',
+            evidenceUrls: Array.isArray(evidenceUrls) ? evidenceUrls : [],
+          }),
+          signal: controller.signal,
+        },
+      );
+
+      clearTimeout(timer);
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        console.error(
+          `[SupportCaseController] Đồng bộ yêu cầu hoàn tiền sang Commerce Service (${commerceUrl}) thất bại [HTTP ${response.status}]: ${errorText}`,
+        );
+      }
+    } catch (err: any) {
+      console.error(
+        `[SupportCaseController] Lỗi kết nối khi đồng bộ yêu cầu hoàn tiền sang Commerce Service (${commerceUrl}):`,
+        err.message,
+      );
     }
   }
 }

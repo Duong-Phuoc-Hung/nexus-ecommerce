@@ -71,6 +71,33 @@ export class PostgresSupportCaseRepository implements ISupportCaseRepository {
     }
   }
 
+  public async findByOrderId(orderId: string): Promise<SupportCase | null> {
+    const cleanId = orderId.trim();
+
+    try {
+      const row = await this.prisma.supportCase.findFirst({
+        where: {
+          OR: [
+            { orderId: { equals: cleanId, mode: 'insensitive' } },
+            { orderCode: { equals: cleanId, mode: 'insensitive' } },
+          ],
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+
+      if (!row) {
+        return null;
+      }
+
+      return this.mapToDomain(row);
+    } catch (err) {
+      console.error('[PostgresSupportCaseRepository] findByOrderId error:', (err as Error).message);
+      return null;
+    }
+  }
+
   public async search(criteria: SupportCaseSearchCriteria): Promise<SupportCaseSearchPage> {
     const where: any = {};
 
@@ -181,6 +208,10 @@ export class PostgresSupportCaseRepository implements ISupportCaseRepository {
         status: caseItem.status,
         resolutionNote: caseItem.resolutionNote || null,
         resolvedBy: caseItem.resolvedBy || null,
+        buyerEvidence: caseItem.buyerEvidence ? (caseItem.buyerEvidence as any) : null,
+        sellerEvidence: caseItem.sellerEvidence ? (caseItem.sellerEvidence as any) : null,
+        verdict: caseItem.verdict ? (caseItem.verdict as any) : null,
+        slaDeadline: caseItem.slaDeadline || null,
         createdAt: caseItem.createdAt,
         updatedAt: caseItem.updatedAt,
       },
@@ -195,6 +226,10 @@ export class PostgresSupportCaseRepository implements ISupportCaseRepository {
         status: caseItem.status,
         resolutionNote: caseItem.resolutionNote || null,
         resolvedBy: caseItem.resolvedBy || null,
+        buyerEvidence: caseItem.buyerEvidence ? (caseItem.buyerEvidence as any) : null,
+        sellerEvidence: caseItem.sellerEvidence ? (caseItem.sellerEvidence as any) : null,
+        verdict: caseItem.verdict ? (caseItem.verdict as any) : null,
+        slaDeadline: caseItem.slaDeadline || null,
         updatedAt: caseItem.updatedAt,
       },
     });
@@ -212,9 +247,31 @@ export class PostgresSupportCaseRepository implements ISupportCaseRepository {
     status: string;
     resolutionNote?: string | null;
     resolvedBy?: string | null;
+    buyerEvidence?: any;
+    sellerEvidence?: any;
+    verdict?: any;
+    slaDeadline?: Date | null;
     createdAt: Date;
     updatedAt: Date;
   }): SupportCase {
+    const buyerEvidence = row.buyerEvidence
+      ? typeof row.buyerEvidence === 'string'
+        ? JSON.parse(row.buyerEvidence)
+        : row.buyerEvidence
+      : undefined;
+
+    const sellerEvidence = row.sellerEvidence
+      ? typeof row.sellerEvidence === 'string'
+        ? JSON.parse(row.sellerEvidence)
+        : row.sellerEvidence
+      : undefined;
+
+    const verdict = row.verdict
+      ? typeof row.verdict === 'string'
+        ? JSON.parse(row.verdict)
+        : row.verdict
+      : undefined;
+
     return new SupportCase({
       id: row.id,
       type: row.type,
@@ -227,6 +284,10 @@ export class PostgresSupportCaseRepository implements ISupportCaseRepository {
       status: row.status as SupportCaseStatus,
       resolutionNote: row.resolutionNote || undefined,
       resolvedBy: row.resolvedBy || undefined,
+      buyerEvidence,
+      sellerEvidence,
+      verdict,
+      slaDeadline: row.slaDeadline ? new Date(row.slaDeadline) : undefined,
       createdAt: new Date(row.createdAt),
       updatedAt: new Date(row.updatedAt),
     });

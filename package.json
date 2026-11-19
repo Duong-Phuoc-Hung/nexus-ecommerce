@@ -38,7 +38,7 @@
     "dev:fulfillment": "pnpm --filter @nexus/fulfillment-service dev",
     "dev:notification": "pnpm --filter @nexus/notification-service dev",
     "dev:chat": "pnpm --filter @nexus/chat-service dev",
-    "predev:all": "node scripts/free-port.js 3000 4000 4001 4002 4003 4004 4005 4006",
+    "predev:all": "node scripts/free-port.js 3000 4000 4001 4002 4003 4004 4005 4006 4008",
     "dev:all": "pnpm --parallel --filter \"./backend/*\" --filter @nexus/web dev",
     "predev:auth": "node scripts/free-port.js 3000 4000 4001",
     "dev:auth": "pnpm --parallel --filter @nexus/api-gateway --filter @nexus/user-service --filter @nexus/web dev",

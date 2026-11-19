@@ -37,7 +37,9 @@ export class InMemoryAuctionRepository implements IAuctionRepository {
 
   public async findAll(filters?: { status?: string; sellerId?: string }): Promise<Auction[]> {
     let list = Array.from(this.auctions.values());
-    if (filters?.status) list = list.filter((a) => a.status === filters.status);
+    if (filters?.status && filters.status.toUpperCase() !== 'ALL') {
+      list = list.filter((a) => a.status === filters.status);
+    }
     if (filters?.sellerId) list = list.filter((a) => a.sellerId === filters.sellerId);
     return list;
   }

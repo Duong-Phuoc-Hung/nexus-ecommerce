@@ -7,17 +7,29 @@ export class PostgresAddressRepository implements IAddressRepository {
   private tableInitialized: boolean = false;
 
   constructor(pool?: Pool) {
+    const rawHost = process.env.USER_DB_HOST || process.env.DB_HOST || '127.0.0.1';
+    const host = rawHost === 'localhost' ? '127.0.0.1' : rawHost;
+    const port = Number(process.env.USER_DB_PORT || process.env.DB_PORT) || 5432;
+    const user = process.env.USER_DB_USER || process.env.DB_USER || 'nexus_user';
+    const password = process.env.USER_DB_PASSWORD || process.env.DB_PASSWORD || 'nexus_password';
+    const database = process.env.USER_DB_NAME || process.env.DB_NAME || 'nexus_user_db';
+
     this.pool =
       pool ||
       new Pool({
-        host: process.env.DB_HOST || 'localhost',
-        port: Number(process.env.DB_PORT) || 5432,
-        user: process.env.DB_USER || 'nexus_user',
-        password: process.env.DB_PASSWORD || 'nexus_password',
-        database: process.env.DB_NAME || 'nexus_user_db',
+        host,
+        port,
+        user,
+        password,
+        database,
         max: 10,
         idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 5000,
       });
+
+    this.pool.on('error', (err: Error) => {
+      console.error('[PostgresAddressRepository Pool Error]:', err.message);
+    });
   }
 
   private async ensureTable(): Promise<void> {
