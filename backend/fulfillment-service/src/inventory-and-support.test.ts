@@ -717,13 +717,14 @@ test('Ticket 4 - Buyer Support Cases by Order: GET /api/v1/support/cases/by-orde
     assert.equal(getRes.status, 200);
     const getJson = (await getRes.json()) as any;
     assert.equal(getJson.success, true);
-    assert.equal(getJson.data.orderId, 'NX-ORD-TEST-CASE-888');
-    assert.equal(getJson.data.reason, 'Sản phẩm lỗi không lên nguồn');
+    const caseData = Array.isArray(getJson.data) ? getJson.data[0] : getJson.data;
+    assert.equal(caseData.orderId, 'NX-ORD-TEST-CASE-888');
+    assert.equal(caseData.reason, 'Sản phẩm lỗi không lên nguồn');
     assert.equal(
-      getJson.data.buyerEvidence.photos[0],
+      caseData.buyerEvidence.photos[0],
       'https://storage.nexus.vn/evidence/box_defect.png',
     );
     // Không có link Unsplash giả
-    assert.ok(!JSON.stringify(getJson.data.buyerEvidence).includes('images.unsplash.com'));
+    assert.ok(!JSON.stringify(caseData.buyerEvidence).includes('images.unsplash.com'));
   });
 });

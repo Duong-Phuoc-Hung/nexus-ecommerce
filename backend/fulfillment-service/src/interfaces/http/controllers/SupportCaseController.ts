@@ -419,7 +419,7 @@ export class SupportCaseController {
 
       res.status(200).json({
         success: true,
-        data: found.toDisputeDto(),
+        data: found ? [found.toDisputeDto()] : [],
       });
     } catch (error: any) {
       console.error('[SupportCaseController.getCaseByOrderId Error]:', error);
