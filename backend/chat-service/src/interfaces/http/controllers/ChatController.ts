@@ -4,6 +4,7 @@ import { SendMessageUseCase } from '../../../application/use-cases/SendMessageUs
 import { EscalateDisputeUseCase } from '../../../application/use-cases/EscalateDisputeUseCase';
 import { IChatMessageRepository } from '../../../domain/repositories/IChatMessageRepository';
 import { IConversationRepository } from '../../../domain/repositories/IConversationRepository';
+import { Conversation, ChannelType } from '../../../domain/entities/Conversation';
 import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
 import { ConversationNotFoundException } from '../../../domain/exceptions/ConversationNotFoundException';
 import { ChatForbiddenException } from '../../../domain/exceptions/ChatForbiddenException';
@@ -259,7 +260,7 @@ export class ChatController {
       if (!conv) {
         res
           .status(404)
-          .json({ success: false, error: `Không tìm thấy cuộc hội thoại "${convId}".` });
+          .json({ success: false, error: `Không tìm thấy cuộc hội thoại với mã "${convId}".` });
         return;
       }
 

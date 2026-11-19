@@ -24,6 +24,16 @@ export class InMemorySupportCaseRepository implements ISupportCaseRepository {
     return this.cases.get(id.trim().toUpperCase()) || this.cases.get(id.trim()) || null;
   }
 
+  public async findByOrderId(orderId: string): Promise<SupportCase | null> {
+    const cleanId = orderId.trim().toLowerCase();
+    const all = Array.from(this.cases.values());
+    const found = all
+      .filter((c) => c.orderId.toLowerCase() === cleanId || c.orderCode.toLowerCase() === cleanId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    return found[0] || null;
+  }
+
   public async search(criteria: SupportCaseSearchCriteria): Promise<SupportCaseSearchPage> {
     let items = Array.from(this.cases.values());
 

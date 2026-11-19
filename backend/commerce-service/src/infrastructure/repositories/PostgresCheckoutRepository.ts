@@ -131,46 +131,74 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
   }
 
   public async createOrder(params: CreateOrderParams) {
+    if (params.idempotencyKey) {
+      const existing = await this.prisma.checkoutIdempotency.findUnique({
+        where: {
+          buyerId_idempotencyKey: {
+            buyerId: params.buyerId,
+            idempotencyKey: params.idempotencyKey,
+          },
+        },
+      });
+
+      if (existing) {
+        if (existing.requestHash !== params.requestHash) {
+          return {
+            order: null as unknown as OrderRecord,
+            payment: null as unknown as PaymentRecord,
+            replay: true,
+            requestHash: existing.requestHash,
+          };
+        }
+        if (existing.orderId) {
+          const order = await this.loadOrderPrisma(this.prisma, String(existing.orderId));
+          const payment = await this.loadLatestPaymentPrisma(this.prisma, String(existing.orderId));
+          return {
+            order: order!,
+            payment: payment!,
+            replay: true,
+            requestHash: params.requestHash,
+          };
+        }
+      }
+    }
+
     return this.prisma.$transaction(async (tx) => {
       if (params.idempotencyKey) {
-        try {
-          await tx.checkoutIdempotency.create({
-            data: {
+        // Sử dụng ON CONFLICT DO NOTHING để tránh gây lỗi 25P02 abort transaction trong PostgreSQL
+        await tx.$executeRaw`
+          INSERT INTO commerce_checkout_idempotency (buyer_id, idempotency_key, request_hash, created_at)
+          VALUES (${params.buyerId}, ${params.idempotencyKey}, ${params.requestHash}, NOW())
+          ON CONFLICT (buyer_id, idempotency_key) DO NOTHING
+        `;
+
+        const existing = await tx.checkoutIdempotency.findUnique({
+          where: {
+            buyerId_idempotencyKey: {
               buyerId: params.buyerId,
               idempotencyKey: params.idempotencyKey,
-              requestHash: params.requestHash,
             },
-          });
-        } catch {
-          // Khóa Idempotency đã tồn tại, kiểm tra xem có cùng request_hash không
-          const existing = await tx.checkoutIdempotency.findUnique({
-            where: {
-              buyerId_idempotencyKey: {
-                buyerId: params.buyerId,
-                idempotencyKey: params.idempotencyKey,
-              },
-            },
-          });
+          },
+        });
 
-          if (existing) {
-            if (existing.requestHash !== params.requestHash) {
-              return {
-                order: null as unknown as OrderRecord,
-                payment: null as unknown as PaymentRecord,
-                replay: true,
-                requestHash: existing.requestHash,
-              };
-            }
-            if (existing.orderId) {
-              const order = await this.loadOrderPrisma(tx, String(existing.orderId));
-              const payment = await this.loadLatestPaymentPrisma(tx, String(existing.orderId));
-              return {
-                order: order!,
-                payment: payment!,
-                replay: true,
-                requestHash: params.requestHash,
-              };
-            }
+        if (existing) {
+          if (existing.requestHash !== params.requestHash) {
+            return {
+              order: null as unknown as OrderRecord,
+              payment: null as unknown as PaymentRecord,
+              replay: true,
+              requestHash: existing.requestHash,
+            };
+          }
+          if (existing.orderId) {
+            const order = await this.loadOrderPrisma(tx, String(existing.orderId));
+            const payment = await this.loadLatestPaymentPrisma(tx, String(existing.orderId));
+            return {
+              order: order!,
+              payment: payment!,
+              replay: true,
+              requestHash: params.requestHash,
+            };
           }
         }
       }

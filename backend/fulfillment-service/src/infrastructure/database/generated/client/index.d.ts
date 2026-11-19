@@ -6549,6 +6549,7 @@ export namespace Prisma {
     status: string | null
     resolutionNote: string | null
     resolvedBy: string | null
+    slaDeadline: Date | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -6565,6 +6566,7 @@ export namespace Prisma {
     status: string | null
     resolutionNote: string | null
     resolvedBy: string | null
+    slaDeadline: Date | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -6581,6 +6583,10 @@ export namespace Prisma {
     status: number
     resolutionNote: number
     resolvedBy: number
+    buyerEvidence: number
+    sellerEvidence: number
+    verdict: number
+    slaDeadline: number
     createdAt: number
     updatedAt: number
     _all: number
@@ -6599,6 +6605,7 @@ export namespace Prisma {
     status?: true
     resolutionNote?: true
     resolvedBy?: true
+    slaDeadline?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -6615,6 +6622,7 @@ export namespace Prisma {
     status?: true
     resolutionNote?: true
     resolvedBy?: true
+    slaDeadline?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -6631,6 +6639,10 @@ export namespace Prisma {
     status?: true
     resolutionNote?: true
     resolvedBy?: true
+    buyerEvidence?: true
+    sellerEvidence?: true
+    verdict?: true
+    slaDeadline?: true
     createdAt?: true
     updatedAt?: true
     _all?: true
@@ -6720,6 +6732,10 @@ export namespace Prisma {
     status: string
     resolutionNote: string | null
     resolvedBy: string | null
+    buyerEvidence: JsonValue | null
+    sellerEvidence: JsonValue | null
+    verdict: JsonValue | null
+    slaDeadline: Date | null
     createdAt: Date
     updatedAt: Date
     _count: SupportCaseCountAggregateOutputType | null
@@ -6753,6 +6769,10 @@ export namespace Prisma {
     status?: boolean
     resolutionNote?: boolean
     resolvedBy?: boolean
+    buyerEvidence?: boolean
+    sellerEvidence?: boolean
+    verdict?: boolean
+    slaDeadline?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["supportCase"]>
@@ -6769,6 +6789,10 @@ export namespace Prisma {
     status?: boolean
     resolutionNote?: boolean
     resolvedBy?: boolean
+    buyerEvidence?: boolean
+    sellerEvidence?: boolean
+    verdict?: boolean
+    slaDeadline?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["supportCase"]>
@@ -6785,6 +6809,10 @@ export namespace Prisma {
     status?: boolean
     resolutionNote?: boolean
     resolvedBy?: boolean
+    buyerEvidence?: boolean
+    sellerEvidence?: boolean
+    verdict?: boolean
+    slaDeadline?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }
@@ -6805,6 +6833,10 @@ export namespace Prisma {
       status: string
       resolutionNote: string | null
       resolvedBy: string | null
+      buyerEvidence: Prisma.JsonValue | null
+      sellerEvidence: Prisma.JsonValue | null
+      verdict: Prisma.JsonValue | null
+      slaDeadline: Date | null
       createdAt: Date
       updatedAt: Date
     }, ExtArgs["result"]["supportCase"]>
@@ -7211,6 +7243,10 @@ export namespace Prisma {
     readonly status: FieldRef<"SupportCase", 'String'>
     readonly resolutionNote: FieldRef<"SupportCase", 'String'>
     readonly resolvedBy: FieldRef<"SupportCase", 'String'>
+    readonly buyerEvidence: FieldRef<"SupportCase", 'Json'>
+    readonly sellerEvidence: FieldRef<"SupportCase", 'Json'>
+    readonly verdict: FieldRef<"SupportCase", 'Json'>
+    readonly slaDeadline: FieldRef<"SupportCase", 'DateTime'>
     readonly createdAt: FieldRef<"SupportCase", 'DateTime'>
     readonly updatedAt: FieldRef<"SupportCase", 'DateTime'>
   }
@@ -7606,6 +7642,10 @@ export namespace Prisma {
     status: 'status',
     resolutionNote: 'resolutionNote',
     resolvedBy: 'resolvedBy',
+    buyerEvidence: 'buyerEvidence',
+    sellerEvidence: 'sellerEvidence',
+    verdict: 'verdict',
+    slaDeadline: 'slaDeadline',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
   };
@@ -7619,6 +7659,14 @@ export namespace Prisma {
   };
 
   export type SortOrder = (typeof SortOrder)[keyof typeof SortOrder]
+
+
+  export const NullableJsonNullValueInput: {
+    DbNull: typeof DbNull,
+    JsonNull: typeof JsonNull
+  };
+
+  export type NullableJsonNullValueInput = (typeof NullableJsonNullValueInput)[keyof typeof NullableJsonNullValueInput]
 
 
   export const QueryMode: {
@@ -7635,6 +7683,15 @@ export namespace Prisma {
   };
 
   export type NullsOrder = (typeof NullsOrder)[keyof typeof NullsOrder]
+
+
+  export const JsonNullValueFilter: {
+    DbNull: typeof DbNull,
+    JsonNull: typeof JsonNull,
+    AnyNull: typeof AnyNull
+  };
+
+  export type JsonNullValueFilter = (typeof JsonNullValueFilter)[keyof typeof JsonNullValueFilter]
 
 
   /**
@@ -7716,6 +7773,13 @@ export namespace Prisma {
    * Reference to a field of type 'Decimal[]'
    */
   export type ListDecimalFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Decimal[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'Json'
+   */
+  export type JsonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Json'>
     
 
 
@@ -8159,6 +8223,10 @@ export namespace Prisma {
     status?: StringFilter<"SupportCase"> | string
     resolutionNote?: StringNullableFilter<"SupportCase"> | string | null
     resolvedBy?: StringNullableFilter<"SupportCase"> | string | null
+    buyerEvidence?: JsonNullableFilter<"SupportCase">
+    sellerEvidence?: JsonNullableFilter<"SupportCase">
+    verdict?: JsonNullableFilter<"SupportCase">
+    slaDeadline?: DateTimeNullableFilter<"SupportCase"> | Date | string | null
     createdAt?: DateTimeFilter<"SupportCase"> | Date | string
     updatedAt?: DateTimeFilter<"SupportCase"> | Date | string
   }
@@ -8175,6 +8243,10 @@ export namespace Prisma {
     status?: SortOrder
     resolutionNote?: SortOrderInput | SortOrder
     resolvedBy?: SortOrderInput | SortOrder
+    buyerEvidence?: SortOrderInput | SortOrder
+    sellerEvidence?: SortOrderInput | SortOrder
+    verdict?: SortOrderInput | SortOrder
+    slaDeadline?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -8194,6 +8266,10 @@ export namespace Prisma {
     status?: StringFilter<"SupportCase"> | string
     resolutionNote?: StringNullableFilter<"SupportCase"> | string | null
     resolvedBy?: StringNullableFilter<"SupportCase"> | string | null
+    buyerEvidence?: JsonNullableFilter<"SupportCase">
+    sellerEvidence?: JsonNullableFilter<"SupportCase">
+    verdict?: JsonNullableFilter<"SupportCase">
+    slaDeadline?: DateTimeNullableFilter<"SupportCase"> | Date | string | null
     createdAt?: DateTimeFilter<"SupportCase"> | Date | string
     updatedAt?: DateTimeFilter<"SupportCase"> | Date | string
   }, "id">
@@ -8210,6 +8286,10 @@ export namespace Prisma {
     status?: SortOrder
     resolutionNote?: SortOrderInput | SortOrder
     resolvedBy?: SortOrderInput | SortOrder
+    buyerEvidence?: SortOrderInput | SortOrder
+    sellerEvidence?: SortOrderInput | SortOrder
+    verdict?: SortOrderInput | SortOrder
+    slaDeadline?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     _count?: SupportCaseCountOrderByAggregateInput
@@ -8232,6 +8312,10 @@ export namespace Prisma {
     status?: StringWithAggregatesFilter<"SupportCase"> | string
     resolutionNote?: StringNullableWithAggregatesFilter<"SupportCase"> | string | null
     resolvedBy?: StringNullableWithAggregatesFilter<"SupportCase"> | string | null
+    buyerEvidence?: JsonNullableWithAggregatesFilter<"SupportCase">
+    sellerEvidence?: JsonNullableWithAggregatesFilter<"SupportCase">
+    verdict?: JsonNullableWithAggregatesFilter<"SupportCase">
+    slaDeadline?: DateTimeNullableWithAggregatesFilter<"SupportCase"> | Date | string | null
     createdAt?: DateTimeWithAggregatesFilter<"SupportCase"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"SupportCase"> | Date | string
   }
@@ -8705,6 +8789,10 @@ export namespace Prisma {
     status?: string
     resolutionNote?: string | null
     resolvedBy?: string | null
+    buyerEvidence?: NullableJsonNullValueInput | InputJsonValue
+    sellerEvidence?: NullableJsonNullValueInput | InputJsonValue
+    verdict?: NullableJsonNullValueInput | InputJsonValue
+    slaDeadline?: Date | string | null
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -8721,6 +8809,10 @@ export namespace Prisma {
     status?: string
     resolutionNote?: string | null
     resolvedBy?: string | null
+    buyerEvidence?: NullableJsonNullValueInput | InputJsonValue
+    sellerEvidence?: NullableJsonNullValueInput | InputJsonValue
+    verdict?: NullableJsonNullValueInput | InputJsonValue
+    slaDeadline?: Date | string | null
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -8737,6 +8829,10 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     resolutionNote?: NullableStringFieldUpdateOperationsInput | string | null
     resolvedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    buyerEvidence?: NullableJsonNullValueInput | InputJsonValue
+    sellerEvidence?: NullableJsonNullValueInput | InputJsonValue
+    verdict?: NullableJsonNullValueInput | InputJsonValue
+    slaDeadline?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -8753,6 +8849,10 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     resolutionNote?: NullableStringFieldUpdateOperationsInput | string | null
     resolvedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    buyerEvidence?: NullableJsonNullValueInput | InputJsonValue
+    sellerEvidence?: NullableJsonNullValueInput | InputJsonValue
+    verdict?: NullableJsonNullValueInput | InputJsonValue
+    slaDeadline?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -8769,6 +8869,10 @@ export namespace Prisma {
     status?: string
     resolutionNote?: string | null
     resolvedBy?: string | null
+    buyerEvidence?: NullableJsonNullValueInput | InputJsonValue
+    sellerEvidence?: NullableJsonNullValueInput | InputJsonValue
+    verdict?: NullableJsonNullValueInput | InputJsonValue
+    slaDeadline?: Date | string | null
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -8785,6 +8889,10 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     resolutionNote?: NullableStringFieldUpdateOperationsInput | string | null
     resolvedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    buyerEvidence?: NullableJsonNullValueInput | InputJsonValue
+    sellerEvidence?: NullableJsonNullValueInput | InputJsonValue
+    verdict?: NullableJsonNullValueInput | InputJsonValue
+    slaDeadline?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -8801,6 +8909,10 @@ export namespace Prisma {
     status?: StringFieldUpdateOperationsInput | string
     resolutionNote?: NullableStringFieldUpdateOperationsInput | string | null
     resolvedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    buyerEvidence?: NullableJsonNullValueInput | InputJsonValue
+    sellerEvidence?: NullableJsonNullValueInput | InputJsonValue
+    verdict?: NullableJsonNullValueInput | InputJsonValue
+    slaDeadline?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -9341,6 +9453,28 @@ export namespace Prisma {
   export type CarrierSumOrderByAggregateInput = {
     id?: SortOrder
   }
+  export type JsonNullableFilter<$PrismaModel = never> = 
+    | PatchUndefined<
+        Either<Required<JsonNullableFilterBase<$PrismaModel>>, Exclude<keyof Required<JsonNullableFilterBase<$PrismaModel>>, 'path'>>,
+        Required<JsonNullableFilterBase<$PrismaModel>>
+      >
+    | OptionalFlat<Omit<Required<JsonNullableFilterBase<$PrismaModel>>, 'path'>>
+
+  export type JsonNullableFilterBase<$PrismaModel = never> = {
+    equals?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+    path?: string[]
+    string_contains?: string | StringFieldRefInput<$PrismaModel>
+    string_starts_with?: string | StringFieldRefInput<$PrismaModel>
+    string_ends_with?: string | StringFieldRefInput<$PrismaModel>
+    array_contains?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_starts_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_ends_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    lt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    lte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    not?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+  }
 
   export type SupportCaseCountOrderByAggregateInput = {
     id?: SortOrder
@@ -9354,6 +9488,10 @@ export namespace Prisma {
     status?: SortOrder
     resolutionNote?: SortOrder
     resolvedBy?: SortOrder
+    buyerEvidence?: SortOrder
+    sellerEvidence?: SortOrder
+    verdict?: SortOrder
+    slaDeadline?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -9370,6 +9508,7 @@ export namespace Prisma {
     status?: SortOrder
     resolutionNote?: SortOrder
     resolvedBy?: SortOrder
+    slaDeadline?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -9386,8 +9525,34 @@ export namespace Prisma {
     status?: SortOrder
     resolutionNote?: SortOrder
     resolvedBy?: SortOrder
+    slaDeadline?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
+  }
+  export type JsonNullableWithAggregatesFilter<$PrismaModel = never> = 
+    | PatchUndefined<
+        Either<Required<JsonNullableWithAggregatesFilterBase<$PrismaModel>>, Exclude<keyof Required<JsonNullableWithAggregatesFilterBase<$PrismaModel>>, 'path'>>,
+        Required<JsonNullableWithAggregatesFilterBase<$PrismaModel>>
+      >
+    | OptionalFlat<Omit<Required<JsonNullableWithAggregatesFilterBase<$PrismaModel>>, 'path'>>
+
+  export type JsonNullableWithAggregatesFilterBase<$PrismaModel = never> = {
+    equals?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+    path?: string[]
+    string_contains?: string | StringFieldRefInput<$PrismaModel>
+    string_starts_with?: string | StringFieldRefInput<$PrismaModel>
+    string_ends_with?: string | StringFieldRefInput<$PrismaModel>
+    array_contains?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_starts_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_ends_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    lt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    lte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    not?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedJsonNullableFilter<$PrismaModel>
+    _max?: NestedJsonNullableFilter<$PrismaModel>
   }
 
   export type SkuInventoryCreateNestedManyWithoutWarehouseInput = {
@@ -9876,6 +10041,28 @@ export namespace Prisma {
     _count?: NestedIntNullableFilter<$PrismaModel>
     _min?: NestedDateTimeNullableFilter<$PrismaModel>
     _max?: NestedDateTimeNullableFilter<$PrismaModel>
+  }
+  export type NestedJsonNullableFilter<$PrismaModel = never> = 
+    | PatchUndefined<
+        Either<Required<NestedJsonNullableFilterBase<$PrismaModel>>, Exclude<keyof Required<NestedJsonNullableFilterBase<$PrismaModel>>, 'path'>>,
+        Required<NestedJsonNullableFilterBase<$PrismaModel>>
+      >
+    | OptionalFlat<Omit<Required<NestedJsonNullableFilterBase<$PrismaModel>>, 'path'>>
+
+  export type NestedJsonNullableFilterBase<$PrismaModel = never> = {
+    equals?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+    path?: string[]
+    string_contains?: string | StringFieldRefInput<$PrismaModel>
+    string_starts_with?: string | StringFieldRefInput<$PrismaModel>
+    string_ends_with?: string | StringFieldRefInput<$PrismaModel>
+    array_contains?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_starts_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_ends_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    lt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    lte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    not?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
   }
 
   export type SkuInventoryCreateWithoutWarehouseInput = {

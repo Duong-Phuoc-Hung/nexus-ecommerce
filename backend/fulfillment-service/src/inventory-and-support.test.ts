@@ -583,3 +583,51 @@ test('Task 3 - Failed Delivery & RTO: POST request-redelivery and confirm-return
     assert.match(returnJson.data.currentLocation, /kho người bán/);
   });
 });
+
+test('Ticket 4 - Buyer Support Cases by Order: GET /api/v1/support/cases/by-order/:orderId', async () => {
+  await withFulfillmentServer(async (baseUrl) => {
+    const buyerToken = createTestToken({
+      sub: 'usr_buyer_001',
+      email: 'buyer@nexus.vn',
+      role: 'BUYER',
+    });
+
+    // 1. Tạo case mới kèm bằng chứng
+    const createRes = await fetch(`${baseUrl}/api/v1/support/cases`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${buyerToken}`,
+      },
+      body: JSON.stringify({
+        orderId: 'NX-ORD-TEST-CASE-888',
+        orderCode: 'NX-ORD-TEST-CASE-888',
+        customer: 'Nguyen Van Test',
+        reason: 'Sản phẩm lỗi không lên nguồn',
+        buyerEvidence: {
+          photos: ['https://storage.nexus.vn/evidence/box_defect.png'],
+          note: 'Không có đèn báo tín hiệu',
+        },
+      }),
+    });
+    assert.equal(createRes.status, 201);
+
+    // 2. Tra cứu qua GET /api/v1/support/cases/by-order/:orderId
+    const getRes = await fetch(`${baseUrl}/api/v1/support/cases/by-order/NX-ORD-TEST-CASE-888`, {
+      headers: {
+        Authorization: `Bearer ${buyerToken}`,
+      },
+    });
+    assert.equal(getRes.status, 200);
+    const getJson = (await getRes.json()) as any;
+    assert.equal(getJson.success, true);
+    assert.equal(getJson.data.orderId, 'NX-ORD-TEST-CASE-888');
+    assert.equal(getJson.data.reason, 'Sản phẩm lỗi không lên nguồn');
+    assert.equal(
+      getJson.data.buyerEvidence.photos[0],
+      'https://storage.nexus.vn/evidence/box_defect.png',
+    );
+    // Không có link Unsplash giả
+    assert.ok(!JSON.stringify(getJson.data.buyerEvidence).includes('images.unsplash.com'));
+  });
+});

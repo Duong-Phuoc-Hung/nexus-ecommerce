@@ -19,6 +19,7 @@ export interface SupportCaseSearchPage {
 
 export interface ISupportCaseRepository {
   findById(id: string): Promise<SupportCase | null>;
+  findByOrderId(orderId: string): Promise<SupportCase | null>;
   search(criteria: SupportCaseSearchCriteria): Promise<SupportCaseSearchPage>;
   save(caseItem: SupportCase): Promise<void>;
 }
