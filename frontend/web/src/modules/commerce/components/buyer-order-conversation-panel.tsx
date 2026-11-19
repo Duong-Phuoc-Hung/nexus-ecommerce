@@ -32,6 +32,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { useSession } from '@/modules/auth/hooks/use-session';
 import type { DamageAssessmentVerdict } from '@/modules/chat/api/buyer-assistant.api';
 import { useBuyerAssistant } from '@/modules/chat/context/buyer-assistant-provider';
+import { commerceApi } from '@/modules/commerce/api/commerce.api';
 import {
   fetchReadOnlyOrderShipment,
   generateClientUuid,
@@ -49,6 +50,15 @@ import type {
   OrderMessage,
 } from '@/modules/commerce/types/order-conversation.types';
 
+const MAX_CASE_IMAGES = 4;
+
+function isAllowedCaseImageFile(file: File): boolean {
+  const mime = (file.type || '').toLowerCase();
+  if (['image/jpeg', 'image/png', 'image/webp'].includes(mime)) return true;
+  if (!mime && /\.(jpe?g|png|webp)$/i.test(file.name || '')) return true;
+  return false;
+}
+
 const CASE_TYPE_OPTIONS: Array<{
   value: ComplaintCaseType;
   label: string;
@@ -57,7 +67,7 @@ const CASE_TYPE_OPTIONS: Array<{
   {
     value: 'DAMAGED_ITEM',
     label: 'Báo hàng vỡ / Hư hỏng khi nhận',
-    desc: 'Sản phẩm bị móp méo, nứt vỡ, rách niêm phong hoặc hư hại khi giao tới.',
+    desc: 'Sản phẩm bị móp méo, nứt vỡ, rách niêm phong hoặc hư hại khi giao tới (cần ảnh).',
   },
   {
     value: 'WRONG_ITEM',
@@ -66,13 +76,18 @@ const CASE_TYPE_OPTIONS: Array<{
   },
   {
     value: 'DELIVERY_ISSUE',
-    label: 'Sự cố giao nhận / Chậm trễ vận đơn',
-    desc: 'Vận đơn báo đã giao nhưng chưa nhận được hàng hoặc quá hạn bàn giao.',
+    label: 'Sự cố giao nhận / Chưa nhận hàng',
+    desc: 'Hệ thống ghi đã giao nhưng thực tế bạn chưa nhận được kiện hàng.',
+  },
+  {
+    value: 'RETURN_REQUEST',
+    label: 'Yêu cầu trả hàng / Hoàn tiền',
+    desc: 'Đề nghị trả lại hàng đã nhận và tạo yêu cầu đối soát hoàn tiền trên đơn hàng.',
   },
   {
     value: 'OTHER',
-    label: 'Yêu cầu trả hàng / Khiếu nại khác',
-    desc: 'Mở hồ sơ đề nghị trả hàng đã giao hoặc đối soát thanh toán.',
+    label: 'Khiếu nại khác',
+    desc: 'Các vấn đề khác cần Bộ phận Hỗ trợ kiểm tra (không tự gửi yêu cầu hoàn tiền).',
   },
 ];
 
@@ -93,10 +108,15 @@ const CASE_CATEGORY_BY_TYPE: Record<ComplaintCaseType, string[]> = {
     'Đơn hàng quá hạn bàn giao vận chuyển nhiều ngày',
     'Hành trình vận đơn đứng yên bất thường trên hệ thống',
   ],
-  OTHER: [
+  RETURN_REQUEST: [
     'Yêu cầu trả hàng / hoàn tiền do sản phẩm lỗi kỹ thuật',
-    'Đã thanh toán PayOS nhưng trạng thái đơn / hoàn tiền chưa khớp',
-    'Người bán không phản hồi tin nhắn xử lý sự cố',
+    'Sản phẩm không đúng mô tả, đề nghị trả hàng hoàn tiền',
+    'Thiếu linh kiện quan trọng không thể sử dụng, đề nghị trả hàng',
+  ],
+  OTHER: [
+    'Đã thanh toán nhưng trạng thái tiền trên đơn chưa khớp',
+    'Người bán không phản hồi tin nhắn xử lý sau khi nhận hàng',
+    'Vấn đề khác cần Bộ phận Hỗ trợ kiểm tra đối soát',
   ],
 };
 
@@ -118,6 +138,8 @@ function sanitizePhoneInput(raw: string): string {
 
 export interface BuyerOrderConversationPanelProps {
   order: OrderDetail;
+  canOpenCase: boolean;
+  hasActiveCase?: boolean;
   recipientName: string;
   recipientPhone: string;
   onCaseCreated?: (createdCase: OrderConversationCaseSummary) => void;
@@ -130,6 +152,8 @@ export interface BuyerOrderConversationPanelProps {
 
 export function BuyerOrderConversationPanel({
   order,
+  canOpenCase,
+  hasActiveCase = false,
   recipientName,
   recipientPhone,
   onCaseCreated,
@@ -161,6 +185,8 @@ export function BuyerOrderConversationPanel({
   const [hasOlderMessages, setHasOlderMessages] = useState<boolean>(false);
   const [loadingConversation, setLoadingConversation] = useState<boolean>(false);
   const [loadingOlder, setLoadingOlder] = useState<boolean>(false);
+  const [roomError, setRoomError] = useState<string>('');
+  const [historyError, setHistoryError] = useState<string>('');
 
   // Vận đơn chỉ đọc (?readOnly=true)
   const [shipmentSnapshot, setShipmentSnapshot] = useState<ReadOnlyOrderShipmentSnapshot | null>(
@@ -181,6 +207,10 @@ export function BuyerOrderConversationPanel({
   const [escalateModalOpen, setEscalateModalOpen] = useState<boolean>(false);
   const [selectedShareSeqs, setSelectedShareSeqs] = useState<Record<number, boolean>>({});
   const [escalateReason, setEscalateReason] = useState<string>('');
+  const [escalateError, setEscalateError] = useState<string>('');
+  const [escalatingToSupport, setEscalatingToSupport] = useState<boolean>(false);
+  const [retryingRefund, setRetryingRefund] = useState<boolean>(false);
+  const [syncingRefund, setSyncingRefund] = useState<boolean>(false);
 
   // Simulator bar (chỉ hiện khi URL có ?sim=1)
   const [showSimulatorBar, setShowSimulatorBar] = useState<boolean>(false);
@@ -215,6 +245,7 @@ export function BuyerOrderConversationPanel({
   const composerFileInputRef = useRef<HTMLInputElement | null>(null);
   const caseFileInputRef = useRef<HTMLInputElement | null>(null);
   const handledUrlTriggerRef = useRef<string>('');
+  const openRequestSeqRef = useRef<number>(0);
 
   const selectedSeller = useMemo(
     () =>
@@ -246,13 +277,59 @@ export function BuyerOrderConversationPanel({
     void refreshReadOnlyShipment();
   }, [refreshReadOnlyShipment]);
 
+  const loadMessagesForConversation = useCallback(
+    async (conv: OrderConversation, reqSeq = openRequestSeqRef.current) => {
+      setHistoryError('');
+      try {
+        const listResult = await orderConversationsApi.listMessages(conv.id, {
+          limit: 30,
+          recipientLabel: conv.recipientLabel,
+        });
+        if (reqSeq !== openRequestSeqRef.current) return;
+        setMessages(listResult.items);
+        setHasOlderMessages(listResult.hasOlder);
+
+        const maxSeq = listResult.items.reduce((acc, m) => Math.max(acc, m.seq), 0);
+        if (listResult.meta) {
+          setConversation((prev) =>
+            prev && prev.id === conv.id
+              ? {
+                  ...prev,
+                  lastSeq: listResult.meta?.lastSeq ?? prev.lastSeq,
+                  buyerLastReadSeq: listResult.meta?.buyerLastReadSeq ?? prev.buyerLastReadSeq,
+                  counterpartLastReadSeq:
+                    listResult.meta?.counterpartLastReadSeq ?? prev.counterpartLastReadSeq,
+                }
+              : prev,
+          );
+        }
+        if (maxSeq > conv.buyerLastReadSeq) {
+          void orderConversationsApi.markAsRead(conv.id, maxSeq).catch(() => {});
+        }
+      } catch {
+        if (reqSeq !== openRequestSeqRef.current) return;
+        setHistoryError('Chưa tải được lịch sử tin nhắn · Thử lại');
+      }
+    },
+    [],
+  );
+
   const openChannelWorkspace = useCallback(
     async (channel: ConversationChannel, sellerIdOverride?: string) => {
       const targetSellerId =
         channel === 'SELLER' ? sellerIdOverride || selectedSeller.sellerId : undefined;
+      const reqSeq = ++openRequestSeqRef.current;
+
       setIsWorkspaceOpen(true);
       setActiveChannel(channel);
+      setConversation(null);
+      setMessages([]);
+      setPendingAttachments([]);
+      setComposerText('');
+      setHasOlderMessages(false);
       setLoadingConversation(true);
+      setRoomError('');
+      setHistoryError('');
       setComposerError('');
 
       try {
@@ -262,27 +339,31 @@ export function BuyerOrderConversationPanel({
           sellerId: targetSellerId,
           sellerName: selectedSeller.sellerName,
         });
-        setConversation(opened.conversation);
-
-        const listResult = await orderConversationsApi.listMessages(opened.conversation.id, {
-          limit: 20,
-        });
-        setMessages(listResult.items);
-        setHasOlderMessages(listResult.hasOlder);
-
-        const maxSeq = listResult.items.reduce((acc, m) => Math.max(acc, m.seq), 0);
-        if (maxSeq > opened.conversation.buyerLastReadSeq) {
-          await orderConversationsApi.markAsRead(opened.conversation.id, maxSeq);
+        if (reqSeq !== openRequestSeqRef.current) return;
+        if (!opened.conversation?.id) {
+          setConversation(null);
+          setRoomError('Chưa mở được hội thoại · Thử lại');
+          return;
         }
-      } catch (err) {
-        setComposerError(
-          err instanceof Error ? err.message : 'Chưa thể tải hội thoại lúc này. Vui lòng thử lại.',
-        );
+        setConversation(opened.conversation);
+        await loadMessagesForConversation(opened.conversation, reqSeq);
+      } catch {
+        if (reqSeq !== openRequestSeqRef.current) return;
+        setConversation(null);
+        setRoomError('Chưa mở được hội thoại · Thử lại');
       } finally {
-        setLoadingConversation(false);
+        if (reqSeq === openRequestSeqRef.current) {
+          setLoadingConversation(false);
+        }
       }
     },
-    [buyerId, order, selectedSeller.sellerId, selectedSeller.sellerName],
+    [
+      buyerId,
+      loadMessagesForConversation,
+      order,
+      selectedSeller.sellerId,
+      selectedSeller.sellerName,
+    ],
   );
 
   const handleOpenCaseModal = useCallback(
@@ -290,7 +371,9 @@ export function BuyerOrderConversationPanel({
       initialType: ComplaintCaseType = 'DAMAGED_ITEM',
       prefill?: { category?: string; description?: string },
     ) => {
+      if (!canOpenCase) return;
       collapseAssistant();
+      setCaseAttachments([]);
       setCaseType(initialType);
       const defaultCategories = CASE_CATEGORY_BY_TYPE[initialType];
       setCaseCategory(prefill?.category || defaultCategories[0] || '');
@@ -310,12 +393,22 @@ export function BuyerOrderConversationPanel({
       setCaseIdempotencyKey(generateClientUuid());
       setCaseModalOpen(true);
     },
-    [collapseAssistant, order.items, recipientPhone],
+    [canOpenCase, collapseAssistant, order.items, recipientPhone],
   );
 
   // Polling có kiểm soát (`after=cursor`) khi khung hội thoại đang mở
   useEffect(() => {
-    if (!isWorkspaceOpen || !conversation) return;
+    if (
+      !isWorkspaceOpen ||
+      !conversation?.id ||
+      conversation.channel !== activeChannel ||
+      Boolean(roomError)
+    ) {
+      return;
+    }
+
+    const activeConvId = conversation.id;
+    const seqAtStart = openRequestSeqRef.current;
 
     const timer = window.setInterval(async () => {
       try {
@@ -323,14 +416,15 @@ export function BuyerOrderConversationPanel({
           (max, m) => (m.seq > max && m.deliveryStatus !== 'failed' ? m.seq : max),
           0,
         );
-        const polled = await orderConversationsApi.listMessages(conversation.id, {
+        const polled = await orderConversationsApi.listMessages(activeConvId, {
           after: highestSeq,
         });
+        if (seqAtStart !== openRequestSeqRef.current) return;
         if (polled.conversation) {
           setConversation(polled.conversation);
         } else if (polled.meta) {
           setConversation((prev) =>
-            prev
+            prev && prev.id === activeConvId
               ? {
                   ...prev,
                   lastSeq: Math.max(prev.lastSeq, polled.meta?.lastSeq || 0),
@@ -358,7 +452,7 @@ export function BuyerOrderConversationPanel({
             return merged.sort((a, b) => a.seq - b.seq);
           });
           const latestSeq = polled.items[polled.items.length - 1]?.seq || highestSeq;
-          await orderConversationsApi.markAsRead(conversation.id, latestSeq);
+          await orderConversationsApi.markAsRead(activeConvId, latestSeq);
         }
       } catch {
         // Bỏ qua lỗi mạng tạm thời trong lúc polling nền
@@ -366,7 +460,7 @@ export function BuyerOrderConversationPanel({
     }, 4500);
 
     return () => window.clearInterval(timer);
-  }, [conversation, isWorkspaceOpen, messages]);
+  }, [activeChannel, conversation, isWorkspaceOpen, messages, roomError]);
 
   // Đồng bộ từ các nút trong trang Chi tiết đơn (`buyer-order-detail-page.tsx`)
   useEffect(() => {
@@ -419,7 +513,11 @@ export function BuyerOrderConversationPanel({
     }
 
     if (chatParam === 'complaint') {
-      handleOpenCaseModal('DAMAGED_ITEM', { description: savedDraft });
+      if (canOpenCase) {
+        handleOpenCaseModal('DAMAGED_ITEM', { description: savedDraft });
+      } else if (hasActiveCase) {
+        void openChannelWorkspace('SUPPORT');
+      }
     } else if (chatParam === 'seller') {
       void openChannelWorkspace('SELLER');
       if (savedDraft) setComposerText((prev) => prev || savedDraft);
@@ -427,17 +525,19 @@ export function BuyerOrderConversationPanel({
       void openChannelWorkspace('SUPPORT');
       if (savedDraft) setComposerText((prev) => prev || savedDraft);
     }
-  }, [handleOpenCaseModal, openChannelWorkspace, order.id, user?.id]);
+  }, [canOpenCase, handleOpenCaseModal, hasActiveCase, openChannelWorkspace, order.id, user?.id]);
 
   const handleLoadOlderMessages = async () => {
     if (!conversation || messages.length === 0 || loadingOlder) return;
     const oldestSeq = messages[0].seq;
+    const reqSeq = openRequestSeqRef.current;
     setLoadingOlder(true);
     try {
       const older = await orderConversationsApi.listMessages(conversation.id, {
         before: oldestSeq,
         limit: 15,
       });
+      if (reqSeq !== openRequestSeqRef.current) return;
       setHasOlderMessages(older.hasOlder);
       if (older.items.length > 0) {
         setMessages((prev) => {
@@ -454,11 +554,13 @@ export function BuyerOrderConversationPanel({
   const handleComposerFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || !conversation) return;
+    const reqSeq = openRequestSeqRef.current;
     setComposerError('');
     setUploadingAttachment(true);
     try {
       for (const file of Array.from(files)) {
         const uploaded = await orderConversationsApi.uploadAttachment(conversation.id, file);
+        if (reqSeq !== openRequestSeqRef.current) return;
         setPendingAttachments((prev) => [...prev, uploaded]);
       }
     } catch (err) {
@@ -472,7 +574,9 @@ export function BuyerOrderConversationPanel({
   };
 
   const handleSendMessage = async (retryMessage?: OrderMessage) => {
-    if (!conversation) return;
+    if (!conversation?.id || loadingConversation || Boolean(roomError)) return;
+    const targetConvId = conversation.id;
+    const reqSeqAtSend = openRequestSeqRef.current;
 
     const rawBody = retryMessage ? retryMessage.body : composerText;
     const trimmedBody = rawBody.trim();
@@ -497,7 +601,7 @@ export function BuyerOrderConversationPanel({
       retryMessage?.seq || messages.reduce((max, m) => Math.max(max, m.seq), 0) + 1;
 
     const optimisticMsg: OrderMessage = {
-      conversationId: conversation.id,
+      conversationId: targetConvId,
       seq: optimisticSeq,
       authorId: buyerId,
       authorName: buyerName,
@@ -515,8 +619,6 @@ export function BuyerOrderConversationPanel({
       );
     } else {
       setMessages((prev) => [...prev, optimisticMsg]);
-      setComposerText('');
-      setPendingAttachments([]);
     }
 
     setSendingMessage(true);
@@ -530,7 +632,7 @@ export function BuyerOrderConversationPanel({
         buyerId,
         buyerName,
         {
-          conversationId: conversation.id,
+          conversationId: targetConvId,
           clientMessageId,
           text: trimmedBody,
           attachmentIds: attachmentsToSend.map((a) => a.attachmentId),
@@ -538,6 +640,12 @@ export function BuyerOrderConversationPanel({
         { simulateNetworkFailure: shouldFailNow },
       );
 
+      if (reqSeqAtSend !== openRequestSeqRef.current) return;
+
+      if (!retryMessage) {
+        setComposerText('');
+        setPendingAttachments([]);
+      }
       setMessages((prev) =>
         prev.map((m) => (m.clientMessageId === clientMessageId ? result.message : m)),
       );
@@ -548,8 +656,8 @@ export function BuyerOrderConversationPanel({
         messageListBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 60);
     } catch (err) {
-      const errorText =
-        err instanceof Error ? err.message : 'Gửi tin nhắn chưa thành công. Vui lòng thử lại.';
+      if (reqSeqAtSend !== openRequestSeqRef.current) return;
+      const errorText = err instanceof Error ? err.message : 'Gửi thất bại · Vui lòng thử lại.';
       setMessages((prev) =>
         prev.map((m) =>
           m.clientMessageId === clientMessageId
@@ -603,8 +711,16 @@ export function BuyerOrderConversationPanel({
         body: m.body,
         createdAt: m.createdAt,
       }));
+    const trimmedReason = escalateReason.trim();
+    if (sharedMessages.length === 0 && trimmedReason.length < 5) {
+      setEscalateError(
+        'Vui lòng chọn ít nhất 1 tin nhắn hoặc nhập lý do ngắn (tối thiểu 5 ký tự).',
+      );
+      return;
+    }
 
-    setEscalateModalOpen(false);
+    setEscalateError('');
+    setEscalatingToSupport(true);
     setComposerError('');
     try {
       await openChannelWorkspace('SUPPORT');
@@ -618,7 +734,7 @@ export function BuyerOrderConversationPanel({
         conversationId: supportOpened.conversation.id,
         orderId: String(order.id),
         topic:
-          escalateReason.trim() ||
+          trimmedReason ||
           `Chuyển tiếp từ hội thoại với ${selectedSeller.sellerName} sang Bộ phận Hỗ trợ (Đơn #${order.id}).`,
         sharedFromSellerConversationId: sellerConvId,
         sharedMessages,
@@ -629,48 +745,72 @@ export function BuyerOrderConversationPanel({
         limit: 30,
       });
       setMessages(updatedList.items);
+      setEscalateModalOpen(false);
     } catch (err) {
-      setComposerError(
-        err instanceof Error ? err.message : 'Chưa thể chuyển tiếp sang Bộ phận Hỗ trợ.',
+      setEscalateError(
+        err instanceof Error
+          ? err.message
+          : 'Chưa thể chuyển tiếp sang Bộ phận Hỗ trợ lúc này. Vui lòng thử lại.',
       );
+    } finally {
+      setEscalatingToSupport(false);
     }
   };
 
   const handleCaseFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files || files.length === 0) return;
+    if (!canOpenCase || !files?.length) return;
+
+    const incoming = Array.from(files);
+    if (caseAttachments.length + incoming.length > MAX_CASE_IMAGES) {
+      setCaseFieldErrors((prev) => ({
+        ...prev,
+        attachments: `Mỗi hồ sơ đính kèm tối đa ${MAX_CASE_IMAGES} ảnh (hiện đã có ${caseAttachments.length} ảnh).`,
+      }));
+      if (caseFileInputRef.current) caseFileInputRef.current.value = '';
+      return;
+    }
 
     setCaseFieldErrors((prev) => ({ ...prev, attachments: undefined }));
     setCaseUploadingFile(true);
     try {
-      let targetConv = conversation;
-      if (!targetConv) {
-        const opened = await orderConversationsApi.openOrGetConversation(order, buyerId, {
-          orderId: String(order.id),
-          channel: 'SUPPORT',
-        });
-        targetConv = opened.conversation;
-        setConversation(opened.conversation);
+      for (const file of incoming) {
+        if (!isAllowedCaseImageFile(file) || file.size > 5 * 1024 * 1024) {
+          throw new Error('Vui lòng chọn ảnh JPG, PNG hoặc WEBP, tối đa 5 MB mỗi ảnh.');
+        }
       }
-      for (const file of Array.from(files)) {
+
+      let targetConv = conversation?.channel === 'SUPPORT' ? conversation : null;
+      if (!targetConv) {
+        try {
+          const opened = await orderConversationsApi.openOrGetConversation(order, buyerId, {
+            orderId: String(order.id),
+            channel: 'SUPPORT',
+          });
+          targetConv = opened.conversation;
+        } catch {
+          throw new Error(
+            'Dịch vụ tải ảnh đính kèm (Chat) đang gián đoạn. Vui lòng thử lại hoặc chọn loại khiếu nại không yêu cầu ảnh nếu phù hợp.',
+          );
+        }
+      }
+      for (const file of incoming) {
         const uploaded = await orderConversationsApi.uploadAttachment(targetConv.id, file);
         setCaseAttachments((prev) => [...prev, uploaded]);
-        if (file.type.startsWith('image/')) {
-          const firstItemName = order.items?.[0]?.productName || undefined;
-          void orderConversationsApi
-            .assessDamageImage(file, firstItemName)
-            .then((verdict) => {
-              if (verdict && !verdict.summary?.startsWith('[MOCK]')) {
-                setCaseAiVerdict(verdict);
-              }
-            })
-            .catch(() => {});
-        }
+        const firstItemName = order.items?.[0]?.productName || undefined;
+        void orderConversationsApi
+          .assessDamageImage(file, firstItemName)
+          .then((verdict) => {
+            if (verdict && !verdict.summary?.startsWith('[MOCK]')) {
+              setCaseAiVerdict(verdict);
+            }
+          })
+          .catch(() => {});
       }
     } catch (err) {
       setCaseFieldErrors((prev) => ({
         ...prev,
-        attachments: err instanceof Error ? err.message : 'Chưa thể tải lên tệp bằng chứng.',
+        attachments: err instanceof Error ? err.message : 'Chưa thể tải lên ảnh bằng chứng.',
       }));
     } finally {
       setCaseUploadingFile(false);
@@ -682,7 +822,11 @@ export function BuyerOrderConversationPanel({
 
   const handleProceedToCaseReview = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canOpenCase || caseUploadingFile) return;
     const errors: typeof caseFieldErrors = {};
+    if (caseType === 'DAMAGED_ITEM' && caseAttachments.length === 0) {
+      errors.attachments = 'Vui lòng tải ít nhất một ảnh thể hiện phần hàng bị hư hỏng.';
+    }
 
     if (!caseCategory.trim()) {
       errors.category = 'Vui lòng chọn phân loại sự cố.';
@@ -721,18 +865,30 @@ export function BuyerOrderConversationPanel({
   };
 
   const handleConfirmSubmitCase = async () => {
+    if (!canOpenCase || caseUploadingFile || submittingCase) return;
+    if (caseType === 'DAMAGED_ITEM' && caseAttachments.length === 0) {
+      setCaseFieldErrors({
+        attachments: 'Vui lòng tải ít nhất một ảnh thể hiện phần hàng bị hư hỏng.',
+      });
+      setCaseStep('FORM');
+      return;
+    }
     setSubmittingCase(true);
     setCaseFieldErrors((prev) => ({ ...prev, submit: undefined }));
 
     try {
-      let targetConv = conversation;
+      let targetConv = conversation?.channel === 'SUPPORT' ? conversation : null;
       if (!targetConv) {
-        const opened = await orderConversationsApi.openOrGetConversation(order, buyerId, {
-          orderId: String(order.id),
-          channel: 'SUPPORT',
-        });
-        targetConv = opened.conversation;
-        setConversation(opened.conversation);
+        try {
+          const opened = await orderConversationsApi.openOrGetConversation(order, buyerId, {
+            orderId: String(order.id),
+            channel: 'SUPPORT',
+          });
+          targetConv = opened.conversation;
+        } catch {
+          // Cho phép gửi hồ sơ không cần ảnh thẳng tới Fulfillment khi dịch vụ Chat gián đoạn
+          targetConv = null;
+        }
       }
 
       const selectedItemsPayload = (order.items || [])
@@ -749,7 +905,7 @@ export function BuyerOrderConversationPanel({
         buyerId,
         buyerName,
         {
-          conversationId: targetConv.id,
+          conversationId: targetConv?.id || '',
           idempotencyKey: caseIdempotencyKey || generateClientUuid(),
           type: caseType,
           items: selectedItemsPayload,
@@ -763,17 +919,57 @@ export function BuyerOrderConversationPanel({
       );
 
       setCreatedCaseResult(result.caseSummary);
-      if (result.conversation) {
+      if (result.conversation && activeChannel === 'SUPPORT') {
         setConversation(result.conversation);
       }
-      setMessages((prev) => {
-        const exists = prev.some(
-          (m) => m.clientMessageId === result.confirmationMessage.clientMessageId,
-        );
-        return exists ? prev : [...prev, result.confirmationMessage];
-      });
+      if (
+        targetConv &&
+        activeChannel === 'SUPPORT' &&
+        conversation?.id === targetConv.id &&
+        result.confirmationMessage.conversationId
+      ) {
+        setMessages((prev) => {
+          const exists = prev.some(
+            (m) => m.clientMessageId === result.confirmationMessage.clientMessageId,
+          );
+          return exists ? prev : [...prev, result.confirmationMessage];
+        });
+      }
+      // Chuyển tiến trình UI ngay lập tức khi Fulfillment cấp mã hồ sơ thật
       setCaseStep('SUCCESS');
       onCaseCreated?.(result.caseSummary);
+      setSubmittingCase(false);
+
+      // Chỉ đồng bộ Commerce refund/request khi Buyer chọn RETURN_REQUEST trên đơn đã giao
+      if (
+        caseType === 'RETURN_REQUEST' &&
+        ['DELIVERED', 'COMPLETED'].includes((order.status || '').toUpperCase())
+      ) {
+        setSyncingRefund(true);
+        const itemSummary = selectedItemsPayload
+          .map((it) => `${it.productName} (x${it.quantity})`)
+          .join(', ');
+        const syncRes = await orderConversationsApi.syncReturnRefundRequest(
+          String(order.id),
+          `[Hồ sơ ${result.caseSummary.caseId}] ${fullDescription}\nSản phẩm: ${itemSummary}\nSĐT liên hệ: ${casePhone.trim()}`,
+          caseAttachments.map((a) => a.attachmentId),
+        );
+        const updatedCase: OrderConversationCaseSummary = syncRes.ok
+          ? {
+              ...result.caseSummary,
+              refundRequestStatus: 'SUBMITTED',
+              refundRequestError: undefined,
+            }
+          : {
+              ...result.caseSummary,
+              refundRequestStatus: 'FAILED',
+              refundRequestError: syncRes.errorMessage,
+            };
+        setCreatedCaseResult(updatedCase);
+        onCaseCreated?.(updatedCase);
+        setSyncingRefund(false);
+      }
+      return;
     } catch (err) {
       setCaseFieldErrors((prev) => ({
         ...prev,
@@ -784,6 +980,35 @@ export function BuyerOrderConversationPanel({
       }));
     } finally {
       setSubmittingCase(false);
+    }
+  };
+
+  const handleRetryRefundSync = async () => {
+    if (!createdCaseResult || retryingRefund) return;
+    setRetryingRefund(true);
+    try {
+      await commerceApi.requestRefund(
+        String(order.internalId || order.id),
+        `[${createdCaseResult.caseId}] ${createdCaseResult.description}`,
+      );
+      const updated: OrderConversationCaseSummary = {
+        ...createdCaseResult,
+        refundRequestStatus: 'SUBMITTED',
+        refundRequestError: undefined,
+      };
+      setCreatedCaseResult(updated);
+      onCaseCreated?.(updated);
+    } catch (err) {
+      const updated: OrderConversationCaseSummary = {
+        ...createdCaseResult,
+        refundRequestStatus: 'FAILED',
+        refundRequestError:
+          err instanceof Error ? err.message : 'Chưa thể gửi lại yêu cầu hoàn tiền.',
+      };
+      setCreatedCaseResult(updated);
+      onCaseCreated?.(updated);
+    } finally {
+      setRetryingRefund(false);
     }
   };
 
@@ -932,10 +1157,12 @@ export function BuyerOrderConversationPanel({
             <Button
               type="button"
               variant="outline"
-              className="rounded-xl border-red-200 bg-red-50/60 text-red-800 hover:bg-red-100/70 text-xs font-semibold h-9 px-3"
+              disabled={!canOpenCase}
+              aria-describedby={!canOpenCase ? 'order-case-availability' : undefined}
+              className="rounded-xl border-red-200 bg-red-50/60 text-red-800 hover:bg-red-100/70 text-xs font-semibold h-9 px-3 disabled:border-line disabled:bg-stone-100 disabled:text-stone-500 disabled:opacity-100"
               onClick={() => handleOpenCaseModal('DAMAGED_ITEM')}
             >
-              <ShieldAlert className="mr-1.5 size-3.5 text-red-600" />
+              <ShieldAlert className="mr-1.5 size-3.5" />
               Báo hàng vỡ / Khiếu nại
             </Button>
 
@@ -952,6 +1179,16 @@ export function BuyerOrderConversationPanel({
             )}
           </div>
         </div>
+
+        {!canOpenCase && (
+          <p id="order-case-availability" className="mt-2 text-xs text-stone-600">
+            {hasActiveCase
+              ? 'Đơn hàng đang có hồ sơ khiếu nại đang được giải quyết. Bạn có thể theo dõi tiến trình ở đầu trang hoặc nhắn Bộ phận Hỗ trợ.'
+              : ['CANCELLED', 'REFUNDED', 'REFUND_REQUESTED', 'EXPIRED'].includes(order.status)
+                ? 'Đơn này không mở thêm khiếu nại. Bạn có thể nhắn Bộ phận Hỗ trợ.'
+                : 'Bạn có thể khiếu nại sau khi đơn được giao. Trong lúc chờ, bạn vẫn có thể nhắn người bán hoặc Bộ phận Hỗ trợ.'}
+          </p>
+        )}
 
         {/* KHUNG HỘI THOẠI TRỰC TIẾP GIỮA BUYER VÀ SELLER / SUPPORT */}
         {isWorkspaceOpen && (
@@ -1003,6 +1240,7 @@ export function BuyerOrderConversationPanel({
                           }
                         });
                         setSelectedShareSeqs(initialSelection);
+                        setEscalateError('');
                         setEscalateModalOpen(true);
                       }}
                     >
@@ -1191,7 +1429,35 @@ export function BuyerOrderConversationPanel({
               {loadingConversation ? (
                 <div className="flex flex-col items-center justify-center py-12 text-xs text-muted gap-2">
                   <Loader2 className="size-5 animate-spin text-brand-dark" />
-                  <span>Đang tải lịch sử hội thoại...</span>
+                  <span>Đang mở phòng và tải hội thoại...</span>
+                </div>
+              ) : roomError ? (
+                <div className="rounded-xl border border-red-200 bg-red-50/70 p-6 text-center text-xs text-red-800 space-y-3">
+                  <p className="font-semibold">{roomError}</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-8 rounded-lg border-red-300 bg-white text-xs font-semibold text-red-800 hover:bg-red-100"
+                    onClick={() => void openChannelWorkspace(activeChannel)}
+                  >
+                    <RefreshCw className="mr-1.5 size-3.5" />
+                    Thử lại
+                  </Button>
+                </div>
+              ) : historyError && messages.length === 0 ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-6 text-center text-xs text-amber-900 space-y-3">
+                  <p className="font-semibold">{historyError}</p>
+                  {conversation && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-8 rounded-lg border-amber-300 bg-white text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                      onClick={() => void loadMessagesForConversation(conversation)}
+                    >
+                      <RefreshCw className="mr-1.5 size-3.5" />
+                      Thử tải lại lịch sử
+                    </Button>
+                  )}
                 </div>
               ) : messages.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-line bg-white p-6 text-center text-xs text-muted">
@@ -1317,7 +1583,7 @@ export function BuyerOrderConversationPanel({
                               <div className="flex flex-wrap items-center gap-2 text-red-600">
                                 <span className="inline-flex items-center gap-1 font-semibold">
                                   <AlertCircle className="size-3" />
-                                  Chưa gửi được
+                                  Gửi thất bại
                                 </span>
                                 <button
                                   type="button"
@@ -1325,7 +1591,7 @@ export function BuyerOrderConversationPanel({
                                   className="inline-flex items-center gap-1 rounded-lg bg-red-600 px-2 py-0.5 text-[11px] font-bold text-white hover:bg-red-700"
                                 >
                                   <RotateCcw className="size-3" />
-                                  Gửi lại
+                                  Thử lại
                                 </button>
                               </div>
                             )}
@@ -1415,6 +1681,8 @@ export function BuyerOrderConversationPanel({
                     type="button"
                     variant="outline"
                     className="h-8 rounded-xl bg-white text-xs font-semibold"
+                    disabled={!canOpenCase}
+                    aria-describedby={!canOpenCase ? 'order-case-availability' : undefined}
                     onClick={() => handleOpenCaseModal('OTHER')}
                   >
                     Tạo yêu cầu mới
@@ -1433,7 +1701,13 @@ export function BuyerOrderConversationPanel({
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={uploadingAttachment || sendingMessage}
+                    disabled={
+                      uploadingAttachment ||
+                      sendingMessage ||
+                      loadingConversation ||
+                      !conversation?.id ||
+                      Boolean(roomError)
+                    }
                     onClick={() => composerFileInputRef.current?.click()}
                     className="h-10 shrink-0 rounded-xl border-line px-3 text-xs font-semibold text-stone-700"
                     title="Đính kèm ảnh hoặc PDF (tối đa 5MB/tệp)"
@@ -1449,6 +1723,7 @@ export function BuyerOrderConversationPanel({
                   <textarea
                     rows={2}
                     maxLength={4100}
+                    disabled={loadingConversation || !conversation?.id || Boolean(roomError)}
                     value={composerText}
                     onChange={(e) => {
                       setComposerText(e.target.value);
@@ -1461,16 +1736,26 @@ export function BuyerOrderConversationPanel({
                       }
                     }}
                     placeholder={
-                      activeChannel === 'SELLER'
-                        ? `Nhắn cho ${selectedSeller.sellerName}...`
-                        : 'Mô tả vấn đề để Bộ phận Hỗ trợ tiếp nhận...'
+                      loadingConversation
+                        ? 'Đang xác nhận phòng hội thoại...'
+                        : !conversation?.id || roomError
+                          ? 'Chưa mở được phòng hội thoại. Vui lòng thử lại ở khung trên.'
+                          : activeChannel === 'SELLER'
+                            ? `Nhắn cho ${selectedSeller.sellerName}...`
+                            : 'Mô tả vấn đề để Bộ phận Hỗ trợ tiếp nhận...'
                     }
-                    className="flex-1 rounded-xl border border-line bg-stone-50/50 px-3.5 py-2 text-xs sm:text-sm text-stone-900 focus:border-brand focus:bg-white focus:outline-none"
+                    className="flex-1 rounded-xl border border-line bg-stone-50/50 px-3.5 py-2 text-xs sm:text-sm text-stone-900 focus:border-brand focus:bg-white focus:outline-none disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400"
                   />
 
                   <Button
                     type="button"
-                    disabled={sendingMessage || uploadingAttachment}
+                    disabled={
+                      sendingMessage ||
+                      uploadingAttachment ||
+                      loadingConversation ||
+                      !conversation?.id ||
+                      Boolean(roomError)
+                    }
                     onClick={() => void handleSendMessage()}
                     className="h-10 shrink-0 rounded-xl bg-brand-dark px-4 text-xs sm:text-sm font-semibold text-white hover:bg-brand-dark/90"
                   >
@@ -1521,8 +1806,12 @@ export function BuyerOrderConversationPanel({
               <input
                 id="escalate-reason-input"
                 type="text"
+                maxLength={500}
                 value={escalateReason}
-                onChange={(e) => setEscalateReason(e.target.value)}
+                onChange={(e) => {
+                  setEscalateReason(e.target.value);
+                  if (escalateError) setEscalateError('');
+                }}
                 placeholder="Ví dụ: Người bán chưa phản hồi phương án đổi trả..."
                 className="w-full rounded-xl border border-line bg-white px-3 py-2 text-xs focus:border-brand focus:outline-none"
               />
@@ -1551,12 +1840,13 @@ export function BuyerOrderConversationPanel({
                             type="checkbox"
                             className="mt-0.5 accent-brand-dark size-4"
                             checked={checked}
-                            onChange={(e) =>
+                            onChange={(e) => {
                               setSelectedShareSeqs((prev) => ({
                                 ...prev,
                                 [m.seq]: e.target.checked,
-                              }))
-                            }
+                              }));
+                              if (escalateError) setEscalateError('');
+                            }}
                           />
                           <div className="min-w-0 flex-1">
                             <span className="font-bold text-stone-800">
@@ -1574,12 +1864,22 @@ export function BuyerOrderConversationPanel({
                 )}
               </div>
             </div>
+
+            {escalateError && (
+              <p
+                role="alert"
+                className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700"
+              >
+                {escalateError}
+              </p>
+            )}
           </div>
 
           <div className="mt-5 flex justify-end gap-2">
             <Button
               type="button"
               variant="outline"
+              disabled={escalatingToSupport}
               className="rounded-xl text-xs"
               onClick={() => setEscalateModalOpen(false)}
             >
@@ -1587,10 +1887,11 @@ export function BuyerOrderConversationPanel({
             </Button>
             <Button
               type="button"
+              disabled={escalatingToSupport}
               className="rounded-xl bg-brand-dark text-white hover:bg-brand-dark/90 text-xs font-semibold"
               onClick={() => void handleConfirmEscalateToSupport()}
             >
-              Chuyển sang Hỗ trợ
+              {escalatingToSupport ? 'Đang chuyển tiếp...' : 'Chuyển sang Hỗ trợ'}
             </Button>
           </div>
         </DialogContent>
@@ -1598,9 +1899,9 @@ export function BuyerOrderConversationPanel({
 
       {/* HỘP THOẠI 2 BƯỚC: BÁO HÀNG VỠ / KHIẾU NẠI ĐƠN HÀNG */}
       <Dialog
-        open={caseModalOpen}
+        open={caseModalOpen && (canOpenCase || caseStep === 'SUCCESS')}
         onOpenChange={(open) => {
-          if (!open && !submittingCase) {
+          if (!open && !submittingCase && !caseUploadingFile) {
             setCaseModalOpen(false);
           }
         }}
@@ -1643,6 +1944,11 @@ export function BuyerOrderConversationPanel({
                         onClick={() => {
                           setCaseType(opt.value);
                           setCaseCategory(CASE_CATEGORY_BY_TYPE[opt.value][0] || '');
+                          setCaseFieldErrors((prev) => ({
+                            ...prev,
+                            category: undefined,
+                            attachments: undefined,
+                          }));
                         }}
                         className={`rounded-xl border p-3 text-left transition ${
                           active
@@ -1839,12 +2145,15 @@ export function BuyerOrderConversationPanel({
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
                   <span className="text-xs font-bold text-stone-800">
-                    6. Ảnh / PDF bằng chứng (tối đa 5MB/tệp)
+                    6. Ảnh bằng chứng {caseType === 'DAMAGED_ITEM' ? '(bắt buộc)' : '(tùy chọn)'} ·{' '}
+                    <span className="font-normal text-muted">
+                      {caseAttachments.length}/{MAX_CASE_IMAGES} ảnh
+                    </span>
                   </span>
                   <input
                     ref={caseFileInputRef}
                     type="file"
-                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    accept="image/jpeg,image/png,image/webp"
                     multiple
                     className="hidden"
                     onChange={(e) => void handleCaseFileUpload(e)}
@@ -1852,7 +2161,7 @@ export function BuyerOrderConversationPanel({
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={caseUploadingFile}
+                    disabled={caseUploadingFile || caseAttachments.length >= MAX_CASE_IMAGES}
                     onClick={() => caseFileInputRef.current?.click()}
                     className="h-8 rounded-xl text-xs font-semibold"
                   >
@@ -1861,14 +2170,15 @@ export function BuyerOrderConversationPanel({
                     ) : (
                       <Paperclip className="mr-1.5 size-3.5" />
                     )}
-                    Tải ảnh / PDF
+                    Tải ảnh
                   </Button>
                 </div>
 
                 {caseAttachments.length === 0 ? (
                   <p className="rounded-xl border border-dashed border-line bg-stone-50 p-3 text-xs text-muted">
-                    Khuyến khích đính kèm ảnh chụp kiện hàng hoặc sản phẩm để nhân viên đối soát
-                    nhanh hơn (có thể bổ sung sau qua tin nhắn).
+                    Ảnh JPG, PNG hoặc WEBP, tối đa 5 MB mỗi ảnh (tối đa {MAX_CASE_IMAGES} ảnh).
+                    {caseType === 'DAMAGED_ITEM' &&
+                      ' Chụp rõ vị trí hư hỏng trên sản phẩm hoặc kiện hàng.'}
                   </p>
                 ) : (
                   <div className="grid gap-2 sm:grid-cols-2">
@@ -1931,12 +2241,14 @@ export function BuyerOrderConversationPanel({
                   type="button"
                   variant="outline"
                   className="rounded-xl text-xs sm:text-sm"
+                  disabled={caseUploadingFile}
                   onClick={() => setCaseModalOpen(false)}
                 >
                   Đóng
                 </Button>
                 <Button
                   type="submit"
+                  disabled={caseUploadingFile}
                   className="rounded-xl bg-brand-dark text-white hover:bg-brand-dark/90 text-xs sm:text-sm font-semibold"
                 >
                   Xem lại yêu cầu
@@ -2092,6 +2404,41 @@ export function BuyerOrderConversationPanel({
                   được gắn với đơn hàng <strong>#{order.id}</strong>. Bạn có thể theo dõi và nhắn
                   thêm cho nhân viên Hỗ trợ ngay trong khung trao đổi.
                 </p>
+
+                {syncingRefund && (
+                  <div className="rounded-xl border border-sky-200 bg-white px-3 py-2 text-xs text-sky-900 flex items-center gap-2">
+                    <Loader2 className="size-3.5 animate-spin shrink-0 text-sky-600" />
+                    <span>Đang đồng bộ yêu cầu hoàn tiền sang hệ thống đơn hàng...</span>
+                  </div>
+                )}
+
+                {createdCaseResult.refundRequestStatus === 'SUBMITTED' && (
+                  <div className="rounded-xl border border-emerald-300 bg-white px-3 py-2 text-xs font-medium text-emerald-900">
+                    Đã gửi kèm yêu cầu trả hàng / hoàn tiền sang hệ thống đơn hàng.
+                  </div>
+                )}
+
+                {createdCaseResult.refundRequestStatus === 'FAILED' && (
+                  <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs text-amber-950 space-y-2">
+                    <p className="font-medium">
+                      Hồ sơ hỗ trợ đã tạo thành công, nhưng bước gửi Yêu cầu hoàn tiền sang hệ thống
+                      đơn hàng chưa hoàn tất
+                      {createdCaseResult.refundRequestError
+                        ? `: ${createdCaseResult.refundRequestError}`
+                        : '.'}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={retryingRefund}
+                      className="h-8 rounded-lg border-amber-400 bg-white text-xs font-semibold text-amber-950 hover:bg-amber-100"
+                      onClick={() => void handleRetryRefundSync()}
+                    >
+                      <RotateCcw className="mr-1.5 size-3.5" />
+                      {retryingRefund ? 'Đang gửi lại...' : 'Thử gửi lại yêu cầu hoàn tiền'}
+                    </Button>
+                  </div>
+                )}
 
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <Button

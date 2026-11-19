@@ -1,5 +1,5 @@
 import { requestApi } from '@/lib/axios/api-client';
-import { ApiError, unwrap, type RequestApi } from '@/lib/axios/http';
+import { ApiError, unwrap, userMessage, type RequestApi } from '@/lib/axios/http';
 import type {
   BackendChannelType,
   BackendChatMessageDto,
@@ -16,6 +16,7 @@ import type {
   OpenOrderConversationInput,
   OrderConversation,
   OrderConversationCaseSummary,
+  OrderDisputeVerdict,
   OrderMessage,
   SendOrderMessageInput,
 } from '../types/order-conversation.types';
@@ -318,7 +319,7 @@ async function fileToCompactAttachmentUrl(file: File): Promise<string> {
       const dataUrl = String(reader.result || '');
       const img = new Image();
       img.onload = () => {
-        const maxSide = 960;
+        const maxSide = 800;
         const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
         const width = Math.max(1, Math.round(img.width * scale));
         const height = Math.max(1, Math.round(img.height * scale));
@@ -331,7 +332,7 @@ async function fileToCompactAttachmentUrl(file: File): Promise<string> {
           return;
         }
         ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.8));
+        resolve(canvas.toDataURL('image/jpeg', 0.72));
       };
       img.onerror = () => resolve(dataUrl);
       img.src = dataUrl;
@@ -374,23 +375,18 @@ export function createOrderConversationsApi(request: RequestApi) {
           },
         );
         const dto = unwrap<BackendConversationDto>(raw);
-        const conversation = mapConversationDto(dto, input.channel, recipientLabel);
-
-        const listResult = await this.listMessages(conversation.id, {
-          limit: 50,
-          recipientLabel,
-        });
-        if (listResult.meta) {
-          conversation.lastSeq = listResult.meta.lastSeq;
-          conversation.buyerLastReadSeq = listResult.meta.buyerLastReadSeq;
-          conversation.counterpartLastReadSeq = listResult.meta.counterpartLastReadSeq;
-        } else {
-          conversation.lastSeq = listResult.items.reduce((acc, m) => Math.max(acc, m.seq), 0);
+        if (!dto?.id) {
+          throw new ApiError(
+            'Chưa nhận được mã phòng hội thoại hợp lệ từ máy chủ.',
+            502,
+            'MISSING_CONVERSATION_ID',
+          );
         }
+        const conversation = mapConversationDto(dto, input.channel, recipientLabel);
 
         return {
           conversation,
-          messages: listResult.items,
+          messages: [],
         };
       } catch (err) {
         if (!isSimulationModeEnabled()) throw err;
@@ -943,7 +939,9 @@ export function createOrderConversationsApi(request: RequestApi) {
           id?: string;
           caseId?: string;
           orderId?: string;
+          orderCode?: string;
           status?: string;
+          slaDeadlineAt?: string | null;
         }>(raw);
 
         const realCaseId = resData?.id || resData?.caseId;
@@ -955,29 +953,12 @@ export function createOrderConversationsApi(request: RequestApi) {
           );
         }
 
-        // Nếu Buyer gửi Yêu cầu trả hàng / hoàn tiền trên đơn đã giao, gọi thêm Commerce requestRefund
-        if (
-          input.type === 'OTHER' &&
-          resolvedOrderId &&
-          (input.orderStatus || '').toUpperCase() === 'DELIVERED'
-        ) {
-          try {
-            await request(`/orders/${encodeURIComponent(resolvedOrderId)}/refund/request`, {
-              method: 'POST',
-              body: {
-                reason: fullReason,
-                evidenceUrls: [...photos, ...videos],
-              },
-            });
-          } catch {
-            // Không chặn kết quả đã lưu Support Case thành công trên Fulfillment
-          }
-        }
-
         const now = new Date().toISOString();
         const caseSummary: OrderConversationCaseSummary = {
           caseId: realCaseId,
           orderId: String(resData.orderId || resolvedOrderId),
+          orderCode: resData.orderCode ? String(resData.orderCode) : resolvedOrderId,
+          buyerId,
           conversationId: input.conversationId,
           type: input.type,
           status: 'OPEN',
@@ -985,6 +966,7 @@ export function createOrderConversationsApi(request: RequestApi) {
           description: cleanDesc,
           contactPhone: input.contactPhone,
           attachmentIds: input.attachmentIds,
+          slaDeadlineAt: resData.slaDeadlineAt ?? null,
           createdAt: now,
         };
 
@@ -1081,6 +1063,222 @@ export function createOrderConversationsApi(request: RequestApi) {
     },
 
     /**
+     * Đồng bộ riêng bước yêu cầu hoàn tiền sang Commerce (`POST /api/v1/orders/:id/refund/request`),
+     * chạy sau khi Fulfillment đã cấp mã hồ sơ để không làm chậm bước chuyển tiến trình UI.
+     */
+    async syncReturnRefundRequest(
+      orderId: string,
+      reason: string,
+      attachmentIds: string[] = [],
+    ): Promise<{ ok: true } | { ok: false; errorMessage: string }> {
+      const evidenceUrls = attachmentIds
+        .map((id) => attachmentBuffer.get(id)?.previewUrl)
+        .filter((u): u is string => Boolean(u));
+      try {
+        await request(`/orders/${encodeURIComponent(orderId)}/refund/request`, {
+          method: 'POST',
+          body: {
+            reason,
+            evidenceUrls,
+          },
+        });
+        return { ok: true };
+      } catch (err) {
+        return {
+          ok: false,
+          errorMessage: userMessage(err),
+        };
+      }
+    },
+
+    /**
+     * Đọc danh sách hồ sơ khiếu nại / trả hàng theo đơn (`GET /api/v1/support/orders/:id/cases`).
+     * Chấp nhận nhiều mã đơn (id / internalId) để khớp với bản ghi đã tạo, parse an toàn verdict có cấu trúc.
+     */
+    async listOrderCases(
+      orderIdentifiers: string | string[],
+      buyerId?: string,
+      signal?: AbortSignal,
+    ): Promise<{
+      cases: OrderConversationCaseSummary[];
+      unavailable: boolean;
+      errorMessage?: string;
+    }> {
+      const candidates = Array.from(
+        new Set(
+          (Array.isArray(orderIdentifiers) ? orderIdentifiers : [orderIdentifiers])
+            .map((v) => String(v || '').trim())
+            .filter(Boolean),
+        ),
+      );
+      if (candidates.length === 0) {
+        return { cases: [], unavailable: true };
+      }
+
+      interface BackendOrderCaseDto {
+        id?: string;
+        caseId?: string;
+        orderId?: string;
+        orderCode?: string;
+        type?: string;
+        status?: string;
+        reason?: string;
+        description?: string;
+        resolutionSummary?: string;
+        resolutionNote?: string;
+        resolution?: string;
+        conclusion?: string;
+        slaDeadlineAt?: string | null;
+        slaDeadline?: string | null;
+        deadlineAt?: string | null;
+        verdict?:
+          | string
+          | {
+              decision?: string;
+              note?: string;
+              refundAmount?: number | string | null;
+              refundChannel?: string | null;
+              channel?: string | null;
+              issuedAt?: string | null;
+            }
+          | null;
+        resolvedAt?: string;
+        createdAt?: string;
+        updatedAt?: string;
+      }
+
+      const mapCases = (list: BackendOrderCaseDto[], queriedOrderId: string) =>
+        list
+          .map((item): OrderConversationCaseSummary | null => {
+            const caseId = item.id || item.caseId;
+            if (!caseId) return null;
+            const statusUpper = (item.status || 'OPEN').toUpperCase();
+            const mappedStatus: OrderConversationCaseSummary['status'] =
+              statusUpper === 'RESOLVED' || statusUpper === 'CLOSED'
+                ? 'RESOLVED'
+                : statusUpper === 'REJECTED'
+                  ? 'REJECTED'
+                  : statusUpper === 'ESCALATED' ||
+                      statusUpper === 'ESCALATED_DISPUTE' ||
+                      statusUpper === 'DISPUTED'
+                    ? 'ESCALATED_DISPUTE'
+                    : statusUpper === 'INVESTIGATING' || statusUpper === 'IN_PROGRESS'
+                      ? 'INVESTIGATING'
+                      : 'OPEN';
+
+            const rawType = (item.type || '').toUpperCase();
+            const mappedType: OrderConversationCaseSummary['type'] =
+              rawType.includes('DAMAGED') || rawType.includes('VỠ') || rawType.includes('HƯ HỎNG')
+                ? 'DAMAGED_ITEM'
+                : rawType.includes('WRONG') || rawType.includes('SAI') || rawType.includes('THIẾU')
+                  ? 'WRONG_ITEM'
+                  : rawType.includes('DELIVERY') || rawType.includes('GIAO NHẬN')
+                    ? 'DELIVERY_ISSUE'
+                    : rawType.includes('RETURN') || rawType.includes('TRẢ HÀNG')
+                      ? 'RETURN_REQUEST'
+                      : 'OTHER';
+
+            let parsedVerdict: OrderDisputeVerdict | null = null;
+            let verdictTextSummary: string | undefined;
+            if (item.verdict && typeof item.verdict === 'object') {
+              const rawDecision = String(item.verdict.decision || '')
+                .trim()
+                .toUpperCase();
+              const rawNote = typeof item.verdict.note === 'string' ? item.verdict.note.trim() : '';
+              const rawAmount = item.verdict.refundAmount;
+              const numericAmount =
+                typeof rawAmount === 'number' && Number.isFinite(rawAmount)
+                  ? rawAmount
+                  : typeof rawAmount === 'string' &&
+                      rawAmount.trim() !== '' &&
+                      Number.isFinite(Number(rawAmount))
+                    ? Number(rawAmount)
+                    : null;
+              if (rawDecision || rawNote || numericAmount !== null) {
+                parsedVerdict = {
+                  decision: rawDecision,
+                  note: rawNote,
+                  refundAmount: numericAmount,
+                  refundChannel:
+                    typeof item.verdict.refundChannel === 'string'
+                      ? item.verdict.refundChannel
+                      : typeof item.verdict.channel === 'string'
+                        ? item.verdict.channel
+                        : null,
+                  issuedAt:
+                    typeof item.verdict.issuedAt === 'string' ? item.verdict.issuedAt : null,
+                };
+              }
+              if (rawNote) verdictTextSummary = rawNote;
+            } else if (typeof item.verdict === 'string' && item.verdict.trim()) {
+              verdictTextSummary = item.verdict.trim();
+            }
+
+            const summaryString = [
+              item.resolutionSummary,
+              item.resolutionNote,
+              item.resolution,
+              item.conclusion,
+              verdictTextSummary,
+            ].find((v): v is string => typeof v === 'string' && v.trim().length > 0);
+
+            return {
+              caseId,
+              orderId: String(item.orderId || queriedOrderId),
+              orderCode: item.orderCode ? String(item.orderCode) : undefined,
+              buyerId,
+              conversationId: '',
+              type: mappedType,
+              status: mappedStatus,
+              items: [],
+              description: item.description || item.reason || '',
+              contactPhone: '',
+              attachmentIds: [],
+              verdict: parsedVerdict,
+              slaDeadlineAt: item.slaDeadline ?? item.slaDeadlineAt ?? item.deadlineAt ?? null,
+              resolutionSummary: summaryString?.trim(),
+              resolvedAt: item.resolvedAt,
+              createdAt: item.createdAt || new Date().toISOString(),
+              updatedAt: item.updatedAt,
+            };
+          })
+          .filter((x): x is OrderConversationCaseSummary => Boolean(x));
+
+      let allUnavailable = true;
+      let lastError: string | undefined;
+
+      for (const targetId of candidates) {
+        try {
+          const raw = await request<{
+            success?: boolean;
+            data?: BackendOrderCaseDto[];
+          }>(`/support/orders/${encodeURIComponent(targetId)}/cases`, { signal });
+
+          const list = unwrap<BackendOrderCaseDto[]>(raw);
+          allUnavailable = false;
+          if (Array.isArray(list) && list.length > 0) {
+            return { cases: mapCases(list, targetId), unavailable: false };
+          }
+        } catch (err) {
+          if (signal?.aborted) return { cases: [], unavailable: true };
+          if (err instanceof ApiError && err.status === 404) {
+            continue;
+          }
+          allUnavailable = false;
+          lastError = userMessage(err);
+        }
+      }
+
+      if (allUnavailable) {
+        return { cases: [], unavailable: true };
+      }
+      if (lastError) {
+        return { cases: [], unavailable: false, errorMessage: lastError };
+      }
+      return { cases: [], unavailable: false };
+    },
+
+    /**
      * Chỉ dùng khi bật ?sim=1 cho QA local
      */
     async simulateCounterpartAction(
@@ -1149,9 +1347,11 @@ export function formatCaseTypeLabel(type: string): string {
     case 'WRONG_ITEM':
       return 'Giao sai mẫu mã / thiếu số lượng';
     case 'DELIVERY_ISSUE':
-      return 'Sự cố giao nhận / chậm trễ vận đơn';
+      return 'Sự cố giao nhận / chưa nhận được hàng';
+    case 'RETURN_REQUEST':
+      return 'Yêu cầu trả hàng / hoàn tiền';
     default:
-      return 'Yêu cầu trả hàng / khiếu nại';
+      return 'Khiếu nại khác sau giao hàng';
   }
 }
 
