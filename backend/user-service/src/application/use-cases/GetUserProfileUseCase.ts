@@ -10,7 +10,7 @@ import { UserProfileDto } from '../dtos/UserProfileDto';
 export class GetUserProfileUseCase {
   constructor(private readonly userRepository: IUserRepository) {}
 
-  public async execute(identifier: string): Promise<UserProfileDto> {
+  public async execute(identifier: string, includePrivateFields = false): Promise<UserProfileDto> {
     const trimmed = identifier.trim();
     const user = trimmed.includes('@')
       ? await this.userRepository.findByEmail(trimmed.toLowerCase())
@@ -28,6 +28,13 @@ export class GetUserProfileUseCase {
       role: user.role,
       status: user.status,
       reputationScore: user.reputationScore,
+      ...(includePrivateFields
+        ? {
+            dateOfBirth: user.dateOfBirth,
+            gender: user.gender,
+            updatedAt: user.updatedAt.toISOString(),
+          }
+        : {}),
       createdAt: user.createdAt.toISOString(),
     };
   }

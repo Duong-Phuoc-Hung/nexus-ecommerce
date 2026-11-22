@@ -5,6 +5,7 @@ import { Address } from '../entities/Address';
  * Định nghĩa hợp đồng lưu trữ và truy xuất sổ địa chỉ của Buyer.
  */
 export interface IAddressRepository {
+  withUserTransaction?<T>(userId: string, work: () => Promise<T>): Promise<T>;
   findByUserId(userId: string): Promise<Address[]>;
   findById(id: string): Promise<Address | null>;
   countByUserId(userId: string): Promise<number>;

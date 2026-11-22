@@ -108,13 +108,13 @@ export class UserController {
       const requestedId = req.params.id;
       const queryEmail = typeof req.query.email === 'string' ? req.query.email : undefined;
       const targetParam = Array.isArray(requestedId) ? requestedId[0] : requestedId;
-      const targetIdentifier = queryEmail || targetParam || authenticatedUserId;
+      const targetIdentifier = targetParam ? queryEmail || targetParam : authenticatedUserId;
 
       if (!targetIdentifier) {
         res.status(400).json({ success: false, error: 'User id or email is required.' });
         return;
       }
-      const profile = await this.getUserProfileUseCase.execute(targetIdentifier);
+      const profile = await this.getUserProfileUseCase.execute(targetIdentifier, !targetParam);
 
       res.status(200).json({
         success: true,
@@ -336,7 +336,13 @@ export class UserController {
       const message = error instanceof Error ? error.message : 'Cập nhật hồ sơ thất bại.';
       const status =
         message.includes('đã được đăng ký') || message.includes('already exists') ? 409 : 400;
-      res.status(status).json({ success: false, error: message });
+      res
+        .status(status)
+        .json({
+          success: false,
+          error: message,
+          ...(message.startsWith('INVALID_DATE_OF_BIRTH') ? { code: 'INVALID_DATE_OF_BIRTH' } : {}),
+        });
     }
   }
 
@@ -344,6 +350,14 @@ export class UserController {
    * GET /api/v1/users/me/addresses
    * Lấy danh sách địa chỉ nhận hàng của Buyer (P0 #3)
    */
+  private addressSyncMetadata() {
+    return process.env.USE_IN_MEMORY_DB === 'true'
+      ? {}
+      : {
+          meta: { source: 'SERVER', syncedAt: new Date().toISOString(), maxAddresses: 5 },
+        };
+  }
+
   public async listAddresses(req: Request, res: Response): Promise<void> {
     try {
       if (!this.getUserAddressesUseCase) {
@@ -362,6 +376,7 @@ export class UserController {
       res.status(200).json({
         success: true,
         data: addresses,
+        ...this.addressSyncMetadata(),
       });
     } catch (error: any) {
       res.status(500).json({
@@ -391,6 +406,7 @@ export class UserController {
       res.status(201).json({
         success: true,
         data: newAddress,
+        ...this.addressSyncMetadata(),
       });
     } catch (error: any) {
       if (error instanceof AddressLimitReachedException) {
@@ -431,6 +447,7 @@ export class UserController {
       res.status(200).json({
         success: true,
         data: updated,
+        ...this.addressSyncMetadata(),
       });
     } catch (error: any) {
       if (error instanceof AddressNotFoundException) {
@@ -468,7 +485,7 @@ export class UserController {
         : String(req.params.addressId);
 
       const result = await this.deleteAddressUseCase.execute(userId, addressId);
-      res.status(200).json(result);
+      res.status(200).json({ ...result, ...this.addressSyncMetadata() });
     } catch (error: any) {
       if (error instanceof AddressNotFoundException) {
         res.status(404).json({ success: false, error: error.message });
@@ -510,6 +527,7 @@ export class UserController {
       res.status(200).json({
         success: true,
         data: updated,
+        ...this.addressSyncMetadata(),
       });
     } catch (error: any) {
       if (error instanceof AddressNotFoundException) {

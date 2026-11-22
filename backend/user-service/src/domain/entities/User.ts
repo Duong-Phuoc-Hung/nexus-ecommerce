@@ -27,7 +27,11 @@ export interface UserFeatureRestriction {
   createdAt: Date;
 }
 
+export type Gender = 'MALE' | 'FEMALE' | 'OTHER' | 'UNSPECIFIED';
+
 export interface UserProps {
+  dateOfBirth?: string | null;
+  gender?: Gender | null;
   id: string;
   email: string;
   fullName: string;
@@ -58,6 +62,8 @@ export class User {
   private _fullName: string;
   private _passwordHash: string;
   private _phone: string;
+  public dateOfBirth: string | null;
+  public gender: Gender | null;
   private _role: UserRole;
   private _status: UserStatus;
   private _reputationScore: number;
@@ -74,6 +80,8 @@ export class User {
     this._fullName = props.fullName;
     this._passwordHash = props.passwordHash;
     this._phone = props.phone || '';
+    this.dateOfBirth = props.dateOfBirth ?? null;
+    this.gender = props.gender ?? null;
     this._role = props.role;
     this._status = props.status;
     this._reputationScore = props.reputationScore;
