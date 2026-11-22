@@ -229,13 +229,21 @@ function timestamp(value: unknown, fallback: number): number {
   }
   return fallback;
 }
+const productCache = new Map<string, any>();
+async function getCachedProduct(productId: string) {
+  if (productCache.has(productId)) return productCache.get(productId);
+  const product = await catalogApi.detail(productId);
+  productCache.set(productId, product);
+  return product;
+}
+
 async function mapServerAuction(value: unknown): Promise<Auction> {
   const source = row(value);
   const productId = String(source.productId ?? '');
   const id = String(source.id ?? '');
   if (!id || !productId)
     throw new ApiError('Phiên đấu thiếu mã phiên hoặc mã sản phẩm.', undefined, 'INVALID_AUCTION');
-  const product = await catalogApi.detail(productId);
+  const product = await getCachedProduct(productId);
   const now = Date.now();
   const currentHighestBid =
     source.currentHighestBid == null ? null : numberValue(source.currentHighestBid);

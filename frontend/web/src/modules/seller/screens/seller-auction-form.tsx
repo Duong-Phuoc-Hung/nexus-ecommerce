@@ -145,7 +145,7 @@ export function SellerAuctionForm() {
       }
 
       setMessage(
-        `Đã khởi tạo thành công phiên đấu giá "${created.title || chosenProd?.title}" với mã #${auctionId} trên Auction Service! Đang chuyển hướng...`,
+        `Đã khởi tạo thành công phiên đấu giá "${created.title || chosenProd?.title}"! Đang chuyển hướng về danh sách phiên...`,
       );
 
       setTimeout(() => {
@@ -199,7 +199,7 @@ export function SellerAuctionForm() {
       }
 
       setMessage(
-        `Đã khởi tạo thành công phiên đấu giá "${newAuction.title}" với mã ${auctionId}! Đang chuyển hướng về danh sách phiên...`,
+        `Đã khởi tạo thành công phiên đấu giá "${newAuction.title}"! Đang chuyển hướng về danh sách phiên...`,
       );
 
       setTimeout(() => {

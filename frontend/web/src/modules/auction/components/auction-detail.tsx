@@ -15,6 +15,7 @@ import { StoreHeader } from '@/components/layout/store-header';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import { useBuyerAssistant } from '@/modules/chat/context/buyer-assistant-provider';
 import { appConfig } from '@/configs/app.config';
+import { getAuctionSocket } from '../utils/auction-socket';
 import {
   auctionApi,
   auctionStatusLabel,
@@ -68,15 +69,27 @@ export function AuctionDetail({ id }: { id: string }) {
   useEffect(() => {
     void refresh();
     const off = auctionApi.subscribe(() => void refresh());
-    const timer = setInterval(() => {
-      if (!document.hidden) void refresh();
-    }, 3000);
+    if (!id) return;
+    const socket = getAuctionSocket();
+
+    // Tham gia vào phòng đấu giá này
+    socket.emit('join_auction', id);
+
+    // Lắng nghe khi có người đặt giá mới thành công
+    const onBidPlaced = (data: any) => {
+      if (data?.auctionId && String(data.auctionId) !== String(id)) return;
+      void refresh(); // Tải lại thông tin mới nhất
+    };
+
+    socket.on('auction:bid_placed', onBidPlaced);
+
     return () => {
       requestVersion.current++;
       off();
-      clearInterval(timer);
+      socket.emit('leave_auction', id);
+      socket.off('auction:bid_placed', onBidPlaced);
     };
-  }, [refresh]);
+  }, [id, refresh]);
   useEffect(() => {
     setNow(Date.now() + offset);
     const timer = setInterval(() => setNow(Date.now() + offset), 1000);
