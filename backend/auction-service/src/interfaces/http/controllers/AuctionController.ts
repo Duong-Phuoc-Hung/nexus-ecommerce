@@ -14,6 +14,7 @@ import {
   CancelAuctionUseCase,
 } from '../../../application/use-cases/CancelAuctionUseCase';
 import { AuctionCheckoutUseCase } from '../../../application/use-cases/AuctionCheckoutUseCase';
+import { getSocketServer } from '../../../infrastructure/websocket/socket';
 
 export class AuctionController {
   constructor(
@@ -325,6 +326,20 @@ export class AuctionController {
         bidderId: effectiveBidderId,
         bidAmount: Number(bidAmount),
       });
+
+      // Bắn sự kiện Realtime xuống tất cả người đang xem phòng này
+      const io = getSocketServer();
+      if (io) {
+        io.to(`auction:${auctionId}`).emit('auction:bid_placed', {
+          auctionId,
+          currentHighestBid: Number(bidAmount),
+          bidderId: effectiveBidderId,
+          bidderName: (authUser as any)?.name || 'Người đấu giá',
+          isExtended: result.isExtended,
+          newEndTime: (result as any).actualEndTime || (result as any).endTime,
+          timestamp: new Date().toISOString(),
+        });
+      }
 
       res.status(200).json({
         success: true,
