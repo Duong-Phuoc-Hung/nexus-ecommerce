@@ -56,6 +56,12 @@ export class CreateAuctionRoomUseCase {
       throw new Error('Thời gian kết thúc phiên đấu giá phải ở tương lai.');
     }
 
+    // Cho phép dung sai tối đa 5 phút để mở ngay lập tức (ACTIVE) do thời gian điền form hoặc clock skew
+    const MAX_PAST_DRIFT_MS = 5 * 60 * 1000;
+    if (startTime.getTime() < now.getTime() - MAX_PAST_DRIFT_MS) {
+      throw new Error('Thời gian bắt đầu phiên đấu giá (startTime) không thể nằm trong quá khứ.');
+    }
+
     const status =
       startTime.getTime() <= now.getTime() ? AuctionStatus.ACTIVE : AuctionStatus.SCHEDULED;
     const antiSniping = input.antiSnipingExtensionSeconds ?? 120;
