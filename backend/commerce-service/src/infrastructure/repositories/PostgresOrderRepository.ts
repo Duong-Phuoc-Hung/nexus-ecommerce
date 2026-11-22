@@ -301,6 +301,14 @@ export class PostgresOrderRepository implements IOrderRepository {
         Number(orderRow.discountAmount || 0),
       shippingFee: Number(orderRow.shippingFee || 0),
       discountAmount: Number(orderRow.discountAmount || 0),
+      promoCode: orderRow.promoCode || orderRow.promo_code || null,
+      taxAmount: Number(orderRow.taxAmount || orderRow.tax_amount || 0),
+      shippingCarrier: orderRow.shippingCarrier || orderRow.shipping_carrier || null,
+      shippingServiceName: orderRow.shippingServiceName || orderRow.shipping_service_name || null,
+      estimatedDeliveryAt:
+        orderRow.estimatedDeliveryAt || orderRow.estimated_delivery_at
+          ? new Date(orderRow.estimatedDeliveryAt || orderRow.estimated_delivery_at)
+          : null,
       shippingAddress,
       totalAmount: Number(orderRow.totalAmount),
       status: (orderRow.status as OrderStatus) || OrderStatus.PENDING,

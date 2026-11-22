@@ -11,7 +11,9 @@ import {
   PricedLine,
   QuoteRecord,
   ShippingAddress,
+  ShippingOption,
 } from './ports';
+import { PromotionService } from '../promotion/PromotionService';
 
 const QUOTE_TTL_MS = 15 * 60 * 1000;
 const ORDER_TTL_MS = 15 * 60 * 1000;
@@ -108,13 +110,115 @@ export class CheckoutService {
     private readonly catalog: ICatalogClient,
     private readonly shipping: IShippingQuote,
     private readonly gateway: IPaymentGateway,
+    private readonly promotionService?: PromotionService,
   ) {}
+
+  public buildShippingOptions(baseFee: number): ShippingOption[] {
+    const now = Date.now();
+    const standardDelivery = new Date(now + 3 * 24 * 60 * 60 * 1000);
+    const fastDelivery = new Date(now + 2 * 24 * 60 * 60 * 1000);
+
+    return [
+      {
+        optionId: 'GHN_STANDARD',
+        carrier: 'GHN',
+        carrierName: 'Giao Hàng Nhanh',
+        serviceName: 'Tiêu chuẩn',
+        fee: baseFee,
+        etaDaysMin: 2,
+        etaDaysMax: 3,
+        etaText: 'Dự kiến 2–3 ngày',
+        estimatedDeliveryAt: standardDelivery.toISOString(),
+        recommended: true,
+      },
+      {
+        optionId: 'GHTK_FAST',
+        carrier: 'GHTK',
+        carrierName: 'Giao Hàng Tiết Kiệm',
+        serviceName: 'Giao nhanh',
+        fee: Math.round(baseFee * 1.5),
+        etaDaysMin: 1,
+        etaDaysMax: 2,
+        etaText: 'Dự kiến 1–2 ngày',
+        estimatedDeliveryAt: fastDelivery.toISOString(),
+        recommended: false,
+      },
+    ];
+  }
+
+  // GET /checkout/promotions
+  public async getPromotions(userId: string, subtotal?: number) {
+    if (!this.promotionService) return [];
+    return this.promotionService.getEligiblePromotions(userId, subtotal);
+  }
+
+  // POST /checkout/promotions/validate
+  public async validatePromotion(params: {
+    code: string;
+    userId: string;
+    subtotal?: number;
+    items?: Array<{ productId: string; quantity: number }>;
+  }) {
+    if (!this.promotionService) {
+      throw new CheckoutError(
+        503,
+        'PROMOTION_SERVICE_UNAVAILABLE',
+        'Dịch vụ khuyến mãi chưa sẵn sàng.',
+      );
+    }
+    return this.promotionService.validatePromotion(params);
+  }
 
   // POST /checkout/quote
   public async quote(buyerId: string, body: unknown) {
     const lines = parseCartLines(body);
     const address = parseShippingAddress(body);
     const priced = await this.priceCart(buyerId, lines, address);
+
+    const shippingOptions = this.buildShippingOptions(priced.shippingFee);
+    const requestedOptionId =
+      isRecord(body) && typeof body.shippingOptionId === 'string'
+        ? String(body.shippingOptionId).trim().toUpperCase()
+        : 'GHN_STANDARD';
+
+    const selectedOption =
+      shippingOptions.find((o) => o.optionId.toUpperCase() === requestedOptionId) ||
+      shippingOptions[0];
+    const finalShippingFee = selectedOption.fee;
+
+    const promoCode =
+      isRecord(body) && typeof body.promoCode === 'string' && body.promoCode.trim()
+        ? String(body.promoCode).trim().toUpperCase()
+        : undefined;
+
+    let discountAmount = 0;
+    let promoData: any = null;
+
+    if (promoCode && this.promotionService) {
+      const promoResult = await this.promotionService.validatePromotion({
+        code: promoCode,
+        userId: buyerId,
+        subtotal: priced.subtotal,
+        items: priced.items,
+      });
+
+      promoData = {
+        code: promoCode,
+        applied: promoResult.valid,
+        discountAmount: promoResult.valid ? promoResult.discountAmount : 0,
+        reasonCode: promoResult.reasonCode,
+      };
+
+      if (promoResult.valid) {
+        discountAmount = promoResult.discountAmount;
+      }
+    }
+
+    const taxAmount = 0;
+    const totalAmount = Math.max(
+      0,
+      priced.subtotal - discountAmount + finalShippingFee + taxAmount,
+    );
 
     const record: QuoteRecord = {
       id: crypto.randomUUID(),
@@ -123,10 +227,16 @@ export class CheckoutService {
       items: priced.items,
       shippingAddress: address,
       subtotal: priced.subtotal,
-      shippingFee: priced.shippingFee,
-      totalAmount: priced.total,
+      discountAmount,
+      taxAmount,
+      shippingFee: finalShippingFee,
+      totalAmount,
       currency: CURRENCY,
       expiresAt: new Date(Date.now() + QUOTE_TTL_MS),
+      promoCode: promoCode || null,
+      promo: promoData,
+      selectedShippingOptionId: selectedOption.optionId,
+      shippingOptions,
     };
     await this.repository.saveQuote(record);
 
@@ -137,8 +247,13 @@ export class CheckoutService {
       sellerId: record.sellerId,
       items: record.items,
       subtotal: record.subtotal,
+      discountAmount,
+      taxAmount,
       shippingFee: record.shippingFee,
       totalAmount: record.totalAmount,
+      promo: promoData,
+      selectedShippingOptionId: selectedOption.optionId,
+      shippingOptions,
     };
   }
 
@@ -173,6 +288,15 @@ export class CheckoutService {
 
     const priced = await this.priceCart(buyerId, lines, address);
 
+    let finalShippingFee = priced.shippingFee;
+    let finalDiscountAmount = 0;
+    let finalTotalAmount = priced.total;
+    let finalPromoCode: string | undefined = undefined;
+    let finalPromotionId: string | undefined = undefined;
+    let finalShippingCarrier = 'GHN';
+    let finalShippingServiceName = 'Tiêu chuẩn';
+    let finalEstimatedDeliveryAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+
     if (quoteId) {
       const quote = await this.repository.findQuote(quoteId);
       if (!quote || quote.buyerId !== buyerId) {
@@ -181,18 +305,71 @@ export class CheckoutService {
       if (quote.expiresAt.getTime() < Date.now()) {
         throw new CheckoutError(422, 'QUOTE_EXPIRED', 'Báo giá đã hết hạn, vui lòng báo giá lại.');
       }
-      if (quote.totalAmount !== priced.total) {
+      if (quote.subtotal !== priced.subtotal) {
         throw new CheckoutError(
           409,
           'QUOTE_PRICE_CHANGED',
           'Giá đã thay đổi, vui lòng báo giá lại.',
         );
       }
+      finalShippingFee = quote.shippingFee;
+      finalDiscountAmount = quote.discountAmount || 0;
+      finalTotalAmount = quote.totalAmount;
+      finalPromoCode = quote.promoCode || undefined;
+      if (quote.selectedShippingOptionId === 'GHTK_FAST') {
+        finalShippingCarrier = 'GHTK';
+        finalShippingServiceName = 'Giao nhanh';
+        finalEstimatedDeliveryAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+      }
+      if (finalPromoCode && this.promotionService) {
+        const promo = await (this.promotionService as any).promotionRepository?.findByCode(
+          finalPromoCode,
+        );
+        if (promo) finalPromotionId = promo.id;
+      }
+    } else {
+      const requestedOptionId =
+        isRecord(body) && typeof body.shippingOptionId === 'string'
+          ? String(body.shippingOptionId).trim().toUpperCase()
+          : 'GHN_STANDARD';
+      if (requestedOptionId === 'GHTK_FAST') {
+        finalShippingFee = Math.round(priced.shippingFee * 1.5);
+        finalShippingCarrier = 'GHTK';
+        finalShippingServiceName = 'Giao nhanh';
+        finalEstimatedDeliveryAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+      }
+      const rawPromo =
+        isRecord(body) && typeof body.promoCode === 'string' && body.promoCode.trim()
+          ? String(body.promoCode).trim().toUpperCase()
+          : undefined;
+      if (rawPromo && this.promotionService) {
+        const promoRes = await this.promotionService.validatePromotion({
+          code: rawPromo,
+          userId: buyerId,
+          subtotal: priced.subtotal,
+          items: priced.items,
+        });
+        if (promoRes.valid) {
+          finalDiscountAmount = promoRes.discountAmount;
+          finalPromoCode = rawPromo;
+          finalPromotionId = promoRes.promotion?.id;
+        }
+      }
+      finalTotalAmount = Math.max(0, priced.subtotal - finalDiscountAmount + finalShippingFee);
     }
 
     const requestHash = crypto
       .createHash('sha256')
-      .update(JSON.stringify({ lines, address, quoteId: quoteId || null, paymentMethod }))
+      .update(
+        JSON.stringify({
+          lines,
+          address,
+          quoteId: quoteId || null,
+          paymentMethod,
+          finalTotalAmount,
+          finalPromoCode,
+        }),
+      )
       .digest('hex');
 
     const created = await this.repository.createOrder({
@@ -202,13 +379,20 @@ export class CheckoutService {
       stockByProduct: priced.stockByProduct,
       shippingAddress: address,
       subtotal: priced.subtotal,
-      shippingFee: priced.shippingFee,
-      totalAmount: priced.total,
+      discountAmount: finalDiscountAmount,
+      taxAmount: 0,
+      shippingFee: finalShippingFee,
+      totalAmount: finalTotalAmount,
       paymentMethod,
       idempotencyKey,
       requestHash,
       orderExpiresAt: new Date(Date.now() + ORDER_TTL_MS),
       reservationExpiresAt: new Date(Date.now() + RESERVATION_TTL_MS),
+      promoCode: finalPromoCode,
+      promotionId: finalPromotionId,
+      shippingCarrier: finalShippingCarrier,
+      shippingServiceName: finalShippingServiceName,
+      estimatedDeliveryAt: finalEstimatedDeliveryAt,
     });
 
     if (created.replay && created.requestHash !== requestHash) {
@@ -441,15 +625,27 @@ export class CheckoutService {
   }
 
   private toCheckoutResponse(order: OrderRecord, payment: PaymentRecord) {
+    const discountAmount = order.discountAmount || 0;
+    const taxAmount = order.taxAmount || 0;
+    const subtotal = order.totalAmount - order.shippingFee + discountAmount - taxAmount;
+
     return {
       orderId: order.id,
       orderCode: order.orderCode,
       status: order.status,
       paymentMethod: payment.paymentMethod || (payment.checkoutUrl ? 'PAYOS' : 'COD'),
       currency: CURRENCY,
-      subtotal: order.totalAmount - order.shippingFee,
+      subtotal,
+      discountAmount,
+      taxAmount,
       shippingFee: order.shippingFee,
       totalAmount: order.totalAmount,
+      promoCode: order.promoCode || null,
+      shippingCarrier: order.shippingCarrier || null,
+      shippingServiceName: order.shippingServiceName || null,
+      estimatedDeliveryAt: order.estimatedDeliveryAt
+        ? order.estimatedDeliveryAt.toISOString()
+        : null,
       expiresAt: order.expiresAt.toISOString(),
       checkoutUrl: payment.checkoutUrl || null,
       paymentLinkId: payment.paymentLinkId || null,

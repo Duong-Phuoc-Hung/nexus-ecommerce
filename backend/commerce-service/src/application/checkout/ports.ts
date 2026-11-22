@@ -107,6 +107,19 @@ export interface PricedLine {
   subtotal: number;
 }
 
+export interface ShippingOption {
+  optionId: string;
+  carrier: string;
+  carrierName: string;
+  serviceName: string;
+  fee: number;
+  etaDaysMin: number;
+  etaDaysMax: number;
+  etaText: string;
+  estimatedDeliveryAt: string;
+  recommended: boolean;
+}
+
 export interface QuoteRecord {
   id: string;
   buyerId: string;
@@ -114,10 +127,21 @@ export interface QuoteRecord {
   items: PricedLine[];
   shippingAddress: ShippingAddress;
   subtotal: number;
+  discountAmount?: number;
+  taxAmount?: number;
   shippingFee: number;
   totalAmount: number;
   currency: string;
   expiresAt: Date;
+  promoCode?: string | null;
+  promo?: {
+    code: string;
+    applied: boolean;
+    discountAmount: number;
+    reasonCode: string | null;
+  } | null;
+  selectedShippingOptionId?: string | null;
+  shippingOptions?: ShippingOption[];
 }
 
 export interface OrderRecord {
@@ -128,9 +152,15 @@ export interface OrderRecord {
   status: string;
   totalAmount: number;
   shippingFee: number;
+  discountAmount?: number;
+  taxAmount?: number;
   shippingAddress: ShippingAddress;
   expiresAt: Date;
   items: PricedLine[];
+  promoCode?: string | null;
+  shippingCarrier?: string | null;
+  shippingServiceName?: string | null;
+  estimatedDeliveryAt?: Date | null;
 }
 
 export interface PaymentRecord {
@@ -159,6 +189,8 @@ export interface CreateOrderParams {
   stockByProduct: Record<string, number>;
   shippingAddress: ShippingAddress;
   subtotal: number;
+  discountAmount?: number;
+  taxAmount?: number;
   shippingFee: number;
   totalAmount: number;
   paymentMethod?: 'PAYOS' | 'COD';
@@ -166,6 +198,12 @@ export interface CreateOrderParams {
   requestHash: string;
   orderExpiresAt: Date;
   reservationExpiresAt: Date;
+  promoCode?: string;
+  promotionId?: string;
+  shippingOptionId?: string;
+  shippingCarrier?: string;
+  shippingServiceName?: string;
+  estimatedDeliveryAt?: Date;
 }
 
 export type ApplyPaymentOutcome =

@@ -152,6 +152,11 @@ exports.Prisma.OrderScalarFieldEnum = {
   totalAmount: 'totalAmount',
   shippingFee: 'shippingFee',
   discountAmount: 'discountAmount',
+  promoCode: 'promoCode',
+  taxAmount: 'taxAmount',
+  shippingCarrier: 'shippingCarrier',
+  shippingServiceName: 'shippingServiceName',
+  estimatedDeliveryAt: 'estimatedDeliveryAt',
   status: 'status',
   shippingAddress: 'shippingAddress',
   checkoutSessionExpiresAt: 'checkoutSessionExpiresAt',
@@ -213,7 +218,12 @@ exports.Prisma.CheckoutQuoteScalarFieldEnum = {
   shippingAddress: 'shippingAddress',
   subtotal: 'subtotal',
   shippingFee: 'shippingFee',
+  discountAmount: 'discountAmount',
+  taxAmount: 'taxAmount',
   totalAmount: 'totalAmount',
+  promoCode: 'promoCode',
+  shippingOptionId: 'shippingOptionId',
+  metadata: 'metadata',
   currency: 'currency',
   expiresAt: 'expiresAt',
   createdAt: 'createdAt'
@@ -235,6 +245,34 @@ exports.Prisma.StockReservationScalarFieldEnum = {
   status: 'status',
   expiresAt: 'expiresAt',
   createdAt: 'createdAt'
+};
+
+exports.Prisma.PromotionScalarFieldEnum = {
+  id: 'id',
+  code: 'code',
+  name: 'name',
+  description: 'description',
+  discountType: 'discountType',
+  discountValue: 'discountValue',
+  maxDiscountAmount: 'maxDiscountAmount',
+  minOrderAmount: 'minOrderAmount',
+  usageLimit: 'usageLimit',
+  usedCount: 'usedCount',
+  perUserLimit: 'perUserLimit',
+  startsAt: 'startsAt',
+  endsAt: 'endsAt',
+  status: 'status',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.PromotionUsageScalarFieldEnum = {
+  id: 'id',
+  promotionId: 'promotionId',
+  userId: 'userId',
+  orderId: 'orderId',
+  discountAmount: 'discountAmount',
+  usedAt: 'usedAt'
 };
 
 exports.Prisma.SortOrder = {
@@ -277,7 +315,9 @@ exports.Prisma.ModelName = {
   Invoice: 'Invoice',
   CheckoutQuote: 'CheckoutQuote',
   CheckoutIdempotency: 'CheckoutIdempotency',
-  StockReservation: 'StockReservation'
+  StockReservation: 'StockReservation',
+  Promotion: 'Promotion',
+  PromotionUsage: 'PromotionUsage'
 };
 
 /**

@@ -36,6 +36,11 @@ export interface OrderProps {
   subtotal?: number;
   shippingFee?: number;
   discountAmount?: number;
+  promoCode?: string | null;
+  taxAmount?: number;
+  shippingCarrier?: string | null;
+  shippingServiceName?: string | null;
+  estimatedDeliveryAt?: Date | null;
   shippingAddress?: {
     fullName?: string;
     phone?: string;
@@ -73,6 +78,11 @@ export class Order {
   private _subtotal: number;
   private _shippingFee: number;
   private _discountAmount: number;
+  private _promoCode?: string | null;
+  private _taxAmount: number;
+  private _shippingCarrier?: string | null;
+  private _shippingServiceName?: string | null;
+  private _estimatedDeliveryAt?: Date | null;
   private _shippingAddress?: OrderProps['shippingAddress'];
   private _paymentMethod?: string;
   private _totalAmount: number;
@@ -96,6 +106,11 @@ export class Order {
     this._items = props.items;
     this._shippingFee = props.shippingFee ?? 0;
     this._discountAmount = props.discountAmount ?? 0;
+    this._promoCode = props.promoCode;
+    this._taxAmount = props.taxAmount ?? 0;
+    this._shippingCarrier = props.shippingCarrier;
+    this._shippingServiceName = props.shippingServiceName;
+    this._estimatedDeliveryAt = props.estimatedDeliveryAt;
     this._subtotal = props.subtotal ?? props.totalAmount - this._shippingFee + this._discountAmount;
     this._shippingAddress = props.shippingAddress;
     this._paymentMethod = props.paymentMethod;
@@ -155,6 +170,26 @@ export class Order {
 
   public get discountAmount(): number {
     return this._discountAmount;
+  }
+
+  public get promoCode(): string | null | undefined {
+    return this._promoCode;
+  }
+
+  public get taxAmount(): number {
+    return this._taxAmount;
+  }
+
+  public get shippingCarrier(): string | null | undefined {
+    return this._shippingCarrier;
+  }
+
+  public get shippingServiceName(): string | null | undefined {
+    return this._shippingServiceName;
+  }
+
+  public get estimatedDeliveryAt(): Date | null | undefined {
+    return this._estimatedDeliveryAt;
   }
 
   public get shippingAddress(): OrderProps['shippingAddress'] {
