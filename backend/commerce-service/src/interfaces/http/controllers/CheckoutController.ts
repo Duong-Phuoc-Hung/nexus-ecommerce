@@ -61,10 +61,14 @@ export class CheckoutController {
     try {
       await work();
     } catch (error) {
-      if (error instanceof CheckoutError) {
-        res.status(error.status).json({
+      if (
+        error instanceof CheckoutError ||
+        (error instanceof Error && (error.name === 'CheckoutError' || (error as any).code))
+      ) {
+        const ce = error as any;
+        res.status(ce.status || 400).json({
           success: false,
-          error: { code: error.code, message: error.message, details: error.details },
+          error: { code: ce.code, message: ce.message, details: ce.details },
         });
         return;
       }
