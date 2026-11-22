@@ -1,3 +1,4 @@
+import { Gender } from '../../domain/entities/User';
 import { IUserRepository } from '../../domain/repositories/IUserRepository';
 import { UserNotFoundException } from '../../domain/exceptions/UserNotFoundException';
 import { UserProfileDto } from '../dtos/UserProfileDto';
@@ -5,6 +6,8 @@ import { UserProfileDto } from '../dtos/UserProfileDto';
 export interface UpdateUserProfileInput {
   fullName?: string;
   phone?: string;
+  dateOfBirth?: string | null;
+  gender?: Gender | null;
 }
 
 /**
@@ -20,6 +23,29 @@ export class UpdateUserProfileUseCase {
       throw new UserNotFoundException(userId);
     }
 
+    if (input.dateOfBirth != null) {
+      const date =
+        typeof input.dateOfBirth === 'string' ? new Date(input.dateOfBirth) : new Date(NaN);
+      const today = new Date().toISOString().slice(0, 10);
+      if (
+        !/^\d{4}-\d{2}-\d{2}$/.test(input.dateOfBirth) ||
+        !Number.isFinite(date.getTime()) ||
+        date.toISOString().slice(0, 10) !== input.dateOfBirth
+      ) {
+        throw new Error('INVALID_DATE_OF_BIRTH: Ngày sinh phải theo YYYY-MM-DD.');
+      }
+      const age =
+        Number(today.slice(0, 4)) -
+        date.getUTCFullYear() -
+        Number(today.slice(5) < input.dateOfBirth.slice(5));
+      if (age < 13 || age > 120) throw new Error('INVALID_DATE_OF_BIRTH: Tuổi phải từ 13 đến 120.');
+    }
+    if (
+      input.gender != null &&
+      !['MALE', 'FEMALE', 'OTHER', 'UNSPECIFIED'].includes(input.gender)
+    ) {
+      throw new Error('Giới tính không hợp lệ.');
+    }
     if (input.fullName !== undefined) {
       const trimmedName = input.fullName.trim();
       if (!trimmedName || trimmedName.length > 100) {
@@ -47,7 +73,11 @@ export class UpdateUserProfileUseCase {
       user.setPhone(normalizedPhone);
     }
 
-    await this.userRepository.update(user);
+    if (input.dateOfBirth !== undefined) user.dateOfBirth = input.dateOfBirth;
+    if (input.gender !== undefined) user.gender = input.gender;
+    const updatedAt = this.userRepository.updateProfileFields
+      ? await this.userRepository.updateProfileFields(user, input)
+      : (await this.userRepository.update(user), user.updatedAt);
 
     return {
       id: user.id,
@@ -57,6 +87,9 @@ export class UpdateUserProfileUseCase {
       role: user.role,
       status: user.status,
       reputationScore: user.reputationScore,
+      dateOfBirth: user.dateOfBirth,
+      gender: user.gender,
+      updatedAt: updatedAt.toISOString(),
       createdAt: user.createdAt.toISOString(),
     };
   }

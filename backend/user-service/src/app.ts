@@ -1,3 +1,5 @@
+import type { Pool } from 'pg';
+import { createAccountExtensionsRoutes } from './interfaces/http/routes/AccountExtensionsRoutes';
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import { InMemoryUserRepository } from './infrastructure/repositories/InMemoryUserRepository';
@@ -51,6 +53,7 @@ import { swaggerDocument } from './interfaces/http/swagger';
 
 export interface CreateApplicationOptions {
   eligibilityChecker?: HttpSellerEligibilityChecker;
+  databasePool?: Pool;
 }
 
 export function createApplication(options?: CreateApplicationOptions): Application {
@@ -73,7 +76,7 @@ export function createApplication(options?: CreateApplicationOptions): Applicati
   const userRepository =
     process.env.USE_IN_MEMORY_DB === 'true'
       ? new InMemoryUserRepository()
-      : new PostgresUserRepository();
+      : new PostgresUserRepository(options?.databasePool);
   const passwordHasher = new BcryptPasswordHasher();
   const tokenService = new JwtTokenService();
   const eventPublisher = new RabbitMqEventPublisher();
@@ -117,7 +120,7 @@ export function createApplication(options?: CreateApplicationOptions): Applicati
   const addressRepository =
     process.env.USE_IN_MEMORY_DB === 'true'
       ? new InMemoryAddressRepository()
-      : new PostgresAddressRepository();
+      : new PostgresAddressRepository(options?.databasePool);
 
   const sellerApplicationRepository =
     process.env.USE_IN_MEMORY_DB === 'true'
@@ -191,6 +194,9 @@ export function createApplication(options?: CreateApplicationOptions): Applicati
   const sellerApplicationController = new SellerApplicationController(sellerApplicationService);
 
   app.use('/api/v1/auth', createAuthRoutes(userController));
+  if (userRepository instanceof PostgresUserRepository) {
+    app.use('/api/v1/users', createAccountExtensionsRoutes(userRepository, passwordHasher));
+  }
   app.use('/api/v1/users', createUserRoutes(userController));
   app.use(
     '/api/v1/seller-applications',

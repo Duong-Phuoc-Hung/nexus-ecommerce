@@ -94,7 +94,7 @@ model User {
   identifyNumber String               @map("identify_number") @db.VarChar(20)
 
   // Giới tính (MALE, FEMALE, OTHER)
-  gender         String?              @db.VarChar(10)
+  gender         String?              @db.VarChar(20)
 
   // Ngày tháng năm sinh
   dateOfBirth    DateTime?            @map("date_of_birth") @db.Date
@@ -194,6 +194,7 @@ model Reputation {
 }
 
 model Rating {
+  isSellerReview Boolean @default(false) @map("is_seller_review")
   // Khóa chính
   id         BigInt   @id @default(autoincrement())
 
