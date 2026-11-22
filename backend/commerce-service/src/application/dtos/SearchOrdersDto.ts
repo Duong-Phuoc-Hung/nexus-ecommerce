@@ -44,6 +44,7 @@ export interface OrderSearchItemDto {
   itemsCount: number;
   items?: OrderItemSummaryDto[];
   timeline?: OrderTimelineItemDto[];
+  buyerReceivedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

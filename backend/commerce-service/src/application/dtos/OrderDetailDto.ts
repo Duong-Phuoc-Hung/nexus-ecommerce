@@ -44,6 +44,7 @@ export interface OrderDetailDto {
   items: OrderItemDetailDto[];
   timeline: OrderTimelineDto[];
   paymentTransactionId?: string;
+  buyerReceivedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

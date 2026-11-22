@@ -278,6 +278,102 @@ test('Support Cases API: GET /api/v1/support/cases and POST /api/v1/support/case
       }),
     });
     assert.equal(invalidResolveRes.status, 400);
+
+    // 4. BUYER tạo khiếu nại kèm Idempotency-Key trên đơn thật có sẵn trong DB (NX-ORD-8009)
+    const testOrderId = 'NX-ORD-8009';
+    const testIdempotencyKey = '019335ef-9689-73e4-8f4b-22240954b9aa';
+
+    const createCaseRes1 = await fetch(`${baseUrl}/api/v1/support/cases`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${buyerToken}`,
+        'Idempotency-Key': testIdempotencyKey,
+      },
+      body: JSON.stringify({
+        orderId: testOrderId,
+        reason: 'Hàng bị nứt vỡ trong quá trình vận chuyển',
+      }),
+    });
+    assert.equal(createCaseRes1.status, 201);
+    const createdCaseJson1 = (await createCaseRes1.json()) as any;
+    assert.equal(createdCaseJson1.success, true);
+    assert.equal(createdCaseJson1.data.id, testIdempotencyKey);
+
+    // 5. BUYER gửi lại cùng Idempotency-Key (Idempotent) -> 200 OK và không tạo trùng
+    const createCaseRes2 = await fetch(`${baseUrl}/api/v1/support/cases`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${buyerToken}`,
+        'Idempotency-Key': testIdempotencyKey,
+      },
+      body: JSON.stringify({
+        orderId: testOrderId,
+        reason: 'Hàng bị nứt vỡ trong quá trình vận chuyển',
+      }),
+    });
+    assert.equal(createCaseRes2.status, 200);
+    const createdCaseJson2 = (await createCaseRes2.json()) as any;
+    assert.equal(createdCaseJson2.data.id, testIdempotencyKey);
+
+    // 6. BUYER tra cứu khiếu nại theo đơn hàng (GET /support/cases?orderId=... và alias /support/orders/:id/cases)
+    const buyerOrderCasesRes = await fetch(
+      `${baseUrl}/api/v1/support/cases?orderId=${testOrderId}`,
+      {
+        headers: { Authorization: `Bearer ${buyerToken}` },
+      },
+    );
+    assert.equal(buyerOrderCasesRes.status, 200);
+    const buyerOrderCasesJson = (await buyerOrderCasesRes.json()) as any;
+    assert.equal(buyerOrderCasesJson.success, true);
+    assert.equal(buyerOrderCasesJson.data.length, 1);
+    assert.equal(buyerOrderCasesJson.data[0].id, testIdempotencyKey);
+
+    const buyerOrderCasesAliasRes = await fetch(
+      `${baseUrl}/api/v1/support/orders/${testOrderId}/cases`,
+      {
+        headers: { Authorization: `Bearer ${buyerToken}` },
+      },
+    );
+    assert.equal(buyerOrderCasesAliasRes.status, 200);
+    const buyerOrderCasesAliasJson = (await buyerOrderCasesAliasRes.json()) as any;
+    assert.ok(buyerOrderCasesAliasJson.data);
+    const resolvedAliasId =
+      buyerOrderCasesAliasJson.data.id ||
+      buyerOrderCasesAliasJson.data.caseId ||
+      buyerOrderCasesAliasJson.data[0]?.id;
+    assert.ok(resolvedAliasId);
+
+    // 7. Người dùng khác cố tình dùng Idempotency-Key để đọc trộm case người khác -> Chặn 403 Forbidden
+    const otherBuyerToken = createTestToken({
+      sub: '01a15822-43b8-78c3-a246-16bff78bc6ff',
+      email: 'other_buyer@test.com',
+      role: 'BUYER',
+    });
+    const leakAttemptRes = await fetch(`${baseUrl}/api/v1/support/cases`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${otherBuyerToken}`,
+        'Idempotency-Key': testIdempotencyKey,
+      },
+      body: JSON.stringify({
+        orderId: testOrderId,
+        reason: 'Cố tình đọc trộm',
+      }),
+    });
+    assert.equal(leakAttemptRes.status, 403);
+
+    // 8. Tra cứu theo alias /cases/by-order/:orderId (tương thích cả 2 nhánh)
+    const byOrderAliasRes = await fetch(`${baseUrl}/api/v1/support/cases/by-order/${testOrderId}`, {
+      headers: { Authorization: `Bearer ${buyerToken}` },
+    });
+    assert.equal(byOrderAliasRes.status, 200);
+    const byOrderAliasJson = (await byOrderAliasRes.json()) as any;
+    assert.ok(byOrderAliasJson.data);
+    const resolvedOrderId = byOrderAliasJson.data.orderId || byOrderAliasJson.data[0]?.orderId;
+    assert.equal(resolvedOrderId, testOrderId);
   });
 });
 
@@ -621,13 +717,14 @@ test('Ticket 4 - Buyer Support Cases by Order: GET /api/v1/support/cases/by-orde
     assert.equal(getRes.status, 200);
     const getJson = (await getRes.json()) as any;
     assert.equal(getJson.success, true);
-    assert.equal(getJson.data.orderId, 'NX-ORD-TEST-CASE-888');
-    assert.equal(getJson.data.reason, 'Sản phẩm lỗi không lên nguồn');
+    const caseData = Array.isArray(getJson.data) ? getJson.data[0] : getJson.data;
+    assert.equal(caseData.orderId, 'NX-ORD-TEST-CASE-888');
+    assert.equal(caseData.reason, 'Sản phẩm lỗi không lên nguồn');
     assert.equal(
-      getJson.data.buyerEvidence.photos[0],
+      caseData.buyerEvidence.photos[0],
       'https://storage.nexus.vn/evidence/box_defect.png',
     );
     // Không có link Unsplash giả
-    assert.ok(!JSON.stringify(getJson.data.buyerEvidence).includes('images.unsplash.com'));
+    assert.ok(!JSON.stringify(caseData.buyerEvidence).includes('images.unsplash.com'));
   });
 });

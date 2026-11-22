@@ -43,7 +43,8 @@ export class InMemoryConversationRepository implements IConversationRepository {
     return Array.from(this.items.values())
       .filter(
         (conversation) =>
-          conversation.channelType === 'AI_BOT' && conversation.status === 'WAITING_STAFF',
+          (conversation.channelType === 'AI_BOT' || conversation.channelType === 'BUYER_SUPPORT') &&
+          conversation.status === 'WAITING_STAFF',
       )
       .sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime())
       .slice(0, limit);

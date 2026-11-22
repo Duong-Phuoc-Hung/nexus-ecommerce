@@ -116,7 +116,15 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 }
 
 export function requireOrderPermission(
-  action: 'VIEW' | 'LIST' | 'CANCEL' | 'REFUND' | 'DISPATCH' | 'REQUEST_REFUND' | 'UPDATE_STATUS',
+  action:
+    | 'VIEW'
+    | 'LIST'
+    | 'CANCEL'
+    | 'REFUND'
+    | 'DISPATCH'
+    | 'REQUEST_REFUND'
+    | 'UPDATE_STATUS'
+    | 'CONFIRM_RECEIPT',
 ) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const user = (req as AuthenticatedRequest).user;
@@ -147,13 +155,14 @@ export function requireOrderPermission(
       }
     }
 
-    // 3. BUYER có quyền VIEW, LIST, CANCEL và REQUEST_REFUND đơn hàng của chính mình (OrderController đã ép buộc buyerId = user.sub chống IDOR)
+    // 3. BUYER có quyền VIEW, LIST, CANCEL, REQUEST_REFUND và CONFIRM_RECEIPT đơn hàng của chính mình (OrderController đã ép buộc buyerId = user.sub chống IDOR)
     if (normalizedRole === 'BUYER') {
       if (
         action === 'VIEW' ||
         action === 'LIST' ||
         action === 'CANCEL' ||
-        action === 'REQUEST_REFUND'
+        action === 'REQUEST_REFUND' ||
+        action === 'CONFIRM_RECEIPT'
       ) {
         return next();
       }

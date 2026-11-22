@@ -13,8 +13,17 @@ export function createOrderRoutes(controller: OrderController): Router {
   router.get('/:id', requireOrderReadAuth, requireOrderPermission('VIEW'), (req, res) =>
     controller.getById(req, res),
   );
+  router.get('/:id/cases', requireAuth, requireOrderPermission('VIEW'), (req, res) =>
+    controller.getOrderCases(req, res),
+  );
   router.post('/:id/cancel', requireAuth, requireOrderPermission('CANCEL'), (req, res) =>
     controller.cancel(req, res),
+  );
+  router.post(
+    '/:id/confirm-receipt',
+    requireAuth,
+    requireOrderPermission('CONFIRM_RECEIPT'),
+    (req, res) => controller.confirmReceipt(req, res),
   );
   router.post('/:id/refund', requireAuth, requireOrderPermission('REFUND'), (req, res) =>
     controller.refund(req, res),
