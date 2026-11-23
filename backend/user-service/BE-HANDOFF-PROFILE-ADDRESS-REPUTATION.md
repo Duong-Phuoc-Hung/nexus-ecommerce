@@ -4,11 +4,11 @@ Tất cả các đường dẫn dưới đây dùng prefix `/api/v1/users` qua G
 
 ## B01 — Hồ sơ và mật khẩu
 
-| Method và path | Body | Kết quả |
-| --- | --- | --- |
-| `GET /profile` | — | `200 { success, data }` với hồ sơ tài khoản trong token. |
-| `PATCH /profile` | `{ fullName?, phone?, dateOfBirth?, gender? }` | `200 { success, data }` với hồ sơ sau cập nhật. Gửi riêng các field cần đổi. |
-| `POST /change-password` | `{ currentPassword, newPassword }` | `200 { success: true, message }`. |
+| Method và path          | Body                                           | Kết quả                                                                      |
+| ----------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------- |
+| `GET /profile`          | —                                              | `200 { success, data }` với hồ sơ tài khoản trong token.                     |
+| `PATCH /profile`        | `{ fullName?, phone?, dateOfBirth?, gender? }` | `200 { success, data }` với hồ sơ sau cập nhật. Gửi riêng các field cần đổi. |
+| `POST /change-password` | `{ currentPassword, newPassword }`             | `200 { success: true, message }`.                                            |
 
 `data` của Profile có `id, email, fullName, phone?, role, status, reputationScore, createdAt, updatedAt, dateOfBirth, gender`. `dateOfBirth` là `YYYY-MM-DD` hoặc `null`. `gender` là `MALE | FEMALE | OTHER | UNSPECIFIED` hoặc `null`. Gửi `null` để xóa ngày sinh hoặc giới tính. Ngày sinh phải có thật và tuổi từ 13 đến 120, lỗi `400 INVALID_DATE_OF_BIRTH`. SĐT giữ quy tắc cũ của User Service và được chuẩn hóa thành đầu số `0`.
 
@@ -16,13 +16,13 @@ Tất cả các đường dẫn dưới đây dùng prefix `/api/v1/users` qua G
 
 ## B02 — Sổ địa chỉ
 
-| Method và path | Kết quả |
-| --- | --- |
-| `GET /me/addresses` | `200 { success, data: Address[], meta }` |
-| `POST /me/addresses` | `201 { success, data: Address, meta }` |
-| `PATCH /me/addresses/:addressId` | `200 { success, data: Address, meta }` |
-| `PUT /me/addresses/:addressId/default` | `200 { success, data: Address, meta }` |
-| `DELETE /me/addresses/:addressId` | `200 { success, message, data: Address[], meta }` |
+| Method và path                         | Kết quả                                           |
+| -------------------------------------- | ------------------------------------------------- |
+| `GET /me/addresses`                    | `200 { success, data: Address[], meta }`          |
+| `POST /me/addresses`                   | `201 { success, data: Address, meta }`            |
+| `PATCH /me/addresses/:addressId`       | `200 { success, data: Address, meta }`            |
+| `PUT /me/addresses/:addressId/default` | `200 { success, data: Address, meta }`            |
+| `DELETE /me/addresses/:addressId`      | `200 { success, message, data: Address[], meta }` |
 
 `Address` giữ cấu trúc đang dùng, gồm `id, userId, label?, recipientName, phone, provinceCode, provinceName, wardCode, wardName, street, note?, isDefault, createdAt, updatedAt`. POST nhận dữ liệu người nhận và địa chỉ, có thể gửi `isDefault`. Dùng PUT để đặt địa chỉ hiện hữu làm mặc định.
 
@@ -44,11 +44,11 @@ Luồng Admin/Support hiện có ghi điểm, lịch sử và hạn chế vào P
 
 ## B04 — Hồ sơ công khai và review Seller
 
-| Method và path | Dữ liệu trả về |
-| --- | --- |
-| `GET /:sellerId/public-profile` | `sellerId, displayName, status, joinedAt, reputationScore, trustTier, trustTierLabel, averageRating, totalReviews, ratingBreakdown, completedOrders, successRate` |
-| `GET /:sellerId/reviews?page=1&limit=10&rating=5` | `data: { items, pagination }`. `rating` tùy chọn, `limit` tối đa 100. |
-| `POST /:sellerId/reviews` | Body `{ orderId, rating, comment? }`, trả `201 { success: true, data: { id, rating, comment, createdAt } }`. |
+| Method và path                                    | Dữ liệu trả về                                                                                                                                                    |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /:sellerId/public-profile`                   | `sellerId, displayName, status, joinedAt, reputationScore, trustTier, trustTierLabel, averageRating, totalReviews, ratingBreakdown, completedOrders, successRate` |
+| `GET /:sellerId/reviews?page=1&limit=10&rating=5` | `data: { items, pagination }`. `rating` tùy chọn, `limit` tối đa 100.                                                                                             |
+| `POST /:sellerId/reviews`                         | Body `{ orderId, rating, comment? }`, trả `201 { success: true, data: { id, rating, comment, createdAt } }`.                                                      |
 
 Danh sách công khai có `id, buyerAlias, rating, comment, createdAt`. BE dùng nhãn “Người mua đã xác minh” và giữ ID đơn trong kho dữ liệu nội bộ. Profile công khai chỉ trả các trường trong bảng trên. Seller chưa có review nhận `averageRating: null`, `totalReviews: 0`, phân bố sao bằng 0 và danh sách rỗng. `completedOrders` và `successRate` hiện là `null`.
 
@@ -56,14 +56,14 @@ POST chỉ dành cho Buyer đang hoạt động. Điểm là số nguyên 1–5 
 
 API tra cứu khiếu nại hiện tại trả hồ sơ mới nhất của đơn. Nếu cần kiểm tra toàn bộ hồ sơ khi một đơn có nhiều khiếu nại, cần thống nhất contract với Commerce/Fulfillment.
 
-| HTTP | Mã | FE xử lý |
-| --- | --- | --- |
-| 400 | `INVALID_REVIEW`, `INVALID_PAGINATION` | Kiểm tra input. |
-| 403 | `SELF_REVIEW_FORBIDDEN`, `FORBIDDEN` | Chặn thao tác và hiện lý do. |
-| 404 | `SELLER_NOT_FOUND` | Ẩn panel hoặc báo gian hàng không khả dụng. |
-| 409 | `DUPLICATE_REVIEW` | Hiển thị đơn đã được đánh giá. |
-| 422 | `ORDER_NOT_ELIGIBLE_FOR_REVIEW` | Thông báo điều kiện đánh giá chưa đạt. |
-| 503 | `COMMERCE_UNAVAILABLE` | Cho thử lại khi dịch vụ xác minh sẵn sàng. |
+| HTTP | Mã                                     | FE xử lý                                    |
+| ---- | -------------------------------------- | ------------------------------------------- |
+| 400  | `INVALID_REVIEW`, `INVALID_PAGINATION` | Kiểm tra input.                             |
+| 403  | `SELF_REVIEW_FORBIDDEN`, `FORBIDDEN`   | Chặn thao tác và hiện lý do.                |
+| 404  | `SELLER_NOT_FOUND`                     | Ẩn panel hoặc báo gian hàng không khả dụng. |
+| 409  | `DUPLICATE_REVIEW`                     | Hiển thị đơn đã được đánh giá.              |
+| 422  | `ORDER_NOT_ELIGIBLE_FOR_REVIEW`        | Thông báo điều kiện đánh giá chưa đạt.      |
+| 503  | `COMMERCE_UNAVAILABLE`                 | Cho thử lại khi dịch vụ xác minh sẵn sàng.  |
 
 ## Chạy BE ở môi trường tích hợp
 
