@@ -194,9 +194,9 @@ export function createApplication(options?: CreateApplicationOptions): Applicati
   const sellerApplicationController = new SellerApplicationController(sellerApplicationService);
 
   app.use('/api/v1/auth', createAuthRoutes(userController));
-  if (userRepository instanceof PostgresUserRepository) {
-    app.use('/api/v1/users', createAccountExtensionsRoutes(userRepository, passwordHasher));
-  }
+  const accountExtensionsRouter = createAccountExtensionsRoutes(userRepository, passwordHasher);
+  app.use('/api/v1/users', accountExtensionsRouter);
+  app.use('/api/v1', accountExtensionsRouter);
   app.use('/api/v1/users', createUserRoutes(userController));
   app.use(
     '/api/v1/seller-applications',

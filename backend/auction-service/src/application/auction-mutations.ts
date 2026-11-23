@@ -3,16 +3,22 @@ import { BuyNowInput, BuyNowUseCase } from './use-cases/BuyNowUseCase';
 import { CancelAuctionInput, CancelAuctionUseCase } from './use-cases/CancelAuctionUseCase';
 import { PlaceBidInput, PlaceBidUseCase } from './use-cases/PlaceBidUseCase';
 import { UpdateAuctionInput, UpdateAuctionUseCase } from './use-cases/UpdateAuctionUseCase';
+import { IUserReputationClient } from './ports/IUserReputationClient';
 
 export interface AuctionMutationTransaction {
   run<T>(id: string, operation: (repository: IAuctionRepository) => Promise<T>): Promise<T>;
 }
 
-export function createAuctionMutations(transaction: AuctionMutationTransaction) {
+export function createAuctionMutations(
+  transaction: AuctionMutationTransaction,
+  userReputationClient?: IUserReputationClient,
+) {
   return {
     bid: {
       execute: (input: PlaceBidInput) =>
-        transaction.run(input.auctionId, (repo) => new PlaceBidUseCase(repo).execute(input)),
+        transaction.run(input.auctionId, (repo) =>
+          new PlaceBidUseCase(repo, userReputationClient).execute(input),
+        ),
     },
     buy: {
       execute: (input: BuyNowInput) =>

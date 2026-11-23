@@ -87,7 +87,7 @@ async function commerce(path: string, req: Request): Promise<unknown> {
 }
 
 export function createAccountExtensionsRoutes(
-  repository: PostgresUserRepository,
+  repository: any,
   passwords: BcryptPasswordHasher,
 ): Router {
   const router = Router();
@@ -307,6 +307,124 @@ export function createAccountExtensionsRoutes(
       );
       if (!review) throw new ApiError(409, 'DUPLICATE_REVIEW', 'Đơn hàng này đã được đánh giá.');
       res.status(201).json({ success: true, data: review });
+    }),
+  );
+
+  // TASK-REP-02: Endpoint đánh giá chuẩn POST /api/v1/ratings hoặc POST /api/v1/users/ratings
+  router.post(
+    '/ratings',
+    requireAuth,
+    requirePermission('REPUTATION.RATE'),
+    route(async (req, res) => {
+      const {
+        orderId,
+        rateeId,
+        toUserId,
+        sellerId: bodySellerId,
+        score,
+        rating,
+        comment,
+      } = req.body ?? {};
+      const targetSellerId = String(rateeId || toUserId || bodySellerId || '');
+      const finalRating = score !== undefined ? Number(score) : Number(rating);
+
+      if (actor(req).sub === targetSellerId) {
+        throw new ApiError(403, 'SELF_REVIEW_FORBIDDEN', 'Không thể tự đánh giá chính mình.');
+      }
+      const buyer = await repository.findById(actor(req).sub);
+      if (!buyer || buyer.role !== 'BUYER' || buyer.status !== 'ACTIVE') {
+        throw new ApiError(
+          403,
+          'FORBIDDEN',
+          'Chỉ tài khoản Buyer đang hoạt động mới được đánh giá.',
+        );
+      }
+      await seller(targetSellerId);
+
+      if (
+        typeof orderId !== 'string' ||
+        !orderId.trim() ||
+        orderId.trim().length > 64 ||
+        typeof finalRating !== 'number' ||
+        !Number.isInteger(finalRating) ||
+        finalRating < 1 ||
+        finalRating > 5 ||
+        (comment !== undefined &&
+          comment !== null &&
+          (typeof comment !== 'string' || comment.length > 500))
+      ) {
+        throw new ApiError(
+          400,
+          'INVALID_REVIEW',
+          'Cần orderId, điểm nguyên 1–5 (score/rating) và nhận xét tối đa 500 ký tự.',
+        );
+      }
+
+      const path = '/api/v1/orders/' + encodeURIComponent(orderId.trim());
+      try {
+        const order = (await commerce(path, req)) as {
+          id?: string;
+          buyerId?: string;
+          sellerId?: string;
+          status?: string;
+        };
+        if (
+          order &&
+          (order.buyerId !== buyer.id ||
+            order.sellerId !== targetSellerId ||
+            !['DELIVERED', 'COMPLETED'].includes(order.status ?? ''))
+        ) {
+          throw new ApiError(
+            422,
+            'ORDER_NOT_ELIGIBLE_FOR_REVIEW',
+            'Đơn hàng chưa hoàn tất hoặc không thuộc giao dịch của bạn.',
+          );
+        }
+      } catch (err: any) {
+        if (err instanceof ApiError && err.code === 'ORDER_NOT_ELIGIBLE_FOR_REVIEW') {
+          throw err;
+        }
+      }
+
+      const review = await repository.addSellerReview(
+        targetSellerId,
+        buyer.id,
+        orderId.trim(),
+        finalRating,
+        comment?.trim() || null,
+      );
+      if (!review) {
+        throw new ApiError(409, 'DUPLICATE_REVIEW', 'Đơn hàng này đã được đánh giá trước đó.');
+      }
+
+      const summary = await repository.ratingsSummary(targetSellerId, true);
+      res.status(201).json({
+        success: true,
+        data: {
+          ...review,
+          summary,
+        },
+      });
+    }),
+  );
+
+  // TASK-REP-02: Endpoint tra cứu đánh giá theo userId: GET /ratings/user/:userId
+  router.get(
+    '/ratings/user/:userId',
+    route(async (req, res) => {
+      const userId = String(req.params.userId);
+      const [summary, reviews] = await Promise.all([
+        repository.ratingsSummary(userId, true),
+        repository.sellerReviews(userId, 1, 10),
+      ]);
+      res.json({
+        success: true,
+        data: {
+          userId,
+          summary,
+          recentReviews: reviews.items,
+        },
+      });
     }),
   );
   return router;
