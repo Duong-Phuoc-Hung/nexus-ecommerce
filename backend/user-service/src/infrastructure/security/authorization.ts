@@ -13,6 +13,8 @@ type AuthenticatedRequest = Request & {
 
 export const ROLE_PERMISSIONS: Record<string, string[]> = {
   BUYER: [
+    'REPUTATION.VIEW',
+    'REPUTATION.RATE',
     'AUTH.LOGIN',
     'AUTH.LOGOUT',
     'PROFILE.VIEW',
@@ -31,6 +33,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'SELLER_APPLICATION.ACTIVATE',
   ],
   SELLER: [
+    'REPUTATION.VIEW',
     'AUTH.LOGIN',
     'AUTH.LOGOUT',
     'PROFILE.VIEW',

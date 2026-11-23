@@ -1,9 +1,32 @@
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { IAddressRepository } from '../../domain/repositories/IAddressRepository';
 import { Address } from '../../domain/entities/Address';
 
 export class PostgresAddressRepository implements IAddressRepository {
   private pool: Pool;
+  private readonly transaction = new AsyncLocalStorage<PoolClient>();
+
+  private get db(): Pool | PoolClient {
+    return this.transaction.getStore() ?? this.pool;
+  }
+
+  public async withUserTransaction<T>(userId: string, work: () => Promise<T>): Promise<T> {
+    await this.ensureTable();
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT id FROM user_users WHERE id = $1 FOR UPDATE', [userId]);
+      const result = await this.transaction.run(client, work);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
   private tableInitialized: boolean = false;
 
   constructor(pool?: Pool) {
@@ -73,7 +96,7 @@ export class PostgresAddressRepository implements IAddressRepository {
       WHERE user_id = $1 AND is_deleted = false
       ORDER BY is_default DESC, created_at ASC;
     `;
-    const result = await this.pool.query(query, [userId]);
+    const result = await this.db.query(query, [userId]);
     return result.rows.map((row) => this.mapRowToAddress(row));
   }
 
@@ -86,7 +109,7 @@ export class PostgresAddressRepository implements IAddressRepository {
       WHERE id = $1 AND is_deleted = false
       LIMIT 1;
     `;
-    const result = await this.pool.query(query, [id]);
+    const result = await this.db.query(query, [id]);
     if (result.rows.length === 0) return null;
     return this.mapRowToAddress(result.rows[0]);
   }
@@ -98,7 +121,7 @@ export class PostgresAddressRepository implements IAddressRepository {
       FROM user_addresses
       WHERE user_id = $1 AND is_deleted = false;
     `;
-    const result = await this.pool.query(query, [userId]);
+    const result = await this.db.query(query, [userId]);
     return Number(result.rows[0]?.total || 0);
   }
 
@@ -110,7 +133,7 @@ export class PostgresAddressRepository implements IAddressRepository {
         ward_code, ward_name, street, note, is_default, is_deleted, created_at, updated_at
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, false, $13, $14);
     `;
-    await this.pool.query(query, [
+    await this.db.query(query, [
       address.id,
       address.userId,
       address.label || null,
@@ -137,7 +160,7 @@ export class PostgresAddressRepository implements IAddressRepository {
           note = $9, updated_at = NOW()
       WHERE id = $10 AND is_deleted = false;
     `;
-    await this.pool.query(query, [
+    await this.db.query(query, [
       address.label || null,
       address.recipientName,
       address.phone,
@@ -158,29 +181,22 @@ export class PostgresAddressRepository implements IAddressRepository {
       SET is_deleted = true, is_default = false, updated_at = NOW()
       WHERE id = $1;
     `;
-    await this.pool.query(query, [id]);
+    await this.db.query(query, [id]);
   }
 
   public async setDefault(userId: string, addressId: string): Promise<void> {
     await this.ensureTable();
-    const client = await this.pool.connect();
-    try {
-      await client.query('BEGIN');
-      await client.query(
-        `UPDATE user_addresses SET is_default = false, updated_at = NOW() WHERE user_id = $1 AND is_deleted = false;`,
-        [userId],
-      );
-      await client.query(
-        `UPDATE user_addresses SET is_default = true, updated_at = NOW() WHERE id = $1 AND user_id = $2 AND is_deleted = false;`,
-        [addressId, userId],
-      );
-      await client.query('COMMIT');
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
+    if (!this.transaction.getStore()) {
+      return this.withUserTransaction(userId, () => this.setDefault(userId, addressId));
     }
+    await this.db.query(
+      `UPDATE user_addresses SET is_default = false, updated_at = NOW() WHERE user_id = $1 AND is_deleted = false;`,
+      [userId],
+    );
+    await this.db.query(
+      `UPDATE user_addresses SET is_default = true, updated_at = NOW() WHERE id = $1 AND user_id = $2 AND is_deleted = false;`,
+      [addressId, userId],
+    );
   }
 
   private mapRowToAddress(row: any): Address {

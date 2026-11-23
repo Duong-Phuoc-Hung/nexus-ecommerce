@@ -7,8 +7,8 @@ export interface UserProfileDto {
   status: string;
   reputationScore: number;
   identifyNumber?: string;
-  gender?: string;
-  dateOfBirth?: string;
+  gender?: string | null;
+  dateOfBirth?: string | null;
   address?: string;
   reputationHistory?: Array<{
     points: number;
@@ -24,5 +24,6 @@ export interface UserProfileDto {
     expiresAt: string;
     createdAt: string;
   }>;
+  updatedAt?: string;
   createdAt: string;
 }

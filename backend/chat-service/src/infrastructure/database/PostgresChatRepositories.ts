@@ -57,7 +57,7 @@ export class PostgresConversationRepository implements IConversationRepository {
     try {
       const res = await this.pool.query(
         `SELECT * FROM chat_conversations 
-         WHERE channel_type = 'AI_BOT' AND status = 'WAITING_STAFF' 
+         WHERE (channel_type = 'AI_BOT' OR channel_type = 'BUYER_SUPPORT') AND status = 'WAITING_STAFF' 
          ORDER BY updated_at ASC LIMIT $1`,
         [limit],
       );

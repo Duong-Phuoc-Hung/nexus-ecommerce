@@ -10,7 +10,7 @@ import { UserProfileDto } from '../dtos/UserProfileDto';
 export class GetUserProfileUseCase {
   constructor(private readonly userRepository: IUserRepository) {}
 
-  public async execute(identifier: string): Promise<UserProfileDto> {
+  public async execute(identifier: string, includePrivateFields = false): Promise<UserProfileDto> {
     const trimmed = identifier.trim();
     const user = trimmed.includes('@')
       ? await this.userRepository.findByEmail(trimmed.toLowerCase())
@@ -30,11 +30,7 @@ export class GetUserProfileUseCase {
       reputationScore: user.reputationScore,
       identifyNumber: user.identifyNumber || undefined,
       gender: user.gender || undefined,
-      dateOfBirth: user.dateOfBirth
-        ? user.dateOfBirth instanceof Date
-          ? user.dateOfBirth.toISOString().split('T')[0]
-          : String(user.dateOfBirth).split('T')[0]
-        : undefined,
+      dateOfBirth: user.dateOfBirth ? String(user.dateOfBirth).split('T')[0] : undefined,
       address: user.address || undefined,
       reputationHistory: user.reputationHistory.map((h) => ({
         points: h.points,
@@ -50,6 +46,7 @@ export class GetUserProfileUseCase {
         expiresAt: r.expiresAt instanceof Date ? r.expiresAt.toISOString() : String(r.expiresAt),
         createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
       })),
+      updatedAt: user.updatedAt.toISOString(),
       createdAt: user.createdAt.toISOString(),
     };
   }

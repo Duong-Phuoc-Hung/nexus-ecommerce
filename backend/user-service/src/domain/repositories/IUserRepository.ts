@@ -1,4 +1,4 @@
-import { User } from '../entities/User';
+import { ReputationAuditEntry, UserFeatureRestriction, User } from '../entities/User';
 
 /**
  * Tiêu chí tìm kiếm và lọc danh sách người dùng cho Support Staff & Admin
@@ -52,5 +52,19 @@ export interface IUserRepository {
   getUserReviews?(userId: string): Promise<UserReview[]>;
   save(user: User): Promise<void>;
   update(user: User): Promise<void>;
+  updateProfileFields?(
+    user: User,
+    fields: Partial<Record<'fullName' | 'phone' | 'dateOfBirth' | 'gender', unknown>>,
+  ): Promise<Date>;
+  adjustScore?(
+    userId: string,
+    points: number,
+    reason: string,
+    actorId: string,
+  ): Promise<{ score: number; history: ReputationAuditEntry[] }>;
+  saveRestriction?(
+    userId: string,
+    restriction: UserFeatureRestriction,
+  ): Promise<UserFeatureRestriction[]>;
   delete(id: string): Promise<void>;
 }

@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { Request, Response } from 'express';
 import { ListSupportCasesUseCase } from '../../../application/use-cases/ListSupportCasesUseCase';
 import { ResolveSupportCaseUseCase } from '../../../application/use-cases/ResolveSupportCaseUseCase';
@@ -24,6 +25,8 @@ export class SupportCaseController {
    */
   public async listCases(req: Request, res: Response): Promise<void> {
     try {
+      const user = (req as AuthenticatedRequest).user;
+      let userId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
       const orderId =
         typeof req.query.orderId === 'string'
           ? req.query.orderId
@@ -31,9 +34,26 @@ export class SupportCaseController {
             ? req.query.order_id
             : undefined;
 
+      // Bảo vệ chống IDOR: Nếu là BUYER thì bắt buộc chỉ tra cứu case của chính mình
+      if (user?.role === 'BUYER') {
+        userId = user.sub;
+      }
+
       // Hỗ trợ tra cứu theo orderId qua query parameter: GET /api/v1/support/cases?orderId=... (Chuẩn REST thống nhất)
       if (orderId && this.supportCaseRepository) {
         const found = await this.supportCaseRepository.findByOrderId(orderId);
+        if (
+          found &&
+          user?.role === 'BUYER' &&
+          found.userId.toLowerCase() !== user.sub.toLowerCase()
+        ) {
+          res.status(403).json({
+            success: false,
+            error: 'Bạn không có quyền truy cập khiếu nại của đơn hàng này.',
+          });
+          return;
+        }
+
         res.status(200).json({
           success: true,
           data: found ? [found.toResponseDto()] : [],
@@ -46,15 +66,19 @@ export class SupportCaseController {
         });
         return;
       }
-
-      const userId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
       const status = typeof req.query.status === 'string' ? req.query.status : undefined;
       const priority = typeof req.query.priority === 'string' ? req.query.priority : undefined;
       const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 10;
 
+      // Bảo vệ chống IDOR: Nếu là BUYER thì bắt buộc chỉ tra cứu case của chính mình
+      if (user?.role === 'BUYER') {
+        userId = user.sub;
+      }
+
       const result = await this.listSupportCasesUseCase.execute({
         userId,
+        orderId,
         status,
         priority,
         page,
@@ -247,6 +271,14 @@ export class SupportCaseController {
   public async createCase(req: Request, res: Response): Promise<void> {
     try {
       const user = (req as AuthenticatedRequest).user;
+      if (!user || !user.sub) {
+        res.status(401).json({
+          success: false,
+          error: 'Yêu cầu đăng nhập để tạo hồ sơ khiếu nại.',
+        });
+        return;
+      }
+
       const {
         caseId,
         orderId,
@@ -257,16 +289,47 @@ export class SupportCaseController {
         type,
         priority,
         buyerEvidence,
+        idempotencyKey: bodyIdempotencyKey,
       } = req.body || {};
 
-      const id =
-        caseId || `cs_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+      const headerIdempotencyKey = req.headers['idempotency-key'] as string | undefined;
+      const idempotencyKey = bodyIdempotencyKey || headerIdempotencyKey;
+      const id = caseId || idempotencyKey || crypto.randomUUID();
+
+      if (this.supportCaseRepository) {
+        const existing = await this.supportCaseRepository.findById(id);
+        if (existing) {
+          // Vá lỗ hổng bảo mật rò rỉ thông tin cá nhân:
+          // Bắt buộc kiểm tra quyền sở hữu (chính chủ hoặc Staff/Admin)
+          const isOwner = existing.userId.toLowerCase() === user.sub.toLowerCase();
+          const isStaffOrAdmin = user.role === 'ADMIN' || user.role === 'SUPPORT_STAFF';
+
+          if (!isOwner && !isStaffOrAdmin) {
+            res.status(403).json({
+              success: false,
+              error: 'Bạn không có quyền truy cập hồ sơ khiếu nại này.',
+            });
+            return;
+          }
+
+          res.status(200).json({
+            success: true,
+            message: 'Hồ sơ khiếu nại đã được tiếp nhận trước đó (Idempotent).',
+            data: existing.toResponseDto(),
+          });
+          return;
+        }
+      }
+
+      // BUYER chỉ có quyền tạo khiếu nại cho chính mình (chống mạo danh userId người khác)
+      const effectiveUserId = user.role === 'BUYER' ? user.sub : userId || user.sub;
+
       const supportCase = new SupportCase({
         id,
         orderId: orderId || '',
         orderCode: orderCode || orderId || '',
         customer: customer || 'Khách hàng Nexus',
-        userId: userId || user?.sub || 'usr_buyer',
+        userId: effectiveUserId,
         type: type || 'Yêu cầu trả hàng / hoàn tiền',
         reason: reason || 'Khiếu nại từ khách hàng',
         priority: priority || 'Cao',
@@ -321,15 +384,18 @@ export class SupportCaseController {
       }
 
       const orderId = (
-        typeof req.params.orderId === 'string'
+        typeof req.params.orderId === 'string' && req.params.orderId
           ? req.params.orderId
-          : String(req.params.orderId || '')
+          : typeof req.params.id === 'string' && req.params.id
+            ? req.params.id
+            : String(req.params.orderId || req.params.id || '')
       ).trim();
       if (!orderId) {
         res.status(400).json({ success: false, error: 'orderId không được để trống.' });
         return;
       }
 
+      const user = (req as AuthenticatedRequest).user;
       const found = await this.supportCaseRepository.findByOrderId(orderId);
       if (!found) {
         res.status(404).json({
@@ -339,9 +405,21 @@ export class SupportCaseController {
         return;
       }
 
+      if (
+        found &&
+        user?.role === 'BUYER' &&
+        found.userId.toLowerCase() !== user.sub.toLowerCase()
+      ) {
+        res.status(403).json({
+          success: false,
+          error: 'Bạn không có quyền truy cập khiếu nại của đơn hàng này.',
+        });
+        return;
+      }
+
       res.status(200).json({
         success: true,
-        data: found.toDisputeDto(),
+        data: found ? [found.toDisputeDto()] : [],
       });
     } catch (error: any) {
       console.error('[SupportCaseController.getCaseByOrderId Error]:', error);

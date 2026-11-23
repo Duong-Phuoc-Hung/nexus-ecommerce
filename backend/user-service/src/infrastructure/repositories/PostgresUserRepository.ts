@@ -1,11 +1,17 @@
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 import {
   IUserRepository,
   UserReview,
   UserSearchCriteria,
   UserSearchPage,
 } from '../../domain/repositories/IUserRepository';
-import { User, UserRole, UserStatus, ReputationAuditEntry } from '../../domain/entities/User';
+import {
+  User,
+  UserFeatureRestriction,
+  UserRole,
+  UserStatus,
+  ReputationAuditEntry,
+} from '../../domain/entities/User';
 
 /**
  * Infrastructure Repository: PostgresUserRepository (Database Integration)
@@ -46,6 +52,7 @@ export class PostgresUserRepository implements IUserRepository {
             SELECT u.id, u.email, u.phone, u.full_name, u.password_hash, u.status,
               u.identify_number, u.gender, u.date_of_birth, u.address,
               u.failed_login_attempts, u.locked_until, u.created_at, u.updated_at,
+              to_char(u.date_of_birth, 'YYYY-MM-DD') as birth_date, u.gender,
              COALESCE(r.role_code, 'BUYER') as role_code,
              COALESCE(rep.score, 100) as reputation_score
       FROM user_users u
@@ -69,6 +76,7 @@ export class PostgresUserRepository implements IUserRepository {
             SELECT u.id, u.email, u.phone, u.full_name, u.password_hash, u.status,
               u.identify_number, u.gender, u.date_of_birth, u.address,
               u.failed_login_attempts, u.locked_until, u.created_at, u.updated_at,
+              to_char(u.date_of_birth, 'YYYY-MM-DD') as birth_date, u.gender,
              COALESCE(r.role_code, 'BUYER') as role_code,
              COALESCE(rep.score, 100) as reputation_score
       FROM user_users u
@@ -112,6 +120,7 @@ export class PostgresUserRepository implements IUserRepository {
             SELECT u.id, u.email, u.phone, u.full_name, u.password_hash, u.status,
               u.identify_number, u.gender, u.date_of_birth, u.address,
               u.failed_login_attempts, u.locked_until, u.created_at, u.updated_at,
+              to_char(u.date_of_birth, 'YYYY-MM-DD') as birth_date, u.gender,
              COALESCE(r.role_code, 'BUYER') as role_code,
              COALESCE(rep.score, 100) as reputation_score
       FROM user_users u
@@ -202,6 +211,7 @@ export class PostgresUserRepository implements IUserRepository {
       SELECT u.id, u.email, u.phone, u.full_name, u.password_hash, u.status,
              u.identify_number, u.gender, u.date_of_birth, u.address,
              u.failed_login_attempts, u.locked_until, u.created_at, u.updated_at,
+              to_char(u.date_of_birth, 'YYYY-MM-DD') as birth_date, u.gender,
              COALESCE(r.role_code, 'BUYER') as role_code,
              COALESCE(rep.score, 100) as reputation_score
       FROM user_users u
@@ -359,6 +369,31 @@ export class PostgresUserRepository implements IUserRepository {
     }));
   }
 
+  public async updateProfileFields(
+    user: User,
+    fields: Partial<Record<'fullName' | 'phone' | 'dateOfBirth' | 'gender', unknown>>,
+  ): Promise<Date> {
+    const columns = {
+      fullName: 'full_name',
+      phone: 'phone',
+      dateOfBirth: 'date_of_birth',
+      gender: 'gender',
+    } as const;
+    const keys = (Object.keys(columns) as Array<keyof typeof columns>).filter(
+      (key) => fields[key] !== undefined,
+    );
+    if (keys.length === 0) return user.updatedAt;
+    const assignments = keys.map((key, index) => columns[key] + ' = $' + (index + 2));
+    const result = await this.pool.query(
+      'UPDATE user_users SET ' +
+        assignments.join(', ') +
+        ', updated_at = NOW() WHERE id = $1 AND NOT is_deleted RETURNING updated_at',
+      [user.id, ...keys.map((key) => user[key])],
+    );
+    if (!result.rowCount) throw new Error('Không tìm thấy hồ sơ.');
+    return new Date(result.rows[0].updated_at);
+  }
+
   public async delete(id: string): Promise<void> {
     const query = `
       UPDATE user_users
@@ -366,6 +401,159 @@ export class PostgresUserRepository implements IUserRepository {
       WHERE id = $1;
     `;
     await this.pool.query(query, [id]);
+  }
+
+  public async changePassword(
+    userId: string,
+    previousHash: string,
+    nextHash: string,
+  ): Promise<boolean> {
+    const result = await this.pool.query(
+      "UPDATE user_users SET password_hash = $3, updated_at = NOW() WHERE id = $1 AND password_hash = $2 AND status = 'ACTIVE' AND NOT is_deleted",
+      [userId, previousHash, nextHash],
+    );
+    return result.rowCount === 1;
+  }
+
+  public async adjustScore(userId: string, points: number, reason: string, actorId: string) {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT id FROM user_users WHERE id = $1 FOR UPDATE', [userId]);
+      const previous = await client.query('SELECT score FROM user_reputations WHERE user_id = $1', [
+        userId,
+      ]);
+      const oldScore = Number(previous.rows[0]?.score ?? 100);
+      const score = Math.min(2147483647, Math.max(0, oldScore + points));
+      await client.query(
+        'INSERT INTO user_reputations (user_id, score) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET score = EXCLUDED.score, updated_at = NOW()',
+        [userId, score],
+      );
+      await client.query(
+        'INSERT INTO user_reputation_events (user_id, delta, reason, actor_id) VALUES ($1, $2, $3, $4)',
+        [userId, score - oldScore, reason, actorId],
+      );
+      const history = (await this.reputationHistory(userId, client)).reverse();
+      await client.query('COMMIT');
+      return { score, history };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  public async reputationHistory(userId: string, db: Pool | PoolClient = this.pool) {
+    const result = await db.query(
+      'SELECT id::text, delta, reason, actor_id, created_at FROM user_reputation_events WHERE user_id = $1 ORDER BY created_at DESC, id DESC LIMIT 20',
+      [userId],
+    );
+    return result.rows.map((row) => ({
+      id: String(row.id),
+      points: Number(row.delta),
+      reason: String(row.reason),
+      adjustedBy: String(row.actor_id),
+      createdAt: new Date(row.created_at),
+    }));
+  }
+
+  public async saveRestriction(userId: string, restriction: UserFeatureRestriction) {
+    await this.pool.query(
+      `INSERT INTO user_feature_restrictions (user_id, feature, duration_days, reason, actor_id, expires_at, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (user_id, feature) DO UPDATE SET
+       duration_days=EXCLUDED.duration_days, reason=EXCLUDED.reason, actor_id=EXCLUDED.actor_id,
+       expires_at=EXCLUDED.expires_at, created_at=EXCLUDED.created_at`,
+      [
+        userId,
+        restriction.restriction,
+        restriction.durationDays,
+        restriction.reason,
+        restriction.appliedBy,
+        restriction.expiresAt,
+        restriction.createdAt,
+      ],
+    );
+    return this.activeRestrictions(userId);
+  }
+
+  public async activeRestrictions(userId: string): Promise<UserFeatureRestriction[]> {
+    const result = await this.pool.query(
+      'SELECT * FROM user_feature_restrictions WHERE user_id = $1 AND expires_at > NOW() ORDER BY created_at DESC',
+      [userId],
+    );
+    return result.rows.map((row) => ({
+      restriction: row.feature,
+      durationDays: row.duration_days,
+      reason: row.reason,
+      appliedBy: row.actor_id,
+      expiresAt: new Date(row.expires_at),
+      createdAt: new Date(row.created_at),
+    }));
+  }
+
+  public async ratingsSummary(userId: string, sellerOnly: boolean) {
+    const { rows } = await this.pool.query(
+      `SELECT rating, count(*)::int AS total FROM user_ratings WHERE to_user_id = $1
+       AND (NOT $2::boolean OR is_seller_review) GROUP BY rating`,
+      [userId, sellerOnly],
+    );
+    const ratingBreakdown: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    let totalReviews = 0;
+    let stars = 0;
+    for (const row of rows) {
+      ratingBreakdown[row.rating] = row.total;
+      totalReviews += row.total;
+      stars += row.total * row.rating;
+    }
+    return {
+      ratingBreakdown,
+      totalReviews,
+      averageRating: totalReviews === 0 ? null : Number((stars / totalReviews).toFixed(2)),
+    };
+  }
+
+  public async sellerReviews(sellerId: string, page: number, limit: number, rating?: number) {
+    const where =
+      'to_user_id = $1 AND is_seller_review AND ($2::smallint IS NULL OR user_ratings.rating = $2)';
+    const [count, list] = await Promise.all([
+      this.pool.query('SELECT count(*)::int AS total FROM user_ratings WHERE ' + where, [
+        sellerId,
+        rating ?? null,
+      ]),
+      this.pool.query(
+        `SELECT id::text, rating, comment, created_at FROM user_ratings WHERE ${where}
+         ORDER BY created_at DESC, id DESC LIMIT $3 OFFSET $4`,
+        [sellerId, rating ?? null, limit, (page - 1) * limit],
+      ),
+    ]);
+    const total = Number(count.rows[0].total);
+    return {
+      items: list.rows.map((row) => ({
+        id: row.id,
+        buyerAlias: 'Người mua đã xác minh',
+        rating: row.rating,
+        comment: row.comment,
+        createdAt: row.created_at,
+      })),
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  public async addSellerReview(
+    sellerId: string,
+    buyerId: string,
+    orderId: string,
+    rating: number,
+    comment: string | null,
+  ) {
+    const { rows } = await this.pool.query(
+      `INSERT INTO user_ratings (order_id, from_user_id, to_user_id, rating, comment, is_seller_review)
+       VALUES ($1,$2,$3,$4,$5,TRUE) ON CONFLICT DO NOTHING
+       RETURNING id::text, rating, comment, created_at AS "createdAt"`,
+      [orderId, buyerId, sellerId, rating, comment],
+    );
+    return rows[0] ?? null;
   }
 
   public async close(): Promise<void> {
@@ -382,19 +570,26 @@ export class PostgresUserRepository implements IUserRepository {
     if (row.status === 'SUSPENDED') status = UserStatus.SUSPENDED;
     else if (row.status === 'PENDING_VERIFICATION') status = UserStatus.PENDING_VERIFICATION;
 
+    const dob = row.date_of_birth || row.birth_date;
+    const dateOfBirth = dob
+      ? dob instanceof Date
+        ? dob.toISOString().split('T')[0]
+        : String(dob).split('T')[0]
+      : null;
+
     return new User({
       id: String(row.id),
       email: row.email,
       fullName: row.full_name,
       phone: row.phone || '',
       identifyNumber: row.identify_number || '',
-      gender: row.gender || '',
-      dateOfBirth: row.date_of_birth ? new Date(row.date_of_birth) : null,
+      gender: row.gender || null,
+      dateOfBirth,
       address: row.address || '',
       passwordHash: row.password_hash,
       role: role,
       status: status,
-      reputationScore: Number(row.reputation_score) || 100,
+      reputationScore: Number(row.reputation_score ?? 100),
       failedLoginAttempts: Number(row.failed_login_attempts) || 0,
       lockedUntil: row.locked_until ? new Date(row.locked_until) : null,
       reputationHistory,

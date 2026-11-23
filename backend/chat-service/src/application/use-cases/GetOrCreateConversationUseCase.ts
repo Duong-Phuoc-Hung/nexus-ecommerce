@@ -54,7 +54,12 @@ export class GetOrCreateConversationUseCase {
       channelType,
       buyerId,
       sellerId,
-      status: channelType === 'AI_BOT' ? 'BOT_ACTIVE' : 'ACTIVE',
+      status:
+        channelType === 'AI_BOT'
+          ? 'BOT_ACTIVE'
+          : channelType === 'BUYER_SUPPORT'
+            ? 'WAITING_STAFF'
+            : 'ACTIVE',
     });
 
     // Kiểm tra quyền trước khi lưu

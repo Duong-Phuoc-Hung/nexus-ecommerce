@@ -197,6 +197,31 @@ export class Order {
     return [...this._timeline];
   }
 
+  public get buyerReceivedAt(): Date | null {
+    const receivedEvent = this._timeline.find(
+      (t) => t.note === 'BUYER_CONFIRMED_RECEIPT' || t.status === 'BUYER_CONFIRMED_RECEIPT',
+    );
+    return receivedEvent ? new Date(receivedEvent.timestamp) : null;
+  }
+
+  public confirmReceipt(): void {
+    if (this._status !== OrderStatus.DELIVERED) {
+      throw new Error('Chỉ có thể xác nhận nhận hàng khi đơn hàng ở trạng thái "DELIVERED".');
+    }
+    const alreadyConfirmed = this._timeline.some(
+      (t) => t.note === 'BUYER_CONFIRMED_RECEIPT' || t.status === 'BUYER_CONFIRMED_RECEIPT',
+    );
+    if (!alreadyConfirmed) {
+      this._timeline.push({
+        status: 'DELIVERED',
+        title: 'Người mua xác nhận đã nhận hàng',
+        timestamp: new Date(),
+        note: 'BUYER_CONFIRMED_RECEIPT',
+      });
+      this._updatedAt = new Date();
+    }
+  }
+
   public get createdAt(): Date {
     return this._createdAt;
   }

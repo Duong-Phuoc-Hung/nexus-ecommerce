@@ -109,6 +109,14 @@ export class PostgresSupportCaseRepository implements ISupportCaseRepository {
       };
     }
 
+    // 1.1 Lọc theo orderId
+    if (criteria.orderId && criteria.orderId.trim().length > 0) {
+      where.orderId = {
+        equals: criteria.orderId.trim(),
+        mode: 'insensitive',
+      };
+    }
+
     // 2. Lọc theo status
     if (criteria.status && criteria.status.trim().length > 0) {
       where.status = {

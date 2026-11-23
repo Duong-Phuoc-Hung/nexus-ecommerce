@@ -30,7 +30,7 @@ export class AdjustUserReputationUseCase {
       throw new Error('userId is required.');
     }
 
-    if (typeof input.points !== 'number' || isNaN(input.points)) {
+    if (!Number.isSafeInteger(input.points) || Math.abs(input.points) > 2147483647) {
       throw new Error('points must be a valid number.');
     }
 
@@ -43,6 +43,23 @@ export class AdjustUserReputationUseCase {
       throw new UserNotFoundException(input.userId);
     }
 
+    if (this.userRepository.adjustScore) {
+      const actor = input.operatorId || 'system';
+      const { score, history } = await this.userRepository.adjustScore(
+        user.id,
+        input.points,
+        input.reason.trim(),
+        actor,
+      );
+      return {
+        userId: user.id,
+        newReputationScore: score,
+        adjustedPoints: input.points,
+        reason: input.reason.trim(),
+        adjustedBy: actor,
+        reputationHistory: history,
+      };
+    }
     user.adjustReputation(input.points, input.reason.trim(), input.operatorId || 'system');
     await this.userRepository.update(user);
 

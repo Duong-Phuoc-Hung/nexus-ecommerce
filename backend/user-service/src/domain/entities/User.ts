@@ -27,6 +27,8 @@ export interface UserFeatureRestriction {
   createdAt: Date;
 }
 
+export type Gender = 'MALE' | 'FEMALE' | 'OTHER' | 'UNSPECIFIED';
+
 export interface UserProps {
   id: string;
   email: string;
@@ -37,8 +39,8 @@ export interface UserProps {
   status: UserStatus;
   reputationScore: number;
   identifyNumber?: string;
-  gender?: string;
-  dateOfBirth?: Date | null;
+  gender?: Gender | string | null;
+  dateOfBirth?: string | Date | null;
   address?: string;
   failedLoginAttempts?: number;
   lockedUntil?: Date | null;
@@ -66,8 +68,8 @@ export class User {
   private _status: UserStatus;
   private _reputationScore: number;
   private _identifyNumber: string;
-  private _gender: string;
-  private _dateOfBirth: Date | null;
+  private _gender: Gender | string | null;
+  private _dateOfBirth: string | null;
   private _address: string;
   private _failedLoginAttempts: number;
   private _lockedUntil: Date | null;
@@ -86,8 +88,12 @@ export class User {
     this._status = props.status;
     this._reputationScore = props.reputationScore;
     this._identifyNumber = props.identifyNumber || '';
-    this._gender = props.gender || '';
-    this._dateOfBirth = props.dateOfBirth || null;
+    this._gender = props.gender ?? null;
+    this._dateOfBirth = props.dateOfBirth
+      ? props.dateOfBirth instanceof Date
+        ? props.dateOfBirth.toISOString().split('T')[0]
+        : String(props.dateOfBirth).split('T')[0]
+      : null;
     this._address = props.address || '';
     this._failedLoginAttempts = props.failedLoginAttempts ?? 0;
     this._lockedUntil = props.lockedUntil ?? null;
@@ -137,12 +143,28 @@ export class User {
     return this._identifyNumber;
   }
 
-  public get gender(): string {
+  public get gender(): Gender | string | null {
     return this._gender;
   }
 
-  public get dateOfBirth(): Date | null {
+  public set gender(value: Gender | string | null | undefined) {
+    this._gender = value ?? null;
+    this._updatedAt = new Date();
+  }
+
+  public get dateOfBirth(): string | null {
     return this._dateOfBirth;
+  }
+
+  public set dateOfBirth(value: string | Date | null | undefined) {
+    if (!value) {
+      this._dateOfBirth = null;
+    } else if (value instanceof Date) {
+      this._dateOfBirth = value.toISOString().split('T')[0];
+    } else {
+      this._dateOfBirth = String(value).split('T')[0];
+    }
+    this._updatedAt = new Date();
   }
 
   public get address(): string {

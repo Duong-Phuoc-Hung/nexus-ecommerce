@@ -70,18 +70,22 @@ export class EscalateDisputeUseCase {
       `http://127.0.0.1:${process.env.FULFILLMENT_SERVICE_PORT || 4005}`
     ).replace(/\/$/, '');
 
+    let finalCaseId = caseId;
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 2000);
 
-      await fetch(`${baseUrl}/api/v1/support/cases`, {
+      const fulfillmentRes = await fetch(`${baseUrl}/api/v1/support/cases`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-user-id': input.buyerId,
           'x-user-role': 'BUYER',
+          ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
         },
         body: JSON.stringify({
+          caseId,
+          idempotencyKey,
           orderId: rawOrderId,
           orderCode,
           customer: input.buyerName || 'Khách hàng Nexus',
@@ -115,6 +119,13 @@ export class EscalateDisputeUseCase {
       }).catch(() => null);
 
       clearTimeout(timer);
+
+      if (fulfillmentRes && (fulfillmentRes as any).ok) {
+        const json = (await (fulfillmentRes as any).json().catch(() => null)) as any;
+        if (json?.data?.id) {
+          finalCaseId = json.data.id;
+        }
+      }
     } catch {
       // Khi fulfillment service chưa bật trong môi trường test độc lập
     }
@@ -125,12 +136,12 @@ export class EscalateDisputeUseCase {
       'BUYER_SUPPORT',
     );
     if (supportConv) {
-      supportConv.linkSupportCase(caseId);
+      supportConv.linkSupportCase(finalCaseId);
       await this.conversationRepo.update(supportConv);
     }
 
     const result: EscalateDisputeResult = {
-      caseId,
+      caseId: finalCaseId,
       orderId: rawOrderId,
       orderCode,
       status: 'PENDING_REVIEW',

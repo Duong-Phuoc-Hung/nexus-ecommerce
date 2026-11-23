@@ -11,12 +11,20 @@ export function createSupportCaseRoutes(controller: SupportCaseController): Rout
   );
 
   // 1.1 GET /api/v1/support/cases/by-order/:orderId - Tra cứu khiếu nại theo đơn hàng (Buyer/Seller Portal)
-  router.get('/cases/by-order/:orderId', requireAuth, (req, res) =>
+  router.get(
+    '/cases/by-order/:orderId',
+    requireAuth,
+    requireSupportCasePermission('VIEW'),
+    (req, res) => controller.getCaseByOrderId(req, res),
+  );
+  router.get('/orders/:id/cases', requireAuth, requireSupportCasePermission('VIEW'), (req, res) =>
     controller.getCaseByOrderId(req, res),
   );
-  router.get('/orders/:id/cases', requireAuth, (req, res) => controller.getCaseByOrderId(req, res));
-  router.get('/orders/:orderId/cases', requireAuth, (req, res) =>
-    controller.getCaseByOrderId(req, res),
+  router.get(
+    '/orders/:orderId/cases',
+    requireAuth,
+    requireSupportCasePermission('VIEW'),
+    (req, res) => controller.getCaseByOrderId(req, res),
   );
 
   // 1.2 POST /api/v1/support/cases - Tiếp nhận tạo khiếu nại mới từ Buyer / Chatbot
