@@ -278,7 +278,7 @@ async function mapServerAuction(value: unknown): Promise<Auction> {
   };
 }
 async function readServerAuctions(): Promise<Auction[]> {
-  const values = unwrap<unknown>(await requestApi('/auctions'));
+  const values = unwrap<unknown>(await requestApi('/auctions?status=ALL'));
   if (!Array.isArray(values))
     throw new ApiError('Danh sách phiên đấu chưa đúng định dạng.', undefined, 'INVALID_AUCTIONS');
   return Promise.all(values.map(mapServerAuction));
