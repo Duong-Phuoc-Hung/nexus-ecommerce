@@ -34,6 +34,7 @@ import { UserNotFoundException } from '../../../domain/exceptions/UserNotFoundEx
 import { UserAlreadyExistsException } from '../../../domain/exceptions/UserAlreadyExistsException';
 import { OtpRateLimitException } from '../../../domain/exceptions/OtpRateLimitException';
 import { ROLE_PERMISSIONS } from '../../../infrastructure/security/authorization';
+import { IUserRepository } from '../../../domain/repositories/IUserRepository';
 
 export class UserController {
   constructor(
@@ -55,6 +56,7 @@ export class UserController {
     private readonly sendRegistrationOtpUseCase?: SendRegistrationOtpUseCase,
     private readonly adjustUserReputationUseCase?: AdjustUserReputationUseCase,
     private readonly restrictUserFeaturesUseCase?: RestrictUserFeaturesUseCase,
+    private readonly userRepository?: IUserRepository,
   ) {}
 
   public async listUsers(req: Request, res: Response): Promise<void> {
@@ -671,6 +673,47 @@ export class UserController {
       res.status(400).json({
         success: false,
         error: error.message || 'Không thể áp dụng chế tài tính năng.',
+      });
+    }
+  }
+
+  /**
+   * GET /api/v1/users/:id/reviews
+   * Lấy danh sách đánh giá từ cộng đồng (User Reviews) cho người dùng (SRS 3.1.2)
+   */
+  public async listUserReviews(req: Request, res: Response): Promise<void> {
+    try {
+      const rawId = req.params.id;
+      const userId = Array.isArray(rawId) ? rawId[0] : String(rawId);
+      if (!userId) {
+        res.status(400).json({ success: false, error: 'User ID is required.' });
+        return;
+      }
+
+      const reviews =
+        this.userRepository && this.userRepository.getUserReviews
+          ? await this.userRepository.getUserReviews(userId)
+          : [];
+
+      const totalReviews = reviews.length;
+      const averageRating =
+        totalReviews > 0
+          ? Number((reviews.reduce((acc, r) => acc + r.rating, 0) / totalReviews).toFixed(1))
+          : 5.0;
+
+      res.status(200).json({
+        success: true,
+        data: {
+          userId,
+          averageRating,
+          totalReviews,
+          reviews,
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Không thể lấy danh sách đánh giá của người dùng.',
       });
     }
   }

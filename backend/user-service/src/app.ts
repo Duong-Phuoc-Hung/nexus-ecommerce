@@ -186,6 +186,7 @@ export function createApplication(options?: CreateApplicationOptions): Applicati
     sendRegistrationOtpUseCase,
     adjustUserReputationUseCase,
     restrictUserFeaturesUseCase,
+    userRepository,
   );
 
   const sellerApplicationController = new SellerApplicationController(sellerApplicationService);

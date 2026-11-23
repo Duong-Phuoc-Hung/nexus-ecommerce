@@ -433,4 +433,74 @@ export class ShipmentController {
       });
     }
   }
+
+  /**
+   * POST /api/v1/fulfillments/shipments/quote
+   * Báo giá cước vận chuyển và thời gian dự kiến (ETA) của các hãng (GHN, GHTK, Viettel Post, J&T)
+   */
+  public async getShippingQuote(req: Request, res: Response): Promise<void> {
+    try {
+      const { warehouseId, city } = req.body || {};
+      const targetCity = String(city || '')
+        .toLowerCase()
+        .trim();
+      const isHcmWarehouse = !warehouseId || warehouseId === 'WH_001' || warehouseId === '1';
+      const isLocal = isHcmWarehouse
+        ? targetCity.includes('hồ chí minh') ||
+          targetCity.includes('hcm') ||
+          targetCity.includes('sài gòn')
+        : targetCity.includes('hà nội') || targetCity.includes('ha noi');
+
+      const now = new Date();
+      const addDays = (d: number) => {
+        const date = new Date(now.getTime() + d * 86400000);
+        return date.toISOString().split('T')[0];
+      };
+
+      const quotes = [
+        {
+          carrier: 'GHN',
+          carrierName: 'Giao Hàng Nhanh',
+          serviceName: isLocal ? 'Giao Nhanh Nội Thành' : 'Chuyển Phát Chuẩn Liên Tỉnh',
+          fee: isLocal ? 22000 : 35000,
+          estimatedDays: isLocal ? 1 : 3,
+          estimatedDeliveryDate: addDays(isLocal ? 1 : 3),
+        },
+        {
+          carrier: 'GHTK',
+          carrierName: 'Giao Hàng Tiết Kiệm',
+          serviceName: isLocal ? 'GHTK Tiết Kiệm' : 'GHTK Liên Tỉnh',
+          fee: isLocal ? 20000 : 32000,
+          estimatedDays: isLocal ? 2 : 3,
+          estimatedDeliveryDate: addDays(isLocal ? 2 : 3),
+        },
+        {
+          carrier: 'VIETTEL_POST',
+          carrierName: 'Viettel Post',
+          serviceName: isLocal ? 'Chuyển Phát Hỏa Tốc' : 'Chuyển Phát Nhanh',
+          fee: isLocal ? 25000 : 38000,
+          estimatedDays: isLocal ? 1 : 2,
+          estimatedDeliveryDate: addDays(isLocal ? 1 : 2),
+        },
+        {
+          carrier: 'JT_EXPRESS',
+          carrierName: 'J&T Express',
+          serviceName: isLocal ? 'J&T Tiêu Chuẩn' : 'J&T Tiết Kiệm',
+          fee: isLocal ? 18000 : 30000,
+          estimatedDays: isLocal ? 2 : 4,
+          estimatedDeliveryDate: addDays(isLocal ? 2 : 4),
+        },
+      ];
+
+      res.status(200).json({
+        success: true,
+        data: quotes,
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Không thể tính toán cước vận chuyển.',
+      });
+    }
+  }
 }

@@ -33,6 +33,7 @@ export function createUserRoutes(controller: UserController): Router {
   router.get('/:id', requireAuth, requirePermission('USER.VIEW'), (req, res) =>
     controller.getProfile(req, res),
   );
+  router.get('/:id/reviews', requireAuth, (req, res) => controller.listUserReviews(req, res));
   router.put('/:id/role', requireAuth, requirePermission('ROLE.UPDATE'), (req, res) =>
     controller.assignRole(req, res),
   );

@@ -1,5 +1,6 @@
 import {
   IUserRepository,
+  UserReview,
   UserSearchCriteria,
   UserSearchPage,
 } from '../../domain/repositories/IUserRepository';
@@ -9,6 +10,7 @@ import { hashPassword } from '../security/auth';
 export class InMemoryUserRepository implements IUserRepository {
   private readonly users: Map<string, User> = new Map();
   private readonly legacyAliases: Map<string, string> = new Map();
+  private readonly reviews: UserReview[] = [];
 
   constructor() {
     const now = new Date();
@@ -22,6 +24,11 @@ export class InMemoryUserRepository implements IUserRepository {
       role: UserRole.BUYER,
       status: UserStatus.ACTIVE,
       reputationScore: 98,
+      identifyNumber: '079201005678',
+      gender: 'MALE',
+      dateOfBirth: new Date('1995-08-15'),
+      address: '123 Lê Lợi, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
+      reputationHistory: [],
       createdAt: new Date(now.getTime() - 86400000 * 3),
       updatedAt: new Date(now.getTime() - 86400000 * 3),
     });
@@ -38,6 +45,18 @@ export class InMemoryUserRepository implements IUserRepository {
       role: UserRole.SELLER,
       status: UserStatus.ACTIVE,
       reputationScore: 92,
+      identifyNumber: '079201009999',
+      gender: 'MALE',
+      dateOfBirth: new Date('1990-05-20'),
+      address: '456 Hai Bà Trưng, Phường Tân Định, Quận 1, TP. Hồ Chí Minh',
+      reputationHistory: [
+        {
+          points: 10,
+          reason: 'Cung cấp bằng chứng giải quyết khiếu nại CS-4018 đúng hạn',
+          adjustedBy: 'SUPPORT_STAFF',
+          createdAt: new Date(now.getTime() - 86400000),
+        },
+      ],
       createdAt: new Date(now.getTime() - 86400000 * 2),
       updatedAt: new Date(now.getTime() - 86400000 * 2),
     });
@@ -98,6 +117,45 @@ export class InMemoryUserRepository implements IUserRepository {
       });
       this.users.set(admin.id, admin);
     }
+
+    this.reviews = [
+      {
+        id: 'rev_1',
+        orderId: 'NX-ORD-8009',
+        fromUserId: buyer.id,
+        fromUserName: buyer.fullName,
+        toUserId: seller.id,
+        rating: 5,
+        comment:
+          'Shop đóng gói rất cẩn thận, sản phẩm nguyên seal chính hãng, giao hàng siêu nhanh!',
+        createdAt: new Date(now.getTime() - 86400000 * 2),
+      },
+      {
+        id: 'rev_2',
+        orderId: 'NX-ORD-8008',
+        fromUserId: seller.id,
+        fromUserName: seller.fullName,
+        toUserId: buyer.id,
+        rating: 5,
+        comment: 'Khách hàng thanh toán nhanh, nhận hàng và xác nhận đơn rất đúng hẹn!',
+        createdAt: new Date(now.getTime() - 86400000 * 3),
+      },
+      {
+        id: 'rev_3',
+        orderId: 'NX-ORD-7990',
+        fromUserId: 'usr_buyer_002',
+        fromUserName: 'Tran Thi Lan',
+        toUserId: seller.id,
+        rating: 4,
+        comment: 'Hàng chuẩn đẹp đúng mô tả, tư vấn nhiệt tình.',
+        createdAt: new Date(now.getTime() - 86400000 * 7),
+      },
+    ];
+  }
+
+  public async getUserReviews(userId: string): Promise<UserReview[]> {
+    const resolvedId = this.legacyAliases.get(userId) ?? userId;
+    return this.reviews.filter((r) => r.toUserId === resolvedId || r.toUserId === userId);
   }
 
   public async findById(id: string): Promise<User | null> {

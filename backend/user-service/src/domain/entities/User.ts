@@ -36,6 +36,10 @@ export interface UserProps {
   role: UserRole;
   status: UserStatus;
   reputationScore: number;
+  identifyNumber?: string;
+  gender?: string;
+  dateOfBirth?: Date | null;
+  address?: string;
   failedLoginAttempts?: number;
   lockedUntil?: Date | null;
   reputationHistory?: ReputationAuditEntry[];
@@ -61,6 +65,10 @@ export class User {
   private _role: UserRole;
   private _status: UserStatus;
   private _reputationScore: number;
+  private _identifyNumber: string;
+  private _gender: string;
+  private _dateOfBirth: Date | null;
+  private _address: string;
   private _failedLoginAttempts: number;
   private _lockedUntil: Date | null;
   private _reputationHistory: ReputationAuditEntry[];
@@ -77,6 +85,10 @@ export class User {
     this._role = props.role;
     this._status = props.status;
     this._reputationScore = props.reputationScore;
+    this._identifyNumber = props.identifyNumber || '';
+    this._gender = props.gender || '';
+    this._dateOfBirth = props.dateOfBirth || null;
+    this._address = props.address || '';
     this._failedLoginAttempts = props.failedLoginAttempts ?? 0;
     this._lockedUntil = props.lockedUntil ?? null;
     this._reputationHistory = props.reputationHistory || [];
@@ -119,6 +131,22 @@ export class User {
 
   public get reputationScore(): number {
     return this._reputationScore;
+  }
+
+  public get identifyNumber(): string {
+    return this._identifyNumber;
+  }
+
+  public get gender(): string {
+    return this._gender;
+  }
+
+  public get dateOfBirth(): Date | null {
+    return this._dateOfBirth;
+  }
+
+  public get address(): string {
+    return this._address;
   }
 
   public get reputationHistory(): ReputationAuditEntry[] {
