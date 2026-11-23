@@ -374,3 +374,441 @@ test('8. Live DB: PostgresOrderRepository và GetOrderDetailUseCase trả đầy
   assert.ok('shippingServiceName' in orderDetail, 'DTO phải chứa trường shippingServiceName');
   assert.ok('estimatedDeliveryAt' in orderDetail, 'DTO phải chứa trường estimatedDeliveryAt');
 });
+
+// =============================================================================
+// TEST SUITES: KIỂM THỬ CHẶT CHẼ 5 LỖI P1 THEO BÁO CÁO REVIEW
+// =============================================================================
+
+test('9. [P1-1] Voucher không đủ điều kiện (min-spend) không bị trừ lượt trong DB khi checkout', async () => {
+  const validProdId = '01932f01-0001-7000-8000-000000000001';
+  let createdParams: any = null;
+  const mockRepo: any = {
+    saveQuote: async () => {},
+    findQuote: async () => null,
+    createOrder: async (params: any) => {
+      createdParams = params;
+      return {
+        order: {
+          id: 'ORD-TEST-1',
+          orderCode: 'ORD-TEST-1',
+          status: 'PROCESSING',
+          totalAmount: 232000,
+          items: [],
+          expiresAt: new Date(),
+        },
+        payment: {
+          id: 'PAY-1',
+          orderId: 'ORD-TEST-1',
+          paymentMethod: 'COD',
+          status: 'SUCCESS',
+          amount: 232000,
+        },
+        replay: false,
+        requestHash: 'hash',
+      };
+    },
+  };
+  const mockCatalog: any = {
+    findProduct: async (id: string) => ({
+      id,
+      sellerId: 'SELLER-1',
+      title: 'Item 1',
+      price: 200000,
+      stockQuantity: 10,
+      status: 'ACTIVE',
+    }),
+  };
+  const mockShipping: any = {
+    quote: async () => ({ supported: true, fee: 32000 }),
+  };
+  const mockGateway: any = { isConfigured: () => false };
+  const mockPromoService: any = {
+    validatePromotion: async () => ({
+      valid: false,
+      discountAmount: 0,
+      reasonCode: 'MIN_ORDER_AMOUNT_NOT_MET',
+    }),
+    getPromotionByCode: async () => ({ id: 'promo-50k', code: 'NEXUS50K' }),
+  };
+
+  const service = new CheckoutService(
+    mockRepo,
+    mockCatalog,
+    mockShipping,
+    mockGateway,
+    mockPromoService,
+  );
+
+  // Checkout trực tiếp với mã NEXUS50K không đủ min-spend
+  await service.checkout(
+    'buyer-1',
+    {
+      items: [{ productId: validProdId, quantity: 1 }],
+      shippingAddress: {
+        fullName: 'Nguyen Van A',
+        phone: '0901234567',
+        province: 'Hà Nội',
+        district: 'Ba Đình',
+        addressLine: '123 Đội Cấn',
+      },
+      paymentMethod: 'COD',
+      promoCode: 'NEXUS50K',
+    },
+    undefined,
+  );
+
+  assert.ok(createdParams, 'createOrder phải được gọi');
+  assert.equal(createdParams.discountAmount, 0, 'Tiền giảm phải là 0đ');
+  assert.equal(
+    createdParams.promotionId,
+    undefined,
+    'promotionId phải là undefined, không được truyền để tránh trừ lượt',
+  );
+  assert.equal(
+    createdParams.promoCode,
+    undefined,
+    'promoCode phải là undefined khi không được áp dụng',
+  );
+});
+
+test('10. [P1-2] Retry checkout cùng Idempotency-Key và cùng input trả về đơn cũ không tính lại voucher', async () => {
+  const validProdId = '01932f01-0001-7000-8000-000000000001';
+  let promoValidateCount = 0;
+  const existingOrderRecord = {
+    id: 'ORD-EXISTING-1',
+    orderCode: 'ORD-EXISTING-1',
+    buyerId: 'buyer-retry',
+    sellerId: 'SELLER-1',
+    status: 'PROCESSING',
+    totalAmount: 212000,
+    shippingFee: 32000,
+    discountAmount: 20000,
+    items: [],
+    shippingAddress: {
+      fullName: 'Nguyen Van A',
+      phone: '0901234567',
+      province: 'Hà Nội',
+      district: 'Ba Đình',
+      addressLine: '123 Đội Cấn',
+    },
+    expiresAt: new Date(),
+  };
+  const existingPaymentRecord = {
+    id: 'PAY-EXISTING-1',
+    orderId: 'ORD-EXISTING-1',
+    paymentMethod: 'COD',
+    payosOrderCode: 12345,
+    status: 'SUCCESS',
+    amount: 212000,
+    currency: 'VND',
+  };
+
+  // Tính trước requestHash chuẩn của payload đầu vào
+  const crypto = await import('node:crypto');
+  const expectedInputHash = crypto
+    .createHash('sha256')
+    .update(
+      JSON.stringify({
+        buyerId: 'buyer-retry',
+        lines: [{ productId: validProdId, quantity: 1 }],
+        address: {
+          fullName: 'Nguyen Van A',
+          phone: '0901234567',
+          province: 'Hà Nội',
+          district: 'Ba Đình',
+          ward: undefined,
+          addressLine: '123 Đội Cấn',
+          country: 'VN',
+        },
+        quoteId: null,
+        paymentMethod: 'COD',
+        promoCode: 'WELCOME10',
+        shippingOptionId: null,
+      }),
+    )
+    .digest('hex');
+
+  const mockRepo: any = {
+    findOrderByIdempotency: async (_buyerId: string, key: string) => {
+      if (key === 'IDEMP-RETRY-001') {
+        return {
+          order: existingOrderRecord,
+          payment: existingPaymentRecord,
+          requestHash: expectedInputHash,
+        };
+      }
+      return null;
+    },
+    createOrder: async () => {
+      throw new Error('createOrder không được gọi khi retry thành công');
+    },
+  };
+
+  const mockCatalog: any = {
+    findProduct: async (id: string) => ({
+      id,
+      sellerId: 'SELLER-1',
+      title: 'Item 1',
+      price: 200000,
+      stockQuantity: 10,
+      status: 'ACTIVE',
+    }),
+  };
+  const mockShipping: any = { quote: async () => ({ supported: true, fee: 32000 }) };
+  const mockGateway: any = { isConfigured: () => false };
+  const mockPromoService: any = {
+    validatePromotion: async () => {
+      promoValidateCount++;
+      return { valid: true, discountAmount: 20000 };
+    },
+  };
+
+  const service = new CheckoutService(
+    mockRepo,
+    mockCatalog,
+    mockShipping,
+    mockGateway,
+    mockPromoService,
+  );
+
+  // Lần gọi retry cùng Idempotency-Key và cùng input
+  const res = await service.checkout(
+    'buyer-retry',
+    {
+      items: [{ productId: validProdId, quantity: 1 }],
+      shippingAddress: {
+        fullName: 'Nguyen Van A',
+        phone: '0901234567',
+        province: 'Hà Nội',
+        district: 'Ba Đình',
+        addressLine: '123 Đội Cấn',
+      },
+      paymentMethod: 'COD',
+      promoCode: 'WELCOME10',
+    },
+    'IDEMP-RETRY-001',
+  );
+
+  assert.equal(res.replay, true, 'Phải đánh dấu là đơn replay');
+  assert.equal(res.data.orderId, 'ORD-EXISTING-1');
+  assert.equal(promoValidateCount, 0, 'Không được gọi validatePromotion lại khi replay đơn');
+
+  // Thử retry với Idempotency-Key cũ nhưng đổi địa chỉ khác -> phải văng 409 IDEMPOTENCY_KEY_REUSED
+  await assert.rejects(
+    async () => {
+      await service.checkout(
+        'buyer-retry',
+        {
+          items: [{ productId: validProdId, quantity: 1 }],
+          shippingAddress: {
+            fullName: 'Nguyen Van A',
+            phone: '0901234567',
+            province: 'Hà Nội',
+            district: 'Cầu Giấy', // Đổi quận làm đổi hash
+            addressLine: '99 Cầu Giấy',
+          },
+          paymentMethod: 'COD',
+          promoCode: 'WELCOME10',
+        },
+        'IDEMP-RETRY-001',
+      );
+    },
+    (err: any) => {
+      assert.equal(err.status, 409);
+      assert.equal(err.code, 'IDEMPOTENCY_KEY_REUSED');
+      return true;
+    },
+  );
+});
+
+test('11. [P1-3] Ràng buộc quoteId: đổi địa chỉ làm đổi cước hoặc đổi giỏ hàng phải báo lỗi 409', async () => {
+  const validProdId = '01932f01-0001-7000-8000-000000000001';
+  const quoteData: QuoteRecord = {
+    id: 'QUOTE-TEST-001',
+    buyerId: 'buyer-quote',
+    sellerId: 'SELLER-1',
+    items: [
+      { productId: validProdId, title: 'Item 1', unitPrice: 200000, quantity: 1, subtotal: 200000 },
+    ],
+    shippingAddress: {
+      fullName: 'Nguyen Van A',
+      phone: '0901234567',
+      province: 'Hà Nội',
+      district: 'Ba Đình',
+      addressLine: '123 Đội Cấn',
+      country: 'VN',
+    },
+    subtotal: 200000,
+    shippingFee: 32000,
+    totalAmount: 232000,
+    currency: 'VND',
+    expiresAt: new Date(Date.now() + 600000),
+    selectedShippingOptionId: 'GHN_STANDARD',
+  };
+
+  const mockRepo: any = {
+    findQuote: async (id: string) => (id === 'QUOTE-TEST-001' ? quoteData : null),
+  };
+  const mockCatalog: any = {
+    findProduct: async (id: string) => ({
+      id,
+      sellerId: 'SELLER-1',
+      title: 'Item 1',
+      price: 200000,
+      stockQuantity: 10,
+      status: 'ACTIVE',
+    }),
+  };
+  const mockShipping: any = {
+    quote: async (addr: ShippingAddress) => {
+      // Nếu ở Hà Nội cước 32.000, nếu Cà Mau cước 65.000
+      if (addr.province === 'Cà Mau') return { supported: true, fee: 65000 };
+      return { supported: true, fee: 32000 };
+    },
+  };
+  const mockGateway: any = { isConfigured: () => false };
+
+  const service = new CheckoutService(mockRepo, mockCatalog, mockShipping, mockGateway);
+
+  // 1. Đổi địa chỉ sang Cà Mau làm cước nhảy từ 32k lên 65k -> phải từ chối 409 QUOTE_PRICE_CHANGED
+  await assert.rejects(
+    async () => {
+      await service.checkout(
+        'buyer-quote',
+        {
+          items: [{ productId: validProdId, quantity: 1 }],
+          shippingAddress: {
+            fullName: 'Nguyen Van A',
+            phone: '0901234567',
+            province: 'Cà Mau',
+            district: 'Đầm Dơi',
+            addressLine: 'Xã Tân Thuận',
+          },
+          paymentMethod: 'COD',
+          quoteId: 'QUOTE-TEST-001',
+        },
+        undefined,
+      );
+    },
+    (err: any) => {
+      assert.equal(err.status, 409);
+      assert.equal(err.code, 'QUOTE_PRICE_CHANGED');
+      return true;
+    },
+  );
+
+  // 2. Đổi số lượng trong giỏ hàng (quantity: 2) -> phải từ chối 409 QUOTE_PRICE_CHANGED
+  await assert.rejects(
+    async () => {
+      await service.checkout(
+        'buyer-quote',
+        {
+          items: [{ productId: validProdId, quantity: 2 }],
+          shippingAddress: {
+            fullName: 'Nguyen Van A',
+            phone: '0901234567',
+            province: 'Hà Nội',
+            district: 'Ba Đình',
+            addressLine: '123 Đội Cấn',
+          },
+          paymentMethod: 'COD',
+          quoteId: 'QUOTE-TEST-001',
+        },
+        undefined,
+      );
+    },
+    (err: any) => {
+      assert.equal(err.status, 409);
+      assert.equal(err.code, 'QUOTE_PRICE_CHANGED');
+      return true;
+    },
+  );
+});
+
+test('12. [P1-4] Báo giá vận chuyển chỉ mở các phương án backend có thể tạo vận đơn (GHN)', () => {
+  const service = new CheckoutService({} as any, {} as any, {} as any, {} as any);
+  const options = service.buildShippingOptions(32000);
+
+  assert.equal(options.length, 1, 'Chỉ mở 1 phương án duy nhất là GHN');
+  assert.equal(options[0].carrier, 'GHN');
+  assert.equal(options[0].optionId, 'GHN_STANDARD');
+  assert.equal(
+    options.some((o) => o.carrier === 'GHTK'),
+    false,
+    'Tạm ẩn GHTK vì chưa có client tích hợp',
+  );
+});
+
+test('13. [P1-5] Hủy đơn và hoàn voucher nguyên tử trong cùng transaction, chống hủy lặp', async () => {
+  let txExecuted = false;
+  let promoUsageDeleted = false;
+  let promoCountDecremented = false;
+  let orderStatusUpdated = false;
+
+  const mockTx: any = {
+    order: {
+      findFirst: async () => ({ id: 'ORD-CANCEL-1', status: 'PROCESSING' }),
+      updateMany: async () => {
+        orderStatusUpdated = true;
+      },
+    },
+    promotionUsage: {
+      findMany: async () => [{ id: 'usage-1', promotionId: 'promo-1' }],
+      delete: async () => {
+        promoUsageDeleted = true;
+        return { id: 'usage-1' };
+      },
+    },
+    promotion: {
+      update: async () => {
+        promoCountDecremented = true;
+      },
+    },
+  };
+
+  const mockPrisma: any = {
+    $transaction: async (cb: any) => {
+      txExecuted = true;
+      return cb(mockTx);
+    },
+  };
+
+  const repo = new PostgresOrderRepository({} as any, mockPrisma);
+  const orderToCancel: any = {
+    id: 'ORD-CANCEL-1',
+    status: 'CANCELLED',
+    timeline: [],
+    updatedAt: new Date(),
+  };
+
+  // Lần hủy thứ 1: chuyển từ PROCESSING sang CANCELLED
+  await repo.update(orderToCancel);
+  assert.equal(txExecuted, true, 'Toàn bộ thao tác phải thực thi trong transaction');
+  assert.equal(promoUsageDeleted, true, 'Phải xóa bản ghi lượt dùng');
+  assert.equal(promoCountDecremented, true, 'Phải giảm usedCount của voucher');
+  assert.equal(orderStatusUpdated, true, 'Phải cập nhật status đơn sang CANCELLED');
+
+  // Lần hủy thứ 2 (idempotent retry): đơn trong DB ĐÃ LÀ CANCELLED
+  let secondUsageDeleted = false;
+  let secondCountDecremented = false;
+  mockTx.order.findFirst = async () => ({ id: 'ORD-CANCEL-1', status: 'CANCELLED' });
+  mockTx.promotionUsage.delete = async () => {
+    secondUsageDeleted = true;
+    return { id: 'usage-1' };
+  };
+  mockTx.promotion.update = async () => {
+    secondCountDecremented = true;
+  };
+
+  await repo.update(orderToCancel);
+  assert.equal(
+    secondUsageDeleted,
+    false,
+    'Không được xóa promotionUsage lần 2 khi đơn đã là CANCELLED',
+  );
+  assert.equal(
+    secondCountDecremented,
+    false,
+    'Không được giảm usedCount lần 2 khi đơn đã là CANCELLED',
+  );
+});

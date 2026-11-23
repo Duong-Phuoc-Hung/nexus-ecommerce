@@ -212,6 +212,10 @@ export type ApplyPaymentOutcome =
 export interface ICheckoutRepository {
   saveQuote(quote: QuoteRecord): Promise<void>;
   findQuote(id: string): Promise<QuoteRecord | null>;
+  findOrderByIdempotency?(
+    buyerId: string,
+    idempotencyKey: string,
+  ): Promise<{ order: OrderRecord; payment: PaymentRecord; requestHash: string } | null>;
   createOrder(params: CreateOrderParams): Promise<{
     order: OrderRecord;
     payment: PaymentRecord;

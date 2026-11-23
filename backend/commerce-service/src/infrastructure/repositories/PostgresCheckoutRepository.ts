@@ -162,6 +162,37 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
     };
   }
 
+  public async findOrderByIdempotency(
+    buyerId: string,
+    idempotencyKey: string,
+  ): Promise<{ order: OrderRecord; payment: PaymentRecord; requestHash: string } | null> {
+    if (!this.prisma?.checkoutIdempotency) return null;
+    const existing = await this.prisma.checkoutIdempotency.findUnique({
+      where: {
+        buyerId_idempotencyKey: {
+          buyerId,
+          idempotencyKey,
+        },
+      },
+    });
+
+    if (!existing || !existing.orderId) {
+      return null;
+    }
+
+    const order = await this.loadOrderPrisma(this.prisma, String(existing.orderId));
+    const payment = await this.loadLatestPaymentPrisma(this.prisma, String(existing.orderId));
+    if (!order || !payment) {
+      return null;
+    }
+
+    return {
+      order,
+      payment,
+      requestHash: existing.requestHash,
+    };
+  }
+
   public async createOrder(params: CreateOrderParams) {
     if (params.idempotencyKey) {
       const existing = await this.prisma.checkoutIdempotency.findUnique({
@@ -297,7 +328,7 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
       const orderId = String(order.id);
 
       // Record promotion usage if voucher applied (với Advisory Lock chống Race Condition)
-      if (params.promotionId) {
+      if (params.promotionId && Number(params.discountAmount || 0) > 0) {
         // 1. Khóa theo promotionId để tuần tự hóa việc áp mã chống race condition
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${params.promotionId}))`;
 

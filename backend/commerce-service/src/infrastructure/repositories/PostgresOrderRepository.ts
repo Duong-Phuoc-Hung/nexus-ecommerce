@@ -227,38 +227,64 @@ export class PostgresOrderRepository implements IOrderRepository {
   public async update(order: Order): Promise<void> {
     const cleanId = order.id.trim();
 
-    await this.prisma.order.updateMany({
-      where: {
-        OR: [{ id: cleanId }, { orderCode: cleanId }],
-      },
-      data: {
-        status: order.status,
-        trackingCode: order.trackingCode || null,
-        timeline: order.timeline as any,
-        updatedAt: order.updatedAt,
-      },
-    });
+    const runInTx = async (tx: any) => {
+      // 1. Kiểm tra trạng thái hiện tại trong DB để chống hoàn voucher lặp khi retry hủy đơn (P1-5)
+      const existing = await tx.order.findFirst({
+        where: {
+          OR: [{ id: cleanId }, { orderCode: cleanId }],
+        },
+        select: { id: true, status: true },
+      });
 
-    // Hoàn trả voucher khi đơn hàng bị hủy (BUG-02)
-    if (order.status === 'CANCELLED' && this.prisma?.promotionUsage && this.prisma?.promotion) {
-      try {
-        const promoUsages = await this.prisma.promotionUsage.findMany({
-          where: { orderId: cleanId },
+      const currentStatus = existing?.status;
+      const targetOrderId = existing?.id || cleanId;
+
+      // 2. Cập nhật trạng thái và timeline của đơn hàng trong transaction
+      await tx.order.updateMany({
+        where: {
+          OR: [{ id: cleanId }, { orderCode: cleanId }],
+        },
+        data: {
+          status: order.status,
+          trackingCode: order.trackingCode || null,
+          timeline: order.timeline as any,
+          updatedAt: order.updatedAt,
+        },
+      });
+
+      // 3. Hoàn trả voucher nguyên tử trong cùng transaction (chỉ khi đơn chưa từng bị CANCELLED)
+      if (
+        order.status === 'CANCELLED' &&
+        currentStatus !== 'CANCELLED' &&
+        tx.promotionUsage &&
+        tx.promotion
+      ) {
+        const promoUsages = await tx.promotionUsage.findMany({
+          where: { orderId: targetOrderId },
         });
-        if (Array.isArray(promoUsages)) {
+
+        if (Array.isArray(promoUsages) && promoUsages.length > 0) {
           for (const usage of promoUsages) {
-            await this.prisma.promotion.update({
-              where: { id: usage.promotionId },
-              data: { usedCount: { decrement: 1 } },
-            });
-            await this.prisma.promotionUsage.delete({
+            // Xóa bản ghi lượt dùng trước trong cùng transaction
+            const deleted = await tx.promotionUsage.delete({
               where: { id: usage.id },
             });
+            // Chỉ giảm bộ đếm khi đã thu hồi đúng bản ghi sử dụng thành công
+            if (deleted) {
+              await tx.promotion.update({
+                where: { id: usage.promotionId },
+                data: { usedCount: { decrement: 1 } },
+              });
+            }
           }
         }
-      } catch (err) {
-        console.warn('[PostgresOrderRepository] Warning releasing voucher on cancel:', err);
       }
+    };
+
+    if (typeof (this.prisma as any)?.$transaction === 'function') {
+      await (this.prisma as any).$transaction(runInTx);
+    } else {
+      await runInTx(this.prisma);
     }
   }
 

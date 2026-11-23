@@ -39,8 +39,8 @@ export class DispatchOrderUseCase {
     let trackingCode = input.trackingCode;
     let awbBarcodeUrl: string | undefined;
 
-    // Tự động tạo vận đơn sang 3PL (GHN Sandbox) nếu chưa có sẵn tracking code thủ công
-    if (!trackingCode && this.shippingOrderClient) {
+    // Tự động tạo vận đơn sang 3PL (GHN Sandbox) nếu carrier là GHN và chưa có sẵn tracking code thủ công
+    if (!trackingCode && this.shippingOrderClient && carrier === 'GHN') {
       try {
         const outbound = await this.shippingOrderClient.createShippingOrder({
           orderId: order.id,
