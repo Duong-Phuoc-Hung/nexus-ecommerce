@@ -59,5 +59,35 @@
     "estimatedDaysAhead": 3,
     "createdAt": "2026-10-20T08:00:00.000Z",
     "updatedAt": "2026-10-20T08:30:00.000Z"
+  },
+  {
+    "id": "shp_05ghn_failed",
+    "orderId": "NX-ORD-8030",
+    "carrier": "GHN",
+    "trackingCode": "GHN9920192VN",
+    "status": "FAILED",
+    "shippingAddress": "123 Lê Duẩn, Quận Hải Châu, Đà Nẵng",
+    "recipientName": "Lê Hoàng Nam",
+    "recipientPhone": "0934567890",
+    "city": "Đà Nẵng",
+    "currentLocation": "Đà Nẵng · Giao hàng không thành công - Người nhận hẹn lại",
+    "estimatedDaysAhead": 0,
+    "createdAt": "2026-10-21T08:00:00.000Z",
+    "updatedAt": "2026-10-21T16:00:00.000Z"
+  },
+  {
+    "id": "shp_06ghtk_returned",
+    "orderId": "NX-ORD-8031",
+    "carrier": "GHTK",
+    "trackingCode": "GHTK7788991",
+    "status": "RETURNED",
+    "shippingAddress": "456 Xô Viết Nghệ Tĩnh, Bình Thạnh, TP. Hồ Chí Minh",
+    "recipientName": "Trần Thị Mai",
+    "recipientPhone": "0987654321",
+    "city": "TP. Hồ Chí Minh",
+    "currentLocation": "TP. Hồ Chí Minh · Đã hoàn trả về kho xuất hàng",
+    "estimatedDaysAhead": 0,
+    "createdAt": "2026-10-20T10:00:00.000Z",
+    "updatedAt": "2026-10-22T14:00:00.000Z"
   }
 ]

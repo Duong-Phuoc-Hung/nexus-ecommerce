@@ -269,42 +269,90 @@ export class PostgresShipmentRepository implements IShipmentRepository {
   }
 
   public async getDashboardSummary(): Promise<FulfillmentDashboardSummary> {
-    // 1. Thống kê vận đơn có vấn đề
-    let flaggedShipments = 4;
+    // 1. Thống kê vận đơn có vấn đề từ bảng fulfillment_shipments
+    let flaggedShipments = 0;
     try {
-      const flaggedCount = await this.prisma.shipment.count({
+      flaggedShipments = await this.prisma.shipment.count({
         where: {
           status: {
             in: ['FAILED', 'RETURNED'],
           },
         },
       });
-      flaggedShipments = Math.max(flaggedCount, 4);
     } catch {
-      flaggedShipments = 4;
+      flaggedShipments = 0;
     }
 
-    // 2. Thống kê hồ sơ khiếu nại từ fulfillment_support_cases
-    let pendingCases = 8;
-    let processingCases = 5;
-    let resolvedToday = 17;
-    let highPriorityCount = 3;
+    // 2. Thống kê hồ sơ khiếu nại từ bảng fulfillment_support_cases
+    let pendingCases = 0;
+    let processingCases = 0;
+    let resolvedToday = 0;
+    let highPriorityCount = 0;
+    let nearOverdueCount = 0;
+    let averageHandlingTimeMinutes = 0;
+    let updatedTodayCount = 0;
     let recentCases: SupportCaseItem[] = [];
 
     try {
-      const [pendingCount, inProgressCount, resolvedCount, highPriCount] = await Promise.all([
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+      const [
+        pendingCount,
+        inProgressCount,
+        resolvedCount,
+        highPriCount,
+        nearOverdue,
+        updatedToday,
+      ] = await Promise.all([
         this.prisma.supportCase.count({ where: { status: 'PENDING' } }),
         this.prisma.supportCase.count({ where: { status: 'IN_PROGRESS' } }),
-        this.prisma.supportCase.count({ where: { status: { in: ['RESOLVED', 'REJECTED'] } } }),
+        this.prisma.supportCase.count({
+          where: {
+            status: { in: ['RESOLVED', 'REJECTED'] },
+            updatedAt: { gte: todayStart },
+          },
+        }),
         this.prisma.supportCase.count({ where: { priority: { in: ['Cao', 'HIGH'] } } }),
+        this.prisma.supportCase.count({
+          where: {
+            status: { in: ['PENDING', 'IN_PROGRESS'] },
+            slaDeadline: { lte: in24Hours },
+          },
+        }),
+        this.prisma.supportCase.count({
+          where: {
+            updatedAt: { gte: todayStart },
+          },
+        }),
       ]);
 
-      pendingCases = Math.max(pendingCount, 3);
-      processingCases = Math.max(inProgressCount, 2);
-      resolvedToday = Math.max(resolvedCount, 5);
-      highPriorityCount = Math.max(highPriCount, 1);
+      pendingCases = pendingCount;
+      processingCases = inProgressCount;
+      resolvedToday = resolvedCount;
+      highPriorityCount = highPriCount;
+      nearOverdueCount = nearOverdue;
+      updatedTodayCount = updatedToday;
 
-      // Lấy 5 khiếu nại gần nhất
+      // Tính thời gian xử lý trung bình thực tế từ các ca đã đóng trong CSDL
+      const resolvedList = await this.prisma.supportCase.findMany({
+        where: { status: { in: ['RESOLVED', 'REJECTED'] } },
+        select: { createdAt: true, updatedAt: true },
+        take: 20,
+      });
+      if (resolvedList.length > 0) {
+        const totalDuration = resolvedList.reduce((acc, c) => {
+          const diff = Math.max(
+            1,
+            Math.floor((new Date(c.updatedAt).getTime() - new Date(c.createdAt).getTime()) / 60000),
+          );
+          return acc + diff;
+        }, 0);
+        averageHandlingTimeMinutes = Math.round(totalDuration / resolvedList.length);
+      }
+
+      // Lấy 5 khiếu nại gần nhất từ PostgreSQL
       const recent = await this.prisma.supportCase.findMany({
         take: 5,
         orderBy: {
@@ -337,7 +385,7 @@ export class PostgresShipmentRepository implements IShipmentRepository {
       });
     } catch (e: any) {
       console.warn(
-        '[PostgresShipmentRepository] Error calculating live support stats, using baseline defaults:',
+        '[PostgresShipmentRepository] Error calculating live support stats from PostgreSQL:',
         e?.message || e,
       );
     }
@@ -349,9 +397,9 @@ export class PostgresShipmentRepository implements IShipmentRepository {
       flaggedShipments,
       metrics: {
         highPriorityCount,
-        nearOverdueCount: 2,
-        averageHandlingTimeMinutes: 24,
-        updatedTodayCount: 2,
+        nearOverdueCount,
+        averageHandlingTimeMinutes,
+        updatedTodayCount,
       },
       recentCases,
     };

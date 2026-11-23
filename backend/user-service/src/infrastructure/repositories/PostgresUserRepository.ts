@@ -52,7 +52,7 @@ export class PostgresUserRepository implements IUserRepository {
             SELECT u.id, u.email, u.phone, u.full_name, u.password_hash, u.status,
               u.identify_number, u.gender, u.date_of_birth, u.address,
               u.failed_login_attempts, u.locked_until, u.created_at, u.updated_at,
-              to_char(u.date_of_birth, 'YYYY-MM-DD') as birth_date, u.gender,
+              to_char(u.date_of_birth, 'YYYY-MM-DD') as birth_date,
              COALESCE(r.role_code, 'BUYER') as role_code,
              COALESCE(rep.score, 100) as reputation_score
       FROM user_users u
@@ -76,7 +76,7 @@ export class PostgresUserRepository implements IUserRepository {
             SELECT u.id, u.email, u.phone, u.full_name, u.password_hash, u.status,
               u.identify_number, u.gender, u.date_of_birth, u.address,
               u.failed_login_attempts, u.locked_until, u.created_at, u.updated_at,
-              to_char(u.date_of_birth, 'YYYY-MM-DD') as birth_date, u.gender,
+              to_char(u.date_of_birth, 'YYYY-MM-DD') as birth_date,
              COALESCE(r.role_code, 'BUYER') as role_code,
              COALESCE(rep.score, 100) as reputation_score
       FROM user_users u
@@ -120,7 +120,7 @@ export class PostgresUserRepository implements IUserRepository {
             SELECT u.id, u.email, u.phone, u.full_name, u.password_hash, u.status,
               u.identify_number, u.gender, u.date_of_birth, u.address,
               u.failed_login_attempts, u.locked_until, u.created_at, u.updated_at,
-              to_char(u.date_of_birth, 'YYYY-MM-DD') as birth_date, u.gender,
+              to_char(u.date_of_birth, 'YYYY-MM-DD') as birth_date,
              COALESCE(r.role_code, 'BUYER') as role_code,
              COALESCE(rep.score, 100) as reputation_score
       FROM user_users u
