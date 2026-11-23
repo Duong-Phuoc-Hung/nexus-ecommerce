@@ -1171,6 +1171,7 @@ export namespace Prisma {
     productId: string | null
     sellerId: string | null
     title: string | null
+    imageUrl: string | null
     startPrice: Decimal | null
     currentPrice: Decimal | null
     bidStep: Decimal | null
@@ -1192,6 +1193,7 @@ export namespace Prisma {
     productId: string | null
     sellerId: string | null
     title: string | null
+    imageUrl: string | null
     startPrice: Decimal | null
     currentPrice: Decimal | null
     bidStep: Decimal | null
@@ -1213,6 +1215,7 @@ export namespace Prisma {
     productId: number
     sellerId: number
     title: number
+    imageUrl: number
     startPrice: number
     currentPrice: number
     bidStep: number
@@ -1250,6 +1253,7 @@ export namespace Prisma {
     productId?: true
     sellerId?: true
     title?: true
+    imageUrl?: true
     startPrice?: true
     currentPrice?: true
     bidStep?: true
@@ -1271,6 +1275,7 @@ export namespace Prisma {
     productId?: true
     sellerId?: true
     title?: true
+    imageUrl?: true
     startPrice?: true
     currentPrice?: true
     bidStep?: true
@@ -1292,6 +1297,7 @@ export namespace Prisma {
     productId?: true
     sellerId?: true
     title?: true
+    imageUrl?: true
     startPrice?: true
     currentPrice?: true
     bidStep?: true
@@ -1400,6 +1406,7 @@ export namespace Prisma {
     productId: string
     sellerId: string
     title: string
+    imageUrl: string | null
     startPrice: Decimal
     currentPrice: Decimal
     bidStep: Decimal
@@ -1440,6 +1447,7 @@ export namespace Prisma {
     productId?: boolean
     sellerId?: boolean
     title?: boolean
+    imageUrl?: boolean
     startPrice?: boolean
     currentPrice?: boolean
     bidStep?: boolean
@@ -1465,6 +1473,7 @@ export namespace Prisma {
     productId?: boolean
     sellerId?: boolean
     title?: boolean
+    imageUrl?: boolean
     startPrice?: boolean
     currentPrice?: boolean
     bidStep?: boolean
@@ -1486,6 +1495,7 @@ export namespace Prisma {
     productId?: boolean
     sellerId?: boolean
     title?: boolean
+    imageUrl?: boolean
     startPrice?: boolean
     currentPrice?: boolean
     bidStep?: boolean
@@ -1522,6 +1532,7 @@ export namespace Prisma {
       productId: string
       sellerId: string
       title: string
+      imageUrl: string | null
       startPrice: Prisma.Decimal
       currentPrice: Prisma.Decimal
       bidStep: Prisma.Decimal
@@ -1936,6 +1947,7 @@ export namespace Prisma {
     readonly productId: FieldRef<"AuctionRoom", 'String'>
     readonly sellerId: FieldRef<"AuctionRoom", 'String'>
     readonly title: FieldRef<"AuctionRoom", 'String'>
+    readonly imageUrl: FieldRef<"AuctionRoom", 'String'>
     readonly startPrice: FieldRef<"AuctionRoom", 'Decimal'>
     readonly currentPrice: FieldRef<"AuctionRoom", 'Decimal'>
     readonly bidStep: FieldRef<"AuctionRoom", 'Decimal'>
@@ -5353,6 +5365,7 @@ export namespace Prisma {
     productId: 'productId',
     sellerId: 'sellerId',
     title: 'title',
+    imageUrl: 'imageUrl',
     startPrice: 'startPrice',
     currentPrice: 'currentPrice',
     bidStep: 'bidStep',
@@ -5544,6 +5557,7 @@ export namespace Prisma {
     productId?: StringFilter<"AuctionRoom"> | string
     sellerId?: StringFilter<"AuctionRoom"> | string
     title?: StringFilter<"AuctionRoom"> | string
+    imageUrl?: StringNullableFilter<"AuctionRoom"> | string | null
     startPrice?: DecimalFilter<"AuctionRoom"> | Decimal | DecimalJsLike | number | string
     currentPrice?: DecimalFilter<"AuctionRoom"> | Decimal | DecimalJsLike | number | string
     bidStep?: DecimalFilter<"AuctionRoom"> | Decimal | DecimalJsLike | number | string
@@ -5568,6 +5582,7 @@ export namespace Prisma {
     productId?: SortOrder
     sellerId?: SortOrder
     title?: SortOrder
+    imageUrl?: SortOrderInput | SortOrder
     startPrice?: SortOrder
     currentPrice?: SortOrder
     bidStep?: SortOrder
@@ -5595,6 +5610,7 @@ export namespace Prisma {
     productId?: StringFilter<"AuctionRoom"> | string
     sellerId?: StringFilter<"AuctionRoom"> | string
     title?: StringFilter<"AuctionRoom"> | string
+    imageUrl?: StringNullableFilter<"AuctionRoom"> | string | null
     startPrice?: DecimalFilter<"AuctionRoom"> | Decimal | DecimalJsLike | number | string
     currentPrice?: DecimalFilter<"AuctionRoom"> | Decimal | DecimalJsLike | number | string
     bidStep?: DecimalFilter<"AuctionRoom"> | Decimal | DecimalJsLike | number | string
@@ -5619,6 +5635,7 @@ export namespace Prisma {
     productId?: SortOrder
     sellerId?: SortOrder
     title?: SortOrder
+    imageUrl?: SortOrderInput | SortOrder
     startPrice?: SortOrder
     currentPrice?: SortOrder
     bidStep?: SortOrder
@@ -5648,6 +5665,7 @@ export namespace Prisma {
     productId?: StringWithAggregatesFilter<"AuctionRoom"> | string
     sellerId?: StringWithAggregatesFilter<"AuctionRoom"> | string
     title?: StringWithAggregatesFilter<"AuctionRoom"> | string
+    imageUrl?: StringNullableWithAggregatesFilter<"AuctionRoom"> | string | null
     startPrice?: DecimalWithAggregatesFilter<"AuctionRoom"> | Decimal | DecimalJsLike | number | string
     currentPrice?: DecimalWithAggregatesFilter<"AuctionRoom"> | Decimal | DecimalJsLike | number | string
     bidStep?: DecimalWithAggregatesFilter<"AuctionRoom"> | Decimal | DecimalJsLike | number | string
@@ -5880,6 +5898,7 @@ export namespace Prisma {
     productId: string
     sellerId: string
     title: string
+    imageUrl?: string | null
     startPrice: Decimal | DecimalJsLike | number | string
     currentPrice: Decimal | DecimalJsLike | number | string
     bidStep: Decimal | DecimalJsLike | number | string
@@ -5904,6 +5923,7 @@ export namespace Prisma {
     productId: string
     sellerId: string
     title: string
+    imageUrl?: string | null
     startPrice: Decimal | DecimalJsLike | number | string
     currentPrice: Decimal | DecimalJsLike | number | string
     bidStep: Decimal | DecimalJsLike | number | string
@@ -5928,6 +5948,7 @@ export namespace Prisma {
     productId?: StringFieldUpdateOperationsInput | string
     sellerId?: StringFieldUpdateOperationsInput | string
     title?: StringFieldUpdateOperationsInput | string
+    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
     startPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     currentPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     bidStep?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -5952,6 +5973,7 @@ export namespace Prisma {
     productId?: StringFieldUpdateOperationsInput | string
     sellerId?: StringFieldUpdateOperationsInput | string
     title?: StringFieldUpdateOperationsInput | string
+    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
     startPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     currentPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     bidStep?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -5976,6 +5998,7 @@ export namespace Prisma {
     productId: string
     sellerId: string
     title: string
+    imageUrl?: string | null
     startPrice: Decimal | DecimalJsLike | number | string
     currentPrice: Decimal | DecimalJsLike | number | string
     bidStep: Decimal | DecimalJsLike | number | string
@@ -5997,6 +6020,7 @@ export namespace Prisma {
     productId?: StringFieldUpdateOperationsInput | string
     sellerId?: StringFieldUpdateOperationsInput | string
     title?: StringFieldUpdateOperationsInput | string
+    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
     startPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     currentPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     bidStep?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -6018,6 +6042,7 @@ export namespace Prisma {
     productId?: StringFieldUpdateOperationsInput | string
     sellerId?: StringFieldUpdateOperationsInput | string
     title?: StringFieldUpdateOperationsInput | string
+    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
     startPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     currentPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     bidStep?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -6270,6 +6295,21 @@ export namespace Prisma {
     not?: NestedStringFilter<$PrismaModel> | string
   }
 
+  export type StringNullableFilter<$PrismaModel = never> = {
+    equals?: string | StringFieldRefInput<$PrismaModel> | null
+    in?: string[] | ListStringFieldRefInput<$PrismaModel> | null
+    notIn?: string[] | ListStringFieldRefInput<$PrismaModel> | null
+    lt?: string | StringFieldRefInput<$PrismaModel>
+    lte?: string | StringFieldRefInput<$PrismaModel>
+    gt?: string | StringFieldRefInput<$PrismaModel>
+    gte?: string | StringFieldRefInput<$PrismaModel>
+    contains?: string | StringFieldRefInput<$PrismaModel>
+    startsWith?: string | StringFieldRefInput<$PrismaModel>
+    endsWith?: string | StringFieldRefInput<$PrismaModel>
+    mode?: QueryMode
+    not?: NestedStringNullableFilter<$PrismaModel> | string | null
+  }
+
   export type DecimalFilter<$PrismaModel = never> = {
     equals?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
     in?: Decimal[] | DecimalJsLike[] | number[] | string[] | ListDecimalFieldRefInput<$PrismaModel>
@@ -6314,21 +6354,6 @@ export namespace Prisma {
     not?: NestedDateTimeNullableFilter<$PrismaModel> | Date | string | null
   }
 
-  export type StringNullableFilter<$PrismaModel = never> = {
-    equals?: string | StringFieldRefInput<$PrismaModel> | null
-    in?: string[] | ListStringFieldRefInput<$PrismaModel> | null
-    notIn?: string[] | ListStringFieldRefInput<$PrismaModel> | null
-    lt?: string | StringFieldRefInput<$PrismaModel>
-    lte?: string | StringFieldRefInput<$PrismaModel>
-    gt?: string | StringFieldRefInput<$PrismaModel>
-    gte?: string | StringFieldRefInput<$PrismaModel>
-    contains?: string | StringFieldRefInput<$PrismaModel>
-    startsWith?: string | StringFieldRefInput<$PrismaModel>
-    endsWith?: string | StringFieldRefInput<$PrismaModel>
-    mode?: QueryMode
-    not?: NestedStringNullableFilter<$PrismaModel> | string | null
-  }
-
   export type AuctionBidListRelationFilter = {
     every?: AuctionBidWhereInput
     some?: AuctionBidWhereInput
@@ -6364,6 +6389,7 @@ export namespace Prisma {
     productId?: SortOrder
     sellerId?: SortOrder
     title?: SortOrder
+    imageUrl?: SortOrder
     startPrice?: SortOrder
     currentPrice?: SortOrder
     bidStep?: SortOrder
@@ -6392,6 +6418,7 @@ export namespace Prisma {
     productId?: SortOrder
     sellerId?: SortOrder
     title?: SortOrder
+    imageUrl?: SortOrder
     startPrice?: SortOrder
     currentPrice?: SortOrder
     bidStep?: SortOrder
@@ -6413,6 +6440,7 @@ export namespace Prisma {
     productId?: SortOrder
     sellerId?: SortOrder
     title?: SortOrder
+    imageUrl?: SortOrder
     startPrice?: SortOrder
     currentPrice?: SortOrder
     bidStep?: SortOrder
@@ -6452,6 +6480,24 @@ export namespace Prisma {
     _count?: NestedIntFilter<$PrismaModel>
     _min?: NestedStringFilter<$PrismaModel>
     _max?: NestedStringFilter<$PrismaModel>
+  }
+
+  export type StringNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: string | StringFieldRefInput<$PrismaModel> | null
+    in?: string[] | ListStringFieldRefInput<$PrismaModel> | null
+    notIn?: string[] | ListStringFieldRefInput<$PrismaModel> | null
+    lt?: string | StringFieldRefInput<$PrismaModel>
+    lte?: string | StringFieldRefInput<$PrismaModel>
+    gt?: string | StringFieldRefInput<$PrismaModel>
+    gte?: string | StringFieldRefInput<$PrismaModel>
+    contains?: string | StringFieldRefInput<$PrismaModel>
+    startsWith?: string | StringFieldRefInput<$PrismaModel>
+    endsWith?: string | StringFieldRefInput<$PrismaModel>
+    mode?: QueryMode
+    not?: NestedStringNullableWithAggregatesFilter<$PrismaModel> | string | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedStringNullableFilter<$PrismaModel>
+    _max?: NestedStringNullableFilter<$PrismaModel>
   }
 
   export type DecimalWithAggregatesFilter<$PrismaModel = never> = {
@@ -6512,24 +6558,6 @@ export namespace Prisma {
     _count?: NestedIntNullableFilter<$PrismaModel>
     _min?: NestedDateTimeNullableFilter<$PrismaModel>
     _max?: NestedDateTimeNullableFilter<$PrismaModel>
-  }
-
-  export type StringNullableWithAggregatesFilter<$PrismaModel = never> = {
-    equals?: string | StringFieldRefInput<$PrismaModel> | null
-    in?: string[] | ListStringFieldRefInput<$PrismaModel> | null
-    notIn?: string[] | ListStringFieldRefInput<$PrismaModel> | null
-    lt?: string | StringFieldRefInput<$PrismaModel>
-    lte?: string | StringFieldRefInput<$PrismaModel>
-    gt?: string | StringFieldRefInput<$PrismaModel>
-    gte?: string | StringFieldRefInput<$PrismaModel>
-    contains?: string | StringFieldRefInput<$PrismaModel>
-    startsWith?: string | StringFieldRefInput<$PrismaModel>
-    endsWith?: string | StringFieldRefInput<$PrismaModel>
-    mode?: QueryMode
-    not?: NestedStringNullableWithAggregatesFilter<$PrismaModel> | string | null
-    _count?: NestedIntNullableFilter<$PrismaModel>
-    _min?: NestedStringNullableFilter<$PrismaModel>
-    _max?: NestedStringNullableFilter<$PrismaModel>
   }
 
   export type BoolFilter<$PrismaModel = never> = {
@@ -6770,6 +6798,10 @@ export namespace Prisma {
     set?: string
   }
 
+  export type NullableStringFieldUpdateOperationsInput = {
+    set?: string | null
+  }
+
   export type DecimalFieldUpdateOperationsInput = {
     set?: Decimal | DecimalJsLike | number | string
     increment?: Decimal | DecimalJsLike | number | string
@@ -6792,10 +6824,6 @@ export namespace Prisma {
 
   export type NullableDateTimeFieldUpdateOperationsInput = {
     set?: Date | string | null
-  }
-
-  export type NullableStringFieldUpdateOperationsInput = {
-    set?: string | null
   }
 
   export type AuctionBidUpdateManyWithoutAuctionNestedInput = {
@@ -6950,6 +6978,20 @@ export namespace Prisma {
     not?: NestedStringFilter<$PrismaModel> | string
   }
 
+  export type NestedStringNullableFilter<$PrismaModel = never> = {
+    equals?: string | StringFieldRefInput<$PrismaModel> | null
+    in?: string[] | ListStringFieldRefInput<$PrismaModel> | null
+    notIn?: string[] | ListStringFieldRefInput<$PrismaModel> | null
+    lt?: string | StringFieldRefInput<$PrismaModel>
+    lte?: string | StringFieldRefInput<$PrismaModel>
+    gt?: string | StringFieldRefInput<$PrismaModel>
+    gte?: string | StringFieldRefInput<$PrismaModel>
+    contains?: string | StringFieldRefInput<$PrismaModel>
+    startsWith?: string | StringFieldRefInput<$PrismaModel>
+    endsWith?: string | StringFieldRefInput<$PrismaModel>
+    not?: NestedStringNullableFilter<$PrismaModel> | string | null
+  }
+
   export type NestedDecimalFilter<$PrismaModel = never> = {
     equals?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
     in?: Decimal[] | DecimalJsLike[] | number[] | string[] | ListDecimalFieldRefInput<$PrismaModel>
@@ -6994,20 +7036,6 @@ export namespace Prisma {
     not?: NestedDateTimeNullableFilter<$PrismaModel> | Date | string | null
   }
 
-  export type NestedStringNullableFilter<$PrismaModel = never> = {
-    equals?: string | StringFieldRefInput<$PrismaModel> | null
-    in?: string[] | ListStringFieldRefInput<$PrismaModel> | null
-    notIn?: string[] | ListStringFieldRefInput<$PrismaModel> | null
-    lt?: string | StringFieldRefInput<$PrismaModel>
-    lte?: string | StringFieldRefInput<$PrismaModel>
-    gt?: string | StringFieldRefInput<$PrismaModel>
-    gte?: string | StringFieldRefInput<$PrismaModel>
-    contains?: string | StringFieldRefInput<$PrismaModel>
-    startsWith?: string | StringFieldRefInput<$PrismaModel>
-    endsWith?: string | StringFieldRefInput<$PrismaModel>
-    not?: NestedStringNullableFilter<$PrismaModel> | string | null
-  }
-
   export type NestedStringWithAggregatesFilter<$PrismaModel = never> = {
     equals?: string | StringFieldRefInput<$PrismaModel>
     in?: string[] | ListStringFieldRefInput<$PrismaModel>
@@ -7034,6 +7062,34 @@ export namespace Prisma {
     gt?: number | IntFieldRefInput<$PrismaModel>
     gte?: number | IntFieldRefInput<$PrismaModel>
     not?: NestedIntFilter<$PrismaModel> | number
+  }
+
+  export type NestedStringNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: string | StringFieldRefInput<$PrismaModel> | null
+    in?: string[] | ListStringFieldRefInput<$PrismaModel> | null
+    notIn?: string[] | ListStringFieldRefInput<$PrismaModel> | null
+    lt?: string | StringFieldRefInput<$PrismaModel>
+    lte?: string | StringFieldRefInput<$PrismaModel>
+    gt?: string | StringFieldRefInput<$PrismaModel>
+    gte?: string | StringFieldRefInput<$PrismaModel>
+    contains?: string | StringFieldRefInput<$PrismaModel>
+    startsWith?: string | StringFieldRefInput<$PrismaModel>
+    endsWith?: string | StringFieldRefInput<$PrismaModel>
+    not?: NestedStringNullableWithAggregatesFilter<$PrismaModel> | string | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedStringNullableFilter<$PrismaModel>
+    _max?: NestedStringNullableFilter<$PrismaModel>
+  }
+
+  export type NestedIntNullableFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel> | null
+    in?: number[] | ListIntFieldRefInput<$PrismaModel> | null
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel> | null
+    lt?: number | IntFieldRefInput<$PrismaModel>
+    lte?: number | IntFieldRefInput<$PrismaModel>
+    gt?: number | IntFieldRefInput<$PrismaModel>
+    gte?: number | IntFieldRefInput<$PrismaModel>
+    not?: NestedIntNullableFilter<$PrismaModel> | number | null
   }
 
   export type NestedDecimalWithAggregatesFilter<$PrismaModel = never> = {
@@ -7068,17 +7124,6 @@ export namespace Prisma {
     _max?: NestedDecimalNullableFilter<$PrismaModel>
   }
 
-  export type NestedIntNullableFilter<$PrismaModel = never> = {
-    equals?: number | IntFieldRefInput<$PrismaModel> | null
-    in?: number[] | ListIntFieldRefInput<$PrismaModel> | null
-    notIn?: number[] | ListIntFieldRefInput<$PrismaModel> | null
-    lt?: number | IntFieldRefInput<$PrismaModel>
-    lte?: number | IntFieldRefInput<$PrismaModel>
-    gt?: number | IntFieldRefInput<$PrismaModel>
-    gte?: number | IntFieldRefInput<$PrismaModel>
-    not?: NestedIntNullableFilter<$PrismaModel> | number | null
-  }
-
   export type NestedDateTimeWithAggregatesFilter<$PrismaModel = never> = {
     equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
@@ -7105,23 +7150,6 @@ export namespace Prisma {
     _count?: NestedIntNullableFilter<$PrismaModel>
     _min?: NestedDateTimeNullableFilter<$PrismaModel>
     _max?: NestedDateTimeNullableFilter<$PrismaModel>
-  }
-
-  export type NestedStringNullableWithAggregatesFilter<$PrismaModel = never> = {
-    equals?: string | StringFieldRefInput<$PrismaModel> | null
-    in?: string[] | ListStringFieldRefInput<$PrismaModel> | null
-    notIn?: string[] | ListStringFieldRefInput<$PrismaModel> | null
-    lt?: string | StringFieldRefInput<$PrismaModel>
-    lte?: string | StringFieldRefInput<$PrismaModel>
-    gt?: string | StringFieldRefInput<$PrismaModel>
-    gte?: string | StringFieldRefInput<$PrismaModel>
-    contains?: string | StringFieldRefInput<$PrismaModel>
-    startsWith?: string | StringFieldRefInput<$PrismaModel>
-    endsWith?: string | StringFieldRefInput<$PrismaModel>
-    not?: NestedStringNullableWithAggregatesFilter<$PrismaModel> | string | null
-    _count?: NestedIntNullableFilter<$PrismaModel>
-    _min?: NestedStringNullableFilter<$PrismaModel>
-    _max?: NestedStringNullableFilter<$PrismaModel>
   }
 
   export type NestedBoolFilter<$PrismaModel = never> = {
@@ -7370,6 +7398,7 @@ export namespace Prisma {
     productId: string
     sellerId: string
     title: string
+    imageUrl?: string | null
     startPrice: Decimal | DecimalJsLike | number | string
     currentPrice: Decimal | DecimalJsLike | number | string
     bidStep: Decimal | DecimalJsLike | number | string
@@ -7393,6 +7422,7 @@ export namespace Prisma {
     productId: string
     sellerId: string
     title: string
+    imageUrl?: string | null
     startPrice: Decimal | DecimalJsLike | number | string
     currentPrice: Decimal | DecimalJsLike | number | string
     bidStep: Decimal | DecimalJsLike | number | string
@@ -7432,6 +7462,7 @@ export namespace Prisma {
     productId?: StringFieldUpdateOperationsInput | string
     sellerId?: StringFieldUpdateOperationsInput | string
     title?: StringFieldUpdateOperationsInput | string
+    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
     startPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     currentPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     bidStep?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -7455,6 +7486,7 @@ export namespace Prisma {
     productId?: StringFieldUpdateOperationsInput | string
     sellerId?: StringFieldUpdateOperationsInput | string
     title?: StringFieldUpdateOperationsInput | string
+    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
     startPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     currentPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     bidStep?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -7478,6 +7510,7 @@ export namespace Prisma {
     productId: string
     sellerId: string
     title: string
+    imageUrl?: string | null
     startPrice: Decimal | DecimalJsLike | number | string
     currentPrice: Decimal | DecimalJsLike | number | string
     bidStep: Decimal | DecimalJsLike | number | string
@@ -7501,6 +7534,7 @@ export namespace Prisma {
     productId: string
     sellerId: string
     title: string
+    imageUrl?: string | null
     startPrice: Decimal | DecimalJsLike | number | string
     currentPrice: Decimal | DecimalJsLike | number | string
     bidStep: Decimal | DecimalJsLike | number | string
@@ -7540,6 +7574,7 @@ export namespace Prisma {
     productId?: StringFieldUpdateOperationsInput | string
     sellerId?: StringFieldUpdateOperationsInput | string
     title?: StringFieldUpdateOperationsInput | string
+    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
     startPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     currentPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     bidStep?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -7563,6 +7598,7 @@ export namespace Prisma {
     productId?: StringFieldUpdateOperationsInput | string
     sellerId?: StringFieldUpdateOperationsInput | string
     title?: StringFieldUpdateOperationsInput | string
+    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
     startPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     currentPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     bidStep?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -7586,6 +7622,7 @@ export namespace Prisma {
     productId: string
     sellerId: string
     title: string
+    imageUrl?: string | null
     startPrice: Decimal | DecimalJsLike | number | string
     currentPrice: Decimal | DecimalJsLike | number | string
     bidStep: Decimal | DecimalJsLike | number | string
@@ -7609,6 +7646,7 @@ export namespace Prisma {
     productId: string
     sellerId: string
     title: string
+    imageUrl?: string | null
     startPrice: Decimal | DecimalJsLike | number | string
     currentPrice: Decimal | DecimalJsLike | number | string
     bidStep: Decimal | DecimalJsLike | number | string
@@ -7648,6 +7686,7 @@ export namespace Prisma {
     productId?: StringFieldUpdateOperationsInput | string
     sellerId?: StringFieldUpdateOperationsInput | string
     title?: StringFieldUpdateOperationsInput | string
+    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
     startPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     currentPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     bidStep?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
@@ -7671,6 +7710,7 @@ export namespace Prisma {
     productId?: StringFieldUpdateOperationsInput | string
     sellerId?: StringFieldUpdateOperationsInput | string
     title?: StringFieldUpdateOperationsInput | string
+    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
     startPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     currentPrice?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string
     bidStep?: DecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string

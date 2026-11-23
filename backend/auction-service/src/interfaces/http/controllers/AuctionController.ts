@@ -99,6 +99,7 @@ export class AuctionController {
             highestBidderId: a.highestBidderId,
             bidIncrement: a.bidIncrement,
             buyNowPrice: a.buyNowPrice,
+            imageUrl: a.imageUrl,
             status: a.status,
             startTime: a.startTime,
             endTime: a.endTime,
@@ -226,6 +227,7 @@ export class AuctionController {
         startPrice,
         bidStep,
         buyNowPrice,
+        imageUrl,
         startTime,
         endTime,
         antiSnipingExtensionSeconds,
@@ -259,6 +261,7 @@ export class AuctionController {
         startPrice: Number(startPrice),
         bidStep: bidStep ? Number(bidStep) : undefined,
         buyNowPrice: buyNowPrice ? Number(buyNowPrice) : undefined,
+        imageUrl: typeof imageUrl === 'string' && imageUrl.trim() ? imageUrl.trim() : undefined,
         startTime,
         endTime,
         antiSnipingExtensionSeconds: antiSnipingExtensionSeconds
@@ -278,6 +281,7 @@ export class AuctionController {
           currentHighestBid: auction.currentHighestBid,
           bidIncrement: auction.bidIncrement,
           buyNowPrice: auction.buyNowPrice,
+          imageUrl: auction.imageUrl,
           status: auction.status,
           startTime: auction.startTime,
           endTime: auction.endTime,
@@ -450,7 +454,7 @@ export class AuctionController {
     try {
       const authUser = (req as AuthenticatedRequest).user;
       const auctionId = req.params.id as string;
-      const { title, bidIncrement, buyNowPrice, startTime, endTime } = req.body;
+      const { title, bidIncrement, buyNowPrice, imageUrl, startTime, endTime } = req.body;
 
       const sellerId = authUser?.id || 'usr_seller_default';
       const isAdmin = authUser?.role === 'ADMIN';
@@ -462,6 +466,7 @@ export class AuctionController {
         title,
         bidIncrement: bidIncrement ? Number(bidIncrement) : undefined,
         buyNowPrice: buyNowPrice !== undefined ? Number(buyNowPrice) : undefined,
+        imageUrl: typeof imageUrl === 'string' ? imageUrl.trim() : undefined,
         startTime: startTime ? new Date(startTime) : undefined,
         endTime: endTime ? new Date(endTime) : undefined,
       });
@@ -475,6 +480,7 @@ export class AuctionController {
           currentHighestBid: updatedAuction.currentHighestBid,
           bidIncrement: updatedAuction.bidIncrement,
           buyNowPrice: updatedAuction.buyNowPrice,
+          imageUrl: updatedAuction.imageUrl,
           status: updatedAuction.status,
           startTime: updatedAuction.startTime,
           endTime: updatedAuction.endTime,

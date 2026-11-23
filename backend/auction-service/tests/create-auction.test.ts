@@ -55,6 +55,30 @@ describe('CreateAuctionRoomUseCase', () => {
     assert.strictEqual(auction.bidIncrement, 10000); // Mặc định 10.000
   });
 
+  it('tạo thành công phòng đấu giá có imageUrl và lưu vào repository', async () => {
+    const repo = new InMemoryAuctionRepository();
+    const useCase = new CreateAuctionRoomUseCase(repo);
+
+    const startTime = new Date(Date.now() - 1000);
+    const endTime = new Date(Date.now() + 3600 * 1000);
+    const customImage = 'https://example.com/son-tung-auction.jpg';
+
+    const auction = await useCase.execute({
+      productId: '15',
+      sellerId: 'sel_son_tung',
+      title: 'Đấu giá áo có chữ ký Sơn Tùng M-TP',
+      startPrice: 2000000,
+      imageUrl: customImage,
+      startTime,
+      endTime,
+    });
+
+    assert.strictEqual(auction.imageUrl, customImage);
+    const saved = await repo.findById(auction.id);
+    assert.ok(saved);
+    assert.strictEqual(saved.imageUrl, customImage);
+  });
+
   it('báo lỗi khi startPrice <= 0', async () => {
     const repo = new InMemoryAuctionRepository();
     const useCase = new CreateAuctionRoomUseCase(repo);

@@ -28,6 +28,7 @@ export class GetAuctionDetailUseCase {
       productId: auction.productId,
       sellerId: auction.sellerId,
       title: auction.title,
+      imageUrl: auction.imageUrl,
       startingPrice: auction.startingPrice,
       currentHighestBid: auction.currentHighestBid,
       highestBidderId: auction.highestBidderId,

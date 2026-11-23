@@ -10,6 +10,7 @@ export interface AuctionDetailDto {
   productId: string;
   sellerId: string;
   title: string;
+  imageUrl?: string;
   startingPrice: number;
   currentHighestBid: number;
   highestBidderId?: string;

@@ -21,6 +21,7 @@ export interface AuctionProps {
   productId: string;
   sellerId: string;
   title?: string;
+  imageUrl?: string;
   startingPrice: number;
   currentHighestBid: number;
   highestBidderId?: string;
@@ -43,6 +44,7 @@ export class Auction {
   private readonly _productId: string;
   private readonly _sellerId: string;
   private _title: string;
+  private _imageUrl?: string;
   private readonly _startingPrice: number;
   private _currentHighestBid: number;
   private _highestBidderId?: string;
@@ -64,6 +66,7 @@ export class Auction {
     this._productId = props.productId;
     this._sellerId = props.sellerId;
     this._title = props.title || `Phiên đấu giá sản phẩm #${props.productId}`;
+    this._imageUrl = props.imageUrl;
     this._startingPrice = props.startingPrice;
     this._currentHighestBid = props.currentHighestBid;
     this._highestBidderId = props.highestBidderId;
@@ -92,6 +95,9 @@ export class Auction {
   }
   public get title(): string {
     return this._title;
+  }
+  public get imageUrl(): string | undefined {
+    return this._imageUrl;
   }
   public get startingPrice(): number {
     return this._startingPrice;
@@ -201,6 +207,7 @@ export class Auction {
   // Nghiệp vụ cập nhật phiên (chỉ cho phép khi chưa bắt đầu)
   public updateDetails(params: {
     title?: string;
+    imageUrl?: string;
     bidIncrement?: number;
     buyNowPrice?: number;
     startTime?: Date;
@@ -210,6 +217,7 @@ export class Auction {
       throw new Error('Chỉ có thể chỉnh sửa phiên đấu giá khi chưa bắt đầu (SCHEDULED).');
     }
     if (params.title) this._title = params.title;
+    if (params.imageUrl !== undefined) this._imageUrl = params.imageUrl;
     if (params.bidIncrement) this._bidIncrement = params.bidIncrement;
     if (params.buyNowPrice !== undefined) this._buyNowPrice = params.buyNowPrice;
     if (params.startTime) this._startTime = params.startTime;
