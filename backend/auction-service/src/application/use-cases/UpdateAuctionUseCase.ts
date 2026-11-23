@@ -9,6 +9,7 @@ export interface UpdateAuctionInput {
   title?: string;
   bidIncrement?: number;
   buyNowPrice?: number;
+  imageUrl?: string;
   startTime?: Date;
   endTime?: Date;
 }

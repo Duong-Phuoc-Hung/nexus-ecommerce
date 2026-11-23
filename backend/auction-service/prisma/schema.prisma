@@ -30,6 +30,9 @@ model AuctionRoom {
   // Tiêu đề phòng đấu giá (VD: "Đấu giá iPhone 15 Pro Max 256GB Like New")
   title         String             @db.VarChar(255)
 
+  // Hình ảnh đại diện tùy chỉnh cho phiên đấu giá
+  imageUrl      String?            @map("image_url") @db.VarChar(1000)
+
   // Giá khởi điểm do người bán đặt ra ban đầu
   startPrice    Decimal            @map("start_price") @db.Decimal(12, 2)
 

@@ -7,6 +7,7 @@ export interface CreateAuctionRoomInput {
   productId: string;
   sellerId: string;
   title?: string;
+  imageUrl?: string;
   startPrice: number;
   bidStep?: number;
   buyNowPrice?: number;
@@ -72,6 +73,7 @@ export class CreateAuctionRoomUseCase {
       productId: String(input.productId),
       sellerId: input.sellerId,
       title: input.title || `Phiên đấu giá sản phẩm #${input.productId}`,
+      imageUrl: input.imageUrl,
       startingPrice: startPrice,
       currentHighestBid: startPrice,
       bidIncrement: bidStep,

@@ -113,6 +113,7 @@ export class PostgresAuctionRepository implements IAuctionRepository {
           currentPrice: auction.currentHighestBid,
           bidStep: auction.bidIncrement,
           buyNowPrice: auction.buyNowPrice || null,
+          imageUrl: auction.imageUrl || null,
           status: auction.status,
           startTime: auction.startTime,
           endTime: auction.endTime,
@@ -141,6 +142,7 @@ export class PostgresAuctionRepository implements IAuctionRepository {
           currentPrice: auction.currentHighestBid,
           bidStep: auction.bidIncrement,
           buyNowPrice: auction.buyNowPrice || null,
+          imageUrl: auction.imageUrl || null,
           status: auction.status,
           winnerId: auction.highestBidderId || null,
           endTime: auction.endTime,
@@ -214,6 +216,7 @@ export class PostgresAuctionRepository implements IAuctionRepository {
       startTime: record.startTime,
       endTime: record.endTime,
       actualEndTime: record.actualEndTime ? new Date(record.actualEndTime) : undefined,
+      imageUrl: record.imageUrl || record.image_url || undefined,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     });

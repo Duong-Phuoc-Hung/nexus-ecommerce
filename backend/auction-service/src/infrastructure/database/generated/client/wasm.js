@@ -127,6 +127,7 @@ exports.Prisma.AuctionRoomScalarFieldEnum = {
   productId: 'productId',
   sellerId: 'sellerId',
   title: 'title',
+  imageUrl: 'imageUrl',
   startPrice: 'startPrice',
   currentPrice: 'currentPrice',
   bidStep: 'bidStep',
