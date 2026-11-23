@@ -29,6 +29,11 @@ function conflict(message: string): never {
 const caseFields = Prisma.sql`c.id, c.product_id AS "productId", c.review_id AS "reviewId",
   c.kind AS type, c.status, c.report_reason AS "reportReason", c.created_at AS "createdAt",
   c.updated_at AS "updatedAt", p.title, p.seller_id AS "sellerId", p.seller_name AS "sellerName",
+  p.base_price::float8 AS price, c.status AS "moderationStatus", c.created_at AS "submittedAt",
+  CASE WHEN c.kind='NEW_PRODUCT' THEN 'NEW_LISTING' ELSE c.kind END AS "triggerSource",
+  (SELECT count(*)::int FROM catalog_moderation_reports r WHERE r.case_id=c.id) AS "reportCount",
+  COALESCE((SELECT a.reason FROM catalog_moderation_actions a WHERE a.case_id=c.id AND a.reason IS NOT NULL
+            ORDER BY a.id DESC LIMIT 1), c.report_reason) AS "lastReason",
   p.status AS "productStatus", (SELECT image_url FROM catalog_product_images
     WHERE product_id=p.id ORDER BY is_primary DESC, display_order, id LIMIT 1) AS "thumbnailUrl"`;
 
@@ -58,24 +63,50 @@ export class PostgresModerationRepository implements ModerationRepository {
     return row;
   }
 
-  async detail(caseId: string) {
-    const [row] = await this.db.$queryRaw<unknown[]>`
-      SELECT ${caseFields}, p.description, p.base_price::float8 AS price,
+  async detail(id: string, mode: 'case' | 'product' = 'case') {
+    const target =
+      mode === 'case'
+        ? Prisma.sql`c.id=${id}`
+        : Prisma.sql`c.product_id=${id} AND c.review_id IS NULL`;
+    const [row] = await this.db.$queryRaw<
+      Array<
+        Record<string, unknown> & {
+          history: Array<Record<string, unknown>>;
+        }
+      >
+    >`
+      SELECT ${caseFields}, p.description,
         cat.id::text AS "categoryId", cat.name AS "categoryName", c.reporter_id AS "reporterId",
         COALESCE((SELECT jsonb_agg(image_url ORDER BY display_order, id)
           FROM catalog_product_images WHERE product_id=p.id), '[]') AS images,
         (SELECT jsonb_build_object('id', r.id, 'rating', r.rating, 'comment', r.comment,
           'userName', r.user_name, 'createdAt', r.created_at, 'hidden', r.moderated_hidden)
           FROM catalog_product_reviews r WHERE r.id=c.review_id) AS review,
-        COALESCE((SELECT jsonb_agg(jsonb_build_object('caseId', h.case_id, 'actorId', h.actor_id,
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('reason', r.reason, 'createdAt', r.created_at)
+          ORDER BY r.created_at DESC, r.reporter_id) FROM catalog_moderation_reports r WHERE r.case_id=c.id), '[]') AS reports,
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('id', h.id::text, 'caseId', h.case_id, 'actorId', h.actor_id,
           'decision', h.decision, 'reason', h.reason, 'violationCategory', h.violation_category,
           'createdAt', h.created_at) ORDER BY h.id DESC)
           FROM catalog_moderation_actions h JOIN catalog_moderation_cases prior ON prior.id=h.case_id
           WHERE prior.product_id=c.product_id AND prior.review_id IS NOT DISTINCT FROM c.review_id), '[]') AS history
       FROM catalog_moderation_cases c JOIN catalog_products p ON p.id=c.product_id
-      JOIN catalog_categories cat ON cat.id=p.category_id WHERE c.id=${caseId}
+      JOIN catalog_categories cat ON cat.id=p.category_id WHERE ${target}
+      ORDER BY (c.status='PENDING') DESC, c.updated_at DESC, c.id DESC LIMIT 1
     `;
-    return row ?? missing();
+    if (!row) return missing();
+    return {
+      ...row,
+      moderationLogs: row.history.map((log) => ({
+        ...log,
+        moderatorId: log.actorId,
+        violationCategory:
+          log.violationCategory === 'MISLEADING_DESCRIPTION'
+            ? 'MISLEADING_INFO'
+            : log.violationCategory === 'SUSPECTED_FRAUD'
+              ? 'FRAUD_SUSPECTED'
+              : log.violationCategory,
+      })),
+    };
   }
 
   async report({
@@ -105,8 +136,22 @@ export class PostgresModerationRepository implements ModerationRepository {
         VALUES (${randomUUID()},${productId},${reviewId ?? null},${type},${actorId},${reason})
         ON CONFLICT DO NOTHING RETURNING id
       `;
-      if (!created) conflict('Đối tượng đã có hồ sơ chờ xử lý.');
-      return { id: created.id, productId, reviewId: reviewId ?? null, type, status: 'PENDING' };
+      const existing =
+        created ??
+        (
+          await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM catalog_moderation_cases WHERE product_id=${productId} AND kind=${type}
+          AND review_id IS NOT DISTINCT FROM ${reviewId ?? null}::text AND status='PENDING'
+      `
+        )[0];
+      if (!existing) return conflict('Đối tượng đã có hồ sơ chờ xử lý.');
+
+      const inserted = await tx.$executeRaw`
+        INSERT INTO catalog_moderation_reports (case_id, reporter_id, reason)
+        VALUES (${existing.id},${actorId},${reason}) ON CONFLICT DO NOTHING
+      `;
+      if (!inserted) return conflict('Bạn đã gửi báo cáo cho hồ sơ này.');
+      return { id: existing.id, productId, reviewId: reviewId ?? null, type, status: 'PENDING' };
     });
   }
 
@@ -153,7 +198,7 @@ export class PostgresModerationRepository implements ModerationRepository {
   async decide(input: ModerationDecision) {
     const { actorId, productId, caseId, decision, reason, violationCategory } = input;
     return this.db.$transaction(async (tx) => {
-      const product = await this.lockProduct(tx, productId);
+      await this.lockProduct(tx, productId);
       const [current] = await tx.$queryRaw<CaseRecord[]>`
         SELECT * FROM catalog_moderation_cases
         WHERE product_id=${productId} AND (
@@ -181,7 +226,7 @@ export class PostgresModerationRepository implements ModerationRepository {
           UPDATE catalog_product_reviews SET moderated_hidden=${!approved}, updated_at=now()
           WHERE id=${current.review_id} AND product_id=${productId}
         `;
-      } else if (!approved || product.moderation_blocked) {
+      } else {
         const productStatus = approved ? 'ACTIVE' : decision === 'REJECT' ? 'INACTIVE' : 'DRAFT';
         await tx.$executeRaw`
           UPDATE catalog_products SET status=${productStatus}, moderation_blocked=${!approved}, updated_at=now()
@@ -195,7 +240,14 @@ export class PostgresModerationRepository implements ModerationRepository {
         INSERT INTO catalog_moderation_actions (case_id, actor_id, decision, reason, violation_category)
         VALUES (${current.id},${actorId},${decision},${reason},${violationCategory})
       `;
-      return { id: current.id, productId, reviewId: current.review_id, type: current.kind, status };
+      return {
+        id: current.id,
+        productId,
+        reviewId: current.review_id,
+        type: current.kind,
+        status,
+        moderationStatus: status,
+      };
     });
   }
 

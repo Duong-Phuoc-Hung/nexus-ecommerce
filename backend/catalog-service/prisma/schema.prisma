@@ -224,6 +224,7 @@ model ModerationCase {
   product      Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
   review       Review?            @relation(fields: [reviewId], references: [id], onDelete: Cascade)
   actions      ModerationAction[]
+  reports      ModerationReport[]
 
   @@index([status, createdAt(sort: Desc)], map: "idx_moderation_queue")
   @@index([productId], map: "idx_moderation_product")
@@ -242,4 +243,15 @@ model ModerationAction {
 
   @@index([caseId, id], map: "idx_moderation_action_case")
   @@map("catalog_moderation_actions")
+}
+
+model ModerationReport {
+  caseId     String         @map("case_id") @db.VarChar(36)
+  reporterId String         @map("reporter_id") @db.VarChar(36)
+  reason     String         @db.VarChar(500)
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz()
+  moderationCase ModerationCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@id([caseId, reporterId])
+  @@map("catalog_moderation_reports")
 }

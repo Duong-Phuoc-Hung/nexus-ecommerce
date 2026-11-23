@@ -42,7 +42,7 @@ export interface ModerationDecision {
 
 export interface ModerationRepository {
   list(filters: QueueFilters): Promise<{ items: unknown[]; total: number }>;
-  detail(caseId: string): Promise<unknown>;
+  detail(id: string, mode?: 'case' | 'product'): Promise<unknown>;
   sellerStatus(productId: string, actorId: string): Promise<unknown>;
   report(input: {
     actorId: string;
@@ -95,7 +95,7 @@ export class ModerationService {
   async list(query: Record<string, unknown>) {
     const status = caseStatuses.find((value) => value === query.status);
     const type = caseTypes.find((value) => value === query.type);
-    if (query.status && !status) return invalid('status');
+    if (query.status && query.status !== 'ALL' && !status) return invalid('status');
     if (query.type && !type) return invalid('type');
     const q = query.q === undefined ? '' : string(query.q, 'q', 0, 200);
     const page = pageNumber(query.page, 'page', 1, 1_000_000);
@@ -106,6 +106,10 @@ export class ModerationService {
 
   detail(caseId: unknown) {
     return this.repository.detail(key(caseId, 'caseId'));
+  }
+
+  productDetail(productId: unknown) {
+    return this.repository.detail(key(productId, 'productId'), 'product');
   }
 
   report(productId: unknown, reviewId: unknown, actorId: string, value: unknown) {
@@ -129,11 +133,22 @@ export class ModerationService {
     const input = body(value);
     const decision = decisions.find((value) => value === input.decision);
     if (!decision) return invalid('decision');
-    const reason =
-      input.reason == null && decision === 'APPROVE'
-        ? null
-        : string(input.reason, 'reason', decision === 'APPROVE' ? 0 : 10, 500) || null;
-    const violationCategory = violations.find((value) => value === input.violationCategory) ?? null;
+    const trimmedReason = typeof input.reason === 'string' ? input.reason.trim() : '';
+    if (decision !== 'APPROVE' && (trimmedReason.length < 10 || trimmedReason.length > 500)) {
+      throw new ModerationError(
+        400,
+        'MODERATION_REASON_REQUIRED',
+        'Lý do phải có từ 10 đến 500 ký tự.',
+      );
+    }
+    const reason = input.reason == null ? null : string(input.reason, 'reason', 0, 500) || null;
+    const claimedCategory =
+      input.violationCategory === 'MISLEADING_INFO'
+        ? 'MISLEADING_DESCRIPTION'
+        : input.violationCategory === 'FRAUD_SUSPECTED'
+          ? 'SUSPECTED_FRAUD'
+          : input.violationCategory;
+    const violationCategory = violations.find((value) => value === claimedCategory) ?? null;
     if ((decision === 'REJECT' || input.violationCategory != null) && !violationCategory) {
       return invalid('violationCategory');
     }

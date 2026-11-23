@@ -37,6 +37,9 @@ test(
 
     const { port } = address;
     type ResponseBody = {
+      code?: string;
+      error?: { code: string };
+      pagination?: { total: number };
       data?: {
         id: string;
         status: string;
@@ -44,6 +47,7 @@ test(
         items: Array<{ id: string }>;
         history: Array<{ decision: string }>;
         lastDecision: { reason: string };
+        moderationLogs: Array<{ decision: string }>;
       };
     };
 
@@ -83,12 +87,25 @@ test(
     assert.equal((await request('GET', '?scope=admin&status=DRAFT', 'ADMIN', admin)).status, 200);
     const pending = await request(
       'GET',
-      `/moderation/queue?status=PENDING&q=${encodeURIComponent(title)}`,
+      `/moderation/queue?format=items&status=PENDING&q=${encodeURIComponent(title)}`,
       'ADMIN',
       admin,
     );
     assert.equal(pending.body.data!.pagination.total, 1);
     const caseId = pending.body.data!.items[0].id;
+    const handoff = await request(
+      'GET',
+      `/moderation/queue?status=ALL&q=${encodeURIComponent(title)}`,
+      'ADMIN',
+      admin,
+    );
+    assert.equal(handoff.body.pagination?.total, 1);
+    assert.deepEqual(
+      (handoff.body.data as unknown as Array<{ moderationStatus: string }>).map(
+        (item) => item.moderationStatus,
+      ),
+      ['PENDING'],
+    );
     assert.equal(
       (
         await request('POST', `/${productId}/moderate`, 'ADMIN', admin, {
@@ -96,8 +113,8 @@ test(
           decision: 'REQUEST_CHANGES',
           reason: 'Too short',
         })
-      ).status,
-      400,
+      ).body.error?.code,
+      'MODERATION_REASON_REQUIRED',
     );
     assert.equal(
       (
@@ -131,7 +148,9 @@ test(
       'APPROVED',
     );
     assert.equal((await request('GET', `/${productId}`)).status, 200);
-    const detail = await request('GET', `/moderation/cases/${caseId}`, 'ADMIN', admin);
+    const detail = await request('GET', `/moderation/${productId}`, 'ADMIN', admin);
+    assert.equal(detail.body.data!.id, caseId);
+    assert.equal(detail.body.data!.moderationLogs[0].decision, 'APPROVE');
     assert.deepEqual(
       detail.body.data!.history.map((row: { decision: string }) => row.decision),
       ['APPROVE', 'RESUBMIT', 'REQUEST_CHANGES'],
@@ -150,11 +169,29 @@ test(
     );
     assert.equal(report.status, 201, JSON.stringify(report.body));
     const reviewCase = report.body.data!.id;
+    const additional = await request(
+      'POST',
+      `/${productId}/reviews/${reviewId}/reports`,
+      'BUYER',
+      randomUUID(),
+      { reason: 'Another user reported the review.' },
+    );
+    assert.equal(additional.body.data!.id, reviewCase);
+    const reported = await request(
+      'GET',
+      '/moderation/queue?type=REPORTED_REVIEW&status=PENDING',
+      'ADMIN',
+      admin,
+    );
+    assert.equal(
+      (reported.body.data as unknown as Array<{ reportCount: number }>)[0].reportCount,
+      2,
+    );
     const rejected = await request('POST', `/${productId}/moderate`, 'ADMIN', admin, {
       caseId: reviewCase,
       decision: 'REJECT',
       reason: 'Remove this review.',
-      violationCategory: 'OTHER',
+      violationCategory: 'MISLEADING_INFO',
     });
     assert.equal(rejected.status, 200, JSON.stringify(rejected.body));
     assert.equal(
