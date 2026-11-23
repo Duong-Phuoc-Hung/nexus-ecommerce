@@ -4,7 +4,7 @@ import { UserProfileDto } from '../dtos/UserProfileDto';
 
 /**
  * UseCase: GetUserProfileUseCase
- * Ứng dụng nghiệp vụ truy xuất thông tin hồ sơ người dùng theo chuẩn SRS A01 & A04.
+ * Ứng dụng nghiệp vụ truy xuất thông tin hồ sơ người dùng.
  * Phụ thuộc vào interface IUserRepository (Dependency Inversion Principle).
  */
 export class GetUserProfileUseCase {
@@ -28,25 +28,13 @@ export class GetUserProfileUseCase {
       role: user.role,
       status: user.status,
       reputationScore: user.reputationScore,
-      identifyNumber: user.identifyNumber || undefined,
-      gender: user.gender || undefined,
-      dateOfBirth: user.dateOfBirth ? String(user.dateOfBirth).split('T')[0] : undefined,
-      address: user.address || undefined,
-      reputationHistory: user.reputationHistory.map((h) => ({
-        points: h.points,
-        reason: h.reason,
-        adjustedBy: h.adjustedBy,
-        createdAt: h.createdAt instanceof Date ? h.createdAt.toISOString() : String(h.createdAt),
-      })),
-      restrictions: user.restrictions.map((r) => ({
-        restriction: r.restriction,
-        durationDays: r.durationDays,
-        reason: r.reason,
-        appliedBy: r.appliedBy,
-        expiresAt: r.expiresAt instanceof Date ? r.expiresAt.toISOString() : String(r.expiresAt),
-        createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
-      })),
-      updatedAt: user.updatedAt.toISOString(),
+      ...(includePrivateFields
+        ? {
+            dateOfBirth: user.dateOfBirth,
+            gender: user.gender,
+            updatedAt: user.updatedAt.toISOString(),
+          }
+        : {}),
       createdAt: user.createdAt.toISOString(),
     };
   }

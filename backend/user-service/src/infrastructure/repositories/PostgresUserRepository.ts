@@ -1,17 +1,10 @@
 import { Pool, PoolClient } from 'pg';
 import {
   IUserRepository,
-  UserReview,
   UserSearchCriteria,
   UserSearchPage,
 } from '../../domain/repositories/IUserRepository';
-import {
-  User,
-  UserFeatureRestriction,
-  UserRole,
-  UserStatus,
-  ReputationAuditEntry,
-} from '../../domain/entities/User';
+import { User, UserFeatureRestriction, UserRole, UserStatus } from '../../domain/entities/User';
 
 /**
  * Infrastructure Repository: PostgresUserRepository (Database Integration)
@@ -50,9 +43,8 @@ export class PostgresUserRepository implements IUserRepository {
   public async findByEmail(email: string): Promise<User | null> {
     const query = `
             SELECT u.id, u.email, u.phone, u.full_name, u.password_hash, u.status,
-              u.identify_number, u.gender, u.date_of_birth, u.address,
               u.failed_login_attempts, u.locked_until, u.created_at, u.updated_at,
-              to_char(u.date_of_birth, 'YYYY-MM-DD') as birth_date,
+              to_char(u.date_of_birth, 'YYYY-MM-DD') as birth_date, u.gender,
              COALESCE(r.role_code, 'BUYER') as role_code,
              COALESCE(rep.score, 100) as reputation_score
       FROM user_users u
@@ -74,9 +66,8 @@ export class PostgresUserRepository implements IUserRepository {
   public async findById(id: string): Promise<User | null> {
     const query = `
             SELECT u.id, u.email, u.phone, u.full_name, u.password_hash, u.status,
-              u.identify_number, u.gender, u.date_of_birth, u.address,
               u.failed_login_attempts, u.locked_until, u.created_at, u.updated_at,
-              to_char(u.date_of_birth, 'YYYY-MM-DD') as birth_date,
+              to_char(u.date_of_birth, 'YYYY-MM-DD') as birth_date, u.gender,
              COALESCE(r.role_code, 'BUYER') as role_code,
              COALESCE(rep.score, 100) as reputation_score
       FROM user_users u
@@ -92,35 +83,14 @@ export class PostgresUserRepository implements IUserRepository {
       return null;
     }
 
-    // Nạp lịch sử vi phạm / trừ điểm thực tế từ bảng user_penalties trên PostgreSQL
-    let reputationHistory: ReputationAuditEntry[] = [];
-    try {
-      const penQuery = `
-        SELECT id, user_id, reason, deduct_score, created_at
-        FROM user_penalties
-        WHERE user_id = $1
-        ORDER BY created_at DESC;
-      `;
-      const penRes = await this.pool.query(penQuery, [id]);
-      reputationHistory = penRes.rows.map((p: any) => ({
-        points: -Math.abs(Number(p.deduct_score) || 10),
-        reason: p.reason,
-        adjustedBy: 'SUPPORT_STAFF',
-        createdAt: new Date(p.created_at),
-      }));
-    } catch {
-      // Fallback nếu kết nối lỗi
-    }
-
-    return this.mapRowToUser(result.rows[0], reputationHistory);
+    return this.mapRowToUser(result.rows[0]);
   }
 
   public async findByPhone(phone: string): Promise<User | null> {
     const query = `
             SELECT u.id, u.email, u.phone, u.full_name, u.password_hash, u.status,
-              u.identify_number, u.gender, u.date_of_birth, u.address,
               u.failed_login_attempts, u.locked_until, u.created_at, u.updated_at,
-              to_char(u.date_of_birth, 'YYYY-MM-DD') as birth_date,
+              to_char(u.date_of_birth, 'YYYY-MM-DD') as birth_date, u.gender,
              COALESCE(r.role_code, 'BUYER') as role_code,
              COALESCE(rep.score, 100) as reputation_score
       FROM user_users u
@@ -208,8 +178,7 @@ export class PostgresUserRepository implements IUserRepository {
 
     const dataParams = [...params, limit, offset];
     const dataQuery = `
-      SELECT u.id, u.email, u.phone, u.full_name, u.password_hash, u.status,
-             u.identify_number, u.gender, u.date_of_birth, u.address,
+      SELECT u.id, u.email, u.full_name, u.password_hash, u.status,
              u.failed_login_attempts, u.locked_until, u.created_at, u.updated_at,
               to_char(u.date_of_birth, 'YYYY-MM-DD') as birth_date, u.gender,
              COALESCE(r.role_code, 'BUYER') as role_code,
@@ -291,46 +260,19 @@ export class PostgresUserRepository implements IUserRepository {
       await client.query(
         `UPDATE user_users
          SET full_name = $1, phone = $2, status = $3, password_hash = $4,
-             identify_number = $5, gender = $6, date_of_birth = $7, address = $8,
-             failed_login_attempts = $9, locked_until = $10, updated_at = $11
-         WHERE id = $12;`,
+             failed_login_attempts = $5, locked_until = $6, updated_at = $7
+         WHERE id = $8;`,
         [
           user.fullName,
           user.phone,
           user.status,
           user.passwordHash,
-          user.identifyNumber || null,
-          user.gender || null,
-          user.dateOfBirth || null,
-          user.address || null,
           user.failedLoginAttempts,
           user.lockedUntil,
           new Date(),
           user.id,
         ],
       );
-
-      // Đồng bộ điểm uy tín vào user_reputations trong PostgreSQL
-      await client.query(
-        `INSERT INTO user_reputations (user_id, trust_level, score, total_orders, total_penalties, updated_at)
-         VALUES ($1, 'STANDARD', $2, 0, 0, NOW())
-         ON CONFLICT (user_id) DO UPDATE
-         SET score = EXCLUDED.score, updated_at = NOW();`,
-        [user.id, user.reputationScore],
-      );
-
-      // Ghi nhận các bản ghi vi phạm mới vào user_penalties
-      for (const entry of user.reputationHistory) {
-        if (entry.points < 0) {
-          await client.query(
-            `INSERT INTO user_penalties (user_id, reason, deduct_score, created_at)
-             VALUES ($1, $2, $3, $4)
-             ON CONFLICT DO NOTHING;`,
-            [user.id, entry.reason, Math.abs(entry.points), entry.createdAt || new Date()],
-          );
-        }
-      }
-
       await client.query('DELETE FROM user_user_roles WHERE user_id = $1;', [user.id]);
       await client.query(
         `INSERT INTO user_user_roles (user_id, role_id)
@@ -345,28 +287,6 @@ export class PostgresUserRepository implements IUserRepository {
     } finally {
       client.release();
     }
-  }
-
-  public async getUserReviews(userId: string): Promise<UserReview[]> {
-    const query = `
-      SELECT r.id, r.order_id, r.from_user_id, r.to_user_id, r.rating, r.comment, r.created_at,
-             u.full_name as from_user_name
-      FROM user_ratings r
-      LEFT JOIN user_users u ON r.from_user_id = u.id
-      WHERE r.to_user_id = $1
-      ORDER BY r.created_at DESC;
-    `;
-    const res = await this.pool.query(query, [userId]);
-    return res.rows.map((row: any) => ({
-      id: String(row.id),
-      orderId: row.order_id,
-      fromUserId: row.from_user_id,
-      fromUserName: row.from_user_name || undefined,
-      toUserId: row.to_user_id,
-      rating: Number(row.rating) || 5,
-      comment: row.comment || undefined,
-      createdAt: new Date(row.created_at),
-    }));
   }
 
   public async updateProfileFields(
@@ -560,7 +480,7 @@ export class PostgresUserRepository implements IUserRepository {
     await this.pool.end();
   }
 
-  private mapRowToUser(row: any, reputationHistory: ReputationAuditEntry[] = []): User {
+  private mapRowToUser(row: any): User {
     let role = UserRole.BUYER;
     if (row.role_code === 'ADMIN') role = UserRole.ADMIN;
     else if (row.role_code === 'SELLER') role = UserRole.SELLER;
@@ -570,29 +490,19 @@ export class PostgresUserRepository implements IUserRepository {
     if (row.status === 'SUSPENDED') status = UserStatus.SUSPENDED;
     else if (row.status === 'PENDING_VERIFICATION') status = UserStatus.PENDING_VERIFICATION;
 
-    const dob = row.date_of_birth || row.birth_date;
-    const dateOfBirth = dob
-      ? dob instanceof Date
-        ? dob.toISOString().split('T')[0]
-        : String(dob).split('T')[0]
-      : null;
-
     return new User({
       id: String(row.id),
       email: row.email,
       fullName: row.full_name,
       phone: row.phone || '',
-      identifyNumber: row.identify_number || '',
-      gender: row.gender || null,
-      dateOfBirth,
-      address: row.address || '',
       passwordHash: row.password_hash,
       role: role,
       status: status,
+      dateOfBirth: row.birth_date,
+      gender: row.gender,
       reputationScore: Number(row.reputation_score ?? 100),
       failedLoginAttempts: Number(row.failed_login_attempts) || 0,
       lockedUntil: row.locked_until ? new Date(row.locked_until) : null,
-      reputationHistory,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
     });

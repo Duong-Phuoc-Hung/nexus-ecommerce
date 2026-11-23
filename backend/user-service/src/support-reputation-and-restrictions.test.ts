@@ -185,39 +185,3 @@ test('Support Staff Task 4: POST /api/v1/support/users/:userId/restrict-features
     assert.equal(restrictBody.data.activeRestrictions.length, 1);
   });
 });
-
-test('User Profile & Reviews: Enriched SRS fields and community reviews (SRS A01, A04)', async () => {
-  await withUserServer(async (baseUrl) => {
-    const staffToken = await login(baseUrl, 'staff.test@nexus-ecommerce.com', 'Password123!');
-    const buyerId = '01a15822-43b8-78c3-a246-16bff78bc6e8';
-    const sellerId = '01a15822-3fd0-7b39-ad01-f11da72d5b80';
-
-    // 1. GET /api/v1/users/:id -> returns identifyNumber, gender, dateOfBirth, address
-    const profileRes = await fetch(`${baseUrl}/api/v1/users/${buyerId}`, {
-      headers: { Authorization: `Bearer ${staffToken}` },
-    });
-    assert.equal(profileRes.status, 200);
-    const profileBody = (await profileRes.json()) as any;
-    assert.equal(profileBody.success, true);
-    assert.equal(profileBody.data.identifyNumber, '079201005678');
-    assert.equal(profileBody.data.gender, 'MALE');
-    assert.equal(profileBody.data.dateOfBirth, '1995-08-15');
-    assert.equal(profileBody.data.address, '123 Lê Lợi, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh');
-    assert.ok(Array.isArray(profileBody.data.reputationHistory));
-    assert.ok(Array.isArray(profileBody.data.restrictions));
-
-    // 2. GET /api/v1/users/:id/reviews -> returns community reviews
-    const reviewsRes = await fetch(`${baseUrl}/api/v1/users/${sellerId}/reviews`, {
-      headers: { Authorization: `Bearer ${staffToken}` },
-    });
-    assert.equal(reviewsRes.status, 200);
-    const reviewsBody = (await reviewsRes.json()) as any;
-    assert.equal(reviewsBody.success, true);
-    assert.equal(reviewsBody.data.userId, sellerId);
-    assert.ok(reviewsBody.data.totalReviews >= 1);
-    assert.ok(reviewsBody.data.averageRating >= 1 && reviewsBody.data.averageRating <= 5);
-    assert.ok(Array.isArray(reviewsBody.data.reviews));
-    assert.ok(reviewsBody.data.reviews.length >= 1);
-    assert.equal(reviewsBody.data.reviews[0].toUserId, sellerId);
-  });
-});

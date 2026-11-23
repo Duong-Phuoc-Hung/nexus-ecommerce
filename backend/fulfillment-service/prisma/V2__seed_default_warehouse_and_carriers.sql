@@ -13,16 +13,13 @@ SET name = EXCLUDED.name,
     address = EXCLUDED.address, 
     city = EXCLUDED.city;
 
--- 2. NẠP DỮ LIỆU ĐỐI TÁC VẬN CHUYỂN (SRS 3.6: Tích hợp các hãng giao nhận chuẩn)
+-- 2. NẠP DỮ LIỆU ĐỐI TÁC VẬN CHUYỂN (SRS: Tích hợp GHN và GHTK)
 INSERT INTO fulfillment_carriers (id, carrier_code, carrier_name, is_active, api_endpoint)
 VALUES 
 (1, 'GHN', 'Giao Hàng Nhanh', TRUE, 'https://dev-online-gateway.ghn.vn/shiip/public-api/v2'),
-(2, 'GHTK', 'Giao Hàng Tiết Kiệm', TRUE, 'https://services.giaohangtietkiem.vn/services/shipment'),
-(3, 'VIETTEL_POST', 'Viettel Post', TRUE, 'https://partner.viettelpost.vn/v2'),
-(4, 'JT_EXPRESS', 'J&T Express', TRUE, 'https://vip.jtexpress.vn/api/v1')
+(2, 'GHTK', 'Giao Hàng Tiết Kiệm', TRUE, 'https://services.giaohangtietkiem.vn/services/shipment')
 ON CONFLICT (carrier_code) DO UPDATE 
-SET carrier_name = EXCLUDED.carrier_name,
-    api_endpoint = EXCLUDED.api_endpoint;
+SET carrier_name = EXCLUDED.carrier_name;
 
 -- Đặt lại giá trị Sequence tự tăng sau khi chèn dữ liệu chỉ định ID
 SELECT setval('fulfillment_warehouses_id_seq', (SELECT MAX(id) FROM fulfillment_warehouses));

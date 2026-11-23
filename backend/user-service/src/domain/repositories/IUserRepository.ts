@@ -26,20 +26,6 @@ export interface UserSearchPage {
 }
 
 /**
- * Đánh giá uy tín & phản hồi từ cộng đồng (SRS 3.1.2)
- */
-export interface UserReview {
-  id: string;
-  orderId: string;
-  fromUserId: string;
-  fromUserName?: string;
-  toUserId: string;
-  rating: number;
-  comment?: string;
-  createdAt: Date;
-}
-
-/**
  * Domain Port / Repository Interface: IUserRepository
  * Định nghĩa hợp đồng truy xuất dữ liệu của User Bounded Context.
  * Thuần túy là Interface, không chứa logic SQL hay Prisma.
@@ -49,7 +35,6 @@ export interface IUserRepository {
   findByEmail(email: string): Promise<User | null>;
   findByPhone?(phone: string): Promise<User | null>;
   search(criteria: UserSearchCriteria): Promise<UserSearchPage>;
-  getUserReviews?(userId: string): Promise<UserReview[]>;
   save(user: User): Promise<void>;
   update(user: User): Promise<void>;
   updateProfileFields?(

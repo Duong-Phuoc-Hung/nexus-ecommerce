@@ -30,6 +30,8 @@ export interface UserFeatureRestriction {
 export type Gender = 'MALE' | 'FEMALE' | 'OTHER' | 'UNSPECIFIED';
 
 export interface UserProps {
+  dateOfBirth?: string | null;
+  gender?: Gender | null;
   id: string;
   email: string;
   fullName: string;
@@ -38,10 +40,6 @@ export interface UserProps {
   role: UserRole;
   status: UserStatus;
   reputationScore: number;
-  identifyNumber?: string;
-  gender?: Gender | string | null;
-  dateOfBirth?: string | Date | null;
-  address?: string;
   failedLoginAttempts?: number;
   lockedUntil?: Date | null;
   reputationHistory?: ReputationAuditEntry[];
@@ -64,13 +62,11 @@ export class User {
   private _fullName: string;
   private _passwordHash: string;
   private _phone: string;
+  public dateOfBirth: string | null;
+  public gender: Gender | null;
   private _role: UserRole;
   private _status: UserStatus;
   private _reputationScore: number;
-  private _identifyNumber: string;
-  private _gender: Gender | string | null;
-  private _dateOfBirth: string | null;
-  private _address: string;
   private _failedLoginAttempts: number;
   private _lockedUntil: Date | null;
   private _reputationHistory: ReputationAuditEntry[];
@@ -84,17 +80,11 @@ export class User {
     this._fullName = props.fullName;
     this._passwordHash = props.passwordHash;
     this._phone = props.phone || '';
+    this.dateOfBirth = props.dateOfBirth ?? null;
+    this.gender = props.gender ?? null;
     this._role = props.role;
     this._status = props.status;
     this._reputationScore = props.reputationScore;
-    this._identifyNumber = props.identifyNumber || '';
-    this._gender = props.gender ?? null;
-    this._dateOfBirth = props.dateOfBirth
-      ? props.dateOfBirth instanceof Date
-        ? props.dateOfBirth.toISOString().split('T')[0]
-        : String(props.dateOfBirth).split('T')[0]
-      : null;
-    this._address = props.address || '';
     this._failedLoginAttempts = props.failedLoginAttempts ?? 0;
     this._lockedUntil = props.lockedUntil ?? null;
     this._reputationHistory = props.reputationHistory || [];
@@ -137,38 +127,6 @@ export class User {
 
   public get reputationScore(): number {
     return this._reputationScore;
-  }
-
-  public get identifyNumber(): string {
-    return this._identifyNumber;
-  }
-
-  public get gender(): Gender | string | null {
-    return this._gender;
-  }
-
-  public set gender(value: Gender | string | null | undefined) {
-    this._gender = value ?? null;
-    this._updatedAt = new Date();
-  }
-
-  public get dateOfBirth(): string | null {
-    return this._dateOfBirth;
-  }
-
-  public set dateOfBirth(value: string | Date | null | undefined) {
-    if (!value) {
-      this._dateOfBirth = null;
-    } else if (value instanceof Date) {
-      this._dateOfBirth = value.toISOString().split('T')[0];
-    } else {
-      this._dateOfBirth = String(value).split('T')[0];
-    }
-    this._updatedAt = new Date();
-  }
-
-  public get address(): string {
-    return this._address;
   }
 
   public get reputationHistory(): ReputationAuditEntry[] {
