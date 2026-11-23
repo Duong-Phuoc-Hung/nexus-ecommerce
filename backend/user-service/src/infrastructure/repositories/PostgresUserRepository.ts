@@ -1,4 +1,6 @@
 import { Pool, PoolClient } from 'pg';
+import { restrictionFeature } from '../../application/dtos/AdminUserDto';
+import { PostgresAdminRoleRepository } from './PostgresAdminRoleRepository';
 import {
   IUserRepository,
   UserSearchCriteria,
@@ -13,6 +15,7 @@ import { User, UserFeatureRestriction, UserRole, UserStatus } from '../../domain
  */
 export class PostgresUserRepository implements IUserRepository {
   private pool: Pool;
+  readonly adminRoles: PostgresAdminRoleRepository;
 
   constructor(pool?: Pool) {
     const rawHost = process.env.USER_DB_HOST || process.env.DB_HOST || '127.0.0.1';
@@ -35,6 +38,7 @@ export class PostgresUserRepository implements IUserRepository {
         connectionTimeoutMillis: 5000,
       });
 
+    this.adminRoles = new PostgresAdminRoleRepository(this.pool);
     this.pool.on('error', (err: Error) => {
       console.error('[PostgresUserRepository Pool Error]:', err.message);
     });
@@ -335,6 +339,51 @@ export class PostgresUserRepository implements IUserRepository {
     return result.rowCount === 1;
   }
 
+  public async adminProfileFields(userId: string) {
+    const { rows } = await this.pool.query<{
+      identityNumberMasked: string | null;
+      defaultAddress: string | null;
+    }>(
+      `
+      SELECT CASE WHEN u.identity_verified_at IS NOT NULL AND length(trim(u.identify_number)) > 4
+          THEN repeat('•', length(trim(u.identify_number)) - 4) || right(trim(u.identify_number), 4)
+        END AS "identityNumberMasked",
+        COALESCE((SELECT concat_ws(', ', a.street, a.ward_name, a.province_name)
+          FROM user_addresses a WHERE a.user_id=u.id AND a.is_default AND NOT a.is_deleted
+          ORDER BY a.created_at DESC, a.id DESC LIMIT 1), NULLIF(trim(u.address), '')) AS "defaultAddress"
+      FROM user_users u WHERE u.id=$1 AND NOT u.is_deleted
+    `,
+      [userId],
+    );
+    return rows[0] ?? null;
+  }
+
+  public async adminReputationHistory(userId: string, page: number, limit: number) {
+    const { rows } = await this.pool.query<{
+      items: unknown[];
+      total: number;
+    }>(
+      `
+      WITH events AS (
+        SELECT e.id::text, e.action_type AS "actionType", e.delta, e.reason,
+          e.score_before AS "scoreBefore", e.score_after AS "scoreAfter",
+          e.restricted_features AS "restrictedFeatures", e.duration_days AS "durationDays",
+          e.expires_at AS "expiresAt", e.actor_id AS "actorId",
+          COALESCE(e.actor_name,a.full_name) AS "actorName", e.created_at AS "createdAt", e.id AS sort_id
+        FROM user_reputation_events e LEFT JOIN user_users a ON a.id=e.actor_id
+        WHERE e.user_id=$1
+      ), page AS (
+        SELECT * FROM events ORDER BY "createdAt" DESC, sort_id DESC LIMIT $2 OFFSET $3
+      )
+      SELECT COALESCE((SELECT jsonb_agg(to_jsonb(page) - 'sort_id' ORDER BY "createdAt" DESC, sort_id DESC) FROM page),
+        '[]'::jsonb) AS items, (SELECT count(*)::int FROM events) AS total
+    `,
+      [userId, limit, (page - 1) * limit],
+    );
+    const { items, total } = rows[0];
+    return { items, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+  }
+
   public async adjustScore(userId: string, points: number, reason: string, actorId: string) {
     const client = await this.pool.connect();
     try {
@@ -350,8 +399,9 @@ export class PostgresUserRepository implements IUserRepository {
         [userId, score],
       );
       await client.query(
-        'INSERT INTO user_reputation_events (user_id, delta, reason, actor_id) VALUES ($1, $2, $3, $4)',
-        [userId, score - oldScore, reason, actorId],
+        `INSERT INTO user_reputation_events (user_id, delta, reason, actor_id, score_before, score_after, actor_name)
+         VALUES ($1,$2,$3,$4::varchar,$5,$6,(SELECT full_name FROM user_users WHERE id=$4::varchar))`,
+        [userId, score - oldScore, reason, actorId, oldScore, score],
       );
       const history = (await this.reputationHistory(userId, client)).reverse();
       await client.query('COMMIT');
@@ -366,7 +416,7 @@ export class PostgresUserRepository implements IUserRepository {
 
   public async reputationHistory(userId: string, db: Pool | PoolClient = this.pool) {
     const result = await db.query(
-      'SELECT id::text, delta, reason, actor_id, created_at FROM user_reputation_events WHERE user_id = $1 ORDER BY created_at DESC, id DESC LIMIT 20',
+      "SELECT id::text, delta, reason, actor_id, created_at FROM user_reputation_events WHERE user_id = $1 AND action_type = 'ADJUST_SCORE' ORDER BY created_at DESC, id DESC LIMIT 20",
       [userId],
     );
     return result.rows.map((row) => ({
@@ -380,10 +430,17 @@ export class PostgresUserRepository implements IUserRepository {
 
   public async saveRestriction(userId: string, restriction: UserFeatureRestriction) {
     await this.pool.query(
-      `INSERT INTO user_feature_restrictions (user_id, feature, duration_days, reason, actor_id, expires_at, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (user_id, feature) DO UPDATE SET
-       duration_days=EXCLUDED.duration_days, reason=EXCLUDED.reason, actor_id=EXCLUDED.actor_id,
-       expires_at=EXCLUDED.expires_at, created_at=EXCLUDED.created_at`,
+      `WITH saved AS (
+         INSERT INTO user_feature_restrictions (user_id, feature, duration_days, reason, actor_id, expires_at, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (user_id, feature) DO UPDATE SET
+         duration_days=EXCLUDED.duration_days, reason=EXCLUDED.reason, actor_id=EXCLUDED.actor_id,
+         expires_at=EXCLUDED.expires_at, created_at=EXCLUDED.created_at
+         RETURNING user_id, duration_days, reason, actor_id, expires_at
+       )
+       INSERT INTO user_reputation_events (user_id, action_type, delta, restricted_features, duration_days,
+         reason, actor_id, actor_name, expires_at)
+       SELECT user_id, 'RESTRICT_FEATURE', 0, jsonb_build_array($8::text), duration_days, reason, actor_id,
+         (SELECT full_name FROM user_users WHERE id=saved.actor_id), expires_at FROM saved`,
       [
         userId,
         restriction.restriction,
@@ -392,6 +449,7 @@ export class PostgresUserRepository implements IUserRepository {
         restriction.appliedBy,
         restriction.expiresAt,
         restriction.createdAt,
+        restrictionFeature(restriction.restriction),
       ],
     );
     return this.activeRestrictions(userId);
@@ -433,25 +491,33 @@ export class PostgresUserRepository implements IUserRepository {
     };
   }
 
-  public async sellerReviews(sellerId: string, page: number, limit: number, rating?: number) {
+  public async sellerReviews(
+    userId: string,
+    page: number,
+    limit: number,
+    rating?: number,
+    admin = false,
+  ) {
     const where =
-      'to_user_id = $1 AND is_seller_review AND ($2::smallint IS NULL OR user_ratings.rating = $2)';
+      'to_user_id = $1 AND ($3::boolean OR is_seller_review) AND ($2::smallint IS NULL OR user_ratings.rating = $2)';
     const [count, list] = await Promise.all([
       this.pool.query('SELECT count(*)::int AS total FROM user_ratings WHERE ' + where, [
-        sellerId,
+        userId,
         rating ?? null,
+        admin,
       ]),
       this.pool.query(
-        `SELECT id::text, rating, comment, created_at FROM user_ratings WHERE ${where}
-         ORDER BY created_at DESC, id DESC LIMIT $3 OFFSET $4`,
-        [sellerId, rating ?? null, limit, (page - 1) * limit],
+        `SELECT id::text, CASE WHEN $3::boolean THEN order_id END AS order_id, rating, comment, created_at
+         FROM user_ratings WHERE ${where} ORDER BY created_at DESC, id DESC LIMIT $4 OFFSET $5`,
+        [userId, rating ?? null, admin, limit, (page - 1) * limit],
       ),
     ]);
     const total = Number(count.rows[0].total);
     return {
       items: list.rows.map((row) => ({
         id: row.id,
-        buyerAlias: 'Người mua đã xác minh',
+        buyerAlias: admin ? 'Người đánh giá ẩn danh' : 'Người mua đã xác minh',
+        ...(admin ? { orderId: row.order_id } : {}),
         rating: row.rating,
         comment: row.comment,
         createdAt: row.created_at,

@@ -48,6 +48,7 @@ test(
         'V4__add_login_lockout_fields.sql',
         'V5__profile_reputation_and_seller_reviews.sql',
         'V5__profile_reputation_and_seller_reviews.sql',
+        'V6__admin_user_audit.sql',
       ]) {
         await pool.query(await readFile(resolve(__dirname, '../prisma', migration), 'utf8'));
       }
@@ -77,8 +78,14 @@ test(
       });
       const address = server.address();
       assert.ok(address && typeof address !== 'string');
-      const base = 'http://127.0.0.1:' + address.port + '/api/v1/users';
+      const { port } = address;
+      const base = 'http://127.0.0.1:' + port + '/api/v1/users';
       const buyerToken = createJwtToken({ sub: buyer, role: 'BUYER', email: 'buyer@example.test' });
+      const adminToken = createJwtToken({
+        sub: randomUUID(),
+        role: 'ADMIN',
+        email: 'admin@example.test',
+      });
       const staffToken = createJwtToken({
         sub: staff,
         role: 'SUPPORT_STAFF',
@@ -153,33 +160,55 @@ test(
         1,
       );
 
-      assert.equal(
-        (
-          await request(
-            '/' + buyer + '/adjust-reputation',
-            'POST',
-            { points: -100, reason: 'Test adjustment' },
-            staffToken,
-          )
-        ).status,
-        200,
+      const adjustment = await request(
+        '/' + buyer + '/adjust-reputation',
+        'POST',
+        { points: -100, reason: 'Test adjustment' },
+        staffToken,
       );
-      assert.equal(
-        (
-          await request(
-            '/' + buyer + '/restrict-features',
-            'POST',
-            { restriction: 'BAN_BIDDING', durationDays: 2, reason: 'Test reason' },
-            staffToken,
-          )
-        ).status,
-        200,
+      assert.equal(adjustment.status, 200, JSON.stringify(adjustment.body));
+      const restriction = await request(
+        '/' + buyer + '/restrict-features',
+        'POST',
+        { restriction: 'BAN_BIDDING', durationDays: 2, reason: 'Test reason' },
+        staffToken,
       );
+      assert.equal(restriction.status, 200, JSON.stringify(restriction.body));
       const reputation = await request('/me/reputation');
       assert.equal(reputation.body.data.reputationScore, 0);
       assert.equal(reputation.body.data.recentHistory[0].delta, -100);
       assert.equal(reputation.body.data.activeRestrictions[0].feature, 'AUCTION_BID');
       assert.equal(reputation.body.data.biddingEligible, false);
+
+      const adminProfile = await request('/' + buyer, 'GET', undefined, adminToken);
+      assert.equal(adminProfile.body.data.identityNumberMasked, null);
+      assert.equal(adminProfile.body.data.dateOfBirth, '2000-02-29');
+      assert.equal(adminProfile.body.data.defaultAddress, 'Đường A, Phường 1, TP HCM');
+      assert.equal(adminProfile.body.data.activeRestrictions[0].feature, 'AUCTION_BID');
+      assert.equal(adminProfile.body.data.trustTier, 'RESTRICTED');
+      assert.equal(
+        (await request('/' + buyer, 'GET', undefined, staffToken)).body.data.identityNumberMasked,
+        undefined,
+      );
+      await pool.query(
+        "UPDATE user_users SET identify_number='001234561234', identity_verified_at=now() WHERE id=$1",
+        [buyer],
+      );
+      const verifiedProfile = await request('/' + buyer, 'GET', undefined, adminToken);
+      assert.equal(verifiedProfile.body.data.identityNumberMasked, '••••••••1234');
+      assert.ok(
+        !('identifyNumber' in verifiedProfile.body.data) &&
+          !('passwordHash' in verifiedProfile.body.data),
+      );
+      const historyPath = '/' + buyer + '/reputation-history';
+      assert.equal((await request(historyPath, 'GET', undefined, staffToken)).status, 403);
+      const history = await request(historyPath, 'GET', undefined, adminToken);
+      assert.equal(history.body.data.pagination.total, 2);
+      assert.deepEqual(
+        history.body.data.items.map((event: { actionType: string }) => event.actionType),
+        ['RESTRICT_FEATURE', 'ADJUST_SCORE'],
+      );
+      assert.equal(history.body.data.items[1].scoreBefore, 100);
 
       const publicPath = '/' + seller + '/public-profile';
       const reviewsPath = '/' + seller + '/reviews';
@@ -199,7 +228,57 @@ test(
       assert.equal(sellerProfile.averageRating, 5);
       assert.equal(sellerProfile.totalReviews, 1);
       assert.ok(!('email' in sellerProfile) && !('phone' in sellerProfile));
-      assert.equal((await request(reviewsPath + '?rating=5')).body.data.items.length, 1);
+      const publicReviews = await request(reviewsPath + '?rating=5');
+      assert.equal(publicReviews.body.data.items.length, 1);
+      assert.equal(publicReviews.body.data.items[0].orderId, undefined);
+      const adminReviews = await request(reviewsPath, 'GET', undefined, adminToken);
+      assert.equal(adminReviews.body.data.items[0].orderId, 'ORDER-CANONICAL');
+
+      async function roleRequest(path: string, method = 'GET', body?: object, token = adminToken) {
+        const response = await fetch('http://127.0.0.1:' + port + '/api/v1/auth/roles' + path, {
+          method,
+          headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body: body && JSON.stringify(body),
+        });
+        return {
+          status: response.status,
+          body: response.status === 204 ? null : ((await response.json()) as any),
+        };
+      }
+      const role = {
+        code: 'QA_TEAM',
+        name: 'Quality',
+        description: 'QA',
+        permissions: ['USER.VIEW'],
+      };
+      assert.equal((await roleRequest('', 'POST', role, staffToken)).status, 403);
+      assert.equal((await roleRequest('', 'POST', role)).status, 201);
+      assert.equal((await roleRequest('', 'POST', role)).body.code, 'ROLE_ALREADY_EXISTS');
+      assert.equal(
+        (await roleRequest('/QA_TEAM', 'PUT', { ...role, permissions: ['DOES.NOT.EXIST'] })).status,
+        400,
+      );
+      const listed = await roleRequest('');
+      assert.deepEqual(
+        listed.body.data.find((item: { role: string }) => item.role === 'QA_TEAM').permissions,
+        ['USER.VIEW'],
+      );
+      assert.equal(
+        (await roleRequest('/QA_TEAM', 'PUT', { ...role, name: 'Quality assurance' })).body.data
+          .name,
+        'Quality assurance',
+      );
+      assert.equal((await roleRequest('/ADMIN', 'DELETE')).body.code, 'SYSTEM_ROLE_LOCKED');
+      await pool.query(
+        "INSERT INTO user_user_roles (user_id, role_id) SELECT $1,id FROM user_roles WHERE role_code='QA_TEAM'",
+        [buyer],
+      );
+      assert.equal((await roleRequest('/QA_TEAM', 'DELETE')).body.code, 'ROLE_IN_USE');
+      await pool.query(
+        "DELETE FROM user_user_roles WHERE user_id=$1 AND role_id=(SELECT id FROM user_roles WHERE role_code='QA_TEAM')",
+        [buyer],
+      );
+      assert.equal((await roleRequest('/QA_TEAM', 'DELETE')).status, 204);
     } finally {
       if (server) await new Promise<void>((done) => server!.close(() => done()));
       if (commerce.listening) await new Promise<void>((done) => commerce.close(() => done()));

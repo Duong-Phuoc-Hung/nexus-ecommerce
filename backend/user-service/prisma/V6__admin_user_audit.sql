@@ -1,0 +1,16 @@
+BEGIN;
+
+ALTER TABLE user_users ADD COLUMN IF NOT EXISTS identity_verified_at TIMESTAMPTZ;
+ALTER TABLE user_reputation_events
+  ADD COLUMN IF NOT EXISTS action_type VARCHAR(24) NOT NULL DEFAULT 'ADJUST_SCORE'
+    CHECK (action_type IN ('ADJUST_SCORE', 'RESTRICT_FEATURE', 'LIFT_RESTRICTION')),
+  ADD COLUMN IF NOT EXISTS score_before INT,
+  ADD COLUMN IF NOT EXISTS score_after INT,
+  ADD COLUMN IF NOT EXISTS restricted_features JSONB NOT NULL DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS duration_days INT,
+  ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS actor_name VARCHAR(120);
+
+CREATE INDEX IF NOT EXISTS idx_user_user_roles_role_id ON user_user_roles(role_id);
+
+COMMIT;

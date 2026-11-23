@@ -79,21 +79,38 @@ export function createJwtToken(payload: Omit<JwtPayload, 'iat' | 'exp'>): string
   return `${signingInput}.${signature}`;
 }
 
-export function verifyJwtToken(token: string): JwtPayload | null {
+export function verifyJwtToken(token: string, strict = false): JwtPayload | null {
   if (!token || typeof token !== 'string') {
     return null;
   }
 
-  const secrets = [
-    process.env.JWT_ACCESS_SECRET,
-    process.env.JWT_SECRET,
-    'nexus_super_secret_jwt_access_key_min_32_chars_local_dev',
-    'nexus-dev-secret',
-  ].filter(Boolean) as string[];
+  const configured = [process.env.JWT_ACCESS_SECRET, process.env.JWT_SECRET].filter(
+    Boolean,
+  ) as string[];
+  const secrets =
+    strict && (configured.length > 0 || process.env.NODE_ENV === 'production')
+      ? configured
+      : [
+          ...configured,
+          'nexus_super_secret_jwt_access_key_min_32_chars_local_dev',
+          'nexus-dev-secret',
+        ];
 
   for (const secret of secrets) {
     try {
-      const decoded = jwt.verify(token, secret) as any;
+      const decoded = jwt.verify(
+        token,
+        secret,
+        strict ? { algorithms: ['HS256'] } : undefined,
+      ) as any;
+      if (
+        strict &&
+        (typeof decoded?.sub !== 'string' ||
+          !decoded.sub.trim() ||
+          !Number.isFinite(decoded.exp) ||
+          decoded.type === 'refresh')
+      )
+        continue;
       if (decoded && (decoded.sub || decoded.userId)) {
         const role =
           decoded.role ||
@@ -111,6 +128,8 @@ export function verifyJwtToken(token: string): JwtPayload | null {
       // Tiếp tục thử secret tiếp theo
     }
   }
+
+  if (strict) return null;
 
   try {
     const parts = token.split('.');
