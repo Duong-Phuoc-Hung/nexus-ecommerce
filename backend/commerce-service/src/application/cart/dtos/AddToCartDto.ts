@@ -28,11 +28,15 @@ export interface UpdateCartItemInputDto {
   quantity: number;
 }
 
+export type CartItemStatus =
+  'OK' | 'PRICE_CHANGED' | 'INSUFFICIENT_STOCK' | 'OUT_OF_STOCK' | 'UNAVAILABLE';
+
 export interface CartItemDto {
   id: string;
   productId: string;
   title: string;
   sellerId: string;
+  sellerName?: string | null;
   price: number;
   stockQuantity: number;
   status: string;
@@ -40,6 +44,22 @@ export interface CartItemDto {
   subtotal: number;
   imageUrl: string | null;
   availability?: 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN';
+  snapshotUnitPrice: number;
+  currentUnitPrice: number;
+  availableStock: number;
+  productStatus: string;
+  itemStatus: CartItemStatus;
+  warningMessage: string | null;
+  canCheckout: boolean;
+}
+
+export interface CartSummaryDto {
+  subtotal: number;
+  estimatedDiscount: number;
+  estimatedTax: number;
+  estimatedShipping: number | null;
+  estimatedTotal: number;
+  currency: string;
 }
 
 export interface CartDto {
@@ -50,6 +70,19 @@ export interface CartDto {
   subtotal: number;
   currency: string;
   items: CartItemDto[];
+  summary: CartSummaryDto;
+  hasBlockingIssues: boolean;
+  validatedAt: string;
+}
+
+export interface ValidateCartItemInputDto {
+  productId: string;
+  quantity: number;
+}
+
+export interface ValidateCartInputDto {
+  items: ValidateCartItemInputDto[];
+  promoCode?: string;
 }
 
 const PRODUCT_ID_PATTERN =
@@ -175,5 +208,71 @@ export function validateMergeCartInput(body: unknown): MergeCartInputDto {
 
   return {
     items: validatedItems,
+  };
+}
+
+export function validateValidateCartInput(body: unknown): ValidateCartInputDto {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    throw new CartValidationError(400, 'VALIDATION_ERROR', 'Dữ liệu yêu cầu không hợp lệ.');
+  }
+
+  const record = body as Record<string, unknown>;
+  const rawItems = record.items;
+
+  if (!Array.isArray(rawItems) || rawItems.length === 0) {
+    throw new CartValidationError(
+      400,
+      'VALIDATION_ERROR',
+      'Danh sách món hàng (items) không được để trống.',
+    );
+  }
+
+  const validatedItems: ValidateCartItemInputDto[] = [];
+  const fieldErrors: Record<string, string> = {};
+
+  rawItems.forEach((entry, index) => {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+      fieldErrors[`items[${index}]`] = 'Item không hợp lệ.';
+      return;
+    }
+
+    const itemRecord = entry as Record<string, unknown>;
+    const rawProductId =
+      itemRecord.productId !== undefined ? String(itemRecord.productId).trim() : '';
+    const rawQuantity = itemRecord.quantity !== undefined ? Number(itemRecord.quantity) : 1;
+
+    if (!rawProductId || !PRODUCT_ID_PATTERN.test(rawProductId)) {
+      fieldErrors[`items[${index}].productId`] = 'Mã sản phẩm phải là chuỗi số hoặc UUID hợp lệ.';
+      return;
+    }
+
+    if (isNaN(rawQuantity) || !Number.isInteger(rawQuantity) || rawQuantity < 1) {
+      fieldErrors[`items[${index}].quantity`] = 'Số lượng sản phẩm phải là số nguyên >= 1.';
+      return;
+    }
+
+    validatedItems.push({
+      productId: rawProductId,
+      quantity: rawQuantity,
+    });
+  });
+
+  if (Object.keys(fieldErrors).length > 0) {
+    throw new CartValidationError(
+      400,
+      'VALIDATION_ERROR',
+      'Dữ liệu kiểm tra giỏ hàng không hợp lệ.',
+      fieldErrors,
+    );
+  }
+
+  const promoCode =
+    record.promoCode !== undefined && record.promoCode !== null
+      ? String(record.promoCode).trim().toUpperCase()
+      : undefined;
+
+  return {
+    items: validatedItems,
+    promoCode,
   };
 }

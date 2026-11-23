@@ -227,17 +227,65 @@ export class PostgresOrderRepository implements IOrderRepository {
   public async update(order: Order): Promise<void> {
     const cleanId = order.id.trim();
 
-    await this.prisma.order.updateMany({
-      where: {
-        OR: [{ id: cleanId }, { orderCode: cleanId }],
-      },
-      data: {
-        status: order.status,
-        trackingCode: order.trackingCode || null,
-        timeline: order.timeline as any,
-        updatedAt: order.updatedAt,
-      },
-    });
+    const runInTx = async (tx: any) => {
+      // 1. Kiểm tra trạng thái hiện tại trong DB để chống hoàn voucher lặp khi retry hủy đơn (P1-5)
+      const existing = await tx.order.findFirst({
+        where: {
+          OR: [{ id: cleanId }, { orderCode: cleanId }],
+        },
+        select: { id: true, status: true },
+      });
+
+      const currentStatus = existing?.status;
+      const targetOrderId = existing?.id || cleanId;
+
+      // 2. Cập nhật trạng thái và timeline của đơn hàng trong transaction
+      await tx.order.updateMany({
+        where: {
+          OR: [{ id: cleanId }, { orderCode: cleanId }],
+        },
+        data: {
+          status: order.status,
+          trackingCode: order.trackingCode || null,
+          timeline: order.timeline as any,
+          updatedAt: order.updatedAt,
+        },
+      });
+
+      // 3. Hoàn trả voucher nguyên tử trong cùng transaction (chỉ khi đơn chưa từng bị CANCELLED)
+      if (
+        order.status === 'CANCELLED' &&
+        currentStatus !== 'CANCELLED' &&
+        tx.promotionUsage &&
+        tx.promotion
+      ) {
+        const promoUsages = await tx.promotionUsage.findMany({
+          where: { orderId: targetOrderId },
+        });
+
+        if (Array.isArray(promoUsages) && promoUsages.length > 0) {
+          for (const usage of promoUsages) {
+            // Xóa bản ghi lượt dùng trước trong cùng transaction
+            const deleted = await tx.promotionUsage.delete({
+              where: { id: usage.id },
+            });
+            // Chỉ giảm bộ đếm khi đã thu hồi đúng bản ghi sử dụng thành công
+            if (deleted) {
+              await tx.promotion.update({
+                where: { id: usage.promotionId },
+                data: { usedCount: { decrement: 1 } },
+              });
+            }
+          }
+        }
+      }
+    };
+
+    if (typeof (this.prisma as any)?.$transaction === 'function') {
+      await (this.prisma as any).$transaction(runInTx);
+    } else {
+      await runInTx(this.prisma);
+    }
   }
 
   /**
@@ -301,6 +349,14 @@ export class PostgresOrderRepository implements IOrderRepository {
         Number(orderRow.discountAmount || 0),
       shippingFee: Number(orderRow.shippingFee || 0),
       discountAmount: Number(orderRow.discountAmount || 0),
+      promoCode: orderRow.promoCode || orderRow.promo_code || null,
+      taxAmount: Number(orderRow.taxAmount || orderRow.tax_amount || 0),
+      shippingCarrier: orderRow.shippingCarrier || orderRow.shipping_carrier || null,
+      shippingServiceName: orderRow.shippingServiceName || orderRow.shipping_service_name || null,
+      estimatedDeliveryAt:
+        orderRow.estimatedDeliveryAt || orderRow.estimated_delivery_at
+          ? new Date(orderRow.estimatedDeliveryAt || orderRow.estimated_delivery_at)
+          : null,
       shippingAddress,
       totalAmount: Number(orderRow.totalAmount),
       status: (orderRow.status as OrderStatus) || OrderStatus.PENDING,

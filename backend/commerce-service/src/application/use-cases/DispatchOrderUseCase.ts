@@ -35,12 +35,12 @@ export class DispatchOrderUseCase {
       throw new Error('Bạn không có quyền bàn giao đơn hàng của gian hàng khác.');
     }
 
-    const carrier = input.carrierCode || 'GHN';
+    const carrier = input.carrierCode || order.shippingCarrier || 'GHN';
     let trackingCode = input.trackingCode;
     let awbBarcodeUrl: string | undefined;
 
-    // Tự động tạo vận đơn sang 3PL (GHN Sandbox) nếu chưa có sẵn tracking code thủ công
-    if (!trackingCode && this.shippingOrderClient) {
+    // Tự động tạo vận đơn sang 3PL (GHN Sandbox) nếu carrier là GHN và chưa có sẵn tracking code thủ công
+    if (!trackingCode && this.shippingOrderClient && carrier === 'GHN') {
       try {
         const outbound = await this.shippingOrderClient.createShippingOrder({
           orderId: order.id,

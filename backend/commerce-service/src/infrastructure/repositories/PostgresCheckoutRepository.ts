@@ -52,6 +52,8 @@ function toOrder(row: any, items: any[]): OrderRecord {
     status: row.status,
     totalAmount: Number(row.totalAmount || row.total_amount),
     shippingFee: Number(row.shippingFee || row.shipping_fee),
+    discountAmount: Number(row.discountAmount || row.discount_amount || 0),
+    taxAmount: Number(row.taxAmount || row.tax_amount || 0),
     shippingAddress: shippingAddress as ShippingAddress,
     expiresAt: new Date(
       row.checkoutSessionExpiresAt || row.checkout_session_expires_at || Date.now(),
@@ -63,6 +65,13 @@ function toOrder(row: any, items: any[]): OrderRecord {
       quantity: Number(item.quantity),
       subtotal: Number(item.subtotal),
     })),
+    promoCode: row.promoCode || row.promo_code || null,
+    shippingCarrier: row.shippingCarrier || row.shipping_carrier || null,
+    shippingServiceName: row.shippingServiceName || row.shipping_service_name || null,
+    estimatedDeliveryAt:
+      row.estimatedDeliveryAt || row.estimated_delivery_at
+        ? new Date(row.estimatedDeliveryAt || row.estimated_delivery_at)
+        : null,
   };
 }
 
@@ -95,7 +104,16 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
         shippingAddress: quote.shippingAddress as any,
         subtotal: quote.subtotal,
         shippingFee: quote.shippingFee,
+        discountAmount: quote.discountAmount || 0,
+        taxAmount: quote.taxAmount || 0,
         totalAmount: quote.totalAmount,
+        promoCode: quote.promoCode || null,
+        shippingOptionId: quote.selectedShippingOptionId || null,
+        metadata: {
+          promo: quote.promo,
+          shippingOptions: quote.shippingOptions,
+          selectedShippingOptionId: quote.selectedShippingOptionId,
+        } as any,
         currency: quote.currency,
         expiresAt: quote.expiresAt,
       },
@@ -115,6 +133,10 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
       typeof row.shippingAddress === 'string'
         ? JSON.parse(row.shippingAddress)
         : row.shippingAddress;
+    const metadata =
+      typeof (row as any).metadata === 'string'
+        ? JSON.parse((row as any).metadata)
+        : (row as any).metadata || {};
 
     return {
       id: row.id,
@@ -124,9 +146,50 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
       shippingAddress,
       subtotal: Number(row.subtotal),
       shippingFee: Number(row.shippingFee),
+      discountAmount: Number((row as any).discountAmount || (row as any).discount_amount || 0),
+      taxAmount: Number((row as any).taxAmount || (row as any).tax_amount || 0),
       totalAmount: Number(row.totalAmount),
+      promoCode: (row as any).promoCode || (row as any).promo_code || null,
+      promo: metadata.promo || null,
+      selectedShippingOptionId:
+        (row as any).shippingOptionId ||
+        (row as any).shipping_option_id ||
+        metadata.selectedShippingOptionId ||
+        null,
+      shippingOptions: metadata.shippingOptions || undefined,
       currency: row.currency,
       expiresAt: new Date(row.expiresAt),
+    };
+  }
+
+  public async findOrderByIdempotency(
+    buyerId: string,
+    idempotencyKey: string,
+  ): Promise<{ order: OrderRecord; payment: PaymentRecord; requestHash: string } | null> {
+    if (!this.prisma?.checkoutIdempotency) return null;
+    const existing = await this.prisma.checkoutIdempotency.findUnique({
+      where: {
+        buyerId_idempotencyKey: {
+          buyerId,
+          idempotencyKey,
+        },
+      },
+    });
+
+    if (!existing || !existing.orderId) {
+      return null;
+    }
+
+    const order = await this.loadOrderPrisma(this.prisma, String(existing.orderId));
+    const payment = await this.loadLatestPaymentPrisma(this.prisma, String(existing.orderId));
+    if (!order || !payment) {
+      return null;
+    }
+
+    return {
+      order,
+      payment,
+      requestHash: existing.requestHash,
     };
   }
 
@@ -250,6 +313,12 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
           sellerId: params.sellerId,
           totalAmount: params.totalAmount,
           shippingFee: params.shippingFee,
+          discountAmount: params.discountAmount || 0,
+          taxAmount: params.taxAmount || 0,
+          promoCode: params.promoCode || null,
+          shippingCarrier: params.shippingCarrier || null,
+          shippingServiceName: params.shippingServiceName || null,
+          estimatedDeliveryAt: params.estimatedDeliveryAt || null,
           status: initialStatus,
           shippingAddress: params.shippingAddress as any,
           checkoutSessionExpiresAt: params.orderExpiresAt,
@@ -257,6 +326,46 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
       });
 
       const orderId = String(order.id);
+
+      // Record promotion usage if voucher applied (với Advisory Lock chống Race Condition)
+      if (params.promotionId && Number(params.discountAmount || 0) > 0) {
+        // 1. Khóa theo promotionId để tuần tự hóa việc áp mã chống race condition
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${params.promotionId}))`;
+
+        // 2. Kiểm tra lại hạn mức thực tế bên trong transaction
+        const promo = await tx.promotion.findUnique({ where: { id: params.promotionId } });
+        if (!promo || promo.usedCount >= promo.usageLimit) {
+          throw new CheckoutError(409, 'PROMO_OUT_OF_QUOTA', 'Mã giảm giá vừa hết lượt sử dụng.');
+        }
+
+        // 3. Kiểm tra lại số lần user đã dùng
+        const userCount = await tx.promotionUsage.count({
+          where: { promotionId: params.promotionId, userId: params.buyerId },
+        });
+        if (userCount >= promo.perUserLimit) {
+          throw new CheckoutError(
+            409,
+            'PROMO_USER_LIMIT_REACHED',
+            'Bạn đã sử dụng hết lượt cho phép của mã này.',
+          );
+        }
+
+        // 4. Lưu lượt dùng và tăng usedCount an toàn
+        await tx.promotionUsage.create({
+          data: {
+            promotionId: params.promotionId,
+            userId: params.buyerId,
+            orderId: order.id,
+            discountAmount: params.discountAmount || 0,
+          },
+        });
+        await tx.promotion.update({
+          where: { id: params.promotionId },
+          data: {
+            usedCount: { increment: 1 },
+          },
+        });
+      }
       const reservationStatus = params.paymentMethod === 'COD' ? 'COMMITTED' : 'ACTIVE';
 
       for (const item of params.items) {
