@@ -10,6 +10,7 @@ import { RequestRedeliveryUseCase } from '../../../application/use-cases/Request
 import { ConfirmReturnUseCase } from '../../../application/use-cases/ConfirmReturnUseCase';
 import { ShipmentNotFoundException } from '../../../domain/exceptions/ShipmentNotFoundException';
 import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
+import { PrismaClientWrapper } from '../../../infrastructure/database/PrismaClient';
 
 export class ShipmentController {
   constructor(
@@ -430,6 +431,187 @@ export class ShipmentController {
       res.status(400).json({
         success: false,
         error: error.message || 'Không thể xác nhận hoàn trả đơn hàng.',
+      });
+    }
+  }
+
+  /**
+   * POST /api/v1/fulfillments/shipments/quote
+   * Báo giá cước vận chuyển và thời gian dự kiến (ETA) của các hãng (GHN, GHTK, Viettel Post, J&T)
+   */
+  public async getShippingQuote(req: Request, res: Response): Promise<void> {
+    try {
+      const { warehouseId, city } = req.body || {};
+      const targetCity = String(city || '')
+        .toLowerCase()
+        .trim();
+
+      // 1. Truy vấn thông tin Kho bãi xuất phát từ cơ sở dữ liệu (fulfillment_warehouses) qua Prisma ORM
+      let warehouseCity = 'Hồ Chí Minh';
+      let warehouseName = 'Kho Tổng TP.HCM';
+      let warehouseCode = 'WH_001';
+
+      if (process.env.USE_IN_MEMORY_DB !== 'true') {
+        try {
+          const prisma = PrismaClientWrapper.getInstance();
+          let warehouseRecord = null;
+          if (warehouseId) {
+            warehouseRecord = await prisma.warehouse.findFirst({
+              where: {
+                OR: [
+                  { code: String(warehouseId) },
+                  ...(Number.isInteger(Number(warehouseId)) ? [{ id: BigInt(warehouseId) }] : []),
+                ],
+              },
+            });
+          }
+          if (!warehouseRecord) {
+            warehouseRecord = await prisma.warehouse.findFirst({
+              where: { isActive: true },
+              orderBy: { id: 'asc' },
+            });
+          }
+          if (warehouseRecord) {
+            warehouseCity = warehouseRecord.city;
+            warehouseName = warehouseRecord.name;
+            warehouseCode = warehouseRecord.code;
+          }
+        } catch {
+          // Fallback an toàn nếu DB tạm thời không phản hồi
+        }
+      } else if (warehouseId === 'WH_002' || warehouseId === '2') {
+        warehouseCity = 'Hà Nội';
+        warehouseName = 'Kho Phân Phối Hà Nội';
+        warehouseCode = 'WH_002';
+      }
+
+      // 2. Tính toán khoảng cách / nội thành dựa trên thành phố kho xuất phát từ DB và điểm giao
+      const normOrigin = warehouseCity.toLowerCase();
+      const isLocal =
+        normOrigin.includes('hồ chí minh') || normOrigin.includes('hcm')
+          ? targetCity.includes('hồ chí minh') ||
+            targetCity.includes('hcm') ||
+            targetCity.includes('sài gòn')
+          : targetCity.includes('hà nội') || targetCity.includes('ha noi');
+
+      const now = new Date();
+      const addDays = (d: number) => {
+        const date = new Date(now.getTime() + d * 86400000);
+        return date.toISOString().split('T')[0];
+      };
+
+      // 3. Truy vấn danh sách đối tác vận chuyển đang kích hoạt từ bảng fulfillment_carriers qua Prisma ORM
+      let carriersFromDb: Array<{ carrierCode: string; carrierName: string }> = [];
+      if (process.env.USE_IN_MEMORY_DB !== 'true') {
+        try {
+          const prisma = PrismaClientWrapper.getInstance();
+          const carriers = await prisma.carrier.findMany({
+            where: { isActive: true },
+            orderBy: { id: 'asc' },
+          });
+          if (carriers && carriers.length > 0) {
+            carriersFromDb = carriers.map((c) => ({
+              carrierCode: c.carrierCode,
+              carrierName: c.carrierName,
+            }));
+          }
+        } catch {
+          // Fallback nếu kết nối lỗi
+        }
+      }
+
+      // Fallback 4 hãng chuẩn SRS khi chạy môi trường in-memory / test
+      if (carriersFromDb.length === 0) {
+        carriersFromDb = [
+          { carrierCode: 'GHN', carrierName: 'Giao Hàng Nhanh' },
+          { carrierCode: 'GHTK', carrierName: 'Giao Hàng Tiết Kiệm' },
+          { carrierCode: 'VIETTEL_POST', carrierName: 'Viettel Post' },
+          { carrierCode: 'JT_EXPRESS', carrierName: 'J&T Express' },
+        ];
+      }
+
+      // 4. Bảng biểu phí tiêu chuẩn theo cấu hình nghiệp vụ vận tải từng hãng (SRS 3.6)
+      const carrierPricingMatrix: Record<
+        string,
+        {
+          localService: string;
+          interService: string;
+          localFee: number;
+          interFee: number;
+          localDays: number;
+          interDays: number;
+        }
+      > = {
+        GHN: {
+          localService: 'Giao Nhanh Nội Thành',
+          interService: 'Chuyển Phát Chuẩn Liên Tỉnh',
+          localFee: 22000,
+          interFee: 35000,
+          localDays: 1,
+          interDays: 3,
+        },
+        GHTK: {
+          localService: 'GHTK Tiết Kiệm',
+          interService: 'GHTK Liên Tỉnh',
+          localFee: 20000,
+          interFee: 32000,
+          localDays: 2,
+          interDays: 3,
+        },
+        VIETTEL_POST: {
+          localService: 'Chuyển Phát Hỏa Tốc',
+          interService: 'Chuyển Phát Nhanh',
+          localFee: 25000,
+          interFee: 38000,
+          localDays: 1,
+          interDays: 2,
+        },
+        JT_EXPRESS: {
+          localService: 'J&T Tiêu Chuẩn',
+          interService: 'J&T Tiết Kiệm',
+          localFee: 18000,
+          interFee: 30000,
+          localDays: 2,
+          interDays: 4,
+        },
+      };
+
+      const quotes = carriersFromDb.map((carrier) => {
+        const pricing = carrierPricingMatrix[carrier.carrierCode] || {
+          localService: `${carrier.carrierName} Tiêu Chuẩn`,
+          interService: `${carrier.carrierName} Liên Tỉnh`,
+          localFee: 22000,
+          interFee: 35000,
+          localDays: 1,
+          interDays: 3,
+        };
+
+        const days = isLocal ? pricing.localDays : pricing.interDays;
+        return {
+          carrier: carrier.carrierCode,
+          carrierName: carrier.carrierName,
+          serviceName: isLocal ? pricing.localService : pricing.interService,
+          fee: isLocal ? pricing.localFee : pricing.interFee,
+          estimatedDays: days,
+          estimatedDeliveryDate: addDays(days),
+        };
+      });
+
+      res.status(200).json({
+        success: true,
+        originWarehouse: {
+          code: warehouseCode,
+          name: warehouseName,
+          city: warehouseCity,
+        },
+        destinationCity: city || 'Toàn quốc',
+        isLocal,
+        data: quotes,
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Không thể tính toán cước vận chuyển.',
       });
     }
   }

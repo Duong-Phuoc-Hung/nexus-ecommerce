@@ -1,12 +1,14 @@
 import { Request, Response } from 'express';
 import { GetSkuInventoryUseCase } from '../../../application/use-cases/GetSkuInventoryUseCase';
 import { AdjustInventoryUseCase } from '../../../application/use-cases/AdjustInventoryUseCase';
+import { IInventoryRepository } from '../../../domain/repositories/IInventoryRepository';
 import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
 
 export class InventoryController {
   constructor(
     private readonly getSkuInventoryUseCase: GetSkuInventoryUseCase,
     private readonly adjustInventoryUseCase: AdjustInventoryUseCase,
+    private readonly inventoryRepository?: IInventoryRepository,
   ) {}
 
   /**
@@ -71,6 +73,43 @@ export class InventoryController {
       res.status(400).json({
         success: false,
         error: error.message || 'Không thể điều chỉnh số lượng tồn kho.',
+      });
+    }
+  }
+
+  /**
+   * GET /api/v1/fulfillments/inventory/:sku/ledger
+   * Tra cứu sổ cái biến động kho (Audit Ledger) theo SKU (SRS 3.6.1).
+   */
+  public async getSkuLedger(req: Request, res: Response): Promise<void> {
+    try {
+      const sku = String(req.params.sku || '').trim();
+      if (!sku) {
+        res.status(400).json({
+          success: false,
+          error: 'Mã SKU không được để trống.',
+        });
+        return;
+      }
+
+      const entries = this.inventoryRepository ? await this.inventoryRepository.getLedger(sku) : [];
+      res.status(200).json({
+        success: true,
+        data: entries.map((e) => ({
+          id: e.id,
+          sku: e.sku,
+          inventoryId: e.inventoryId,
+          adjustmentType: e.transactionType,
+          delta: e.quantityChange,
+          reason: e.reason,
+          operatorId: e.operatorId,
+          createdAt: e.createdAt,
+        })),
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Không thể tra cứu sổ biến động kho.',
       });
     }
   }

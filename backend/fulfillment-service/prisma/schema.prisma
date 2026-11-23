@@ -102,7 +102,7 @@ model InventoryLedger {
   transactionType String       @map("transaction_type") @db.VarChar(30)
 
   // Số lượng thay đổi (Số âm: -5 là giảm; Số dương: +10 là tăng)
-  quantityDelta   Int          @map("quantity_delta")
+  quantityDelta   Int          @map("quantity_change")
 
   // Tham chiếu tới nghiệp vụ sinh ra biến động (VD: Mã đơn hàng ORD-123456 hoặc mã phiếu nhập kho)
   referenceId     String?      @map("reference_id") @db.VarChar(100)

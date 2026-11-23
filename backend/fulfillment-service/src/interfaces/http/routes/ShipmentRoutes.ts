@@ -15,6 +15,9 @@ export function createShipmentRoutes(controller: ShipmentController): Router {
     controller.createShipment(req, res),
   );
 
+  // 1.2 Tra cứu báo giá cước vận chuyển và ETA đối tác
+  router.post('/shipments/quote', requireAuth, (req, res) => controller.getShippingQuote(req, res));
+
   // 2. Tra cứu danh sách vận đơn (Search / Filter / Pagination)
   router.get('/shipments', requireAuth, requireShipmentPermission('LIST'), (req, res) =>
     controller.listShipments(req, res),
