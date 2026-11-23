@@ -115,12 +115,6 @@ export function ProductForm({ productId }: { productId?: string }) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!productId) {
-      setError(
-        'Chưa mở tạo sản phẩm thay Seller. Hệ thống cần xác nhận đúng chủ sở hữu trước khi lưu.',
-      );
-      return;
-    }
     const errors = validateProduct(form);
     if (!productId && !form.sellerId) errors.sellerId = 'Chọn Seller sở hữu sản phẩm.';
     if (!Number.isInteger(form.stockQuantity) || (form.stockQuantity ?? -1) < 0)
@@ -200,10 +194,6 @@ export function ProductForm({ productId }: { productId?: string }) {
                     {sellerError || fieldErrors.sellerId}
                   </p>
                 )}
-                <p className="text-sm text-slate-500">
-                  Chỉ chọn tài khoản Seller đang hoạt động. Chức năng tạo thay Seller chưa được mở;
-                  thông tin chuẩn bị chưa được lưu.
-                </p>
               </div>
             )}
             {error && (
@@ -349,8 +339,8 @@ export function ProductForm({ productId }: { productId?: string }) {
               </p>
             )}
             <div className="mt-6 flex flex-wrap gap-3">
-              <Button type="submit" disabled={saving || !categories.length || !productId}>
-                {saving ? 'Đang lưu…' : 'Lưu thay đổi'}
+              <Button type="submit" disabled={saving || !categories.length}>
+                {saving ? 'Đang lưu…' : productId ? 'Lưu thay đổi' : 'Tạo sản phẩm'}
               </Button>
               <Button asChild variant="outline">
                 <Link href={productsPath}>Hủy</Link>

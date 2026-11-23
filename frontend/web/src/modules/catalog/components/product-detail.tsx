@@ -1,33 +1,52 @@
 'use client';
+
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Heart } from 'lucide-react';
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Heart,
+  Minus,
+  Plus,
+  ShieldCheck,
+  ShoppingCart,
+  Zap,
+} from 'lucide-react';
 import { catalogApi } from '../api/catalog.api';
 import { formatPrice, type CatalogProduct } from '../api/catalog.factory';
 import { ApiError, userMessage } from '../../../lib/axios/http';
 import { StoreHeader } from '@/components/layout/store-header';
+import { SellerReputationTrigger } from '@/modules/user/components/seller-reputation-drawer';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import { useBuyerAssistant } from '@/modules/chat/context/buyer-assistant-provider';
-import { addCartProduct, addCartProductAsync } from '@/modules/commerce/utils/cart';
+import { addCartProductAsync } from '@/modules/commerce/utils/cart';
+import { writeBuyNowLine } from '@/modules/commerce/utils/cart-selection';
 import { FAVORITES_EVENT, hasFavorite, toggleFavorite } from '@/modules/commerce/utils/favorites';
+
 const conditions: Record<string, string> = {
   NEW: 'Mới',
   LIKE_NEW: 'Như mới',
   USED: 'Đã qua sử dụng',
   REFURBISHED: 'Tân trang',
 };
+
 export function ProductDetail({ productId }: { productId: string }) {
+  const router = useRouter();
   const [product, setProduct] = useState<CatalogProduct | null>(null);
   const [error, setError] = useState('');
   const [missing, setMissing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [revision, setRevision] = useState(0);
   const [photo, setPhoto] = useState(0);
+  const [quantity, setQuantity] = useState(1);
+  const [addingToCart, setAddingToCart] = useState(false);
   const [cartNotice, setCartNotice] = useState('');
   const [favorite, setFavorite] = useState(false);
   const { user } = useSession();
   const { setProductContext } = useBuyerAssistant();
+
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -35,6 +54,8 @@ export function ProductDetail({ productId }: { productId: string }) {
     setMissing(false);
     setProduct(null);
     setPhoto(0);
+    setQuantity(1);
+    setCartNotice('');
     catalogApi
       .detail(productId, controller.signal)
       .then((result) => {
@@ -57,6 +78,7 @@ export function ProductDetail({ productId }: { productId: string }) {
       });
     return () => controller.abort();
   }, [productId, revision]);
+
   useEffect(() => {
     const sync = () => setFavorite(hasFavorite(productId));
     sync();
@@ -78,6 +100,44 @@ export function ProductDetail({ productId }: { productId: string }) {
     });
     return () => setProductContext(null);
   }, [product, setProductContext]);
+
+  const maxQuantity =
+    product?.stockQuantity !== null &&
+    product?.stockQuantity !== undefined &&
+    product.stockQuantity > 0
+      ? product.stockQuantity
+      : 99;
+
+  const updateQuantity = (next: number) => {
+    const clamped = Math.max(1, Math.min(maxQuantity, Math.floor(next) || 1));
+    setQuantity(clamped);
+  };
+
+  const handleAddToCart = async () => {
+    if (!product || addingToCart) return;
+    setAddingToCart(true);
+    try {
+      await addCartProductAsync(product, quantity);
+      setCartNotice(`Đã thêm ${quantity} sản phẩm vào giỏ hàng.`);
+    } finally {
+      setAddingToCart(false);
+    }
+  };
+
+  const handleBuyNow = () => {
+    if (!product) return;
+    writeBuyNowLine({
+      productId: product.id,
+      title: product.title,
+      image: product.images[0] || '/images/nexus-product-placeholder.svg',
+      price: product.price ?? 0,
+      currency: product.currency || 'VND',
+      quantity,
+      stock: product.stockQuantity ?? null,
+    });
+    router.push('/checkout?mode=buy-now');
+  };
+
   return (
     <>
       <StoreHeader />
@@ -86,16 +146,19 @@ export function ProductDetail({ productId }: { productId: string }) {
           aria-label="Đường dẫn"
           className="mb-6 flex flex-wrap items-center gap-2 text-xs text-muted"
         >
-          <Link className="inline-flex min-h-11 items-center" href="/">
+          <Link className="inline-flex min-h-11 items-center hover:text-stone-900" href="/">
             Trang chủ
           </Link>
           <span>/</span>
-          <Link className="inline-flex min-h-11 items-center" href="/products">
+          <Link className="inline-flex min-h-11 items-center hover:text-stone-900" href="/products">
             Sản phẩm
           </Link>
           <span>/</span>
-          <span aria-current="page">Chi tiết</span>
+          <span aria-current="page" className="text-stone-800 font-medium">
+            Chi tiết
+          </span>
         </nav>
+
         {loading ? (
           <div
             role="status"
@@ -141,9 +204,9 @@ export function ProductDetail({ productId }: { productId: string }) {
         ) : (
           product && (
             <>
-              <section className="grid gap-7 rounded-3xl border border-line bg-white p-4 sm:p-7 lg:grid-cols-[1.05fr_1fr]">
+              <section className="grid gap-7 rounded-3xl border border-line bg-white p-4 sm:p-7 lg:grid-cols-[1.05fr_1fr] shadow-xs">
                 <div>
-                  <div className="aspect-square overflow-hidden rounded-2xl bg-stone-100">
+                  <div className="aspect-square overflow-hidden rounded-2xl border border-line/60 bg-stone-50">
                     <img
                       key={photo}
                       src={product.images[photo] || '/images/nexus-product-placeholder.svg'}
@@ -169,12 +232,23 @@ export function ProductDetail({ productId }: { productId: string }) {
                           aria-label={'Xem ảnh ' + (i + 1)}
                           aria-pressed={photo === i}
                           className={
-                            'size-20 shrink-0 overflow-hidden rounded-xl border-2 ' +
-                            (photo === i ? 'border-brand' : 'border-line')
+                            'size-20 shrink-0 overflow-hidden rounded-xl border-2 bg-stone-50 ' +
+                            (photo === i
+                              ? 'border-brand ring-1 ring-brand/30'
+                              : 'border-line hover:border-stone-300')
                           }
                         >
                           <img
-                            src={src}
+                            src={src || '/images/nexus-product-placeholder.svg'}
+                            onError={(e) => {
+                              if (
+                                !e.currentTarget.src.endsWith(
+                                  '/images/nexus-product-placeholder.svg',
+                                )
+                              ) {
+                                e.currentTarget.src = '/images/nexus-product-placeholder.svg';
+                              }
+                            }}
                             alt=""
                             width={80}
                             height={80}
@@ -185,12 +259,13 @@ export function ProductDetail({ productId }: { productId: string }) {
                     </div>
                   )}
                 </div>
-                <div className="py-2 lg:px-3">
+
+                <div className="flex flex-col py-1 lg:px-3">
                   <p className="text-xs font-semibold uppercase tracking-wider text-brand-dark">
                     {product.categoryName || 'Bộ sưu tập Nexus'}
                   </p>
-                  <div className="mt-3 flex items-start justify-between gap-3">
-                    <h1 className="text-3xl font-bold leading-tight tracking-tight">
+                  <div className="mt-2.5 flex items-start justify-between gap-3">
+                    <h1 className="text-2xl sm:text-3xl font-bold leading-tight tracking-tight text-stone-900">
                       {product.title}
                     </h1>
                     {user?.role === 'BUYER' && (
@@ -226,118 +301,188 @@ export function ProductDetail({ productId }: { productId: string }) {
                       </Button>
                     )}
                   </div>
-                  <div className="mt-4 flex flex-wrap gap-2 text-xs">
+
+                  <div className="mt-3.5 flex flex-wrap gap-2 text-xs">
                     {product.condition && (
-                      <span className="rounded-full bg-stone-100 px-3 py-2">
+                      <span className="rounded-full bg-stone-100 px-3 py-1.5 font-medium text-stone-700">
                         {conditions[product.condition] || product.condition}
                       </span>
                     )}
-                    <span className="rounded-full bg-stone-100 px-3 py-2">
+                    <span className="rounded-full bg-emerald-50 border border-emerald-200/70 px-3 py-1.5 font-medium text-emerald-800">
                       {product.status === 'ACTIVE'
-                        ? 'Đang hiển thị'
+                        ? 'Đang mở bán'
                         : product.status === 'DRAFT'
                           ? 'Chưa mở bán'
                           : 'Tạm ngừng hiển thị'}
                     </span>
                   </div>
-                  <div className="my-7 rounded-2xl bg-brand-soft p-5">
-                    <p className="text-sm text-muted">Giá sản phẩm</p>
-                    <p className="mt-2 break-words text-3xl font-bold tracking-tight text-brand-dark">
+
+                  <div className="my-6 rounded-2xl bg-brand-soft/75 border border-brand/15 p-5">
+                    <p className="text-xs font-medium text-muted">Giá bán</p>
+                    <p className="mt-1.5 break-words text-3xl font-bold tracking-tight text-brand-dark">
                       {formatPrice(product)}
                     </p>
                   </div>
+
                   <dl className="divide-y divide-line text-sm">
-                    <div className="flex justify-between gap-5 py-4">
+                    <div className="flex justify-between gap-5 py-3.5">
                       <dt className="text-muted">Người bán</dt>
-                      <dd className="text-right font-semibold">
-                        {product.sellerName || 'Thông tin đang cập nhật'}
+                      <dd className="flex flex-wrap items-center justify-end gap-2 text-right font-semibold text-stone-900">
+                        <span>{product.sellerName || 'Thông tin đang cập nhật'}</span>
+                        <SellerReputationTrigger
+                          sellerId={product.sellerId}
+                          sellerName={product.sellerName}
+                        />
                       </dd>
                     </div>
-                    <div className="flex justify-between gap-5 py-4">
-                      <dt className="text-muted">Tình trạng hàng</dt>
-                      <dd className="text-right font-semibold">
+                    <div className="flex justify-between gap-5 py-3.5">
+                      <dt className="text-muted">Kho hàng</dt>
+                      <dd className="text-right font-semibold text-stone-900">
                         {product.stockQuantity === null
-                          ? 'Số lượng đang được cập nhật'
+                          ? 'Đang cập nhật'
                           : product.stockQuantity === 0
                             ? 'Tạm hết hàng'
-                            : product.stockQuantity + ' sản phẩm khả dụng'}
+                            : `${product.stockQuantity} sản phẩm có sẵn`}
                       </dd>
                     </div>
-                    <div className="flex justify-between gap-5 py-4">
+                    <div className="flex justify-between gap-5 py-3.5">
                       <dt className="text-muted">Hình thức giao dịch</dt>
-                      <dd className="text-right font-semibold">
+                      <dd className="text-right font-semibold text-stone-900">
                         {product.saleType === 'FIXED_PRICE'
-                          ? 'Mua sắm'
+                          ? 'Mua trực tiếp · Thanh toán PayOS / COD'
                           : product.saleType === 'AUCTION'
-                            ? 'Tham gia phiên đấu'
+                            ? 'Tham gia phiên đấu giá'
                             : 'Thông tin đang cập nhật'}
                       </dd>
                     </div>
                   </dl>
-                  <div
-                    className="mt-6 rounded-xl border border-line p-4 text-sm leading-6 text-muted"
-                    role="note"
-                  >
-                    {
-                      'Kiểm tra hình ảnh, tình trạng và thông tin người bán trước khi lựa chọn sản phẩm.'
-                    }
-                  </div>
+
                   {product.saleType === 'FIXED_PRICE' && product.stockQuantity !== 0 && (
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div className="mt-5 space-y-4 border-t border-line pt-5">
                       {user?.role === 'BUYER' ? (
                         <>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="min-h-12 rounded-xl border-brand-dark font-semibold text-brand-dark"
-                            onClick={async () => {
-                              await addCartProductAsync(product);
-                              setCartNotice('Đã thêm vào giỏ hàng.');
-                            }}
-                          >
-                            Thêm vào giỏ hàng
-                          </Button>
-                          <Link
-                            href="/cart"
-                            className="inline-flex min-h-12 items-center justify-center rounded-xl bg-brand-dark px-4 text-sm font-semibold text-white hover:bg-brand"
-                          >
-                            Xem giỏ hàng
-                          </Link>
+                          {/* Bộ chọn số lượng kiểu Shopee */}
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <span className="text-sm font-medium text-stone-700">Số lượng</span>
+                            <div className="flex items-center gap-3">
+                              <div className="inline-flex items-center rounded-xl border border-line bg-white shadow-2xs">
+                                <button
+                                  type="button"
+                                  aria-label="Giảm số lượng"
+                                  disabled={quantity <= 1}
+                                  onClick={() => updateQuantity(quantity - 1)}
+                                  className="grid size-9 place-items-center text-stone-600 hover:bg-stone-50 disabled:opacity-40 rounded-l-xl"
+                                >
+                                  <Minus className="size-3.5" />
+                                </button>
+                                <input
+                                  type="number"
+                                  aria-label="Số lượng sản phẩm"
+                                  min={1}
+                                  max={maxQuantity}
+                                  value={quantity}
+                                  onChange={(e) => {
+                                    const parsed = parseInt(e.target.value, 10);
+                                    if (!Number.isNaN(parsed)) updateQuantity(parsed);
+                                  }}
+                                  className="h-9 w-12 border-x border-line bg-white text-center text-sm font-semibold text-stone-900 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                />
+                                <button
+                                  type="button"
+                                  aria-label="Tăng số lượng"
+                                  disabled={quantity >= maxQuantity}
+                                  onClick={() => updateQuantity(quantity + 1)}
+                                  className="grid size-9 place-items-center text-stone-600 hover:bg-stone-50 disabled:opacity-40 rounded-r-xl"
+                                >
+                                  <Plus className="size-3.5" />
+                                </button>
+                              </div>
+                              {product.stockQuantity !== null && product.stockQuantity > 0 && (
+                                <span className="text-xs text-muted">
+                                  Còn {product.stockQuantity} sản phẩm
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* 2 nút chính: Thêm vào giỏ hàng + Mua ngay */}
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              disabled={addingToCart}
+                              className="min-h-12 rounded-xl border-brand-dark bg-brand-soft/30 font-semibold text-brand-dark hover:bg-brand-soft/70"
+                              onClick={handleAddToCart}
+                            >
+                              <ShoppingCart aria-hidden="true" className="mr-2 size-4" />
+                              {addingToCart ? 'Đang thêm…' : 'Thêm vào giỏ hàng'}
+                            </Button>
+                            <Button
+                              type="button"
+                              className="min-h-12 rounded-xl bg-brand-dark px-5 font-semibold text-white hover:bg-brand shadow-xs"
+                              onClick={handleBuyNow}
+                            >
+                              <Zap aria-hidden="true" className="mr-2 size-4" />
+                              Mua ngay
+                            </Button>
+                          </div>
                         </>
                       ) : user ? (
                         <p
-                          className="rounded-xl bg-stone-50 p-4 text-sm leading-6 text-muted sm:col-span-2"
+                          className="rounded-xl bg-stone-50 p-4 text-sm leading-6 text-muted"
                           role="note"
                         >
-                          Bạn vẫn có thể xem đầy đủ sản phẩm. Chức năng mua hàng và giỏ hàng dành
-                          cho tài khoản Buyer.
+                          Bạn vẫn có thể xem đầy đủ sản phẩm. Chức năng mua hàng dành cho tài khoản
+                          Buyer.
                         </p>
                       ) : (
                         <Link
                           href={`/login?next=${encodeURIComponent(`/products/${product.id}`)}`}
-                          className="inline-flex min-h-12 items-center justify-center rounded-xl border border-line px-4 text-sm font-semibold sm:col-span-2"
+                          className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-brand-dark px-4 text-sm font-semibold text-white hover:bg-brand"
                         >
-                          Đăng nhập để mua
+                          Đăng nhập để mua ngay
                         </Link>
                       )}
                     </div>
                   )}
+
                   {cartNotice && (
-                    <p className="mt-3 text-sm font-medium text-emerald-700" role="status">
-                      {cartNotice}
-                    </p>
+                    <div
+                      role="status"
+                      className="mt-3.5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs font-medium text-emerald-900"
+                    >
+                      <span className="inline-flex items-center gap-1.5">
+                        <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
+                        <span>{cartNotice}</span>
+                      </span>
+                      <Link
+                        href="/cart"
+                        className="font-semibold text-emerald-800 underline underline-offset-2 hover:text-emerald-950"
+                      >
+                        Mở giỏ hàng
+                      </Link>
+                    </div>
                   )}
-                  <Link
-                    href="/products"
-                    className="mt-6 inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-brand-dark px-5 text-sm font-semibold text-white hover:bg-brand"
-                  >
-                    Tiếp tục khám phá
-                  </Link>
+
+                  <div className="mt-5 flex items-center justify-between gap-3 border-t border-line/70 pt-4 text-xs text-muted">
+                    <span className="inline-flex items-center gap-1.5">
+                      <ShieldCheck className="size-4 shrink-0 text-emerald-700" />
+                      <span>Bảo chứng Nexus Buyer Protection</span>
+                    </span>
+                    <Link
+                      href="/products"
+                      className="inline-flex items-center gap-1 font-semibold text-stone-700 hover:text-brand-dark transition"
+                    >
+                      <ArrowLeft className="size-3.5" />
+                      <span>Khám phá thêm</span>
+                    </Link>
+                  </div>
                 </div>
               </section>
-              <section className="mt-6 rounded-3xl border border-line bg-white p-6 sm:p-8">
-                <h2 className="text-xl font-bold">Thông tin sản phẩm</h2>
-                <p className="mt-5 whitespace-pre-wrap break-words text-sm leading-7 text-muted">
+
+              <section className="mt-6 rounded-3xl border border-line bg-white p-6 sm:p-8 shadow-xs">
+                <h2 className="text-xl font-bold text-stone-900">Thông tin sản phẩm</h2>
+                <p className="mt-4 whitespace-pre-wrap break-words text-sm leading-7 text-muted">
                   {product.description || 'Người bán chưa cung cấp mô tả chi tiết.'}
                 </p>
               </section>

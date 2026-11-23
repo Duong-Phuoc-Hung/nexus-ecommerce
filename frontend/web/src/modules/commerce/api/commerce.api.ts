@@ -91,6 +91,8 @@ export function createCommerceApi(request: RequestApi) {
         addressLine: string;
         country?: string;
       };
+      promoCode?: string;
+      shippingOptionId?: string;
     }) {
       return unwrap<{
         quoteId: string;
@@ -99,8 +101,28 @@ export function createCommerceApi(request: RequestApi) {
         sellerId?: string;
         items: { productId: string; quantity: number; unitPrice: number; totalPrice: number }[];
         subtotal: number;
+        discountAmount?: number;
+        taxAmount?: number;
         shippingFee: number;
         totalAmount: number;
+        selectedShippingOptionId?: string;
+        shippingOptions?: Array<{
+          optionId: string;
+          carrier: string;
+          carrierName: string;
+          serviceName: string;
+          fee: number;
+          etaText: string;
+          estimatedDeliveryAt?: string;
+          recommended?: boolean;
+        }>;
+        promo?: {
+          code: string;
+          applied: boolean;
+          discountAmount: number;
+          reasonCode?: string | null;
+          message?: string;
+        } | null;
       }>(await request('/checkout/quote', { method: 'POST', body: input }));
     },
     async checkout(
@@ -116,6 +138,8 @@ export function createCommerceApi(request: RequestApi) {
           country?: string;
         };
         quoteId?: string;
+        promoCode?: string;
+        shippingOptionId?: string;
         paymentMethod?: 'PAYOS' | 'COD';
       },
       idempotencyKey?: string,

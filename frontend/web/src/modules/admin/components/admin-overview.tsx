@@ -1,124 +1,371 @@
+'use client';
+
 import Link from 'next/link';
-import { ArrowUpRight, PackageSearch, Gavel, Store, ShieldCheck, ReceiptText } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  AlertTriangle,
+  ArrowUpRight,
+  Clock3,
+  Gavel,
+  ReceiptText,
+  RefreshCw,
+  Store,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { adminNavigation } from '../config/navigation';
+import { requestApi } from '@/lib/axios/api-client';
+import { unwrap } from '@/lib/axios/http';
+import { auctionApi, type Auction } from '@/modules/auction/api/auction.api';
+import { AuctionBadge, auctionDate } from '@/modules/auction/components/auction-ui';
+
+type PendingSellerRow = {
+  id: string;
+  shopName: string;
+  applicantName: string;
+  status: string;
+  submittedAt: string;
+};
+
+type DashboardMetrics = {
+  pendingOrders: number | null;
+  pendingSellerApps: number | null;
+  activeOrUpcomingAuctions: number | null;
+  extendedAuctions: number;
+  openDisputes: number | null;
+  todayRevenue: number | null;
+};
+
+const money = (v: number) => `${new Intl.NumberFormat('vi-VN').format(Math.round(v))} ₫`;
+
 export function AdminOverview({ productsPath = '/admin/products' }: { productsPath?: string }) {
+  const [metrics, setMetrics] = useState<DashboardMetrics>({
+    pendingOrders: null,
+    pendingSellerApps: null,
+    activeOrUpcomingAuctions: null,
+    extendedAuctions: 0,
+    openDisputes: null,
+    todayRevenue: null,
+  });
+  const [pendingSellers, setPendingSellers] = useState<PendingSellerRow[]>([]);
+  const [watchAuctions, setWatchAuctions] = useState<Auction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [updatedAt, setUpdatedAt] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [summaryRes, ordersRes, sellersRes, auctionsRes, casesRes] = await Promise.allSettled([
+      requestApi('/orders/admin/dashboard-summary'),
+      requestApi('/orders?page=1&limit=50'),
+      requestApi('/admin/seller-applications'),
+      auctionApi.list(),
+      requestApi('/support/cases'),
+    ]);
+
+    const next: DashboardMetrics = {
+      pendingOrders: null,
+      pendingSellerApps: null,
+      activeOrUpcomingAuctions: null,
+      extendedAuctions: 0,
+      openDisputes: null,
+      todayRevenue: null,
+    };
+
+    if (summaryRes.status === 'fulfilled') {
+      const s = unwrap<Record<string, unknown>>(summaryRes.value);
+      const orders = (s?.orders ?? {}) as Record<string, unknown>;
+      const auctions = (s?.auctions ?? {}) as Record<string, unknown>;
+      if (typeof orders.pendingProcessing === 'number')
+        next.pendingOrders = orders.pendingProcessing;
+      if (typeof orders.todayRevenue === 'number') next.todayRevenue = orders.todayRevenue;
+      if (typeof s?.sellerApplicationsPending === 'number') {
+        next.pendingSellerApps = s.sellerApplicationsPending;
+      }
+      if (typeof auctions.scheduled === 'number' || typeof auctions.extended === 'number') {
+        next.activeOrUpcomingAuctions =
+          Number(auctions.scheduled ?? 0) + Number(auctions.extended ?? 0);
+        next.extendedAuctions = Number(auctions.extended ?? 0);
+      }
+      if (typeof s?.openDisputes === 'number') next.openDisputes = s.openDisputes;
+    }
+
+    if (ordersRes.status === 'fulfilled') {
+      const raw = unwrap<unknown>(ordersRes.value);
+      const list = Array.isArray(raw)
+        ? raw
+        : Array.isArray((raw as Record<string, unknown>)?.items)
+          ? ((raw as Record<string, unknown>).items as Array<Record<string, unknown>>)
+          : [];
+      if (next.pendingOrders === null) {
+        next.pendingOrders = list.filter((o) =>
+          ['PENDING', 'PENDING_PAYMENT', 'PAID', 'CONFIRMED', 'PROCESSING'].includes(
+            String(o.orderStatus ?? o.status ?? '').toUpperCase(),
+          ),
+        ).length;
+      }
+      if (next.todayRevenue === null) {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        next.todayRevenue = list
+          .filter(
+            (o) =>
+              String(o.createdAt ?? '').startsWith(todayStr) &&
+              !['CANCELLED', 'REFUNDED'].includes(String(o.status ?? '').toUpperCase()),
+          )
+          .reduce((acc, o) => acc + (Number(o.totalAmount ?? o.total ?? 0) || 0), 0);
+      }
+    }
+
+    if (sellersRes.status === 'fulfilled') {
+      const raw = unwrap<unknown>(sellersRes.value);
+      const list = Array.isArray(raw)
+        ? raw
+        : Array.isArray((raw as Record<string, unknown>)?.items)
+          ? ((raw as Record<string, unknown>).items as Array<Record<string, unknown>>)
+          : [];
+      const pending = list.filter((item) =>
+        ['PENDING', 'SUBMITTED', 'UNDER_REVIEW'].includes(String(item.status ?? '').toUpperCase()),
+      );
+      if (next.pendingSellerApps === null) next.pendingSellerApps = pending.length;
+      setPendingSellers(
+        pending.slice(0, 5).map((item, idx) => ({
+          id: String(item.id ?? `app-${idx}`),
+          shopName: String(item.shopName ?? item.storeName ?? 'Hồ sơ gian hàng'),
+          applicantName: String(
+            item.applicantName ?? item.fullName ?? item.email ?? 'Người đăng ký',
+          ),
+          status: String(item.status ?? 'PENDING'),
+          submittedAt: String(item.submittedAt ?? item.createdAt ?? ''),
+        })),
+      );
+    }
+
+    if (auctionsRes.status === 'fulfilled') {
+      const list = auctionsRes.value;
+      const watch = list.filter((a) => a.status === 'SCHEDULED' || a.status === 'EXTENDED');
+      if (next.activeOrUpcomingAuctions === null) {
+        next.activeOrUpcomingAuctions = watch.length;
+        next.extendedAuctions = list.filter((a) => a.status === 'EXTENDED').length;
+      }
+      setWatchAuctions(watch.slice(0, 5));
+    }
+
+    if (casesRes.status === 'fulfilled') {
+      const raw = unwrap<unknown>(casesRes.value);
+      const list = Array.isArray(raw)
+        ? raw
+        : Array.isArray((raw as Record<string, unknown>)?.items)
+          ? ((raw as Record<string, unknown>).items as Array<Record<string, unknown>>)
+          : [];
+      if (next.openDisputes === null) {
+        next.openDisputes = list.filter((c) =>
+          ['OPEN', 'INVESTIGATING', 'ESCALATED_DISPUTE'].includes(
+            String(c.status ?? '').toUpperCase(),
+          ),
+        ).length;
+      }
+    }
+
+    setMetrics(next);
+    setUpdatedAt(new Date().toLocaleTimeString('vi-VN'));
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const kpis = [
+    {
+      label: 'Đơn chờ xử lý',
+      value: metrics.pendingOrders,
+      href: '/admin/orders',
+      icon: ReceiptText,
+      tone: 'bg-sky-50 text-sky-700',
+    },
+    {
+      label: 'Hồ sơ Seller chờ duyệt',
+      value: metrics.pendingSellerApps,
+      href: '/admin/seller-applications',
+      icon: Store,
+      tone: 'bg-emerald-50 text-emerald-700',
+    },
+    {
+      label: 'Phiên sắp mở / gia hạn',
+      value: metrics.activeOrUpcomingAuctions,
+      sub: metrics.extendedAuctions > 0 ? `${metrics.extendedAuctions} đang gia hạn` : undefined,
+      href: '/admin/auctions',
+      icon: Gavel,
+      tone: 'bg-amber-50 text-amber-700',
+    },
+    {
+      label: 'Khiếu nại đang mở',
+      value: metrics.openDisputes,
+      href: '/admin/orders',
+      icon: AlertTriangle,
+      tone: 'bg-red-50 text-red-700',
+    },
+  ];
+
   return (
-    <div className="space-y-7">
+    <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="mb-2 text-xs font-bold tracking-[.16em] text-brand-dark">
-            NEXUS · KHÔNG GIAN QUẢN TRỊ
-          </p>
-          <h1>Tổng quan vận hành</h1>
-          <p className="max-w-2xl text-sm leading-6 text-muted">
-            Điều hành nội dung, giao dịch và quyền truy cập trong một không gian thống nhất.
-          </p>
+          <p className="admin-kicker">NEXUS / QUẢN TRỊ</p>
+          <h1 className="mt-2">Tổng quan vận hành</h1>
         </div>
-        <Button asChild variant="outline">
-          <Link href="/">
-            <Store size={17} />
-            Xem cửa hàng
-          </Link>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {updatedAt && (
+            <span className="text-xs text-slate-500 tabular-nums">Cập nhật: {updatedAt}</span>
+          )}
+          <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
+            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+            Làm mới
+          </Button>
+          <Button asChild size="sm">
+            <Link href="/admin/reports">
+              Xem báo cáo
+              <ArrowUpRight size={15} />
+            </Link>
+          </Button>
+        </div>
       </header>
-      <div className="grid gap-5 md:grid-cols-2">
-        {[
-          {
-            href: productsPath,
-            title: 'Danh mục sản phẩm',
-            caption: 'QUẢN LÝ NỘI DUNG',
-            text: 'Tra cứu sản phẩm, xem thông tin và đối chiếu trạng thái hiển thị trên sàn.',
-            action: 'Xem sản phẩm',
-            Icon: PackageSearch,
-          },
-          {
-            href: '/admin/auctions',
-            title: 'Phiên đấu giá',
-            caption: 'ĐIỀU HÀNH PHIÊN',
-            text: 'Theo dõi các phiên, kiểm tra lịch và lịch sử trả giá trong cùng một không gian.',
-            action: 'Quản lý phiên',
-            Icon: Gavel,
-          },
-          {
-            href: '/admin/orders',
-            title: 'Giám sát đơn hàng',
-            caption: 'COMMERCE OPERATIONS',
-            text: 'Tra cứu đơn mua, cửa hàng và trạng thái giao dịch từ hệ thống.',
-            action: 'Xem đơn hàng',
-            Icon: ReceiptText,
-          },
-        ].map(({ href, title, caption, text, action, Icon }) => (
-          <section
-            key={href}
-            className="flex flex-col rounded-3xl border border-line bg-white p-6 sm:p-8"
+
+      {/* 4 operational KPI cards */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {kpis.map(({ label, value, sub, href, icon: Icon, tone }) => (
+          <Link
+            key={label}
+            href={href}
+            className="group flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-slate-300 hover:shadow-xs"
           >
-            <div className="mb-6 flex items-center justify-between">
-              <span className="grid size-12 place-items-center rounded-2xl bg-slate-100 text-slate-700">
-                <Icon size={23} />
+            <div className="flex items-center justify-between gap-2">
+              <span className={`grid size-10 place-items-center rounded-xl ${tone}`}>
+                <Icon size={19} aria-hidden="true" />
               </span>
-              <span className="text-xs font-semibold tracking-widest text-muted">{caption}</span>
+              <ArrowUpRight
+                size={16}
+                className="text-slate-400 transition group-hover:text-slate-900"
+                aria-hidden="true"
+              />
             </div>
-            <h2>{title}</h2>
-            <p className="mt-3 mb-7 max-w-lg text-sm leading-6 text-muted">{text}</p>
-            <Button asChild variant="outline" className="mt-auto self-start">
-              <Link href={href}>
-                {action}
-                <ArrowUpRight size={17} />
-              </Link>
-            </Button>
-          </section>
+            <div className="mt-4">
+              <p className="text-xs font-medium text-slate-500">{label}</p>
+              <p className="mt-1 text-3xl font-bold tracking-tight text-slate-950 tabular-nums">
+                {loading ? '—' : value === null ? '—' : value}
+              </p>
+              {sub && <p className="mt-1 text-xs font-medium text-amber-800">{sub}</p>}
+            </div>
+          </Link>
         ))}
       </div>
-      <section className="grid gap-4 md:grid-cols-2">
-        {adminNavigation.map((group) => (
-          <div key={group.group} className="rounded-2xl border border-line bg-white p-6">
-            <h2 className="mb-4 text-lg font-semibold">{group.group}</h2>
-            <div className="grid gap-2">
-              {group.items
-                .filter((item) => item.href !== '/admin')
-                .map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-red-700"
-                  >
-                    <item.icon size={18} className="text-slate-500" />
-                    {item.label}
-                    <ArrowUpRight size={15} className="ml-auto text-slate-400" />
-                  </Link>
-                ))}
-            </div>
+
+      {/* Today revenue strip + quick links */}
+      <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5">
+        <div>
+          <p className="text-xs font-medium text-slate-500">Doanh thu ghi nhận hôm nay</p>
+          <p className="mt-1 text-2xl font-bold text-emerald-800 tabular-nums">
+            {loading ? '—' : metrics.todayRevenue !== null ? money(metrics.todayRevenue) : '—'}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href={productsPath}>Sản phẩm</Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/admin/inventory">Kho hàng</Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/admin/promotions">Khuyến mãi</Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/admin/moderation">Kiểm duyệt</Link>
+          </Button>
+        </div>
+      </section>
+
+      {/* Two live watchlists */}
+      <div className="grid gap-6 xl:grid-cols-2">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+          <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3.5">
+            <h2 className="text-base font-semibold text-slate-950">Hồ sơ Seller chờ duyệt</h2>
+            <Link
+              href="/admin/seller-applications"
+              className="text-xs font-semibold text-emerald-800 hover:underline"
+            >
+              Xem tất cả
+            </Link>
           </div>
-        ))}
-      </section>
-      <section className="rounded-3xl border border-line bg-white p-6 sm:p-8">
-        <div className="flex items-center gap-3">
-          <ShieldCheck size={21} className="text-slate-600" />
-          <h2>Trước khi thực hiện thay đổi</h2>
-        </div>
-        <div className="mt-6 grid gap-6 md:grid-cols-3">
-          {[
-            [
-              '01',
-              'Đối chiếu thông tin',
-              'Kiểm tra đúng sản phẩm, người bán và nội dung cần xử lý.',
-            ],
-            ['02', 'Kiểm tra trạng thái', 'Phiên đã bắt đầu không được sửa cấu hình giá và lịch.'],
-            [
-              '03',
-              'Xác nhận thao tác',
-              'Đọc lại thay đổi trước khi lưu. Hủy phiên cần có lý do rõ ràng.',
-            ],
-          ].map(([step, title, text]) => (
-            <div key={step}>
-              <span className="text-xs font-semibold text-muted">{step}</span>
-              <h3 className="mt-2 text-base font-semibold">{title}</h3>
-              <p className="mt-2 text-sm leading-6 text-muted">{text}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+          {pendingSellers.length === 0 ? (
+            <p className="py-10 text-center text-sm text-slate-500">
+              Không có hồ sơ Seller nào đang chờ duyệt.
+            </p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {pendingSellers.map((app) => (
+                <li key={app.id} className="flex items-center justify-between gap-3 py-3.5 text-sm">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-slate-900">{app.shopName}</p>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">
+                      {app.applicantName}
+                      {app.submittedAt &&
+                        ` · ${new Date(app.submittedAt).toLocaleDateString('vi-VN')}`}
+                    </p>
+                  </div>
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={`/admin/seller-applications/${encodeURIComponent(app.id)}`}>
+                      Xét duyệt
+                    </Link>
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+          <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3.5">
+            <h2 className="text-base font-semibold text-slate-950">
+              Phiên sắp mở &amp; đang gia hạn
+            </h2>
+            <Link
+              href="/admin/auctions"
+              className="text-xs font-semibold text-emerald-800 hover:underline"
+            >
+              Quản lý phiên
+            </Link>
+          </div>
+          {watchAuctions.length === 0 ? (
+            <p className="py-10 text-center text-sm text-slate-500">
+              Hiện chưa có phiên sắp mở hoặc đang gia hạn.
+            </p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {watchAuctions.map((a) => (
+                <li key={a.id} className="flex items-center justify-between gap-3 py-3.5 text-sm">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <AuctionBadge status={a.status} />
+                      <Link
+                        href={`/admin/auctions/${encodeURIComponent(a.id)}`}
+                        className="truncate font-semibold text-slate-900 hover:underline"
+                      >
+                        {a.title}
+                      </Link>
+                    </div>
+                    <p className="mt-1 inline-flex items-center gap-1 text-xs text-slate-500 tabular-nums">
+                      <Clock3 size={12} aria-hidden="true" />
+                      {a.status === 'SCHEDULED'
+                        ? `Mở: ${auctionDate(a.startAt)}`
+                        : `Đóng: ${auctionDate(a.endAt)}`}
+                    </p>
+                  </div>
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={`/admin/auctions/${encodeURIComponent(a.id)}`}>Xem</Link>
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

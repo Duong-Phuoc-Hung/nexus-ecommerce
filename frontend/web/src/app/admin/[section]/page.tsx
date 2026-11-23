@@ -1,14 +1,16 @@
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { resources } from '@/modules/admin/config/resources';
 import { AdminResourceScreen } from '@/modules/admin/components/admin-resource-screen';
+import { AdminRolesScreen } from '@/modules/admin/components/admin-roles-screen';
 import {
   AdminProfile,
   AdminSettings,
   AdminHealth,
 } from '@/modules/admin/components/admin-system-screens';
+
 export default async function Page({ params }: { params: Promise<{ section: string }> }) {
   const { section } = await params;
-  if (section === 'roles') redirect('/admin/users');
+  if (section === 'roles') return <AdminRolesScreen />;
   if (section === 'profile') return <AdminProfile />;
   if (section === 'settings') return <AdminSettings />;
   if (section === 'health') return <AdminHealth />;

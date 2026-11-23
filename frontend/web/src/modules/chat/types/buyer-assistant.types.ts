@@ -98,6 +98,15 @@ export interface PolicyCitationItem {
   title?: string;
 }
 
+export interface DamageAssessmentCardData {
+  isDamaged: boolean;
+  damageType: string;
+  severity: string;
+  summary: string;
+  expectedItem?: string;
+  isOfflineFallback?: boolean;
+}
+
 export interface AssistantActionLink {
   label: string;
   action:
@@ -121,6 +130,9 @@ export interface AssistantChatMessage {
   createdAt: string;
   failed?: boolean;
   retryPayload?: string;
+  imagePreviewUrl?: string;
+  damageCard?: DamageAssessmentCardData;
+  aiModel?: string;
   orderCard?: OrderDualStatusCardData;
   orderChoices?: OrderChoiceItem[];
   breakdownCard?: OrderBreakdownCardData;

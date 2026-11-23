@@ -9,6 +9,7 @@ import { ReputationBadge } from '@/components/reputation';
 import { ChatFloatingBubble } from '@/modules/chat/components/chat-floating-bubble';
 
 const navigation = [
+  { href: '/seller/chat', label: 'Tin nhắn khách hàng', icon: '✉' },
   { href: '/seller', label: 'Tổng quan', icon: '⌂' },
   { href: '/seller/products', label: 'Sản phẩm', icon: '▦' },
   { href: '/seller/auctions', label: 'Đấu giá', icon: '◷' },
