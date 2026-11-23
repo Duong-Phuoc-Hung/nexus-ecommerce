@@ -3,12 +3,13 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { MapPin, Plus, Pencil, Trash2 } from 'lucide-react';
+import { MapPin, Plus, Pencil, Trash2, Cloud, HardDrive } from 'lucide-react';
 import { StoreHeader } from '@/components/layout/store-header';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import { safeNextPath } from '@/lib/utils/navigation';
+import { addressApi } from '../api/address.api';
 import { AddressForm } from './address-form';
 import {
   ADDRESS_CHANGE_EVENT,
@@ -33,14 +34,23 @@ export function BuyerAddressesPage() {
   const [deleting, setDeleting] = useState<ShippingAddress | null>(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [syncState, setSyncState] = useState<'checking' | 'server' | 'local'>('checking');
 
   useEffect(() => {
     if (!user?.id) return;
     const sync = () => setAddresses(readAddresses(user.id));
     sync();
-    syncAddressesFromServer(user.id).then((items) => {
-      if (items.length) setAddresses(items);
-    });
+    setSyncState('checking');
+    addressApi
+      .list()
+      .then(() => syncAddressesFromServer(user.id))
+      .then((items) => {
+        if (items.length) setAddresses(items);
+        setSyncState('server');
+      })
+      .catch(() => {
+        setSyncState('local');
+      });
     window.addEventListener(ADDRESS_CHANGE_EVENT, sync);
     return () => window.removeEventListener(ADDRESS_CHANGE_EVENT, sync);
   }, [user?.id]);
@@ -76,9 +86,30 @@ export function BuyerAddressesPage() {
               TÀI KHOẢN BUYER
             </p>
             <h1 className="mt-2 text-3xl font-bold">Địa chỉ nhận hàng</h1>
-            <p className="mt-2 text-sm text-muted">
-              Chọn nơi giao quen thuộc, thay đổi khi đặt hàng.
-            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2.5 text-sm text-muted">
+              <span>Chọn nơi giao quen thuộc, thay đổi khi đặt hàng.</span>
+              {user?.role === 'BUYER' && syncState !== 'checking' && (
+                <span
+                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                    syncState === 'server'
+                      ? 'bg-emerald-50 text-emerald-800'
+                      : 'bg-amber-50 text-amber-900'
+                  }`}
+                >
+                  {syncState === 'server' ? (
+                    <>
+                      <Cloud className="size-3.5" aria-hidden="true" />
+                      Đã đồng bộ tài khoản
+                    </>
+                  ) : (
+                    <>
+                      <HardDrive className="size-3.5" aria-hidden="true" />
+                      Đang lưu trên thiết bị này
+                    </>
+                  )}
+                </span>
+              )}
+            </div>
           </div>
           {user?.role === 'BUYER' && (
             <Button onClick={() => setEditing('new')} disabled={addresses.length >= 5}>

@@ -14,6 +14,8 @@ export interface ChatMessageDto {
   conversationId: string;
   senderId: string;
   senderRole: MessageSenderRole;
+  seq?: number;
+  clientMessageId?: string;
   content: string;
   attachments?: ChatAttachment[];
   metadata?: Record<string, unknown>;
@@ -28,6 +30,14 @@ export interface ConversationDto {
   sellerId: string;
   supportCaseId?: string;
   status: string;
+  lastSeq?: number;
+  buyerLastReadSeq?: number;
+  counterpartLastReadSeq?: number;
+  myLastReadSeq?: number;
+  unreadCount?: number;
+  lastMessage?: string | null;
+  lastMessageRole?: MessageSenderRole | null;
+  lastMessageAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -38,6 +48,8 @@ export interface ChatThreadItem {
   orderId: string;
   orderCode: string;
   channelType: ChannelType;
+  sellerId?: string;
+  counterpartLabel?: string;
   customerName: string;
   customerAvatar?: string;
   customerPhone?: string;
@@ -49,6 +61,8 @@ export interface ChatThreadItem {
   lastMessage?: string;
   lastMessageTime?: string;
   lastMessageRole?: MessageSenderRole;
+  lastSeq?: number;
+  myLastReadSeq?: number;
   unreadCount: number;
   supportCaseId?: string;
   priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
@@ -58,6 +72,7 @@ export interface ChatThreadItem {
 
 export interface SendMessagePayload {
   content: string;
+  clientMessageId?: string;
   attachments?: ChatAttachment[];
 }
 

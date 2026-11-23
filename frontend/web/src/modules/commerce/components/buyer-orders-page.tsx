@@ -2,9 +2,21 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowRight, Banknote, Loader2, Package, QrCode, RefreshCw, Truck } from 'lucide-react';
+import {
+  ArrowRight,
+  Banknote,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Package,
+  QrCode,
+  RefreshCw,
+  Search,
+  Truck,
+} from 'lucide-react';
 import { StoreHeader } from '@/components/layout/store-header';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { userMessage } from '@/lib/axios/http';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import { commerceApi } from '../api/commerce.api';
@@ -49,6 +61,13 @@ export default function BuyerOrdersPage() {
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
   const [activeTab, setActiveTab] = useState<OrderFilterTab>('ALL');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [queryInput, setQueryInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
 
   const canViewBuyerHistory = Boolean(user && (user.role === 'BUYER' || user.role === 'SELLER'));
   const isReadOnlySellerHistory = user?.role === 'SELLER';
@@ -61,9 +80,11 @@ export default function BuyerOrdersPage() {
       }
       setLoading(true);
       commerceApi
-        .listOrders({ buyerId: user.id, page: 1, limit: 20 }, signal)
+        .listOrders({ buyerId: user.id, q: search || undefined, page, limit: 20 }, signal)
         .then((r) => {
           setOrders(r.items);
+          setTotal(r.total);
+          setTotalPages(Math.max(1, r.totalPages));
           setError('');
         })
         .catch((e) => {
@@ -73,7 +94,7 @@ export default function BuyerOrdersPage() {
           if (!signal?.aborted) setLoading(false);
         });
     },
-    [canViewBuyerHistory, user],
+    [canViewBuyerHistory, page, search, user],
   );
 
   useEffect(() => {
@@ -92,8 +113,18 @@ export default function BuyerOrdersPage() {
   );
 
   const filteredOrders = useMemo(() => {
-    if (activeTab === 'ALL') return enrichedOrders;
-    return enrichedOrders.filter(({ view }) => {
+    const fromMs = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : null;
+    const toMs = toDate ? new Date(`${toDate}T23:59:59.999`).getTime() : null;
+    return enrichedOrders.filter(({ order, view }) => {
+      if (fromMs !== null && Number.isFinite(fromMs)) {
+        const ts = Date.parse(order.createdAt || order.date || '');
+        if (Number.isFinite(ts) && ts < fromMs) return false;
+      }
+      if (toMs !== null && Number.isFinite(toMs)) {
+        const ts = Date.parse(order.createdAt || order.date || '');
+        if (Number.isFinite(ts) && ts > toMs) return false;
+      }
+      if (activeTab === 'ALL') return true;
       if (activeTab === 'PROCESSING') {
         return (
           !view.isClosed &&
@@ -111,7 +142,7 @@ export default function BuyerOrdersPage() {
       }
       return true;
     });
-  }, [activeTab, enrichedOrders]);
+  }, [activeTab, enrichedOrders, fromDate, toDate]);
 
   const filterTabs: Array<{ key: OrderFilterTab; label: string }> = [
     { key: 'ALL', label: 'Tất cả' },
@@ -166,28 +197,73 @@ export default function BuyerOrdersPage() {
           </div>
         </div>
 
-        {/* Bộ lọc gọn theo tiến trình đơn hàng */}
-        {canViewBuyerHistory && orders.length > 0 && (
-          <div className="mt-5 flex flex-wrap gap-2" role="tablist" aria-label="Lọc đơn hàng">
-            {filterTabs.map((tab) => {
-              const active = activeTab === tab.key;
-              return (
-                <button
-                  key={tab.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setActiveTab(tab.key)}
-                  className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
-                    active
-                      ? 'bg-stone-900 text-white shadow-2xs'
-                      : 'border border-line bg-white text-stone-600 hover:bg-stone-50 hover:text-stone-900'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
+        {/* Bộ lọc gọn theo tiến trình, từ khóa & khoảng ngày */}
+        {canViewBuyerHistory && (
+          <div className="mt-5 space-y-3">
+            <div className="flex flex-wrap gap-2" role="tablist" aria-label="Lọc đơn hàng">
+              {filterTabs.map((tab) => {
+                const active = activeTab === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setActiveTab(tab.key)}
+                    className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+                      active
+                        ? 'bg-stone-900 text-white shadow-2xs'
+                        : 'border border-line bg-white text-stone-600 hover:bg-stone-50 hover:text-stone-900'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                setSearch(queryInput.trim());
+                setPage(1);
+              }}
+              className="grid gap-2.5 sm:grid-cols-[1.5fr_0.8fr_0.8fr_auto]"
+            >
+              <label className="relative block">
+                <Search
+                  aria-hidden="true"
+                  className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-stone-400"
+                />
+                <span className="sr-only">Tìm theo mã đơn hoặc tên sản phẩm</span>
+                <Input
+                  value={queryInput}
+                  onChange={(e) => setQueryInput(e.target.value)}
+                  placeholder="Tìm mã đơn hoặc sản phẩm…"
+                  className="min-h-10 rounded-xl bg-white pl-9 text-sm"
+                />
+              </label>
+              <Input
+                type="date"
+                aria-label="Từ ngày"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="min-h-10 rounded-xl bg-white text-sm"
+              />
+              <Input
+                type="date"
+                aria-label="Đến ngày"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                className="min-h-10 rounded-xl bg-white text-sm"
+              />
+              <Button
+                type="submit"
+                variant="outline"
+                className="min-h-10 rounded-xl border-line bg-white px-4 text-xs font-semibold"
+              >
+                Tìm
+              </Button>
+            </form>
           </div>
         )}
 
@@ -405,6 +481,37 @@ export default function BuyerOrdersPage() {
                   </article>
                 ))}
               </div>
+              {totalPages > 1 && (
+                <footer className="flex items-center justify-between border-t border-line px-5 py-3.5 text-xs text-muted sm:text-sm">
+                  <span className="tabular-nums">
+                    Trang {page} / {totalPages} · {total} đơn hàng
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={page <= 1 || loading}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      className="min-h-10 rounded-xl"
+                    >
+                      <ChevronLeft className="size-4" aria-hidden="true" />
+                      Trước
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={page >= totalPages || loading}
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      className="min-h-10 rounded-xl"
+                    >
+                      Sau
+                      <ChevronRight className="size-4" aria-hidden="true" />
+                    </Button>
+                  </div>
+                </footer>
+              )}
             </>
           )}
         </section>

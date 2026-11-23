@@ -8,6 +8,7 @@ import { SupportRouteGuard } from './support-route-guard';
 import { ChatFloatingBubble } from '@/modules/chat/components/chat-floating-bubble';
 
 const items = [
+  { href: '/support/chat', label: 'Hộp thư hỗ trợ', icon: '✉' },
   { href: '/support', label: 'Tổng quan', icon: '⌂' },
   { href: '/support/disputes', label: 'Trọng tài tranh chấp', icon: '⚖' },
   { href: '/support/orders', label: 'Tra cứu đơn hàng', icon: '▤' },

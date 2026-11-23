@@ -6,26 +6,27 @@ export type ResourceConfig = {
   columns: [string, string][];
   create?: string;
   actions?: string[];
-  note?: string;
 };
+
 export const resources: Record<string, ResourceConfig> = {
   users: {
     title: 'Quản lý tài khoản',
-    subtitle: 'Tra cứu hồ sơ, cập nhật vai trò và xem phạm vi quyền ngay tại đây.',
+    subtitle: 'Tra cứu hồ sơ, phân vai trò và quản lý trạng thái người dùng.',
     path: '/users',
     paged: true,
     columns: [
       ['fullName', 'Họ và tên'],
       ['email', 'Email'],
+      ['phone', 'Điện thoại'],
       ['role', 'Vai trò'],
       ['status', 'Trạng thái'],
     ],
     create: 'Tạo tài khoản',
-    actions: ['Đổi vai trò', 'Sửa hồ sơ', 'Xóa tài khoản', 'Đổi mật khẩu'],
+    actions: ['Đổi vai trò', 'Sửa hồ sơ', 'Đổi mật khẩu', 'Xóa tài khoản'],
   },
   categories: {
     title: 'Danh mục sản phẩm',
-    subtitle: 'Tổ chức danh mục cha–con để người mua tìm kiếm dễ dàng.',
+    subtitle: 'Tổ chức cấu trúc danh mục cha–con trên toàn sàn.',
     path: '/categories?tree=true',
     columns: [
       ['name', 'Tên danh mục'],
@@ -37,7 +38,7 @@ export const resources: Record<string, ResourceConfig> = {
   },
   orders: {
     title: 'Quản lý đơn hàng',
-    subtitle: 'Theo dõi giao dịch và xử lý các yêu cầu phát sinh.',
+    subtitle: 'Theo dõi giao dịch, trạng thái vận chuyển và xử lý hoàn tiền.',
     path: '/orders',
     paged: true,
     columns: [
@@ -47,12 +48,11 @@ export const resources: Record<string, ResourceConfig> = {
       ['totalAmount', 'Tổng tiền'],
       ['status', 'Trạng thái'],
     ],
-    actions: ['Hủy đơn', 'Hoàn tiền', 'Cập nhật trạng thái'],
-    note: 'Đang hoàn thiện đồng bộ đơn mới với danh sách giao dịch.',
+    actions: ['Cập nhật trạng thái', 'Hoàn tiền', 'Hủy đơn'],
   },
   shipments: {
     title: 'Vận chuyển',
-    subtitle: 'Tra cứu vận đơn và theo dõi hành trình giao nhận.',
+    subtitle: 'Khởi tạo vận đơn và theo dõi hành trình giao nhận.',
     path: '/fulfillments/shipments',
     paged: true,
     columns: [
@@ -67,7 +67,7 @@ export const resources: Record<string, ResourceConfig> = {
   },
   reputation: {
     title: 'Uy tín & vi phạm',
-    subtitle: 'Đối chiếu hồ sơ, điểm uy tín và chuẩn bị quyết định xử lý.',
+    subtitle: 'Theo dõi điểm uy tín và áp dụng chế tài tài khoản.',
     path: '/users',
     paged: true,
     columns: [
@@ -77,11 +77,11 @@ export const resources: Record<string, ResourceConfig> = {
       ['status', 'Trạng thái'],
     ],
     actions: ['Điều chỉnh uy tín', 'Áp dụng hình phạt'],
-    note: 'Lịch sử đánh giá và vi phạm đang được hoàn thiện.',
   },
   notifications: {
     title: 'Lịch sử thông báo',
-    subtitle: 'Theo dõi nội dung, người nhận và kết quả gửi.',
+    subtitle: 'Theo dõi nội dung, người nhận và kết quả gửi thông báo.',
+    path: '/notifications',
     columns: [
       ['title', 'Nội dung'],
       ['recipient', 'Người nhận'],
@@ -91,7 +91,8 @@ export const resources: Record<string, ResourceConfig> = {
   },
   events: {
     title: 'Nhật ký sự kiện',
-    subtitle: 'Tra cứu sự kiện nghiệp vụ theo mã và thời điểm xảy ra.',
+    subtitle: 'Tra cứu sự kiện nghiệp vụ theo mã và thời điểm phát sinh.',
+    path: '/notifications/event-logs',
     columns: [
       ['eventId', 'Mã sự kiện'],
       ['eventType', 'Loại sự kiện'],
@@ -101,6 +102,7 @@ export const resources: Record<string, ResourceConfig> = {
   audit: {
     title: 'Lịch sử quản trị',
     subtitle: 'Đối chiếu người thực hiện, hành động và đối tượng thay đổi.',
+    path: '/audit-logs',
     columns: [
       ['actor', 'Người thực hiện'],
       ['action', 'Hành động'],
@@ -110,7 +112,7 @@ export const resources: Record<string, ResourceConfig> = {
   },
   reports: {
     title: 'Báo cáo vận hành',
-    subtitle: 'Theo dõi đơn hàng, doanh thu và kết quả đấu giá đã đối soát.',
+    subtitle: 'Tổng hợp số đơn hàng, doanh thu và phiên đấu giá đã đối soát.',
     columns: [
       ['period', 'Kỳ báo cáo'],
       ['orders', 'Số đơn'],

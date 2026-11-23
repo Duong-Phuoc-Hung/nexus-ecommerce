@@ -1,12 +1,15 @@
 'use client';
+
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import { LayoutDashboard } from 'lucide-react';
+
 export function AccountControls() {
   const { user, phase, retry, logout, error } = useSession();
   const [busy, setBusy] = useState(false);
+
   if (phase === 'loading')
     return (
       <span className="inline-flex min-h-11 items-center gap-2 text-xs text-muted" role="status">
@@ -48,11 +51,12 @@ export function AccountControls() {
         )}
       </div>
     );
+
   const isSeller = user.role === 'SELLER';
   const isSupport = user.role === 'SUPPORT_STAFF' || user.role === 'SUPPORT';
 
   return (
-    <div className="flex max-w-full items-center gap-2.5 sm:gap-3">
+    <div className="flex max-w-full items-center gap-2 sm:gap-3">
       {user.role === 'ADMIN' && (
         <Link
           href="/admin"
@@ -63,7 +67,7 @@ export function AccountControls() {
           <LayoutDashboard aria-hidden="true" className="size-4" />
           <span>Trang quản trị</span>
         </Link>
-      )}{' '}
+      )}
       {isSeller && (
         <Link
           href="/seller"
@@ -84,18 +88,9 @@ export function AccountControls() {
           <span>Dashboard Support</span>
         </Link>
       )}
-      {user.role === 'BUYER' && (
-        <Link
-          href="/account/seller-registration"
-          className="hidden min-h-8 items-center gap-1.5 rounded-lg border border-brand/25 bg-brand-soft/60 px-2.5 py-1 text-xs font-semibold text-brand-dark transition hover:bg-brand-soft md:inline-flex"
-          title="Đăng ký mở gian hàng Người bán"
-        >
-          <span>Đăng ký bán hàng</span>
-        </Link>
-      )}
       <Link
         href="/account"
-        className="max-w-40 truncate text-sm font-semibold text-ink"
+        className="max-w-40 truncate text-sm font-semibold text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand rounded-md"
         aria-label={`Tài khoản ${user.fullName}`}
       >
         {user.fullName}

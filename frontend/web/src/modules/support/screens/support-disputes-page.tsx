@@ -157,7 +157,10 @@ export function SupportDisputesPage() {
       const res = await chatApi.analyzeDisputeEvidence({
         caseId: selectedDispute.caseId || selectedDispute.id,
         orderId: selectedDispute.orderId || selectedDispute.orderCode || selectedDispute.order,
+        orderAmount: Number(refundAmount) > 0 ? Number(refundAmount) : undefined,
         reason: selectedDispute.reason,
+        buyerNote: selectedDispute.buyerEvidence?.note,
+        sellerNote: selectedDispute.sellerEvidence?.note,
         buyerPhotos: selectedDispute.buyerEvidence?.photos,
         sellerVideos: selectedDispute.sellerEvidence?.videos,
         sellerPhotos: selectedDispute.sellerEvidence?.photos,

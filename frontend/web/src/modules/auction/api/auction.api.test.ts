@@ -155,3 +155,22 @@ test('management persists create/edit/cancel, rejects duplicate product and stal
     else Reflect.set(process.env, 'NODE_ENV', previousEnv);
   }
 });
+
+test('EXTENDED status stays open for bidding until endAt and validates optional buyNowPrice', () => {
+  const extended = { ...fixture(), status: 'EXTENDED' as const };
+  assert.equal(lifecycle(extended, now), 'EXTENDED');
+  assert.equal(lifecycle(extended, extended.endAt), 'ENDED');
+  const bid = acceptBid(extended, 100, buyer, 1, 'ext-1', now);
+  assert.equal(bid.bids.length, 1);
+
+  const validInput = {
+    productId: 'p',
+    startingPrice: 100,
+    increment: 10,
+    buyNowPrice: 200,
+    startAt: now + 1000,
+    endAt: now + 1000 + 3600000,
+  };
+  assert.doesNotThrow(() => validateAuction(validInput, now));
+  assert.throws(() => validateAuction({ ...validInput, buyNowPrice: 100 }, now), /Giá mua ngay/);
+});

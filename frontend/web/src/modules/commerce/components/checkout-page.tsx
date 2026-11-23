@@ -1,9 +1,20 @@
 'use client';
 import Link from 'next/link';
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { CreditCard, MapPin, Plus, ShieldCheck, AlertCircle } from 'lucide-react';
+import {
+  CreditCard,
+  MapPin,
+  Plus,
+  ShieldCheck,
+  AlertCircle,
+  Check,
+  Tag,
+  Truck,
+  X,
+} from 'lucide-react';
 import { StoreHeader } from '@/components/layout/store-header';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import { useBuyerAssistant } from '@/modules/chat/context/buyer-assistant-provider';
@@ -23,7 +34,9 @@ import { commerceApi } from '../api/commerce.api';
 
 import { readCart, writeCart, type CartLine } from '../utils/cart';
 import {
+  clearBuyNowLine,
   clearCheckoutSelection,
+  readBuyNowLine,
   readCheckoutSelection,
   rememberPendingPayosCart,
 } from '../utils/cart-selection';
@@ -42,6 +55,7 @@ export default function CheckoutPage() {
   const { user, phase } = useSession();
   const { setCheckoutContext } = useBuyerAssistant();
   const [lines, setLines] = useState<CartLine[]>([]);
+  const [isBuyNowMode, setIsBuyNowMode] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'PAYOS' | 'COD'>('PAYOS');
@@ -54,11 +68,63 @@ export default function CheckoutPage() {
   const [quote, setQuote] = useState<{
     quoteId: string;
     shippingFee: number;
+    discountAmount: number;
+    taxAmount: number;
     totalAmount: number;
+    expiresAt?: string;
+    selectedShippingOptionId?: string;
+    shippingOptions?: Array<{
+      optionId: string;
+      carrier: string;
+      carrierName: string;
+      serviceName: string;
+      fee: number;
+      etaText: string;
+      recommended?: boolean;
+    }>;
+    promo?: {
+      code: string;
+      applied: boolean;
+      discountAmount: number;
+      message?: string;
+    } | null;
   } | null>(null);
+  const [quoteStatus, setQuoteStatus] = useState<
+    'idle' | 'loading' | 'ready' | 'expired' | 'error'
+  >('idle');
+  const [quoteError, setQuoteError] = useState('');
+  const [quoteRevision, setQuoteRevision] = useState(0);
+  const [selectedShippingOptionId, setSelectedShippingOptionId] = useState('');
+  const [promoInput, setPromoInput] = useState('');
+  const [appliedPromoCode, setAppliedPromoCode] = useState('');
+  const [promoFeedback, setPromoFeedback] = useState('');
   const idempotencyRef = useRef<{ fingerprint: string; key: string } | null>(null);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const saved = window.sessionStorage.getItem('nexus.checkout.promo.v1') || '';
+      if (saved) {
+        setPromoInput(saved);
+        setAppliedPromoCode(saved);
+      }
+    } catch {
+      // Ignore storage error
+    }
+  }, []);
+
+  useEffect(() => {
+    const params =
+      typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    if (params?.get('mode') === 'buy-now') {
+      const buyNowLine = readBuyNowLine();
+      if (buyNowLine) {
+        setIsBuyNowMode(true);
+        setLines([buyNowLine]);
+        return;
+      }
+    }
+    setIsBuyNowMode(false);
     const cart = readCart();
     const selected = readCheckoutSelection();
     setLines(selected === null ? cart : cart.filter((line) => selected.includes(line.productId)));
@@ -119,8 +185,13 @@ export default function CheckoutPage() {
   useEffect(() => {
     // Bỏ báo giá cũ ngay khi giỏ/địa chỉ thay đổi để không gửi quoteId lệch dữ liệu.
     setQuote(null);
-    if (!lines.length || !selectedAddress || user?.role !== 'BUYER' || hasOutOfStock) return;
+    setQuoteError('');
+    if (!lines.length || !selectedAddress || user?.role !== 'BUYER' || hasOutOfStock) {
+      setQuoteStatus('idle');
+      return;
+    }
     let active = true;
+    setQuoteStatus('loading');
 
     const payload = {
       items: lines.map((x) => ({ productId: x.productId, quantity: x.quantity })),
@@ -132,27 +203,67 @@ export default function CheckoutPage() {
         addressLine: selectedAddress.street,
         country: 'VN',
       },
+      promoCode: appliedPromoCode || undefined,
+      shippingOptionId: selectedShippingOptionId || undefined,
     };
 
     commerceApi
       .getQuote(payload)
       .then((res) => {
-        if (active) {
-          setQuote({
-            quoteId: res.quoteId,
-            shippingFee: res.shippingFee,
-            totalAmount: res.totalAmount,
-          });
+        if (!active) return;
+        setQuote({
+          quoteId: res.quoteId,
+          shippingFee: res.shippingFee,
+          discountAmount: res.discountAmount ?? res.promo?.discountAmount ?? 0,
+          taxAmount: res.taxAmount ?? 0,
+          totalAmount: res.totalAmount,
+          expiresAt: res.expiresAt,
+          selectedShippingOptionId: res.selectedShippingOptionId,
+          shippingOptions: res.shippingOptions,
+          promo: res.promo ?? null,
+        });
+        if (res.selectedShippingOptionId && !selectedShippingOptionId) {
+          setSelectedShippingOptionId(res.selectedShippingOptionId);
         }
+        if (appliedPromoCode && res.promo && !res.promo.applied) {
+          setPromoFeedback(res.promo.message || 'Mã giảm giá chưa đủ điều kiện áp dụng.');
+        } else {
+          setPromoFeedback('');
+        }
+        setQuoteStatus('ready');
       })
-      .catch(() => {
-        if (active) setQuote(null);
+      .catch((err) => {
+        if (!active) return;
+        setQuote(null);
+        setQuoteStatus('error');
+        setQuoteError(userMessage(err));
       });
 
     return () => {
       active = false;
     };
-  }, [lines, selectedAddress, user?.role, hasOutOfStock]);
+  }, [
+    appliedPromoCode,
+    hasOutOfStock,
+    lines,
+    quoteRevision,
+    selectedAddress,
+    selectedShippingOptionId,
+    user?.role,
+  ]);
+
+  // Theo dõi hết hạn báo giá
+  useEffect(() => {
+    if (!quote?.expiresAt || quoteStatus !== 'ready') return;
+    const msLeft = Date.parse(quote.expiresAt) - Date.now();
+    if (!Number.isFinite(msLeft)) return;
+    if (msLeft <= 0) {
+      setQuoteStatus('expired');
+      return;
+    }
+    const timer = window.setTimeout(() => setQuoteStatus('expired'), msLeft);
+    return () => window.clearTimeout(timer);
+  }, [quote?.expiresAt, quoteStatus]);
 
   async function addAddress(input: AddressInput, makeDefault: boolean) {
     if (!user) return;
@@ -200,6 +311,17 @@ export default function CheckoutPage() {
       return;
     }
 
+    if (quoteStatus === 'loading') {
+      setError('Đang tính báo giá giao hàng, vui lòng chờ giây lát.');
+      return;
+    }
+    if (quoteStatus === 'expired' || !quote) {
+      setError(
+        'Báo giá chưa sẵn sàng hoặc đã hết hạn. Vui lòng cập nhật báo giá trước khi đặt hàng.',
+      );
+      return;
+    }
+
     setBusy(true);
     try {
       // Giữ cùng một khóa cho cùng nội dung đơn: nếu lần trước timeout và Buyer bấm lại,
@@ -207,6 +329,8 @@ export default function CheckoutPage() {
       const fingerprint = JSON.stringify([
         paymentMethod,
         selectedAddress.id,
+        appliedPromoCode,
+        selectedShippingOptionId,
         lines.map((x) => [x.productId, x.quantity]),
       ]);
       if (idempotencyRef.current?.fingerprint !== fingerprint) {
@@ -229,17 +353,23 @@ export default function CheckoutPage() {
             items: lines.map((x) => ({ productId: x.productId, quantity: x.quantity })),
             shippingAddress: shippingAddressPayload,
             quoteId: quote?.quoteId,
+            promoCode: appliedPromoCode || undefined,
+            shippingOptionId: selectedShippingOptionId || undefined,
             paymentMethod: 'COD',
           },
           idempotencyKey,
         );
 
-        // Bỏ các sản phẩm đã mua khỏi giỏ hàng cả LocalStorage và Server
-        const purchasedIds = lines.map((x) => x.productId);
-        const currentCart = readCart();
-        const remainingCart = currentCart.filter((x) => !purchasedIds.includes(x.productId));
-        writeCart(remainingCart);
-        clearCheckoutSelection();
+        // Bỏ các sản phẩm đã mua khỏi giỏ hàng (chỉ thực hiện khi đi từ Giỏ hàng; Mua ngay giữ nguyên giỏ)
+        if (isBuyNowMode) {
+          clearBuyNowLine();
+        } else {
+          const purchasedIds = lines.map((x) => x.productId);
+          const currentCart = readCart();
+          const remainingCart = currentCart.filter((x) => !purchasedIds.includes(x.productId));
+          writeCart(remainingCart);
+          clearCheckoutSelection();
+        }
         window.location.assign(
           `/checkout/result?orderId=${encodeURIComponent(result.orderId)}&method=COD`,
         );
@@ -252,6 +382,8 @@ export default function CheckoutPage() {
           items: lines.map((x) => ({ productId: x.productId, quantity: x.quantity })),
           shippingAddress: shippingAddressPayload,
           quoteId: quote?.quoteId,
+          promoCode: appliedPromoCode || undefined,
+          shippingOptionId: selectedShippingOptionId || undefined,
           paymentMethod: 'PAYOS',
         },
         idempotencyKey,
@@ -266,9 +398,13 @@ export default function CheckoutPage() {
           'Chưa nhận được liên kết thanh toán PayOS. Vui lòng mở đơn hàng để thử lại.',
         );
       }
-      rememberPendingPayosCart(result.orderId, lines);
+      if (isBuyNowMode) {
+        clearBuyNowLine();
+      } else {
+        rememberPendingPayosCart(result.orderId, lines);
+        clearCheckoutSelection();
+      }
       sessionStorage.setItem('nexus-pending-payos-order', result.orderId);
-      clearCheckoutSelection();
       window.location.assign(checkoutUrl);
       return;
     } catch (e) {
@@ -278,33 +414,90 @@ export default function CheckoutPage() {
     }
   }
 
-  const shippingFeeDisplay = quote
-    ? `${new Intl.NumberFormat('vi-VN').format(quote.shippingFee)} ₫`
-    : 'Chưa có báo giá';
-  const totalAmountDisplay = quote
-    ? `${new Intl.NumberFormat('vi-VN').format(quote.totalAmount)} ₫`
-    : `${new Intl.NumberFormat('vi-VN').format(subtotal)} ₫`;
+  const hasConfirmedQuote = Boolean(quote && quoteStatus === 'ready');
+  const shippingFeeDisplay =
+    quoteStatus === 'loading'
+      ? 'Đang tính phí…'
+      : hasConfirmedQuote && quote
+        ? quote.shippingFee === 0
+          ? 'Miễn phí'
+          : `${new Intl.NumberFormat('vi-VN').format(quote.shippingFee)} ₫`
+        : quoteStatus === 'expired'
+          ? 'Báo giá hết hạn'
+          : 'Chưa xác nhận phí';
+  const totalAmountDisplay =
+    hasConfirmedQuote && quote
+      ? `${new Intl.NumberFormat('vi-VN').format(quote.totalAmount)} ₫`
+      : `${new Intl.NumberFormat('vi-VN').format(subtotal)} ₫`;
+  const backHref =
+    isBuyNowMode && lines[0]?.productId
+      ? `/products/${encodeURIComponent(lines[0].productId)}`
+      : '/cart';
+  const backLabel = isBuyNowMode ? '← Quay lại sản phẩm' : '← Giỏ hàng';
 
   return (
     <>
       <StoreHeader />
       <main className="nexus-container min-h-[70vh] py-8">
-        <Link href="/cart" className="inline-flex min-h-11 items-center text-sm text-muted">
-          ← Giỏ hàng
+        <Link
+          href={backHref}
+          className="inline-flex min-h-11 items-center text-sm text-muted hover:text-stone-900"
+        >
+          {backLabel}
         </Link>
-        <p className="mt-3 text-xs font-bold uppercase tracking-widest text-brand-dark">
-          CHECKOUT · BƯỚC 1 / 2
-        </p>
-        <h1 className="mt-2 text-3xl font-bold">Xác nhận giao hàng</h1>
-        <p className="mt-2 text-sm text-muted">
-          Chọn nơi nhận và kiểm tra sản phẩm trước khi thanh toán.
+
+        {/* Thanh tiến trình 3 bước kiểu Shopee */}
+        <div
+          aria-label="Các bước đặt hàng"
+          className="mt-3 grid grid-cols-3 gap-2 sm:gap-4 rounded-2xl border border-line bg-white p-3 sm:p-4 shadow-2xs"
+        >
+          <div className="flex items-center gap-2 text-xs">
+            <span className="grid size-6 shrink-0 place-items-center rounded-full bg-emerald-600 text-white">
+              <Check className="size-3.5" />
+            </span>
+            <div className="min-w-0">
+              <span className="block font-semibold text-stone-900 truncate">
+                {isBuyNowMode ? 'Chọn sản phẩm' : 'Chọn giỏ hàng'}
+              </span>
+              <span className="hidden sm:block text-[11px] text-emerald-700">Đã xong</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="grid size-6 shrink-0 place-items-center rounded-full bg-brand-dark text-white font-bold">
+              2
+            </span>
+            <div className="min-w-0">
+              <span className="block font-bold text-brand-dark truncate">Địa chỉ & Thanh toán</span>
+              <span className="hidden sm:block text-[11px] text-muted">Bước hiện tại</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-xs opacity-70">
+            <span className="grid size-6 shrink-0 place-items-center rounded-full border border-line bg-stone-50 text-stone-600 font-bold">
+              3
+            </span>
+            <div className="min-w-0">
+              <span className="block font-semibold text-stone-700 truncate">Xác nhận đơn hàng</span>
+              <span className="hidden sm:block text-[11px] text-muted">Theo dõi vận đơn</span>
+            </div>
+          </div>
+        </div>
+
+        <h1 className="mt-5 text-2xl sm:text-3xl font-bold text-stone-900">
+          Xác nhận giao hàng & đặt đơn
+        </h1>
+        <p className="mt-1.5 text-sm text-muted">
+          Kiểm tra địa chỉ nhận hàng, sản phẩm và chọn phương thức thanh toán trước khi đặt đơn.
         </p>
         {!user && phase !== 'loading' && (
           <div className="mt-5 rounded-xl border border-line bg-white p-4 text-sm">
             Đăng nhập để tiếp tục.{' '}
             <Link
               className="font-semibold text-brand-dark underline"
-              href="/login?next=%2Fcheckout"
+              href={
+                isBuyNowMode
+                  ? '/login?next=%2Fcheckout%3Fmode%3Dbuy-now'
+                  : '/login?next=%2Fcheckout'
+              }
             >
               Đăng nhập
             </Link>
@@ -457,6 +650,64 @@ export default function CheckoutPage() {
               </p>
             </section>
 
+            {/* Chọn đơn vị & gói vận chuyển (khi BE trả nhiều phương án) */}
+            {quote?.shippingOptions && quote.shippingOptions.length > 0 && (
+              <section className="mt-4 rounded-2xl border border-line bg-white p-5">
+                <div className="flex items-center gap-2">
+                  <Truck className="size-4 text-brand-dark" aria-hidden="true" />
+                  <h2 className="text-sm font-bold text-stone-900">Đơn vị vận chuyển</h2>
+                </div>
+                <div
+                  className="mt-3 space-y-2.5"
+                  role="radiogroup"
+                  aria-label="Chọn đơn vị vận chuyển"
+                >
+                  {quote.shippingOptions.map((opt) => {
+                    const active =
+                      (selectedShippingOptionId || quote.selectedShippingOptionId) === opt.optionId;
+                    return (
+                      <label
+                        key={opt.optionId}
+                        className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3.5 transition ${
+                          active
+                            ? 'border-brand-dark bg-brand-soft/30'
+                            : 'border-line bg-white hover:bg-stone-50'
+                        }`}
+                      >
+                        <span className="flex items-center gap-3">
+                          <input
+                            type="radio"
+                            name="shippingOptionId"
+                            checked={active}
+                            onChange={() => setSelectedShippingOptionId(opt.optionId)}
+                            className="size-4 accent-brand"
+                          />
+                          <span>
+                            <span className="flex items-center gap-2 text-sm font-semibold text-stone-900">
+                              <span>
+                                {opt.carrierName} · {opt.serviceName}
+                              </span>
+                              {opt.recommended && (
+                                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                                  Đề xuất
+                                </span>
+                              )}
+                            </span>
+                            <span className="mt-0.5 block text-xs text-muted">{opt.etaText}</span>
+                          </span>
+                        </span>
+                        <strong className="shrink-0 text-sm font-bold text-stone-900 tabular-nums">
+                          {opt.fee === 0
+                            ? 'Miễn phí'
+                            : `${new Intl.NumberFormat('vi-VN').format(opt.fee)} ₫`}
+                        </strong>
+                      </label>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
             {error && (
               <p
                 className="mt-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800"
@@ -468,31 +719,155 @@ export default function CheckoutPage() {
             )}
           </div>
 
-          <aside className="h-fit rounded-2xl border border-line bg-white p-5">
-            <h2 className="font-semibold">Đơn hàng của bạn</h2>
+          <aside className="h-fit rounded-2xl border border-line bg-white p-5 shadow-xs">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <h2 className="font-bold text-stone-900">Đơn hàng của bạn</h2>
+              <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-[11px] font-semibold text-stone-700">
+                {lines.reduce((acc, item) => acc + item.quantity, 0)} sản phẩm
+              </span>
+            </div>
             <div className="mt-4 space-y-3 text-sm">
               {lines.map((x) => (
-                <div key={x.productId} className="flex justify-between gap-3">
-                  <span>
-                    {x.title} × {x.quantity}
-                  </span>
-                  <strong>{new Intl.NumberFormat('vi-VN').format(x.price * x.quantity)} ₫</strong>
+                <div key={x.productId} className="flex items-center gap-3">
+                  <img
+                    src={x.image || '/images/nexus-product-placeholder.svg'}
+                    onError={(e) => {
+                      if (!e.currentTarget.src.endsWith('/images/nexus-product-placeholder.svg')) {
+                        e.currentTarget.src = '/images/nexus-product-placeholder.svg';
+                      }
+                    }}
+                    alt={x.title}
+                    width={48}
+                    height={48}
+                    className="size-12 shrink-0 rounded-xl border border-line/70 bg-stone-50 object-cover"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-stone-900 line-clamp-2 leading-snug">
+                      {x.title}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted">
+                      {new Intl.NumberFormat('vi-VN').format(x.price)} ₫ × {x.quantity}
+                    </p>
+                  </div>
+                  <strong className="shrink-0 font-semibold text-stone-900">
+                    {new Intl.NumberFormat('vi-VN').format(x.price * x.quantity)} ₫
+                  </strong>
                 </div>
               ))}
             </div>
-            <div className="mt-5 space-y-2 border-t border-line pt-4 text-sm">
+            <div className="mt-4 border-t border-line pt-4">
+              <label
+                htmlFor="checkout-promo"
+                className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-stone-800"
+              >
+                <Tag className="size-3.5 text-brand-dark" aria-hidden="true" />
+                Mã giảm giá
+              </label>
+              {appliedPromoCode ? (
+                <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950">
+                  <span className="font-mono font-bold">{appliedPromoCode}</span>
+                  <button
+                    type="button"
+                    aria-label="Bỏ mã giảm giá"
+                    onClick={() => {
+                      setAppliedPromoCode('');
+                      setPromoInput('');
+                      setPromoFeedback('');
+                      try {
+                        window.sessionStorage.removeItem('nexus.checkout.promo.v1');
+                      } catch {
+                        // Ignore
+                      }
+                    }}
+                    className="rounded-md p-1 text-emerald-800 hover:bg-emerald-100"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Input
+                    id="checkout-promo"
+                    value={promoInput}
+                    onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
+                    placeholder="Nhập mã ưu đãi…"
+                    className="min-h-10 rounded-xl font-mono text-xs uppercase"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={!promoInput.trim()}
+                    onClick={() => {
+                      const code = promoInput.trim().toUpperCase();
+                      setAppliedPromoCode(code);
+                      try {
+                        window.sessionStorage.setItem('nexus.checkout.promo.v1', code);
+                      } catch {
+                        // Ignore
+                      }
+                    }}
+                    className="min-h-10 shrink-0 rounded-xl px-3.5 text-xs font-semibold"
+                  >
+                    Áp dụng
+                  </Button>
+                </div>
+              )}
+              {promoFeedback && (
+                <p role="alert" className="mt-1.5 text-xs text-amber-800">
+                  {promoFeedback}
+                </p>
+              )}
+            </div>
+
+            <div className="mt-4 space-y-2 border-t border-line pt-4 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted">Tạm tính từ giỏ</span>
-                <strong>{new Intl.NumberFormat('vi-VN').format(subtotal)} ₫</strong>
+                <span className="text-muted">Tạm tính tiền hàng</span>
+                <strong className="tabular-nums">
+                  {new Intl.NumberFormat('vi-VN').format(subtotal)} ₫
+                </strong>
               </div>
+              {(quote?.discountAmount ?? 0) > 0 && (
+                <div className="flex justify-between text-emerald-700">
+                  <span>Giảm giá</span>
+                  <strong className="tabular-nums">
+                    -{new Intl.NumberFormat('vi-VN').format(quote?.discountAmount ?? 0)} ₫
+                  </strong>
+                </div>
+              )}
+              {(quote?.taxAmount ?? 0) > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted">Thuế</span>
+                  <span className="tabular-nums">
+                    {new Intl.NumberFormat('vi-VN').format(quote?.taxAmount ?? 0)} ₫
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-muted">Phí giao hàng</span>
-                <span>{shippingFeeDisplay}</span>
+                <span className="tabular-nums">{shippingFeeDisplay}</span>
               </div>
               <div className="flex justify-between border-t border-line pt-3 font-semibold">
-                <span>Tổng thanh toán</span>
-                <span className="text-brand-dark text-base">{totalAmountDisplay}</span>
+                <span>{hasConfirmedQuote ? 'Tổng thanh toán cuối' : 'Tổng tạm tính'}</span>
+                <span className="text-brand-dark text-base tabular-nums">{totalAmountDisplay}</span>
               </div>
+              {(quoteStatus === 'expired' || quoteStatus === 'error') && (
+                <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
+                  <p>
+                    {quoteStatus === 'expired'
+                      ? 'Báo giá đã hết hiệu lực. Cập nhật lại để xác nhận tổng tiền mới nhất.'
+                      : quoteError || 'Chưa nhận được báo giá vận chuyển từ máy chủ.'}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setQuoteRevision((v) => v + 1)}
+                    className="mt-2 min-h-9 rounded-lg border-amber-300 bg-white text-xs font-semibold text-amber-950"
+                  >
+                    Cập nhật báo giá
+                  </Button>
+                </div>
+              )}
             </div>
 
             <Button
@@ -503,7 +878,8 @@ export default function CheckoutPage() {
                 !lines.length ||
                 !selectedAddress ||
                 hasOutOfStock ||
-                hasExceedStock
+                hasExceedStock ||
+                !hasConfirmedQuote
               }
               className="mt-5 w-full bg-brand-dark py-3 text-sm font-semibold text-white hover:bg-brand"
             >
