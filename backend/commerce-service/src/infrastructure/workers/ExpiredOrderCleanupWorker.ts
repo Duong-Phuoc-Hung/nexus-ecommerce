@@ -115,6 +115,24 @@ export class ExpiredOrderCleanupWorker {
                 updatedAt: now,
               },
             });
+
+            // 4. Hoàn trả voucher nếu đơn bị hủy do quá hạn (BUG-02)
+            if (tx.promotionUsage && tx.promotion) {
+              const promoUsages = await tx.promotionUsage.findMany({
+                where: { orderId: order.id },
+              });
+              if (Array.isArray(promoUsages)) {
+                for (const usage of promoUsages) {
+                  await tx.promotion.update({
+                    where: { id: usage.promotionId },
+                    data: { usedCount: { decrement: 1 } },
+                  });
+                  await tx.promotionUsage.delete({
+                    where: { id: usage.id },
+                  });
+                }
+              }
+            }
           }
         };
 

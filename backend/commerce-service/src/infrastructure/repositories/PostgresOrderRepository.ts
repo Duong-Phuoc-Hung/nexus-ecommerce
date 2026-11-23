@@ -238,6 +238,28 @@ export class PostgresOrderRepository implements IOrderRepository {
         updatedAt: order.updatedAt,
       },
     });
+
+    // Hoàn trả voucher khi đơn hàng bị hủy (BUG-02)
+    if (order.status === 'CANCELLED' && this.prisma?.promotionUsage && this.prisma?.promotion) {
+      try {
+        const promoUsages = await this.prisma.promotionUsage.findMany({
+          where: { orderId: cleanId },
+        });
+        if (Array.isArray(promoUsages)) {
+          for (const usage of promoUsages) {
+            await this.prisma.promotion.update({
+              where: { id: usage.promotionId },
+              data: { usedCount: { decrement: 1 } },
+            });
+            await this.prisma.promotionUsage.delete({
+              where: { id: usage.id },
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('[PostgresOrderRepository] Warning releasing voucher on cancel:', err);
+      }
+    }
   }
 
   /**

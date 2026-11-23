@@ -40,6 +40,10 @@ export class PromotionService {
     private readonly catalogClient?: ICatalogClient,
   ) {}
 
+  public async getPromotionByCode(code: string): Promise<Promotion | null> {
+    return this.promotionRepository.findByCode(code);
+  }
+
   public async validatePromotion(input: ValidatePromotionInput): Promise<ValidatePromotionResult> {
     const rawCode = input.code ? input.code.trim().toUpperCase() : '';
     if (!rawCode) {

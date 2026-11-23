@@ -328,3 +328,30 @@ Frontend có thể dùng ngay 3 mã giảm giá thật đã được nạp sẵn
 1. `NEXUS50K`: Giảm 50.000 ₫ cho đơn từ 500.000 ₫ (mỗi user dùng tối đa 2 lần).
 2. `FREESHIP`: Giảm 30.000 ₫ cho đơn từ 200.000 ₫ (mỗi user dùng tối đa 3 lần).
 3. `WELCOME10`: Giảm 10% (tối đa 100.000 ₫) cho đơn từ 100.000 ₫ (mỗi user dùng tối đa 1 lần).
+
+---
+
+## 5. ⚠️ Cập Nhật Nghiệp Vụ Mới: Mã Lỗi Checkout & Cơ Chế Hoàn Voucher Tự Động
+
+Nhằm hỗ trợ Frontend xử lý trải nghiệm người dùng (UX) tối ưu nhất, Backend đã bổ sung các mã lỗi và cơ chế bảo vệ sau:
+
+### 5.1. Hai mã lỗi Race Condition khi bấm Chốt Đơn (`POST /api/v1/orders/checkout`)
+
+Khi khách hàng bấm đặt hàng, nếu mã giảm giá xảy ra tranh chấp ở phút chót, Backend sẽ trả về mã lỗi HTTP 409 với chi tiết:
+
+| Mã lỗi (`code`)            | HTTP Status    | Thông báo hiển thị (`message`)                 | Hướng xử lý đề xuất cho Frontend                                                                            |
+| :------------------------- | :------------- | :--------------------------------------------- | :---------------------------------------------------------------------------------------------------------- |
+| `PROMO_OUT_OF_QUOTA`       | `409 Conflict` | "Mã giảm giá vừa hết lượt sử dụng."            | Hiển thị Toast thông báo mã vừa hết số lượng, tự động bỏ mã khỏi giỏ để khách tiếp tục thanh toán tiền gốc. |
+| `PROMO_USER_LIMIT_REACHED` | `409 Conflict` | "Bạn đã sử dụng hết lượt cho phép của mã này." | Thông báo khách hàng đã đạt giới hạn dùng mã này trên tài khoản.                                            |
+
+### 5.2. Cơ chế tự động hoàn lại Voucher khi hủy đơn / hết hạn 15 phút
+
+- Nếu khách chọn thanh toán trực tuyến qua **PayOS** nhưng đóng trình duyệt hoặc không chuyển khoản sau **15 phút**:
+  - Worker hệ thống sẽ tự động chuyển đơn sang `CANCELLED`, nhả tồn kho tạm giữ và **tự động hoàn trả lượt dùng voucher** lại cho khách.
+- Nếu khách bấm **Hủy đơn hàng** (`POST /api/v1/orders/:id/cancel`):
+  - Lượt dùng voucher cũng được **hoàn trả ngay lập tức**.
+  - **Frontend có thể hiển thị thông báo:** _"Đơn hàng đã hủy, mã giảm giá của bạn đã được hoàn lại vào ví voucher."_
+
+### 5.3. Bảo toàn hãng vận chuyển thực tế khi giao hàng
+
+- Khi đơn hàng được bàn giao (Seller Dispatch), hệ thống ưu tiên giữ đúng hãng vận chuyển khách đã chọn và thanh toán (`order.shippingCarrier`: `GHN`, `GHTK`, hoặc `VIETTEL_POST`), phục vụ hiển thị chính xác logo hãng ship và tra cứu hành trình vận đơn.

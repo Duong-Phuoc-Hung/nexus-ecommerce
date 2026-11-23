@@ -296,8 +296,30 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
 
       const orderId = String(order.id);
 
-      // Record promotion usage if voucher applied
+      // Record promotion usage if voucher applied (với Advisory Lock chống Race Condition)
       if (params.promotionId) {
+        // 1. Khóa theo promotionId để tuần tự hóa việc áp mã chống race condition
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${params.promotionId}))`;
+
+        // 2. Kiểm tra lại hạn mức thực tế bên trong transaction
+        const promo = await tx.promotion.findUnique({ where: { id: params.promotionId } });
+        if (!promo || promo.usedCount >= promo.usageLimit) {
+          throw new CheckoutError(409, 'PROMO_OUT_OF_QUOTA', 'Mã giảm giá vừa hết lượt sử dụng.');
+        }
+
+        // 3. Kiểm tra lại số lần user đã dùng
+        const userCount = await tx.promotionUsage.count({
+          where: { promotionId: params.promotionId, userId: params.buyerId },
+        });
+        if (userCount >= promo.perUserLimit) {
+          throw new CheckoutError(
+            409,
+            'PROMO_USER_LIMIT_REACHED',
+            'Bạn đã sử dụng hết lượt cho phép của mã này.',
+          );
+        }
+
+        // 4. Lưu lượt dùng và tăng usedCount an toàn
         await tx.promotionUsage.create({
           data: {
             promotionId: params.promotionId,

@@ -35,7 +35,7 @@ export class DispatchOrderUseCase {
       throw new Error('Bạn không có quyền bàn giao đơn hàng của gian hàng khác.');
     }
 
-    const carrier = input.carrierCode || 'GHN';
+    const carrier = input.carrierCode || order.shippingCarrier || 'GHN';
     let trackingCode = input.trackingCode;
     let awbBarcodeUrl: string | undefined;
 

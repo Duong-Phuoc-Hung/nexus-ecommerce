@@ -109,7 +109,7 @@ export class PostgresPromotionRepository implements IPromotionRepository {
            WHERE status = 'ACTIVE' AND starts_at <= NOW() AND ends_at >= NOW()
            ORDER BY min_order_amount ASC`,
         );
-        return res.rows.map((r) =>
+        return res.rows.map((r: any) =>
           this.mapToEntity({
             id: r.id,
             code: r.code,

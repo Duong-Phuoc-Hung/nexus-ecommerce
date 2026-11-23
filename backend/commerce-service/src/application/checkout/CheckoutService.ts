@@ -322,9 +322,7 @@ export class CheckoutService {
         finalEstimatedDeliveryAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
       }
       if (finalPromoCode && this.promotionService) {
-        const promo = await (this.promotionService as any).promotionRepository?.findByCode(
-          finalPromoCode,
-        );
+        const promo = await this.promotionService.getPromotionByCode(finalPromoCode);
         if (promo) finalPromotionId = promo.id;
       }
     } else {
