@@ -256,8 +256,12 @@ async function mapServerAuction(value: unknown): Promise<Auction> {
   return {
     id,
     productId,
-    title: product.title,
-    image: product.images[0] || '/images/nexus-product-placeholder.svg',
+    title: (source.title as string) || product.title,
+    image:
+      (source.imageUrl as string) ||
+      (source.image as string) ||
+      product.images[0] ||
+      '/images/nexus-product-placeholder.svg',
     seller: product.sellerName || product.sellerId || 'Người bán Nexus',
     condition: product.condition || 'Đang cập nhật',
     description: product.description,

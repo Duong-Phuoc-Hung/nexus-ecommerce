@@ -131,6 +131,7 @@ export function SellerAuctionForm() {
       const created = await sellerAuctionsApi.create({
         productId: selectedProduct,
         title: chosenProd?.title || `Sản phẩm #${selectedProduct}`,
+        imageUrl: imageUrl.trim() || undefined,
         startPrice: price,
         bidStep,
         buyNowPrice,

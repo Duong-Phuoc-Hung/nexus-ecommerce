@@ -6,6 +6,7 @@ export type BackendAuction = {
   productId: string;
   sellerId?: string;
   title: string;
+  imageUrl?: string;
   startingPrice: number;
   currentHighestBid?: number;
   highestBidderId?: string;
@@ -23,6 +24,7 @@ export type CreateAuctionInput = {
   productId: string;
   sellerId?: string;
   title?: string;
+  imageUrl?: string;
   startPrice: number;
   bidStep?: number;
   buyNowPrice?: number;
