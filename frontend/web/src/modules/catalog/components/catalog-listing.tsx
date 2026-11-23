@@ -199,6 +199,66 @@ export function CatalogListing({ embedded = false }: { embedded?: boolean }) {
         )}
       </div>
 
+      {!embedded &&
+        query.categoryId &&
+        (() => {
+          const selectedCat = categories.find((c) => c.id === query.categoryId);
+          if (!selectedCat) return null;
+          const parentCat = selectedCat.parentId
+            ? categories.find((c) => c.id === selectedCat.parentId)
+            : null;
+          const childCats = categories.filter((c) => c.parentId === selectedCat.id);
+          return (
+            <div className="mb-6 rounded-2xl border border-line bg-white p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  {parentCat && (
+                    <p className="text-xs text-muted">
+                      Danh mục cha:{' '}
+                      <button
+                        type="button"
+                        onClick={() => navigate({ ...query, categoryId: parentCat.id, page: 1 })}
+                        className="font-semibold text-brand-dark hover:underline"
+                      >
+                        {parentCat.name}
+                      </button>
+                    </p>
+                  )}
+                  <h2 className="mt-1 text-lg font-bold text-ink">{selectedCat.name}</h2>
+                  {data?.total !== null && data?.total !== undefined && (
+                    <p className="mt-1 text-xs text-muted tabular-nums">
+                      {data.total} sản phẩm trong danh mục này
+                    </p>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate({ ...query, categoryId: '', page: 1 })}
+                  className="min-h-10 rounded-xl text-xs"
+                >
+                  Xem tất cả danh mục
+                </Button>
+              </div>
+              {childCats.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3">
+                  {childCats.map((child) => (
+                    <button
+                      key={child.id}
+                      type="button"
+                      onClick={() => navigate({ ...query, categoryId: child.id, page: 1 })}
+                      className="min-h-9 rounded-full border border-line bg-stone-50 px-3.5 text-xs font-medium text-ink hover:border-brand hover:text-brand-dark"
+                    >
+                      {child.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
       <div className="mb-6 rounded-2xl border border-line bg-white p-4 sm:p-5">
         <form role="search" onSubmit={submit}>
           <div className="flex flex-wrap gap-3">
@@ -542,13 +602,14 @@ export function CatalogListing({ embedded = false }: { embedded?: boolean }) {
                 <p className="mt-2 break-words text-lg font-bold text-brand-dark">
                   {formatPrice(product)}
                 </p>
-                {(product.rating !== undefined || product.soldCount !== undefined) && (
-                  <p className="mt-2 text-xs text-muted">
-                    {product.rating !== undefined && '★ ' + product.rating.toFixed(1)}
-                    {product.rating !== undefined && product.soldCount !== undefined && ' · '}
-                    {product.soldCount !== undefined && 'Đã bán ' + product.soldCount}
-                  </p>
-                )}
+                <p className="mt-2 text-xs text-muted">
+                  {typeof product.rating === 'number' && product.rating > 0
+                    ? `★ ${product.rating.toFixed(1)}`
+                    : 'Chưa có đánh giá'}
+                  {typeof product.soldCount === 'number' && product.soldCount > 0
+                    ? ` · Đã bán ${product.soldCount}`
+                    : ''}
+                </p>
                 <p className="mt-3 truncate text-xs text-muted">
                   {product.sellerName || 'Thông tin người bán đang cập nhật'}
                 </p>

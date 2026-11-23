@@ -13,6 +13,8 @@ import {
 import { usePathname, useRouter } from 'next/navigation';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import type { OrderDetail } from '@/modules/commerce/types/order.types';
+import { chatApi } from '../api/chat.api';
+import type { ChatThreadItem } from '../types/chat.types';
 import type {
   ActiveAuctionContext,
   ActiveCheckoutContext,
@@ -22,11 +24,62 @@ import type {
   OrderDetailTabTrigger,
 } from '../types/buyer-assistant.types';
 
+export type BuyerWidgetView = 'INBOX' | 'THREAD' | 'ASSISTANT';
+
+interface BuyerInboxCachePayload {
+  userId: string;
+  threads: ChatThreadItem[];
+  updatedAt: string;
+}
+
+const INBOX_CACHE_PREFIX = 'nexus-buyer-inbox-cache-v1:';
+
+function readInboxCache(userId: string): ChatThreadItem[] {
+  if (typeof window === 'undefined' || !userId) return [];
+  try {
+    const raw = window.localStorage.getItem(`${INBOX_CACHE_PREFIX}${userId}`);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as BuyerInboxCachePayload;
+    if (!parsed || parsed.userId !== userId || !Array.isArray(parsed.threads)) {
+      return [];
+    }
+    return parsed.threads;
+  } catch {
+    return [];
+  }
+}
+
+function writeInboxCache(userId: string, threads: ChatThreadItem[]): void {
+  if (typeof window === 'undefined' || !userId) return;
+  try {
+    const payload: BuyerInboxCachePayload = {
+      userId,
+      threads,
+      updatedAt: new Date().toISOString(),
+    };
+    window.localStorage.setItem(`${INBOX_CACHE_PREFIX}${userId}`, JSON.stringify(payload));
+  } catch {
+    // Bỏ qua lỗi quota trình duyệt
+  }
+}
+
 interface BuyerAssistantContextValue {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   toggleOpen: () => void;
   collapseAssistant: () => void;
+  activeWidgetView: BuyerWidgetView;
+  setActiveWidgetView: (view: BuyerWidgetView) => void;
+  activeThreadId: string | null;
+  openMessagesInbox: () => void;
+  openConversationThread: (conversationId: string) => void;
+  openAssistantChat: () => void;
+  returnToInbox: () => void;
+  inboxThreads: ChatThreadItem[];
+  inboxLoading: boolean;
+  inboxError: string;
+  refreshInbox: () => Promise<void>;
+  markConversationRead: (conversationId: string, lastReadSeq: number) => Promise<void>;
   pageKind: AssistantPageKind;
   pathname: string;
   isHiddenRoute: boolean;
@@ -47,7 +100,6 @@ interface BuyerAssistantContextValue {
   draftText: string;
   setDraftText: (text: string) => void;
   unreadCount: number;
-  setUnreadCount: React.Dispatch<React.SetStateAction<number>>;
   aiConversationIds: Record<string, string>;
   setAiConversationId: (orderId: string, convId: string) => void;
   // Cross-navigation & two-way sync with BuyerOrderConversationPanel
@@ -88,6 +140,12 @@ export function BuyerAssistantProvider({ children }: { children: ReactNode }) {
   const { user } = useSession();
 
   const [isOpen, setIsOpenState] = useState(false);
+  const [activeWidgetView, setActiveWidgetView] = useState<BuyerWidgetView>('ASSISTANT');
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [inboxThreads, setInboxThreads] = useState<ChatThreadItem[]>([]);
+  const [inboxLoading, setInboxLoading] = useState(false);
+  const [inboxError, setInboxError] = useState('');
+
   const [productContext, setProductContext] = useState<ActiveProductContext | null>(null);
   const [auctionContext, setAuctionContext] = useState<ActiveAuctionContext | null>(null);
   const [checkoutContext, setCheckoutContext] = useState<ActiveCheckoutContext | null>(null);
@@ -96,28 +154,14 @@ export function BuyerAssistantProvider({ children }: { children: ReactNode }) {
   const [selectedOrder, setSelectedOrder] = useState<OrderDetail | null>(null);
   const [messages, setMessages] = useState<AssistantChatMessage[]>([]);
   const [draftText, setDraftText] = useState('');
-  const [unreadCount, setUnreadCount] = useState(0);
   const [aiConversationIds, setAiConversationIds] = useState<Record<string, string>>({});
   const [pendingAutoPrompt, setPendingAutoPrompt] = useState<string | null>(null);
   const [orderDetailTrigger, setOrderDetailTrigger] = useState<OrderDetailTabTrigger | null>(null);
 
   const userKey = user?.id ?? 'guest';
   const prevUserKeyRef = useRef<string>(userKey);
-
-  // Bảo vệ riêng tư: đổi tài khoản / đăng xuất phải xóa toàn bộ ngữ cảnh & tin nhắn đang hiển thị
-  useEffect(() => {
-    if (prevUserKeyRef.current !== userKey) {
-      prevUserKeyRef.current = userKey;
-      setIsOpenState(false);
-      setSelectedOrder(null);
-      setPageOrderContext(null);
-      setMessages([]);
-      setDraftText('');
-      setUnreadCount(0);
-      setAiConversationIds({});
-      setPendingAutoPrompt(null);
-    }
-  }, [userKey]);
+  const inboxEpochRef = useRef<number>(0);
+  const inboxFetchingRef = useRef<boolean>(false);
 
   const pageKind = useMemo(() => inferPageKind(pathname), [pathname]);
 
@@ -132,7 +176,132 @@ export function BuyerAssistantProvider({ children }: { children: ReactNode }) {
     return false;
   }, [pathname, user]);
 
-  // Nếu đang mở trang chi tiết đơn, mặc định gắn activeOrder theo đơn đang xem (chỉ sau khi API xác nhận quyền)
+  // Bảo vệ riêng tư: đổi tài khoản / đăng xuất phải xóa toàn bộ ngữ cảnh & tin nhắn đang hiển thị
+  useEffect(() => {
+    if (prevUserKeyRef.current !== userKey) {
+      prevUserKeyRef.current = userKey;
+      inboxEpochRef.current += 1;
+      inboxFetchingRef.current = false;
+      setIsOpenState(false);
+      setActiveWidgetView('ASSISTANT');
+      setActiveThreadId(null);
+      setInboxThreads([]);
+      setInboxError('');
+      setInboxLoading(false);
+      setSelectedOrder(null);
+      setPageOrderContext(null);
+      setMessages([]);
+      setDraftText('');
+      setAiConversationIds({});
+      setPendingAutoPrompt(null);
+    }
+
+    if (user?.role === 'BUYER' && user.id) {
+      const cached = readInboxCache(user.id);
+      if (cached.length > 0) {
+        setInboxThreads(cached);
+      }
+    }
+  }, [user?.id, user?.role, userKey]);
+
+  const refreshInbox = useCallback(async () => {
+    if (!user || user.role !== 'BUYER' || !user.id) {
+      setInboxThreads([]);
+      setInboxError('');
+      setInboxLoading(false);
+      return;
+    }
+    if (inboxFetchingRef.current) return;
+    inboxFetchingRef.current = true;
+    const epochAtStart = inboxEpochRef.current;
+    const targetUserId = user.id;
+
+    setInboxLoading((prev) => prev || inboxThreads.length === 0);
+    try {
+      const threads = await chatApi.getBuyerThreads(targetUserId);
+      if (epochAtStart !== inboxEpochRef.current) return;
+      setInboxThreads(threads);
+      setInboxError('');
+      writeInboxCache(targetUserId, threads);
+    } catch {
+      if (epochAtStart !== inboxEpochRef.current) return;
+      // Giữ số chưa đọc đã xác nhận gần nhất cho tài khoản hiện tại khi mất kết nối
+      setInboxError(
+        'Tạm mất kết nối máy chủ chat. Đang giữ số liệu gần nhất và sẽ tự đồng bộ lại.',
+      );
+    } finally {
+      if (epochAtStart === inboxEpochRef.current) {
+        setInboxLoading(false);
+      }
+      inboxFetchingRef.current = false;
+    }
+  }, [inboxThreads.length, user]);
+
+  // Polling hộp thư Buyer liên tục ngay cả khi widget đóng, đồng bộ khi online/focus/tab visible
+  useEffect(() => {
+    if (!user || user.role !== 'BUYER' || isHiddenRoute) return;
+
+    void refreshInbox();
+    const timer = window.setInterval(() => {
+      void refreshInbox();
+    }, 5000);
+
+    const handleSync = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshInbox();
+      }
+    };
+    const handleCustomSync = () => {
+      void refreshInbox();
+    };
+
+    window.addEventListener('focus', handleCustomSync);
+    window.addEventListener('online', handleCustomSync);
+    window.addEventListener('nexus:chat-sync', handleCustomSync);
+    document.addEventListener('visibilitychange', handleSync);
+
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', handleCustomSync);
+      window.removeEventListener('online', handleCustomSync);
+      window.removeEventListener('nexus:chat-sync', handleCustomSync);
+      document.removeEventListener('visibilitychange', handleSync);
+    };
+  }, [isHiddenRoute, refreshInbox, user]);
+
+  const markConversationRead = useCallback(
+    async (conversationId: string, lastReadSeq: number) => {
+      if (!user || user.role !== 'BUYER' || !user.id || lastReadSeq <= 0) return;
+      const epochAtStart = inboxEpochRef.current;
+      const targetUserId = user.id;
+      try {
+        const res = await chatApi.markAsRead(conversationId, lastReadSeq);
+        if (epochAtStart !== inboxEpochRef.current) return;
+        setInboxThreads((prev) => {
+          const next = prev.map((thread) =>
+            thread.id === conversationId
+              ? {
+                  ...thread,
+                  lastSeq: Math.max(thread.lastSeq ?? 0, res.lastSeq ?? 0),
+                  myLastReadSeq: Math.max(
+                    thread.myLastReadSeq ?? 0,
+                    res.myLastReadSeq ?? lastReadSeq,
+                  ),
+                  unreadCount: Math.max(0, Number(res.unreadCount ?? 0)),
+                }
+              : thread,
+          );
+          writeInboxCache(targetUserId, next);
+          return next;
+        });
+      } catch {
+        // Sẽ tự đồng bộ lại khi kết nối trở về
+      }
+    },
+    [user],
+  );
+
+  // Nếu đang mở trang chi tiết đơn, mặc định gắn activeOrder theo đơn đang xem
   useEffect(() => {
     if (pageKind === 'ORDER_DETAIL' && pageOrderContext) {
       setSelectedOrder((prev) => {
@@ -142,20 +311,51 @@ export function BuyerAssistantProvider({ children }: { children: ReactNode }) {
     }
   }, [pageKind, pageOrderContext]);
 
+  const unreadCount = useMemo(
+    () => inboxThreads.reduce((sum, t) => sum + Math.max(0, Number(t.unreadCount || 0)), 0),
+    [inboxThreads],
+  );
+
+  // Giữ nguyên số tin chưa đọc khi mở widget / danh sách; chỉ xóa từng phòng khi thực sự đọc phòng đó
   const setIsOpen = useCallback((open: boolean) => {
     setIsOpenState(open);
-    if (open) {
-      setUnreadCount(0);
-    }
   }, []);
 
   const toggleOpen = useCallback(() => {
     setIsOpenState((prev) => {
       const next = !prev;
-      if (next) setUnreadCount(0);
+      if (next && user?.role === 'BUYER' && unreadCount > 0) {
+        setActiveWidgetView('INBOX');
+        setActiveThreadId(null);
+      }
       return next;
     });
+  }, [unreadCount, user?.role]);
+
+  const openMessagesInbox = useCallback(() => {
+    setActiveWidgetView('INBOX');
+    setActiveThreadId(null);
+    setIsOpenState(true);
+    void refreshInbox();
+  }, [refreshInbox]);
+
+  const openConversationThread = useCallback((conversationId: string) => {
+    setActiveThreadId(conversationId);
+    setActiveWidgetView('THREAD');
+    setIsOpenState(true);
   }, []);
+
+  const openAssistantChat = useCallback(() => {
+    setActiveThreadId(null);
+    setActiveWidgetView('ASSISTANT');
+    setIsOpenState(true);
+  }, []);
+
+  const returnToInbox = useCallback(() => {
+    setActiveThreadId(null);
+    setActiveWidgetView('INBOX');
+    void refreshInbox();
+  }, [refreshInbox]);
 
   const collapseAssistant = useCallback(() => {
     setIsOpenState(false);
@@ -198,12 +398,14 @@ export function BuyerAssistantProvider({ children }: { children: ReactNode }) {
   const openAssistantWithOrder = useCallback(
     (order: OrderDetail, autoPrompt?: string) => {
       selectOrder(order, true);
-      setIsOpen(true);
+      setActiveThreadId(null);
+      setActiveWidgetView('ASSISTANT');
+      setIsOpenState(true);
       if (autoPrompt) {
         setPendingAutoPrompt(autoPrompt);
       }
     },
-    [selectOrder, setIsOpen],
+    [selectOrder],
   );
 
   const clearPendingAutoPrompt = useCallback(() => {
@@ -267,6 +469,18 @@ export function BuyerAssistantProvider({ children }: { children: ReactNode }) {
     setIsOpen,
     toggleOpen,
     collapseAssistant,
+    activeWidgetView,
+    setActiveWidgetView,
+    activeThreadId,
+    openMessagesInbox,
+    openConversationThread,
+    openAssistantChat,
+    returnToInbox,
+    inboxThreads,
+    inboxLoading,
+    inboxError,
+    refreshInbox,
+    markConversationRead,
     pageKind,
     pathname,
     isHiddenRoute,
@@ -285,7 +499,6 @@ export function BuyerAssistantProvider({ children }: { children: ReactNode }) {
     draftText,
     setDraftText,
     unreadCount,
-    setUnreadCount,
     aiConversationIds,
     setAiConversationId,
     openAssistantWithOrder,

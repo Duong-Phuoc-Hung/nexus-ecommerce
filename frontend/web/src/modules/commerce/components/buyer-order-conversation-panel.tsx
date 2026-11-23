@@ -241,7 +241,58 @@ export function BuyerOrderConversationPanel({
   );
   const [copiedCaseId, setCopiedCaseId] = useState<boolean>(false);
 
-  const messageListBottomRef = useRef<HTMLDivElement | null>(null);
+  const messageListContainerRef = useRef<HTMLDivElement | null>(null);
+  const prevTailMessageKeyRef = useRef<string>('');
+
+  const scrollMessageListToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    const container = messageListContainerRef.current;
+    if (!container) return;
+    const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+    if (behavior === 'auto') {
+      container.scrollTop = maxScrollTop;
+      return;
+    }
+    container.scrollTo({ top: maxScrollTop, behavior: 'smooth' });
+  }, []);
+
+  const tailMessage = messages[messages.length - 1];
+  const tailMessageKey = tailMessage
+    ? `${tailMessage.conversationId}:${tailMessage.seq}:${tailMessage.clientMessageId || ''}:${tailMessage.createdAt}`
+    : '';
+
+  useEffect(() => {
+    if (!tailMessageKey) {
+      prevTailMessageKeyRef.current = '';
+      return;
+    }
+    if (!isWorkspaceOpen || loadingConversation) return;
+    if (prevTailMessageKeyRef.current !== tailMessageKey) {
+      const isInitialLoad = !prevTailMessageKeyRef.current;
+      prevTailMessageKeyRef.current = tailMessageKey;
+      let cancelled = false;
+      let frame2 = 0;
+      let settleTimer = 0;
+      const frame1 = window.requestAnimationFrame(() => {
+        frame2 = window.requestAnimationFrame(() => {
+          if (cancelled) return;
+          scrollMessageListToBottom(isInitialLoad ? 'auto' : 'smooth');
+          // Bảo đảm cuộn chạm đáy sau khi bố cục/hình ảnh hoàn tất mà không kéo trang ngoài
+          settleTimer = window.setTimeout(
+            () => {
+              if (!cancelled) scrollMessageListToBottom('auto');
+            },
+            isInitialLoad ? 50 : 320,
+          );
+        });
+      });
+      return () => {
+        cancelled = true;
+        window.cancelAnimationFrame(frame1);
+        if (frame2) window.cancelAnimationFrame(frame2);
+        if (settleTimer) window.clearTimeout(settleTimer);
+      };
+    }
+  }, [isWorkspaceOpen, loadingConversation, scrollMessageListToBottom, tailMessageKey]);
   const composerFileInputRef = useRef<HTMLInputElement | null>(null);
   const caseFileInputRef = useRef<HTMLInputElement | null>(null);
   const handledUrlTriggerRef = useRef<string>('');
@@ -303,8 +354,15 @@ export function BuyerOrderConversationPanel({
               : prev,
           );
         }
-        if (maxSeq > conv.buyerLastReadSeq) {
-          void orderConversationsApi.markAsRead(conv.id, maxSeq).catch(() => {});
+        if (
+          maxSeq > conv.buyerLastReadSeq &&
+          typeof document !== 'undefined' &&
+          document.visibilityState === 'visible'
+        ) {
+          void orderConversationsApi
+            .markAsRead(conv.id, maxSeq)
+            .then(() => window.dispatchEvent(new CustomEvent('nexus:chat-sync')))
+            .catch(() => {});
         }
       } catch {
         if (reqSeq !== openRequestSeqRef.current) return;
@@ -323,6 +381,7 @@ export function BuyerOrderConversationPanel({
       setIsWorkspaceOpen(true);
       setActiveChannel(channel);
       setConversation(null);
+      prevTailMessageKeyRef.current = '';
       setMessages([]);
       setPendingAttachments([]);
       setComposerText('');
@@ -452,7 +511,10 @@ export function BuyerOrderConversationPanel({
             return merged.sort((a, b) => a.seq - b.seq);
           });
           const latestSeq = polled.items[polled.items.length - 1]?.seq || highestSeq;
-          await orderConversationsApi.markAsRead(activeConvId, latestSeq);
+          if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+            await orderConversationsApi.markAsRead(activeConvId, latestSeq);
+            window.dispatchEvent(new CustomEvent('nexus:chat-sync'));
+          }
         }
       } catch {
         // Bỏ qua lỗi mạng tạm thời trong lúc polling nền
@@ -653,7 +715,7 @@ export function BuyerOrderConversationPanel({
         setConversation(result.conversation);
       }
       setTimeout(() => {
-        messageListBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        scrollMessageListToBottom();
       }, 60);
     } catch (err) {
       if (reqSeqAtSend !== openRequestSeqRef.current) return;
@@ -690,7 +752,7 @@ export function BuyerOrderConversationPanel({
       }
       setMessages((prev) => [...prev, res.systemMessage]);
       setTimeout(() => {
-        messageListBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        scrollMessageListToBottom();
       }, 80);
     } catch (err) {
       setComposerError(
@@ -1444,7 +1506,11 @@ export function BuyerOrderConversationPanel({
             )}
 
             {/* Danh sách tin nhắn */}
-            <div className="max-h-[420px] min-h-[240px] overflow-y-auto p-4 sm:p-5 space-y-3.5">
+            <div
+              ref={messageListContainerRef}
+              style={{ overflowAnchor: 'none' }}
+              className="max-h-[420px] min-h-[240px] overflow-y-auto p-4 sm:p-5 space-y-3.5"
+            >
               {loadingConversation ? (
                 <div className="flex flex-col items-center justify-center py-12 text-xs text-muted gap-2">
                   <Loader2 className="size-5 animate-spin text-brand-dark" />
@@ -1638,7 +1704,6 @@ export function BuyerOrderConversationPanel({
                       </div>
                     );
                   })}
-                  <div ref={messageListBottomRef} />
                 </>
               )}
             </div>

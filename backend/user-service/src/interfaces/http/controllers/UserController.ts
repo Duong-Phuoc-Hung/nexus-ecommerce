@@ -336,13 +336,11 @@ export class UserController {
       const message = error instanceof Error ? error.message : 'Cập nhật hồ sơ thất bại.';
       const status =
         message.includes('đã được đăng ký') || message.includes('already exists') ? 409 : 400;
-      res
-        .status(status)
-        .json({
-          success: false,
-          error: message,
-          ...(message.startsWith('INVALID_DATE_OF_BIRTH') ? { code: 'INVALID_DATE_OF_BIRTH' } : {}),
-        });
+      res.status(status).json({
+        success: false,
+        error: message,
+        ...(message.startsWith('INVALID_DATE_OF_BIRTH') ? { code: 'INVALID_DATE_OF_BIRTH' } : {}),
+      });
     }
   }
 

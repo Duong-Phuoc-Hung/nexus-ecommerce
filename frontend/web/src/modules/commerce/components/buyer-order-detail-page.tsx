@@ -17,6 +17,7 @@ import { useSession } from '@/modules/auth/hooks/use-session';
 import { readAddresses } from '@/modules/user/utils/address-book';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { BuyerOrderConversationPanel } from './buyer-order-conversation-panel';
+import { BuyerOrderReviewCard } from './buyer-order-review-card';
 import {
   getOrderPaymentPresentation,
   type LivePaymentStatusSnapshot,
@@ -256,6 +257,7 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
   );
   const [copiedTracking, setCopiedTracking] = useState(false);
   const [copiedOrderId, setCopiedOrderId] = useState(false);
+  const [receiptOpen, setReceiptOpen] = useState(false);
   const [productImages, setProductImages] = useState<Record<string, string>>({});
   const [conversationTrigger, setConversationTrigger] = useState<{
     action: 'OPEN_SELLER' | 'OPEN_SUPPORT' | 'OPEN_CASE_MODAL' | 'ASK_AI_SHIPMENT';
@@ -1503,6 +1505,14 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
                     </div>
                   </div>
                 </div>
+
+                {/* Đánh giá người bán & sản phẩm sau khi giao hoàn tất */}
+                <BuyerOrderReviewCard
+                  order={order}
+                  buyerId={user.id}
+                  buyerRole={user.role}
+                  hasActiveDispute={confirmedCases.some(isCaseStillOpen)}
+                />
               </div>
 
               {/* CỘT PHỤ (BÊN PHẢI): Bảng phân tách tiền hàng, Trung tâm Hỗ trợ/Trả hàng/Khiếu nại, Bảo chứng Nexus */}
@@ -1588,6 +1598,18 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
                       </span>
                     </div>
                   </div>
+
+                  {(effectiveIsPaid || isDelivered) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setReceiptOpen(true)}
+                      className="mt-4 min-h-11 w-full rounded-xl border-stone-300 text-xs font-semibold text-stone-800"
+                    >
+                      <Receipt className="mr-1.5 size-4" aria-hidden="true" />
+                      Xem biên nhận điện tử
+                    </Button>
+                  )}
                 </div>
 
                 {/* 2. HỖ TRỢ & THEO DÕI HỒ SƠ ĐƠN HÀNG */}
@@ -1941,6 +1963,120 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
               onClick={handleConfirmReceipt}
             >
               {confirmingReceipt ? 'Đang ghi nhận…' : 'Xác nhận đã nhận hàng'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Biên nhận điện tử khớp snapshot đơn hàng */}
+      <Dialog open={receiptOpen} onOpenChange={setReceiptOpen}>
+        <DialogContent className="max-w-lg p-6 sm:p-7">
+          <DialogTitle className="flex items-center gap-2 text-lg font-bold text-stone-950">
+            <Receipt className="size-5 text-brand-dark" aria-hidden="true" />
+            Biên nhận giao dịch Nexus
+          </DialogTitle>
+          <DialogDescription className="mt-1 text-xs text-stone-500">
+            Chứng từ đối chiếu theo bản ghi thanh toán tại thời điểm đặt hàng.
+          </DialogDescription>
+
+          {order && (
+            <div className="mt-4 space-y-4 text-sm">
+              <div className="rounded-xl border border-line bg-stone-50 p-4 text-xs space-y-1.5">
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted">Mã đơn hàng:</span>
+                  <strong className="font-mono text-stone-900">
+                    {order.orderCode || order.id}
+                  </strong>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted">Ngày tạo đơn:</span>
+                  <strong className="tabular-nums text-stone-900">
+                    {new Date(order.createdAt).toLocaleString('vi-VN')}
+                  </strong>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted">Người mua:</span>
+                  <strong className="text-stone-900">{order.buyer || user?.fullName}</strong>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted">Gian hàng:</span>
+                  <strong className="text-stone-900">{order.seller || 'Gian hàng Nexus'}</strong>
+                </div>
+                {order.paymentTransactionId && (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted">Mã giao dịch:</span>
+                    <strong className="font-mono text-stone-900">
+                      {order.paymentTransactionId}
+                    </strong>
+                  </div>
+                )}
+              </div>
+
+              <ul className="divide-y divide-line border-y border-line py-1 text-xs">
+                {order.items.map((item, idx) => (
+                  <li
+                    key={`${item.productId}-${idx}`}
+                    className="flex justify-between gap-3 py-2.5"
+                  >
+                    <span className="text-stone-800">
+                      {item.productName} × {item.quantity}
+                    </span>
+                    <strong className="shrink-0 tabular-nums text-stone-950">
+                      {new Intl.NumberFormat('vi-VN').format(item.totalPrice)} ₫
+                    </strong>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="space-y-1.5 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-muted">Tiền hàng:</span>
+                  <span className="tabular-nums font-medium">
+                    {new Intl.NumberFormat('vi-VN').format(subtotal)} ₫
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted">Phí vận chuyển:</span>
+                  <span className="tabular-nums font-medium">
+                    {shippingFee > 0
+                      ? `${new Intl.NumberFormat('vi-VN').format(shippingFee)} ₫`
+                      : 'Miễn phí'}
+                  </span>
+                </div>
+                {discountAmount > 0 && (
+                  <div className="flex justify-between text-emerald-700">
+                    <span>Giảm giá:</span>
+                    <span className="tabular-nums font-medium">
+                      -{new Intl.NumberFormat('vi-VN').format(discountAmount)} ₫
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between border-t border-line pt-2 text-sm font-bold text-stone-950">
+                  <span>Tổng cộng:</span>
+                  <span className="tabular-nums text-brand-dark">
+                    {new Intl.NumberFormat('vi-VN').format(totalAmount)} ₫
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="mt-5 flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => window.print()}
+              className="min-h-10 rounded-xl text-xs"
+            >
+              <Printer className="mr-1.5 size-3.5" aria-hidden="true" />
+              In biên nhận
+            </Button>
+            <Button
+              type="button"
+              onClick={() => setReceiptOpen(false)}
+              className="min-h-10 rounded-xl bg-brand-dark px-5 text-xs text-white"
+            >
+              Đóng
             </Button>
           </div>
         </DialogContent>
