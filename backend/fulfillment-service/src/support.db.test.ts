@@ -173,4 +173,43 @@ test('Fulfillment Persistence Integration Test Suite', async (t) => {
       assert.equal(ledgers[0].reason, 'Nhập bổ sung lô hàng kiểm kê ngày 23/11');
     },
   );
+
+  await t.test(
+    '8. Prisma ORM: Truy vấn thực tế danh sách kho bãi (fulfillment_warehouses) và đối tác vận chuyển (fulfillment_carriers) từ PostgreSQL',
+    async () => {
+      // 1. Kiểm tra bảng fulfillment_warehouses
+      const warehouses = await prisma.warehouse.findMany({
+        where: { isActive: true },
+        orderBy: { id: 'asc' },
+      });
+      assert.ok(
+        warehouses.length >= 2,
+        `Expected at least 2 warehouses in DB, got ${warehouses.length}`,
+      );
+      const hcmWarehouse = warehouses.find((w) => w.code === 'WH_001');
+      assert.ok(hcmWarehouse !== undefined, 'Warehouse WH_001 must exist');
+      assert.equal(hcmWarehouse?.city, 'Hồ Chí Minh');
+
+      // 2. Kiểm tra bảng fulfillment_carriers
+      const carriers = await prisma.carrier.findMany({
+        where: { isActive: true },
+        orderBy: { id: 'asc' },
+      });
+      assert.ok(
+        carriers.length >= 4,
+        `Expected at least 4 active carriers in DB, got ${carriers.length}`,
+      );
+      const carrierCodes = carriers.map((c) => c.carrierCode);
+      assert.ok(carrierCodes.includes('GHN'), 'GHN must exist in fulfillment_carriers');
+      assert.ok(carrierCodes.includes('GHTK'), 'GHTK must exist in fulfillment_carriers');
+      assert.ok(
+        carrierCodes.includes('VIETTEL_POST'),
+        'VIETTEL_POST must exist in fulfillment_carriers',
+      );
+      assert.ok(
+        carrierCodes.includes('JT_EXPRESS'),
+        'JT_EXPRESS must exist in fulfillment_carriers',
+      );
+    },
+  );
 });
