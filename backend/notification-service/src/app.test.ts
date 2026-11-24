@@ -77,3 +77,84 @@ test('POST /api/v1/notifications/email/send sends custom notification email endp
     assert.equal(json.success, true);
   });
 });
+
+test('Web Push Notifications: VAPID Key, Subscribe, Broadcast & Unsubscribe lifecycle', async () => {
+  await withNotificationServer(async (baseUrl) => {
+    // 1. GET /api/v1/notifications/push/vapid-public-key
+    const vapidRes = await fetch(`${baseUrl}/api/v1/notifications/push/vapid-public-key`);
+    assert.equal(vapidRes.status, 200);
+    const vapidJson = (await vapidRes.json()) as any;
+    assert.equal(vapidJson.success, true);
+    assert.ok(vapidJson.data.publicKey);
+    assert.equal(vapidJson.data.algorithm, 'ES256');
+
+    // 2. POST /api/v1/notifications/push/subscribe
+    const mockEndpoint = 'https://fcm.googleapis.com/fcm/send/test-sub-token-123';
+    const subRes = await fetch(`${baseUrl}/api/v1/notifications/push/subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: 'usr_buyer_001',
+        subscription: {
+          endpoint: mockEndpoint,
+          keys: {
+            p256dh:
+              'BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QT9t04knZX-MDSHWeS8WWD0nG5pLSmW4B_yA9f7kP9kGfM6c',
+            auth: 'tBHItJI5svbpez7KI4CCXg',
+          },
+        },
+      }),
+    });
+    assert.equal(subRes.status, 201);
+    const subJson = (await subRes.json()) as any;
+    assert.equal(subJson.success, true);
+    assert.equal(subJson.data.userId, 'usr_buyer_001');
+    assert.equal(subJson.data.endpoint, mockEndpoint);
+
+    // 3. GET /api/v1/notifications/push/subscriptions?userId=usr_buyer_001
+    const listRes = await fetch(
+      `${baseUrl}/api/v1/notifications/push/subscriptions?userId=usr_buyer_001`,
+    );
+    assert.equal(listRes.status, 200);
+    const listJson = (await listRes.json()) as any;
+    assert.equal(listJson.count, 1);
+    assert.equal(listJson.data[0].endpoint, mockEndpoint);
+
+    // 4. POST /api/v1/notifications/push/send (Dispatches push to buyer)
+    const sendRes = await fetch(`${baseUrl}/api/v1/notifications/push/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: 'usr_buyer_001',
+        title: 'Đơn hàng NX-ORD-8021 đã xuất kho',
+        body: 'Vận đơn GHN đang trên đường giao tới bạn.',
+        url: '/orders/NX-ORD-8021',
+      }),
+    });
+    assert.equal(sendRes.status, 200);
+    const sendJson = (await sendRes.json()) as any;
+    assert.equal(sendJson.success, true);
+    assert.equal(sendJson.data.targetCount, 1);
+    assert.deepEqual(sendJson.data.deliveredEndpoints, [mockEndpoint]);
+
+    // 5. POST /api/v1/notifications/push/unsubscribe
+    const unsubRes = await fetch(`${baseUrl}/api/v1/notifications/push/unsubscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        endpoint: mockEndpoint,
+      }),
+    });
+    assert.equal(unsubRes.status, 200);
+    const unsubJson = (await unsubRes.json()) as any;
+    assert.equal(unsubJson.success, true);
+    assert.equal(unsubJson.removed, true);
+
+    // 6. Verify list is now empty for that user
+    const listEmptyRes = await fetch(
+      `${baseUrl}/api/v1/notifications/push/subscriptions?userId=usr_buyer_001`,
+    );
+    const listEmptyJson = (await listEmptyRes.json()) as any;
+    assert.equal(listEmptyJson.count, 0);
+  });
+});

@@ -487,6 +487,44 @@ test('Shipment By Order & Carrier Webhook API: GET /by-order/:orderId and POST /
     assert.equal(webhookJson.success, true);
     assert.equal(webhookJson.data.status, 'DELIVERED');
     assert.equal(webhookJson.data.currentLocation, 'Hà Nội · Đã phát thành công cho người nhận');
+
+    // 3. Kiểm tra Xác thực HMAC Webhook 3PL (GHN/GHTK)
+    const testPayload = JSON.stringify({
+      carrier: 'GHN',
+      tracking_code: 'GHTK5908112',
+      status: 'IN_TRANSIT',
+      current_location: 'Kho phân loại Hà Nội',
+    });
+    const crypto = await import('crypto');
+    const validSig = crypto
+      .createHmac('sha256', 'nexus_carrier_webhook_default_secret')
+      .update(testPayload)
+      .digest('hex');
+
+    // 3.1: Gửi chữ ký hợp lệ -> 200 OK
+    const validHmacRes = await fetch(`${baseUrl}/api/v1/fulfillment/carriers/webhook`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-carrier-signature': validSig,
+      },
+      body: testPayload,
+    });
+    assert.equal(validHmacRes.status, 200);
+
+    // 3.2: Gửi chữ ký sai lệch -> 401 Unauthorized
+    const invalidHmacRes = await fetch(`${baseUrl}/api/v1/fulfillment/carriers/webhook`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-carrier-signature': 'invalid_tampered_hmac_signature',
+      },
+      body: testPayload,
+    });
+    assert.equal(invalidHmacRes.status, 401);
+    const invalidHmacJson = (await invalidHmacRes.json()) as any;
+    assert.equal(invalidHmacJson.success, false);
+    assert.ok(invalidHmacJson.error.includes('không hợp lệ'));
   });
 });
 

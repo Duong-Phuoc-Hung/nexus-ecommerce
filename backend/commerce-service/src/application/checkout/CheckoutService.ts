@@ -160,7 +160,12 @@ export class CheckoutService {
   public async quote(buyerId: string, body: unknown) {
     const lines = parseCartLines(body);
     const address = parseShippingAddress(body);
-    const priced = await this.priceCart(buyerId, lines, address);
+    const targetSellerId =
+      isRecord(body) && typeof body.targetSellerId === 'string' && body.targetSellerId.trim()
+        ? String(body.targetSellerId).trim()
+        : undefined;
+    const isAuction = isRecord(body) && Boolean(body.isAuction);
+    const priced = await this.priceCart(buyerId, lines, address, { targetSellerId, isAuction });
 
     const shippingOptions = this.buildShippingOptions(priced.shippingFee);
     const requestedOptionId =
@@ -321,7 +326,12 @@ export class CheckoutService {
       }
     }
 
-    const priced = await this.priceCart(buyerId, lines, address);
+    const targetSellerId =
+      isRecord(body) && typeof body.targetSellerId === 'string' && body.targetSellerId.trim()
+        ? String(body.targetSellerId).trim()
+        : undefined;
+    const isAuction = isRecord(body) && Boolean(body.isAuction);
+    const priced = await this.priceCart(buyerId, lines, address, { targetSellerId, isAuction });
 
     let finalShippingFee = priced.shippingFee;
     let finalDiscountAmount = 0;
@@ -716,11 +726,17 @@ export class CheckoutService {
     };
   }
 
-  private async priceCart(buyerId: string, lines: CartLineInput[], address: ShippingAddress) {
+  private async priceCart(
+    buyerId: string,
+    lines: CartLineInput[],
+    address: ShippingAddress,
+    options?: { targetSellerId?: string; isAuction?: boolean },
+  ) {
     const items: PricedLine[] = [];
     const sellers = new Set<string>();
     const stockByProduct: Record<string, number> = {};
 
+    const allProducts = new Map<string, CatalogProduct>();
     for (const line of lines) {
       const product = await this.catalog.findProduct(line.productId);
       if (!product) {
@@ -751,7 +767,28 @@ export class CheckoutService {
           'Không thể mua sản phẩm của chính mình.',
         );
       }
+      allProducts.set(line.productId, product);
       sellers.add(product.sellerId);
+    }
+
+    // Nếu chỉ định targetSellerId -> Lọc chỉ các sản phẩm của Seller đó để tách đơn
+    const activeLines = options?.targetSellerId
+      ? lines.filter((l) => allProducts.get(l.productId)?.sellerId === options.targetSellerId)
+      : lines;
+
+    if (options?.targetSellerId && activeLines.length === 0) {
+      throw new CheckoutError(
+        404,
+        'SELLER_PRODUCTS_NOT_FOUND',
+        'Không tìm thấy sản phẩm của Seller được chỉ định trong giỏ hàng.',
+        { availableSellerIds: Array.from(sellers) },
+      );
+    }
+
+    const activeSellers = new Set<string>();
+    for (const line of activeLines) {
+      const product = allProducts.get(line.productId)!;
+      activeSellers.add(product.sellerId);
       stockByProduct[product.id] = product.stockQuantity;
       const unitPrice = line.price !== undefined && line.price > 0 ? line.price : product.price;
       items.push({
@@ -763,15 +800,16 @@ export class CheckoutService {
       });
     }
 
-    if (sellers.size > 1) {
+    if (activeSellers.size > 1) {
       throw new CheckoutError(
         422,
         'MIXED_SELLERS_NOT_SUPPORTED',
-        'Mỗi đơn hàng chỉ được chứa sản phẩm của một Seller.',
+        'Mỗi đơn hàng chỉ được chứa sản phẩm của một Seller. Vui lòng chọn Shop cần thanh toán (targetSellerId).',
+        { availableSellerIds: Array.from(activeSellers) },
       );
     }
 
-    const shipping = await this.shipping.quote(address, lines);
+    const shipping = await this.shipping.quote(address, activeLines);
     if (!shipping.supported) {
       throw new CheckoutError(
         422,
@@ -781,13 +819,20 @@ export class CheckoutService {
     }
 
     const subtotal = items.reduce((sum, item) => sum + item.subtotal, 0);
+
+    // Tự động miễn phí vận chuyển cho đơn hàng từ 500.000đ trở lên (không áp dụng cho đấu giá)
+    const FREE_SHIPPING_THRESHOLD = 500_000;
+    const finalShippingFee =
+      !options?.isAuction && subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : shipping.fee;
+
     return {
-      sellerId: Array.from(sellers)[0],
+      sellerId: Array.from(activeSellers)[0],
       items,
       stockByProduct,
       subtotal,
-      shippingFee: shipping.fee,
-      total: subtotal + shipping.fee,
+      shippingFee: finalShippingFee,
+      total: subtotal + finalShippingFee,
+      availableSellerIds: Array.from(sellers),
     };
   }
 }

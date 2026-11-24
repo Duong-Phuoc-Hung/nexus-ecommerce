@@ -11,11 +11,13 @@ import { EventLogController } from './interfaces/http/controllers/EventLogContro
 import { createEventLogRoutes } from './interfaces/http/routes/EventLogRoutes';
 import { GlobalEventAuditSubscriber } from './application/listeners/GlobalEventAuditSubscriber';
 import { EmailService } from './infrastructure/email/EmailService';
+import { WebPushService } from './application/services/WebPushService';
 
 export interface AppDependencies {
   eventLogRepository?: IEventLogRepository;
   eventPublisher?: any;
   emailService?: EmailService;
+  webPushService?: WebPushService;
 }
 
 export function createApplication(deps?: AppDependencies): Application {
@@ -36,11 +38,13 @@ export function createApplication(deps?: AppDependencies): Application {
 
   // Email & Notifications
   const emailService = deps?.emailService || new EmailService();
+  const webPushService = deps?.webPushService || new WebPushService();
   const notificationRepository = new InMemoryNotificationRepository();
   const getNotificationDetailUseCase = new GetNotificationDetailUseCase(notificationRepository);
   const notificationController = new NotificationController(
     getNotificationDetailUseCase,
     emailService,
+    webPushService,
   );
   app.use('/api/v1/notifications', createNotificationRoutes(notificationController));
 

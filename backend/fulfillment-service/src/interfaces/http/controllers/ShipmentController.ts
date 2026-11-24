@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { Request, Response } from 'express';
 import { GetShipmentDetailUseCase } from '../../../application/use-cases/GetShipmentDetailUseCase';
 import { SearchShipmentsUseCase } from '../../../application/use-cases/SearchShipmentsUseCase';
@@ -273,6 +274,49 @@ export class ShipmentController {
           error: 'ProcessCarrierWebhookUseCase not configured.',
         });
         return;
+      }
+
+      // Xác thực chữ ký bí mật HMAC Webhook 3PL (GHN / GHTK / Viettel Post)
+      const carrierSecret =
+        process.env.CARRIER_WEBHOOK_SECRET ||
+        process.env.GHN_WEBHOOK_SECRET ||
+        process.env.GHTK_WEBHOOK_SECRET;
+
+      const signature =
+        (req.headers['x-carrier-signature'] as string) ||
+        (req.headers['x-ghn-signature'] as string) ||
+        (req.headers['x-ghtk-signature'] as string) ||
+        (req.headers['x-signature'] as string);
+
+      if (carrierSecret || signature) {
+        if (!signature) {
+          res.status(401).json({
+            success: false,
+            error:
+              'Thiếu chữ ký xác thực Webhook 3PL (Header x-carrier-signature hoặc x-ghn-signature).',
+          });
+          return;
+        }
+
+        const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {});
+        const expectedSignature = crypto
+          .createHmac('sha256', carrierSecret || 'nexus_carrier_webhook_default_secret')
+          .update(rawBody)
+          .digest('hex');
+
+        const signatureBuf = Buffer.from(signature);
+        const expectedBuf = Buffer.from(expectedSignature);
+
+        if (
+          signatureBuf.length !== expectedBuf.length ||
+          !crypto.timingSafeEqual(signatureBuf, expectedBuf)
+        ) {
+          res.status(401).json({
+            success: false,
+            error: 'Chữ ký Webhook 3PL không hợp lệ hoặc đã bị thay đổi.',
+          });
+          return;
+        }
       }
 
       const carrier = (req.body.carrier || 'GHN') as string;

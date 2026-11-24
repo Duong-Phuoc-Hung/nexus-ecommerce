@@ -268,6 +268,143 @@ test('3. CheckoutService: supports AUCTION_SETTLEMENT checkout with winning bid 
   console.log('✅ [TEST PASS] AUCTION_SETTLEMENT checkout with winning bid price verified!');
 });
 
+test('4. CheckoutService: supports Auto Multi-Seller Split Order via targetSellerId and validation', async () => {
+  const mockCatalog: ICatalogClient = {
+    findProduct: async (productId: string) => {
+      if (productId === '301') {
+        return {
+          id: productId,
+          sellerId: 'seller_A',
+          title: 'Sản phẩm Shop A',
+          price: 200000,
+          stockQuantity: 5,
+          status: 'ACTIVE',
+        };
+      }
+      if (productId === '302') {
+        return {
+          id: productId,
+          sellerId: 'seller_B',
+          title: 'Sản phẩm Shop B',
+          price: 300000,
+          stockQuantity: 10,
+          status: 'ACTIVE',
+        };
+      }
+      return null;
+    },
+  };
+
+  const mockShipping: IShippingQuote = {
+    quote: async () => ({ supported: true, fee: 30000 }),
+  };
+
+  const mockGateway: IPaymentGateway = {
+    isConfigured: () => true,
+    createPaymentLink: async () => ({
+      checkoutUrl: 'https://pay.test/link',
+      paymentLinkId: 'link_1',
+    }),
+    verifyWebhook: () => null,
+  };
+
+  let createdOrderParams: any = null;
+  const mockRepo: ICheckoutRepository = {
+    saveQuote: async () => {},
+    findQuote: async () => null,
+    createOrder: async (params: any) => {
+      createdOrderParams = params;
+      return {
+        order: {
+          id: 'ord_split_A',
+          orderCode: 'ORD-SPLIT-A',
+          buyerId: params.buyerId,
+          sellerId: params.sellerId,
+          status: 'PENDING_PAYMENT',
+          totalAmount: params.totalAmount,
+          shippingFee: params.shippingFee,
+          shippingAddress: params.shippingAddress,
+          expiresAt: params.orderExpiresAt,
+          items: params.items,
+        },
+        payment: {
+          id: 'pmt_split_A',
+          orderId: 'ord_split_A',
+          payosOrderCode: 111222,
+          amount: params.totalAmount,
+          currency: 'VND',
+          status: 'NOT_STARTED',
+          paymentMethod: 'PAYOS',
+          expiresAt: params.orderExpiresAt,
+          checkoutUrl: 'https://pay.test/split_A',
+        },
+        replay: false,
+        requestHash: 'hash',
+      };
+    },
+    findOrder: async () => null,
+    latestPayment: async () => null,
+    countPayments: async () => 1,
+    createPaymentAttempt: async () => ({}) as any,
+    markPaymentCancelled: async () => {},
+    setPaymentLink: async () => {},
+    applyPaymentResult: async () => 'PAID',
+  };
+
+  const checkoutService = new CheckoutService(mockRepo, mockCatalog, mockShipping, mockGateway);
+
+  const mixedCartItems = [
+    { productId: '301', quantity: 1 },
+    { productId: '302', quantity: 2 },
+  ];
+  const shippingAddress = {
+    fullName: 'Nguyen Van Split',
+    phone: '0912345678',
+    province: 'Ho Chi Minh',
+    addressLine: '123 Le Loi',
+  };
+
+  // Case 4.1: Không có targetSellerId -> Báo lỗi 422 MIXED_SELLERS_NOT_SUPPORTED kèm danh sách Shop
+  try {
+    await checkoutService.checkout(
+      'usr_buyer_01',
+      {
+        paymentMethod: 'PAYOS',
+        items: mixedCartItems,
+        shippingAddress,
+      },
+      'key_mixed_01',
+    );
+    assert.fail('Phải báo lỗi 422 khi giỏ hàng có nhiều Seller mà chưa chỉ định targetSellerId');
+  } catch (err: any) {
+    assert.equal(err.status, 422);
+    assert.equal(err.code, 'MIXED_SELLERS_NOT_SUPPORTED');
+    assert.ok(Array.isArray(err.details?.availableSellerIds));
+    assert.equal(err.details.availableSellerIds.length, 2);
+  }
+
+  // Case 4.2: Có targetSellerId = 'seller_A' -> Tự động tách giỏ hàng, chỉ thanh toán đơn cho Shop A thành công
+  const checkoutA = await checkoutService.checkout(
+    'usr_buyer_01',
+    {
+      paymentMethod: 'PAYOS',
+      targetSellerId: 'seller_A',
+      items: mixedCartItems,
+      shippingAddress,
+    },
+    'key_split_seller_A',
+  );
+
+  assert.equal(checkoutA.data.orderId, 'ord_split_A');
+  assert.equal(createdOrderParams.sellerId, 'seller_A');
+  assert.equal(createdOrderParams.items.length, 1);
+  assert.equal(createdOrderParams.items[0].productId, '301');
+  assert.equal(createdOrderParams.subtotal, 200000);
+  console.log(
+    '✅ [TEST PASS] Auto Multi-Seller Split Order via targetSellerId verified successfully!',
+  );
+});
+
 test('5. CheckoutService: handles UUIDv7 product IDs in parseCartLines and sort', async () => {
   const uuidProduct1 = '01932f01-0003-7000-8000-000000000003';
   const uuidProduct2 = '01932f01-0001-7000-8000-000000000001';
