@@ -50,6 +50,9 @@ export interface OrderDetailDto {
   timeline: OrderTimelineDto[];
   paymentTransactionId?: string;
   buyerReceivedAt?: string | null;
+  escrowStatus?: string | null;
+  escrowAmount?: number | null;
+  escrowReleasedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

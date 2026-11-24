@@ -4,6 +4,11 @@ import { NotificationController } from '../controllers/NotificationController';
 export function createNotificationRoutes(controller: NotificationController): Router {
   const router = Router();
 
+  // TASK-NOT-01: Realtime SSE Stream & Inbox (đặt TRƯỚC /:id để không bị collision)
+  router.get('/stream', (req, res) => controller.stream(req, res));
+  router.get('/inbox', (req, res) => controller.inbox(req, res));
+  router.put('/:id/read', (req, res) => controller.markAsRead(req, res));
+
   // Web Push Notifications (Sprint 3 & 4)
   router.get('/push/vapid-public-key', (req, res) => controller.getVapidPublicKey(req, res));
   router.get('/push/subscriptions', (req, res) => controller.getSubscriptions(req, res));

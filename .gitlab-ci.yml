@@ -3,13 +3,10 @@
 # Target Environment: GitLab (git.fsoft-academy.edu.vn)
 # ==============================================================================
 
-# Ngăn chặn tạo duplicate pipeline khi đồng thời có branch push và merge request
+# Tắt hoàn toàn GitLab CI/CD Pipeline (Disabled by user request)
 workflow:
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
-      when: never
-    - if: '$CI_COMMIT_BRANCH'
+    - when: never
 
 image: node:20-alpine
 

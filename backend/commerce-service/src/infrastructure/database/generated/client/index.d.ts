@@ -3845,6 +3845,7 @@ export namespace Prisma {
     shippingFee: Decimal | null
     discountAmount: Decimal | null
     taxAmount: Decimal | null
+    escrowAmount: Decimal | null
   }
 
   export type OrderSumAggregateOutputType = {
@@ -3852,6 +3853,7 @@ export namespace Prisma {
     shippingFee: Decimal | null
     discountAmount: Decimal | null
     taxAmount: Decimal | null
+    escrowAmount: Decimal | null
   }
 
   export type OrderMinAggregateOutputType = {
@@ -3870,6 +3872,9 @@ export namespace Prisma {
     shippingCarrier: string | null
     shippingServiceName: string | null
     estimatedDeliveryAt: Date | null
+    escrowStatus: string | null
+    escrowAmount: Decimal | null
+    escrowReleasedAt: Date | null
     status: string | null
     checkoutSessionExpiresAt: Date | null
     trackingCode: string | null
@@ -3893,6 +3898,9 @@ export namespace Prisma {
     shippingCarrier: string | null
     shippingServiceName: string | null
     estimatedDeliveryAt: Date | null
+    escrowStatus: string | null
+    escrowAmount: Decimal | null
+    escrowReleasedAt: Date | null
     status: string | null
     checkoutSessionExpiresAt: Date | null
     trackingCode: string | null
@@ -3916,6 +3924,9 @@ export namespace Prisma {
     shippingCarrier: number
     shippingServiceName: number
     estimatedDeliveryAt: number
+    escrowStatus: number
+    escrowAmount: number
+    escrowReleasedAt: number
     status: number
     shippingAddress: number
     checkoutSessionExpiresAt: number
@@ -3932,6 +3943,7 @@ export namespace Prisma {
     shippingFee?: true
     discountAmount?: true
     taxAmount?: true
+    escrowAmount?: true
   }
 
   export type OrderSumAggregateInputType = {
@@ -3939,6 +3951,7 @@ export namespace Prisma {
     shippingFee?: true
     discountAmount?: true
     taxAmount?: true
+    escrowAmount?: true
   }
 
   export type OrderMinAggregateInputType = {
@@ -3957,6 +3970,9 @@ export namespace Prisma {
     shippingCarrier?: true
     shippingServiceName?: true
     estimatedDeliveryAt?: true
+    escrowStatus?: true
+    escrowAmount?: true
+    escrowReleasedAt?: true
     status?: true
     checkoutSessionExpiresAt?: true
     trackingCode?: true
@@ -3980,6 +3996,9 @@ export namespace Prisma {
     shippingCarrier?: true
     shippingServiceName?: true
     estimatedDeliveryAt?: true
+    escrowStatus?: true
+    escrowAmount?: true
+    escrowReleasedAt?: true
     status?: true
     checkoutSessionExpiresAt?: true
     trackingCode?: true
@@ -4003,6 +4022,9 @@ export namespace Prisma {
     shippingCarrier?: true
     shippingServiceName?: true
     estimatedDeliveryAt?: true
+    escrowStatus?: true
+    escrowAmount?: true
+    escrowReleasedAt?: true
     status?: true
     shippingAddress?: true
     checkoutSessionExpiresAt?: true
@@ -4115,6 +4137,9 @@ export namespace Prisma {
     shippingCarrier: string | null
     shippingServiceName: string | null
     estimatedDeliveryAt: Date | null
+    escrowStatus: string | null
+    escrowAmount: Decimal | null
+    escrowReleasedAt: Date | null
     status: string
     shippingAddress: JsonValue
     checkoutSessionExpiresAt: Date | null
@@ -4159,6 +4184,9 @@ export namespace Prisma {
     shippingCarrier?: boolean
     shippingServiceName?: boolean
     estimatedDeliveryAt?: boolean
+    escrowStatus?: boolean
+    escrowAmount?: boolean
+    escrowReleasedAt?: boolean
     status?: boolean
     shippingAddress?: boolean
     checkoutSessionExpiresAt?: boolean
@@ -4190,6 +4218,9 @@ export namespace Prisma {
     shippingCarrier?: boolean
     shippingServiceName?: boolean
     estimatedDeliveryAt?: boolean
+    escrowStatus?: boolean
+    escrowAmount?: boolean
+    escrowReleasedAt?: boolean
     status?: boolean
     shippingAddress?: boolean
     checkoutSessionExpiresAt?: boolean
@@ -4215,6 +4246,9 @@ export namespace Prisma {
     shippingCarrier?: boolean
     shippingServiceName?: boolean
     estimatedDeliveryAt?: boolean
+    escrowStatus?: boolean
+    escrowAmount?: boolean
+    escrowReleasedAt?: boolean
     status?: boolean
     shippingAddress?: boolean
     checkoutSessionExpiresAt?: boolean
@@ -4259,6 +4293,9 @@ export namespace Prisma {
       shippingCarrier: string | null
       shippingServiceName: string | null
       estimatedDeliveryAt: Date | null
+      escrowStatus: string | null
+      escrowAmount: Prisma.Decimal | null
+      escrowReleasedAt: Date | null
       status: string
       shippingAddress: Prisma.JsonValue
       checkoutSessionExpiresAt: Date | null
@@ -4679,6 +4716,9 @@ export namespace Prisma {
     readonly shippingCarrier: FieldRef<"Order", 'String'>
     readonly shippingServiceName: FieldRef<"Order", 'String'>
     readonly estimatedDeliveryAt: FieldRef<"Order", 'DateTime'>
+    readonly escrowStatus: FieldRef<"Order", 'String'>
+    readonly escrowAmount: FieldRef<"Order", 'Decimal'>
+    readonly escrowReleasedAt: FieldRef<"Order", 'DateTime'>
     readonly status: FieldRef<"Order", 'String'>
     readonly shippingAddress: FieldRef<"Order", 'Json'>
     readonly checkoutSessionExpiresAt: FieldRef<"Order", 'DateTime'>
@@ -13385,6 +13425,9 @@ export namespace Prisma {
     shippingCarrier: 'shippingCarrier',
     shippingServiceName: 'shippingServiceName',
     estimatedDeliveryAt: 'estimatedDeliveryAt',
+    escrowStatus: 'escrowStatus',
+    escrowAmount: 'escrowAmount',
+    escrowReleasedAt: 'escrowReleasedAt',
     status: 'status',
     shippingAddress: 'shippingAddress',
     checkoutSessionExpiresAt: 'checkoutSessionExpiresAt',
@@ -13825,6 +13868,9 @@ export namespace Prisma {
     shippingCarrier?: StringNullableFilter<"Order"> | string | null
     shippingServiceName?: StringNullableFilter<"Order"> | string | null
     estimatedDeliveryAt?: DateTimeNullableFilter<"Order"> | Date | string | null
+    escrowStatus?: StringNullableFilter<"Order"> | string | null
+    escrowAmount?: DecimalNullableFilter<"Order"> | Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: DateTimeNullableFilter<"Order"> | Date | string | null
     status?: StringFilter<"Order"> | string
     shippingAddress?: JsonFilter<"Order">
     checkoutSessionExpiresAt?: DateTimeNullableFilter<"Order"> | Date | string | null
@@ -13855,6 +13901,9 @@ export namespace Prisma {
     shippingCarrier?: SortOrderInput | SortOrder
     shippingServiceName?: SortOrderInput | SortOrder
     estimatedDeliveryAt?: SortOrderInput | SortOrder
+    escrowStatus?: SortOrderInput | SortOrder
+    escrowAmount?: SortOrderInput | SortOrder
+    escrowReleasedAt?: SortOrderInput | SortOrder
     status?: SortOrder
     shippingAddress?: SortOrder
     checkoutSessionExpiresAt?: SortOrderInput | SortOrder
@@ -13888,6 +13937,9 @@ export namespace Prisma {
     shippingCarrier?: StringNullableFilter<"Order"> | string | null
     shippingServiceName?: StringNullableFilter<"Order"> | string | null
     estimatedDeliveryAt?: DateTimeNullableFilter<"Order"> | Date | string | null
+    escrowStatus?: StringNullableFilter<"Order"> | string | null
+    escrowAmount?: DecimalNullableFilter<"Order"> | Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: DateTimeNullableFilter<"Order"> | Date | string | null
     status?: StringFilter<"Order"> | string
     shippingAddress?: JsonFilter<"Order">
     checkoutSessionExpiresAt?: DateTimeNullableFilter<"Order"> | Date | string | null
@@ -13918,6 +13970,9 @@ export namespace Prisma {
     shippingCarrier?: SortOrderInput | SortOrder
     shippingServiceName?: SortOrderInput | SortOrder
     estimatedDeliveryAt?: SortOrderInput | SortOrder
+    escrowStatus?: SortOrderInput | SortOrder
+    escrowAmount?: SortOrderInput | SortOrder
+    escrowReleasedAt?: SortOrderInput | SortOrder
     status?: SortOrder
     shippingAddress?: SortOrder
     checkoutSessionExpiresAt?: SortOrderInput | SortOrder
@@ -13951,6 +14006,9 @@ export namespace Prisma {
     shippingCarrier?: StringNullableWithAggregatesFilter<"Order"> | string | null
     shippingServiceName?: StringNullableWithAggregatesFilter<"Order"> | string | null
     estimatedDeliveryAt?: DateTimeNullableWithAggregatesFilter<"Order"> | Date | string | null
+    escrowStatus?: StringNullableWithAggregatesFilter<"Order"> | string | null
+    escrowAmount?: DecimalNullableWithAggregatesFilter<"Order"> | Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: DateTimeNullableWithAggregatesFilter<"Order"> | Date | string | null
     status?: StringWithAggregatesFilter<"Order"> | string
     shippingAddress?: JsonWithAggregatesFilter<"Order">
     checkoutSessionExpiresAt?: DateTimeNullableWithAggregatesFilter<"Order"> | Date | string | null
@@ -14789,6 +14847,9 @@ export namespace Prisma {
     shippingCarrier?: string | null
     shippingServiceName?: string | null
     estimatedDeliveryAt?: Date | string | null
+    escrowStatus?: string | null
+    escrowAmount?: Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: Date | string | null
     status?: string
     shippingAddress: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: Date | string | null
@@ -14819,6 +14880,9 @@ export namespace Prisma {
     shippingCarrier?: string | null
     shippingServiceName?: string | null
     estimatedDeliveryAt?: Date | string | null
+    escrowStatus?: string | null
+    escrowAmount?: Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: Date | string | null
     status?: string
     shippingAddress: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: Date | string | null
@@ -14849,6 +14913,9 @@ export namespace Prisma {
     shippingCarrier?: NullableStringFieldUpdateOperationsInput | string | null
     shippingServiceName?: NullableStringFieldUpdateOperationsInput | string | null
     estimatedDeliveryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    escrowStatus?: NullableStringFieldUpdateOperationsInput | string | null
+    escrowAmount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     status?: StringFieldUpdateOperationsInput | string
     shippingAddress?: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -14879,6 +14946,9 @@ export namespace Prisma {
     shippingCarrier?: NullableStringFieldUpdateOperationsInput | string | null
     shippingServiceName?: NullableStringFieldUpdateOperationsInput | string | null
     estimatedDeliveryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    escrowStatus?: NullableStringFieldUpdateOperationsInput | string | null
+    escrowAmount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     status?: StringFieldUpdateOperationsInput | string
     shippingAddress?: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -14909,6 +14979,9 @@ export namespace Prisma {
     shippingCarrier?: string | null
     shippingServiceName?: string | null
     estimatedDeliveryAt?: Date | string | null
+    escrowStatus?: string | null
+    escrowAmount?: Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: Date | string | null
     status?: string
     shippingAddress: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: Date | string | null
@@ -14934,6 +15007,9 @@ export namespace Prisma {
     shippingCarrier?: NullableStringFieldUpdateOperationsInput | string | null
     shippingServiceName?: NullableStringFieldUpdateOperationsInput | string | null
     estimatedDeliveryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    escrowStatus?: NullableStringFieldUpdateOperationsInput | string | null
+    escrowAmount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     status?: StringFieldUpdateOperationsInput | string
     shippingAddress?: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -14959,6 +15035,9 @@ export namespace Prisma {
     shippingCarrier?: NullableStringFieldUpdateOperationsInput | string | null
     shippingServiceName?: NullableStringFieldUpdateOperationsInput | string | null
     estimatedDeliveryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    escrowStatus?: NullableStringFieldUpdateOperationsInput | string | null
+    escrowAmount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     status?: StringFieldUpdateOperationsInput | string
     shippingAddress?: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -16010,6 +16089,17 @@ export namespace Prisma {
     gte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     not?: NestedDateTimeNullableFilter<$PrismaModel> | Date | string | null
   }
+
+  export type DecimalNullableFilter<$PrismaModel = never> = {
+    equals?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel> | null
+    in?: Decimal[] | DecimalJsLike[] | number[] | string[] | ListDecimalFieldRefInput<$PrismaModel> | null
+    notIn?: Decimal[] | DecimalJsLike[] | number[] | string[] | ListDecimalFieldRefInput<$PrismaModel> | null
+    lt?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
+    lte?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
+    gt?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
+    gte?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
+    not?: NestedDecimalNullableFilter<$PrismaModel> | Decimal | DecimalJsLike | number | string | null
+  }
   export type JsonFilter<$PrismaModel = never> = 
     | PatchUndefined<
         Either<Required<JsonFilterBase<$PrismaModel>>, Exclude<keyof Required<JsonFilterBase<$PrismaModel>>, 'path'>>,
@@ -16121,6 +16211,9 @@ export namespace Prisma {
     shippingCarrier?: SortOrder
     shippingServiceName?: SortOrder
     estimatedDeliveryAt?: SortOrder
+    escrowStatus?: SortOrder
+    escrowAmount?: SortOrder
+    escrowReleasedAt?: SortOrder
     status?: SortOrder
     shippingAddress?: SortOrder
     checkoutSessionExpiresAt?: SortOrder
@@ -16135,6 +16228,7 @@ export namespace Prisma {
     shippingFee?: SortOrder
     discountAmount?: SortOrder
     taxAmount?: SortOrder
+    escrowAmount?: SortOrder
   }
 
   export type OrderMaxOrderByAggregateInput = {
@@ -16153,6 +16247,9 @@ export namespace Prisma {
     shippingCarrier?: SortOrder
     shippingServiceName?: SortOrder
     estimatedDeliveryAt?: SortOrder
+    escrowStatus?: SortOrder
+    escrowAmount?: SortOrder
+    escrowReleasedAt?: SortOrder
     status?: SortOrder
     checkoutSessionExpiresAt?: SortOrder
     trackingCode?: SortOrder
@@ -16176,6 +16273,9 @@ export namespace Prisma {
     shippingCarrier?: SortOrder
     shippingServiceName?: SortOrder
     estimatedDeliveryAt?: SortOrder
+    escrowStatus?: SortOrder
+    escrowAmount?: SortOrder
+    escrowReleasedAt?: SortOrder
     status?: SortOrder
     checkoutSessionExpiresAt?: SortOrder
     trackingCode?: SortOrder
@@ -16188,6 +16288,7 @@ export namespace Prisma {
     shippingFee?: SortOrder
     discountAmount?: SortOrder
     taxAmount?: SortOrder
+    escrowAmount?: SortOrder
   }
 
   export type DateTimeNullableWithAggregatesFilter<$PrismaModel = never> = {
@@ -16202,6 +16303,22 @@ export namespace Prisma {
     _count?: NestedIntNullableFilter<$PrismaModel>
     _min?: NestedDateTimeNullableFilter<$PrismaModel>
     _max?: NestedDateTimeNullableFilter<$PrismaModel>
+  }
+
+  export type DecimalNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel> | null
+    in?: Decimal[] | DecimalJsLike[] | number[] | string[] | ListDecimalFieldRefInput<$PrismaModel> | null
+    notIn?: Decimal[] | DecimalJsLike[] | number[] | string[] | ListDecimalFieldRefInput<$PrismaModel> | null
+    lt?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
+    lte?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
+    gt?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
+    gte?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
+    not?: NestedDecimalNullableWithAggregatesFilter<$PrismaModel> | Decimal | DecimalJsLike | number | string | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _avg?: NestedDecimalNullableFilter<$PrismaModel>
+    _sum?: NestedDecimalNullableFilter<$PrismaModel>
+    _min?: NestedDecimalNullableFilter<$PrismaModel>
+    _max?: NestedDecimalNullableFilter<$PrismaModel>
   }
   export type JsonWithAggregatesFilter<$PrismaModel = never> = 
     | PatchUndefined<
@@ -16586,17 +16703,6 @@ export namespace Prisma {
     quantity?: SortOrder
   }
 
-  export type DecimalNullableFilter<$PrismaModel = never> = {
-    equals?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel> | null
-    in?: Decimal[] | DecimalJsLike[] | number[] | string[] | ListDecimalFieldRefInput<$PrismaModel> | null
-    notIn?: Decimal[] | DecimalJsLike[] | number[] | string[] | ListDecimalFieldRefInput<$PrismaModel> | null
-    lt?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
-    lte?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
-    gt?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
-    gte?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
-    not?: NestedDecimalNullableFilter<$PrismaModel> | Decimal | DecimalJsLike | number | string | null
-  }
-
   export type PromotionCountOrderByAggregateInput = {
     id?: SortOrder
     code?: SortOrder
@@ -16670,22 +16776,6 @@ export namespace Prisma {
     usageLimit?: SortOrder
     usedCount?: SortOrder
     perUserLimit?: SortOrder
-  }
-
-  export type DecimalNullableWithAggregatesFilter<$PrismaModel = never> = {
-    equals?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel> | null
-    in?: Decimal[] | DecimalJsLike[] | number[] | string[] | ListDecimalFieldRefInput<$PrismaModel> | null
-    notIn?: Decimal[] | DecimalJsLike[] | number[] | string[] | ListDecimalFieldRefInput<$PrismaModel> | null
-    lt?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
-    lte?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
-    gt?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
-    gte?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
-    not?: NestedDecimalNullableWithAggregatesFilter<$PrismaModel> | Decimal | DecimalJsLike | number | string | null
-    _count?: NestedIntNullableFilter<$PrismaModel>
-    _avg?: NestedDecimalNullableFilter<$PrismaModel>
-    _sum?: NestedDecimalNullableFilter<$PrismaModel>
-    _min?: NestedDecimalNullableFilter<$PrismaModel>
-    _max?: NestedDecimalNullableFilter<$PrismaModel>
   }
 
   export type PromotionRelationFilter = {
@@ -16899,6 +16989,14 @@ export namespace Prisma {
 
   export type NullableDateTimeFieldUpdateOperationsInput = {
     set?: Date | string | null
+  }
+
+  export type NullableDecimalFieldUpdateOperationsInput = {
+    set?: Decimal | DecimalJsLike | number | string | null
+    increment?: Decimal | DecimalJsLike | number | string
+    decrement?: Decimal | DecimalJsLike | number | string
+    multiply?: Decimal | DecimalJsLike | number | string
+    divide?: Decimal | DecimalJsLike | number | string
   }
 
   export type OrderItemUpdateManyWithoutOrderNestedInput = {
@@ -17117,14 +17215,6 @@ export namespace Prisma {
     connectOrCreate?: PromotionUsageCreateOrConnectWithoutPromotionInput | PromotionUsageCreateOrConnectWithoutPromotionInput[]
     createMany?: PromotionUsageCreateManyPromotionInputEnvelope
     connect?: PromotionUsageWhereUniqueInput | PromotionUsageWhereUniqueInput[]
-  }
-
-  export type NullableDecimalFieldUpdateOperationsInput = {
-    set?: Decimal | DecimalJsLike | number | string | null
-    increment?: Decimal | DecimalJsLike | number | string
-    decrement?: Decimal | DecimalJsLike | number | string
-    multiply?: Decimal | DecimalJsLike | number | string
-    divide?: Decimal | DecimalJsLike | number | string
   }
 
   export type PromotionUsageUpdateManyWithoutPromotionNestedInput = {
@@ -17386,6 +17476,17 @@ export namespace Prisma {
     not?: NestedDateTimeNullableFilter<$PrismaModel> | Date | string | null
   }
 
+  export type NestedDecimalNullableFilter<$PrismaModel = never> = {
+    equals?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel> | null
+    in?: Decimal[] | DecimalJsLike[] | number[] | string[] | ListDecimalFieldRefInput<$PrismaModel> | null
+    notIn?: Decimal[] | DecimalJsLike[] | number[] | string[] | ListDecimalFieldRefInput<$PrismaModel> | null
+    lt?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
+    lte?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
+    gt?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
+    gte?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
+    not?: NestedDecimalNullableFilter<$PrismaModel> | Decimal | DecimalJsLike | number | string | null
+  }
+
   export type NestedDateTimeNullableWithAggregatesFilter<$PrismaModel = never> = {
     equals?: Date | string | DateTimeFieldRefInput<$PrismaModel> | null
     in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel> | null
@@ -17398,6 +17499,22 @@ export namespace Prisma {
     _count?: NestedIntNullableFilter<$PrismaModel>
     _min?: NestedDateTimeNullableFilter<$PrismaModel>
     _max?: NestedDateTimeNullableFilter<$PrismaModel>
+  }
+
+  export type NestedDecimalNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel> | null
+    in?: Decimal[] | DecimalJsLike[] | number[] | string[] | ListDecimalFieldRefInput<$PrismaModel> | null
+    notIn?: Decimal[] | DecimalJsLike[] | number[] | string[] | ListDecimalFieldRefInput<$PrismaModel> | null
+    lt?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
+    lte?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
+    gt?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
+    gte?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
+    not?: NestedDecimalNullableWithAggregatesFilter<$PrismaModel> | Decimal | DecimalJsLike | number | string | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _avg?: NestedDecimalNullableFilter<$PrismaModel>
+    _sum?: NestedDecimalNullableFilter<$PrismaModel>
+    _min?: NestedDecimalNullableFilter<$PrismaModel>
+    _max?: NestedDecimalNullableFilter<$PrismaModel>
   }
   export type NestedJsonFilter<$PrismaModel = never> = 
     | PatchUndefined<
@@ -17480,33 +17597,6 @@ export namespace Prisma {
     gt?: number | FloatFieldRefInput<$PrismaModel>
     gte?: number | FloatFieldRefInput<$PrismaModel>
     not?: NestedFloatNullableFilter<$PrismaModel> | number | null
-  }
-
-  export type NestedDecimalNullableFilter<$PrismaModel = never> = {
-    equals?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel> | null
-    in?: Decimal[] | DecimalJsLike[] | number[] | string[] | ListDecimalFieldRefInput<$PrismaModel> | null
-    notIn?: Decimal[] | DecimalJsLike[] | number[] | string[] | ListDecimalFieldRefInput<$PrismaModel> | null
-    lt?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
-    lte?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
-    gt?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
-    gte?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
-    not?: NestedDecimalNullableFilter<$PrismaModel> | Decimal | DecimalJsLike | number | string | null
-  }
-
-  export type NestedDecimalNullableWithAggregatesFilter<$PrismaModel = never> = {
-    equals?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel> | null
-    in?: Decimal[] | DecimalJsLike[] | number[] | string[] | ListDecimalFieldRefInput<$PrismaModel> | null
-    notIn?: Decimal[] | DecimalJsLike[] | number[] | string[] | ListDecimalFieldRefInput<$PrismaModel> | null
-    lt?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
-    lte?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
-    gt?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
-    gte?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
-    not?: NestedDecimalNullableWithAggregatesFilter<$PrismaModel> | Decimal | DecimalJsLike | number | string | null
-    _count?: NestedIntNullableFilter<$PrismaModel>
-    _avg?: NestedDecimalNullableFilter<$PrismaModel>
-    _sum?: NestedDecimalNullableFilter<$PrismaModel>
-    _min?: NestedDecimalNullableFilter<$PrismaModel>
-    _max?: NestedDecimalNullableFilter<$PrismaModel>
   }
 
   export type CartItemCreateWithoutCartInput = {
@@ -17958,6 +18048,9 @@ export namespace Prisma {
     shippingCarrier?: string | null
     shippingServiceName?: string | null
     estimatedDeliveryAt?: Date | string | null
+    escrowStatus?: string | null
+    escrowAmount?: Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: Date | string | null
     status?: string
     shippingAddress: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: Date | string | null
@@ -17987,6 +18080,9 @@ export namespace Prisma {
     shippingCarrier?: string | null
     shippingServiceName?: string | null
     estimatedDeliveryAt?: Date | string | null
+    escrowStatus?: string | null
+    escrowAmount?: Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: Date | string | null
     status?: string
     shippingAddress: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: Date | string | null
@@ -18032,6 +18128,9 @@ export namespace Prisma {
     shippingCarrier?: NullableStringFieldUpdateOperationsInput | string | null
     shippingServiceName?: NullableStringFieldUpdateOperationsInput | string | null
     estimatedDeliveryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    escrowStatus?: NullableStringFieldUpdateOperationsInput | string | null
+    escrowAmount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     status?: StringFieldUpdateOperationsInput | string
     shippingAddress?: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -18061,6 +18160,9 @@ export namespace Prisma {
     shippingCarrier?: NullableStringFieldUpdateOperationsInput | string | null
     shippingServiceName?: NullableStringFieldUpdateOperationsInput | string | null
     estimatedDeliveryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    escrowStatus?: NullableStringFieldUpdateOperationsInput | string | null
+    escrowAmount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     status?: StringFieldUpdateOperationsInput | string
     shippingAddress?: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -18090,6 +18192,9 @@ export namespace Prisma {
     shippingCarrier?: string | null
     shippingServiceName?: string | null
     estimatedDeliveryAt?: Date | string | null
+    escrowStatus?: string | null
+    escrowAmount?: Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: Date | string | null
     status?: string
     shippingAddress: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: Date | string | null
@@ -18119,6 +18224,9 @@ export namespace Prisma {
     shippingCarrier?: string | null
     shippingServiceName?: string | null
     estimatedDeliveryAt?: Date | string | null
+    escrowStatus?: string | null
+    escrowAmount?: Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: Date | string | null
     status?: string
     shippingAddress: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: Date | string | null
@@ -18164,6 +18272,9 @@ export namespace Prisma {
     shippingCarrier?: NullableStringFieldUpdateOperationsInput | string | null
     shippingServiceName?: NullableStringFieldUpdateOperationsInput | string | null
     estimatedDeliveryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    escrowStatus?: NullableStringFieldUpdateOperationsInput | string | null
+    escrowAmount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     status?: StringFieldUpdateOperationsInput | string
     shippingAddress?: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -18193,6 +18304,9 @@ export namespace Prisma {
     shippingCarrier?: NullableStringFieldUpdateOperationsInput | string | null
     shippingServiceName?: NullableStringFieldUpdateOperationsInput | string | null
     estimatedDeliveryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    escrowStatus?: NullableStringFieldUpdateOperationsInput | string | null
+    escrowAmount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     status?: StringFieldUpdateOperationsInput | string
     shippingAddress?: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -18222,6 +18336,9 @@ export namespace Prisma {
     shippingCarrier?: string | null
     shippingServiceName?: string | null
     estimatedDeliveryAt?: Date | string | null
+    escrowStatus?: string | null
+    escrowAmount?: Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: Date | string | null
     status?: string
     shippingAddress: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: Date | string | null
@@ -18251,6 +18368,9 @@ export namespace Prisma {
     shippingCarrier?: string | null
     shippingServiceName?: string | null
     estimatedDeliveryAt?: Date | string | null
+    escrowStatus?: string | null
+    escrowAmount?: Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: Date | string | null
     status?: string
     shippingAddress: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: Date | string | null
@@ -18296,6 +18416,9 @@ export namespace Prisma {
     shippingCarrier?: NullableStringFieldUpdateOperationsInput | string | null
     shippingServiceName?: NullableStringFieldUpdateOperationsInput | string | null
     estimatedDeliveryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    escrowStatus?: NullableStringFieldUpdateOperationsInput | string | null
+    escrowAmount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     status?: StringFieldUpdateOperationsInput | string
     shippingAddress?: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -18325,6 +18448,9 @@ export namespace Prisma {
     shippingCarrier?: NullableStringFieldUpdateOperationsInput | string | null
     shippingServiceName?: NullableStringFieldUpdateOperationsInput | string | null
     estimatedDeliveryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    escrowStatus?: NullableStringFieldUpdateOperationsInput | string | null
+    escrowAmount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     status?: StringFieldUpdateOperationsInput | string
     shippingAddress?: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -18354,6 +18480,9 @@ export namespace Prisma {
     shippingCarrier?: string | null
     shippingServiceName?: string | null
     estimatedDeliveryAt?: Date | string | null
+    escrowStatus?: string | null
+    escrowAmount?: Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: Date | string | null
     status?: string
     shippingAddress: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: Date | string | null
@@ -18383,6 +18512,9 @@ export namespace Prisma {
     shippingCarrier?: string | null
     shippingServiceName?: string | null
     estimatedDeliveryAt?: Date | string | null
+    escrowStatus?: string | null
+    escrowAmount?: Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: Date | string | null
     status?: string
     shippingAddress: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: Date | string | null
@@ -18428,6 +18560,9 @@ export namespace Prisma {
     shippingCarrier?: NullableStringFieldUpdateOperationsInput | string | null
     shippingServiceName?: NullableStringFieldUpdateOperationsInput | string | null
     estimatedDeliveryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    escrowStatus?: NullableStringFieldUpdateOperationsInput | string | null
+    escrowAmount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     status?: StringFieldUpdateOperationsInput | string
     shippingAddress?: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -18457,6 +18592,9 @@ export namespace Prisma {
     shippingCarrier?: NullableStringFieldUpdateOperationsInput | string | null
     shippingServiceName?: NullableStringFieldUpdateOperationsInput | string | null
     estimatedDeliveryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    escrowStatus?: NullableStringFieldUpdateOperationsInput | string | null
+    escrowAmount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     status?: StringFieldUpdateOperationsInput | string
     shippingAddress?: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -18571,6 +18709,9 @@ export namespace Prisma {
     shippingCarrier?: string | null
     shippingServiceName?: string | null
     estimatedDeliveryAt?: Date | string | null
+    escrowStatus?: string | null
+    escrowAmount?: Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: Date | string | null
     status?: string
     shippingAddress: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: Date | string | null
@@ -18600,6 +18741,9 @@ export namespace Prisma {
     shippingCarrier?: string | null
     shippingServiceName?: string | null
     estimatedDeliveryAt?: Date | string | null
+    escrowStatus?: string | null
+    escrowAmount?: Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: Date | string | null
     status?: string
     shippingAddress: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: Date | string | null
@@ -18694,6 +18838,9 @@ export namespace Prisma {
     shippingCarrier?: NullableStringFieldUpdateOperationsInput | string | null
     shippingServiceName?: NullableStringFieldUpdateOperationsInput | string | null
     estimatedDeliveryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    escrowStatus?: NullableStringFieldUpdateOperationsInput | string | null
+    escrowAmount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     status?: StringFieldUpdateOperationsInput | string
     shippingAddress?: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -18723,6 +18870,9 @@ export namespace Prisma {
     shippingCarrier?: NullableStringFieldUpdateOperationsInput | string | null
     shippingServiceName?: NullableStringFieldUpdateOperationsInput | string | null
     estimatedDeliveryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    escrowStatus?: NullableStringFieldUpdateOperationsInput | string | null
+    escrowAmount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    escrowReleasedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     status?: StringFieldUpdateOperationsInput | string
     shippingAddress?: JsonNullValueInput | InputJsonValue
     checkoutSessionExpiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null

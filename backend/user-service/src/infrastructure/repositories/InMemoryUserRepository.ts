@@ -198,6 +198,118 @@ export class InMemoryUserRepository implements IUserRepository {
     };
   }
 
+  // --- Hỗ trợ Đánh giá, Uy tín & Đổi mật khẩu trong In-Memory Mode (TASK-REP-02 / TASK-REP-03) ---
+  private readonly inMemoryReviews: Array<{
+    id: string;
+    orderId: string;
+    fromUserId: string;
+    toUserId: string;
+    rating: number;
+    comment: string | null;
+    isSellerReview: boolean;
+    createdAt: Date;
+  }> = [];
+
+  public async changePassword(
+    userId: string,
+    previousHash: string,
+    nextHash: string,
+  ): Promise<boolean> {
+    const user = await this.findById(userId);
+    if (!user || user.passwordHash !== previousHash) return false;
+    user.setPasswordHash(nextHash);
+    return true;
+  }
+
+  public async addSellerReview(
+    sellerId: string,
+    buyerId: string,
+    orderId: string,
+    rating: number,
+    comment: string | null,
+  ): Promise<{ id: string; rating: number; comment: string | null; createdAt: Date } | null> {
+    const exists = this.inMemoryReviews.some(
+      (r) => r.orderId === orderId && r.fromUserId === buyerId && r.toUserId === sellerId,
+    );
+    if (exists) return null;
+
+    const newReview = {
+      id: `rat_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+      orderId,
+      fromUserId: buyerId,
+      toUserId: sellerId,
+      rating,
+      comment,
+      isSellerReview: true,
+      createdAt: new Date(),
+    };
+    this.inMemoryReviews.push(newReview);
+    return {
+      id: newReview.id,
+      rating: newReview.rating,
+      comment: newReview.comment,
+      createdAt: newReview.createdAt,
+    };
+  }
+
+  public async ratingsSummary(userId: string, sellerOnly: boolean) {
+    const matches = this.inMemoryReviews.filter(
+      (r) => r.toUserId === userId && (!sellerOnly || r.isSellerReview),
+    );
+    const ratingBreakdown: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    let totalReviews = 0;
+    let stars = 0;
+    for (const r of matches) {
+      if (r.rating >= 1 && r.rating <= 5) {
+        ratingBreakdown[r.rating] = (ratingBreakdown[r.rating] || 0) + 1;
+        totalReviews += 1;
+        stars += r.rating;
+      }
+    }
+    return {
+      ratingBreakdown,
+      totalReviews,
+      averageRating: totalReviews === 0 ? null : Number((stars / totalReviews).toFixed(2)),
+    };
+  }
+
+  public async sellerReviews(sellerId: string, page: number, limit: number, rating?: number) {
+    let matches = this.inMemoryReviews.filter(
+      (r) => r.toUserId === sellerId && r.isSellerReview && (!rating || r.rating === rating),
+    );
+    matches.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    const total = matches.length;
+    const items = matches.slice((page - 1) * limit, page * limit).map((r) => ({
+      id: r.id,
+      buyerAlias: 'Người mua đã xác minh',
+      rating: r.rating,
+      comment: r.comment,
+      createdAt: r.createdAt,
+    }));
+    return {
+      items,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 },
+    };
+  }
+
+  public async reputationHistory(userId: string) {
+    const user = await this.findById(userId);
+    if (!user) return [];
+    return user.reputationHistory.map((h, idx) => ({
+      id: `rep_hist_${idx}`,
+      points: h.points,
+      reason: h.reason,
+      adjustedBy: h.adjustedBy,
+      createdAt: h.createdAt,
+    }));
+  }
+
+  public async activeRestrictions(userId: string) {
+    const user = await this.findById(userId);
+    if (!user) return [];
+    return user.getActiveRestrictions();
+  }
+
   public async save(user: User): Promise<void> {
     this.users.set(user.id, user);
   }

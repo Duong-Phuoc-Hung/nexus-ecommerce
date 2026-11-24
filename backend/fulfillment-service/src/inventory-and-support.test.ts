@@ -767,6 +767,8 @@ test('Task 3 - Failed Delivery & RTO: POST request-redelivery and confirm-return
         body: JSON.stringify({
           returnedToSellerAt: '2026-11-06T10:00:00Z',
           condition: 'INTACT',
+          sku: 'NX-AIRPODS-PRO-2',
+          quantity: 2,
         }),
       },
     );
@@ -775,6 +777,23 @@ test('Task 3 - Failed Delivery & RTO: POST request-redelivery and confirm-return
     assert.equal(returnJson.success, true);
     assert.equal(returnJson.data.statusCode, 'RETURNED');
     assert.match(returnJson.data.currentLocation, /kho người bán/);
+
+    // 3. Task 15 Verification: Kiểm tra Sổ cái biến động kho đã ghi nhận RETURN_RESTOCK
+    const ledgerCheckRes = await fetch(
+      `${baseUrl}/api/v1/fulfillments/inventory/NX-AIRPODS-PRO-2/ledger`,
+      {
+        headers: { Authorization: `Bearer ${staffToken}` },
+      },
+    );
+    assert.equal(ledgerCheckRes.status, 200);
+    const ledgerCheckJson = (await ledgerCheckRes.json()) as any;
+    assert.equal(ledgerCheckJson.success, true);
+    const rtoEntry = ledgerCheckJson.data.find(
+      (entry: any) => entry.transactionType === 'RETURN_RESTOCK',
+    );
+    assert.ok(rtoEntry, 'Phải có bản ghi sổ cái RETURN_RESTOCK sau khi xác nhận hoàn kho INTACT');
+    assert.equal(rtoEntry.quantityChange, 2);
+    assert.match(rtoEntry.reason, /RTO hoàn kho đơn/);
   });
 });
 

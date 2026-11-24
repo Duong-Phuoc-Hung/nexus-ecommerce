@@ -73,6 +73,11 @@ export function createApplication(): Application {
           prefix: '/api/v1/admin/seller-applications',
           target: SERVICE_ENDPOINTS.user,
         },
+        {
+          name: 'Ratings & Reputation',
+          prefix: '/api/v1/ratings',
+          target: SERVICE_ENDPOINTS.user,
+        },
         { name: 'Catalog', prefix: '/api/v1/products', target: SERVICE_ENDPOINTS.catalog },
         { name: 'Categories', prefix: '/api/v1/categories', target: SERVICE_ENDPOINTS.catalog },
         { name: 'Commerce & Orders', prefix: '/api/v1/orders', target: SERVICE_ENDPOINTS.commerce },
@@ -175,9 +180,28 @@ export function createApplication(): Application {
           body: hasBody ? JSON.stringify(req.body ?? {}) : undefined,
         });
 
-        const text = await upstream.text();
         res.status(upstream.status);
         const contentType = upstream.headers.get('content-type') || 'application/json';
+        const isStream =
+          req.originalUrl.includes('/stream') || contentType.includes('text/event-stream');
+
+        if (isStream && upstream.body) {
+          res.writeHead(upstream.status, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+          });
+          const { Readable } = await import('node:stream');
+          Readable.fromWeb(upstream.body as any).pipe(res);
+          req.on('close', () => {
+            try {
+              (upstream.body as any)?.cancel();
+            } catch {}
+          });
+          return;
+        }
+
+        const text = await upstream.text();
         res.setHeader('content-type', contentType);
         res.setHeader('content-length', Buffer.byteLength(text));
         res.end(text);
@@ -195,6 +219,7 @@ export function createApplication(): Application {
   app.use('/api/v1/users', createProxy('User Service', SERVICE_ENDPOINTS.user));
   app.use('/api/v1/seller-applications', createProxy('User Service', SERVICE_ENDPOINTS.user));
   app.use('/api/v1/admin/seller-applications', createProxy('User Service', SERVICE_ENDPOINTS.user));
+  app.use('/api/v1/ratings', createProxy('User Service', SERVICE_ENDPOINTS.user));
   app.use('/api/v1/products', createProxy('Catalog Service', SERVICE_ENDPOINTS.catalog));
   app.use('/api/v1/categories', createProxy('Catalog Service', SERVICE_ENDPOINTS.catalog));
   app.use('/api/v1/favorites', createProxy('Catalog Service', SERVICE_ENDPOINTS.catalog));

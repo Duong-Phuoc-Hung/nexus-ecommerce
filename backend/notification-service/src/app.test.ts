@@ -158,3 +158,58 @@ test('Web Push Notifications: VAPID Key, Subscribe, Broadcast & Unsubscribe life
     assert.equal(listEmptyJson.count, 0);
   });
 });
+
+test('TASK-NOT-01: SSE Stream, in-app inbox and mark as read', async () => {
+  await withNotificationServer(async (baseUrl) => {
+    // 1. Kết nối SSE stream
+    const controller = new AbortController();
+    const streamRes = await fetch(`${baseUrl}/api/v1/notifications/stream`, {
+      signal: controller.signal,
+    });
+    assert.equal(streamRes.status, 200);
+    assert.match(streamRes.headers.get('content-type') || '', /text\/event-stream/);
+
+    // 2. Gửi thông báo in-app
+    const sendRes = await fetch(`${baseUrl}/api/v1/notifications/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        recipientId: 'buyer_test_uuid',
+        channel: 'IN_APP',
+        title: 'Đơn hàng đã được xác nhận',
+        body: 'Người bán đã chuẩn bị hàng cho bạn.',
+      }),
+    });
+    assert.equal(sendRes.status, 202);
+    const sendJson = (await sendRes.json()) as any;
+    assert.equal(sendJson.success, true);
+    assert.equal(sendJson.data.recipientId, 'buyer_test_uuid');
+    assert.equal(sendJson.data.status, 'DELIVERED');
+    const noticeId = sendJson.data.id;
+
+    // 3. Tra cứu hộp thư đến: GET /api/v1/notifications/inbox
+    const inboxRes = await fetch(`${baseUrl}/api/v1/notifications/inbox?userId=buyer_test_uuid`);
+    assert.equal(inboxRes.status, 200);
+    const inboxJson = (await inboxRes.json()) as any;
+    assert.equal(inboxJson.success, true);
+    assert.equal(inboxJson.data.total, 1);
+    assert.equal(inboxJson.data.unreadCount, 1);
+    assert.equal(inboxJson.data.items[0].title, 'Đơn hàng đã được xác nhận');
+    assert.equal(inboxJson.data.items[0].read, false);
+
+    // 4. Đánh dấu đã đọc: PUT /api/v1/notifications/:id/read
+    const readRes = await fetch(`${baseUrl}/api/v1/notifications/${noticeId}/read`, {
+      method: 'PUT',
+    });
+    assert.equal(readRes.status, 200);
+
+    // 5. Kiểm tra lại inbox: unreadCount = 0
+    const checkRes = await fetch(`${baseUrl}/api/v1/notifications/inbox?userId=buyer_test_uuid`);
+    const checkJson = (await checkRes.json()) as any;
+    assert.equal(checkJson.data.unreadCount, 0);
+    assert.equal(checkJson.data.items[0].read, true);
+
+    // Dọn dẹp stream connection
+    controller.abort();
+  });
+});

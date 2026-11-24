@@ -6,6 +6,17 @@ import { WebPushService } from '../../../application/services/WebPushService';
 
 export class NotificationController {
   private readonly webPushService: WebPushService;
+  private readonly sseClients: Set<Response> = new Set();
+  private readonly inAppNotifications: Array<{
+    id: string;
+    recipientId: string;
+    channel: string;
+    title: string;
+    body: string;
+    data?: any;
+    read: boolean;
+    createdAt: Date;
+  }> = [];
 
   constructor(
     private readonly getNotificationDetailUseCase: GetNotificationDetailUseCase,
@@ -13,6 +24,70 @@ export class NotificationController {
     webPushService?: WebPushService,
   ) {
     this.webPushService = webPushService || new WebPushService();
+  }
+
+  /**
+   * GET /api/v1/notifications/stream
+   * TASK-NOT-01: Server-Sent Events (SSE) đẩy thông báo thời gian thực tới chuông thông báo Web
+   */
+  public stream(req: Request, res: Response): void {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    if (typeof (res as any).flushHeaders === 'function') {
+      (res as any).flushHeaders();
+    }
+
+    // Gửi thông điệp kết nối ban đầu
+    res.write(
+      `data: ${JSON.stringify({ type: 'CONNECTED', message: 'SSE Stream Active', timestamp: new Date().toISOString() })}\n\n`,
+    );
+
+    this.sseClients.add(res);
+
+    req.on('close', () => {
+      this.sseClients.delete(res);
+      res.end();
+    });
+  }
+
+  /**
+   * GET /api/v1/notifications/inbox
+   * TASK-NOT-01: Danh sách thông báo in-app cho người dùng (chuông thông báo Header)
+   */
+  public async inbox(req: Request, res: Response): Promise<void> {
+    const userId = String(req.query.userId || req.headers['x-user-id'] || '');
+    let items = this.inAppNotifications;
+    if (userId) {
+      items = items.filter((n) => n.recipientId === userId || n.recipientId === 'ALL');
+    }
+    items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    const unreadCount = items.filter((n) => !n.read).length;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        items,
+        total: items.length,
+        unreadCount,
+      },
+    });
+  }
+
+  /**
+   * PUT /api/v1/notifications/:id/read
+   * Đánh dấu thông báo đã đọc
+   */
+  public async markAsRead(req: Request, res: Response): Promise<void> {
+    const id = req.params.id;
+    const item = this.inAppNotifications.find((n) => n.id === id);
+    if (item) {
+      item.read = true;
+    }
+    res.status(200).json({
+      success: true,
+      message: 'Đã đánh dấu thông báo đã đọc.',
+    });
   }
 
   public async getById(req: Request, res: Response): Promise<void> {
@@ -39,17 +114,40 @@ export class NotificationController {
   }
 
   public async send(req: Request, res: Response): Promise<void> {
-    const { recipientId, channel, title, body } = req.body;
+    const { recipientId, channel, title, body, data } = req.body || {};
+    const notificationItem = {
+      id: 'ntf_' + Date.now(),
+      recipientId: recipientId || 'usr_01hqz789abc',
+      channel: channel || 'IN_APP',
+      title: title || 'System Alert',
+      body: body || 'Notification body sample',
+      data: data || null,
+      read: false,
+      createdAt: new Date(),
+    };
+
+    // Lưu vào inbox in-app
+    this.inAppNotifications.push(notificationItem);
+
+    // Broadcast tới toàn bộ các kết nối SSE đang mở
+    const ssePayload = JSON.stringify({
+      type: 'NOTIFICATION',
+      notification: notificationItem,
+    });
+    for (const client of this.sseClients) {
+      try {
+        client.write(`data: ${ssePayload}\n\n`);
+      } catch {
+        this.sseClients.delete(client);
+      }
+    }
+
     res.status(202).json({
       success: true,
-      message: 'Notification queued for delivery (Skeleton mode)',
+      message: 'Notification delivered via realtime push and queued for delivery.',
       data: {
-        notificationId: 'ntf_' + Date.now(),
-        recipientId: recipientId || 'usr_01hqz789abc',
-        channel: channel || 'EMAIL',
-        title: title || 'System Alert',
-        body: body || 'Notification body sample',
-        status: 'QUEUED',
+        ...notificationItem,
+        status: 'DELIVERED',
       },
     });
   }

@@ -1,6 +1,7 @@
 import { IAuctionRepository } from '../../domain/repositories/IAuctionRepository';
 import { AuctionNotFoundException } from '../../domain/exceptions/AuctionNotFoundException';
 import { AuctionStatus } from '../../domain/entities/Auction';
+import { IUserReputationClient } from '../ports/IUserReputationClient';
 
 // Định nghĩa dữ liệu đầu vào ngay trong Use Case giống catalog-service
 export interface PlaceBidInput {
@@ -19,7 +20,10 @@ export interface PlaceBidResult {
 }
 
 export class PlaceBidUseCase {
-  constructor(private readonly auctionRepository: IAuctionRepository) {}
+  constructor(
+    private readonly auctionRepository: IAuctionRepository,
+    private readonly userReputationClient?: IUserReputationClient,
+  ) {}
 
   public async execute(input: PlaceBidInput): Promise<PlaceBidResult> {
     const { auctionId, bidderId, bidAmount } = input;
@@ -33,6 +37,17 @@ export class PlaceBidUseCase {
     // 2. Chống tự bid: Người bán không được tự trả giá cho món hàng của chính mình
     if (auction.sellerId === bidderId) {
       throw new Error('Người bán không được phép tự đặt giá cho sản phẩm của chính mình.');
+    }
+
+    // 2.1. TASK-AUC-03: Kiểm tra điều kiện điểm uy tín tối thiểu và chế tài hạn chế (MIN_REPUTATION_TO_BID >= 50)
+    if (this.userReputationClient) {
+      const rep = await this.userReputationClient.getUserReputation(bidderId);
+      if (!rep.biddingEligible) {
+        throw new Error(
+          rep.reason ||
+            'Tài khoản không đủ điều kiện tham gia đấu giá: Điểm uy tín tối thiểu phải từ 50 điểm trở lên và không có án phạt hạn chế.',
+        );
+      }
     }
 
     // 3. Kiểm tra trạng thái: Phải đang ACTIVE hoặc EXTENDED

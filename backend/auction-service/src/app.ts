@@ -17,6 +17,7 @@ import {
 } from './application/auction-mutations';
 import { AuctionCheckoutUseCase } from './application/use-cases/AuctionCheckoutUseCase';
 import { HttpCommerceOrderClient } from './infrastructure/clients/HttpCommerceOrderClient';
+import { HttpUserReputationClient } from './infrastructure/clients/HttpUserReputationClient';
 
 export function createApplication(
   healthChecker: () => Promise<RedisHealthStatus> = checkRedisHealth,
@@ -78,10 +79,12 @@ export function createApplication(
   const auctionRepository = inMemory
     ? new InMemoryAuctionRepository()
     : new TransactionalAuctionRepository();
+  const userReputationClient = new HttpUserReputationClient();
   const mutations = createAuctionMutations(
     inMemory
       ? createInMemoryAuctionTransaction(auctionRepository)
       : createPostgresAuctionTransaction(),
+    userReputationClient,
   );
 
   const getAuctionDetailUseCase = new GetAuctionDetailUseCase(auctionRepository);

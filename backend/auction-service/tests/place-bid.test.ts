@@ -161,4 +161,80 @@ describe('PlaceBidUseCase', () => {
       (err: any) => err.message.includes('hiện không mở để đặt giá'),
     );
   });
+
+  it('TASK-AUC-03: từ chối khi người đặt giá có điểm uy tín dưới 50 (MIN_REPUTATION_TO_BID)', async () => {
+    const repo = new InMemoryAuctionRepository();
+    const fakeClient = {
+      getUserReputation: async (userId: string) => ({
+        userId,
+        reputationScore: 45,
+        biddingEligible: false,
+        isRestricted: false,
+        reason: 'Điểm uy tín không đủ điều kiện (tối thiểu 50)',
+      }),
+    };
+    const useCase = new PlaceBidUseCase(repo, fakeClient);
+
+    const sample = new Auction({
+      id: 'auc_test_rep_low',
+      productId: '10',
+      sellerId: 'seller_01',
+      startingPrice: 1000000,
+      currentHighestBid: 1000000,
+      bidIncrement: 50000,
+      status: AuctionStatus.ACTIVE,
+      startTime: new Date(Date.now() - 3600 * 1000),
+      endTime: new Date(Date.now() + 3600 * 1000),
+    });
+    await repo.create(sample);
+
+    await assert.rejects(
+      async () => {
+        await useCase.execute({
+          auctionId: 'auc_test_rep_low',
+          bidderId: 'buyer_bad_reputation',
+          bidAmount: 1100000,
+        });
+      },
+      (err: any) => err.message.includes('Điểm uy tín không đủ điều kiện (tối thiểu 50)'),
+    );
+  });
+
+  it('TASK-AUC-03: từ chối khi tài khoản đang bị hạn chế tính năng đấu giá', async () => {
+    const repo = new InMemoryAuctionRepository();
+    const fakeClient = {
+      getUserReputation: async (userId: string) => ({
+        userId,
+        reputationScore: 90,
+        biddingEligible: false,
+        isRestricted: true,
+        reason: 'Tài khoản đang bị hạn chế tham gia đấu giá',
+      }),
+    };
+    const useCase = new PlaceBidUseCase(repo, fakeClient);
+
+    const sample = new Auction({
+      id: 'auc_test_rep_restricted',
+      productId: '10',
+      sellerId: 'seller_01',
+      startingPrice: 1000000,
+      currentHighestBid: 1000000,
+      bidIncrement: 50000,
+      status: AuctionStatus.ACTIVE,
+      startTime: new Date(Date.now() - 3600 * 1000),
+      endTime: new Date(Date.now() + 3600 * 1000),
+    });
+    await repo.create(sample);
+
+    await assert.rejects(
+      async () => {
+        await useCase.execute({
+          auctionId: 'auc_test_rep_restricted',
+          bidderId: 'buyer_restricted',
+          bidAmount: 1100000,
+        });
+      },
+      (err: any) => err.message.includes('Tài khoản đang bị hạn chế'),
+    );
+  });
 });

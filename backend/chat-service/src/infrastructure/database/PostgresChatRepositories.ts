@@ -53,6 +53,53 @@ export class PostgresConversationRepository implements IConversationRepository {
     }
   }
 
+  public async findAll(filter?: {
+    buyerId?: string;
+    sellerId?: string;
+    channelType?: ChannelType;
+    status?: string;
+    orderId?: string;
+    limit?: number;
+  }): Promise<Conversation[]> {
+    try {
+      const conditions: string[] = [];
+      const values: any[] = [];
+      let idx = 1;
+
+      if (filter?.buyerId) {
+        conditions.push(`buyer_id = $${idx++}`);
+        values.push(filter.buyerId);
+      }
+      if (filter?.sellerId) {
+        conditions.push(`seller_id = $${idx++}`);
+        values.push(filter.sellerId);
+      }
+      if (filter?.channelType) {
+        conditions.push(`channel_type = $${idx++}`);
+        values.push(filter.channelType);
+      }
+      if (filter?.status) {
+        conditions.push(`status = $${idx++}`);
+        values.push(filter.status);
+      }
+      if (filter?.orderId) {
+        conditions.push(`order_id = $${idx++}`);
+        values.push(filter.orderId);
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const limitVal = Math.min(100, Math.max(1, filter?.limit || 50));
+      const sql = `SELECT * FROM chat_conversations ${whereClause} ORDER BY updated_at DESC LIMIT $${idx}`;
+      values.push(limitVal);
+
+      const res = await this.pool.query(sql, values);
+      return res.rows.map((r: any) => this.mapRowToConversation(r));
+    } catch (err: any) {
+      console.warn('[PostgresConversationRepository.findAll fallback]:', err.message);
+      return [];
+    }
+  }
+
   public async findWaitingForStaff(limit: number): Promise<Conversation[]> {
     try {
       const res = await this.pool.query(

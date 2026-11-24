@@ -21,6 +21,7 @@ const ORDER_TTL_MS = 15 * 60 * 1000;
 const RESERVATION_TTL_MS = 30 * 60 * 1000;
 const MAX_PAYMENT_ATTEMPTS = 3;
 const CURRENCY = 'VND';
+export const FREE_SHIPPING_THRESHOLD = 500_000;
 
 const PRODUCT_ID_PATTERN =
   /^([0-9]+|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$/;
@@ -114,7 +115,9 @@ export class CheckoutService {
     private readonly promotionService?: PromotionService,
   ) {}
 
-  public buildShippingOptions(baseFee: number): ShippingOption[] {
+  public buildShippingOptions(baseFee: number, subtotal?: number): ShippingOption[] {
+    const isFree = subtotal !== undefined && subtotal >= FREE_SHIPPING_THRESHOLD;
+    const fee = isFree ? 0 : baseFee;
     const now = Date.now();
     const standardDelivery = new Date(now + 3 * 24 * 60 * 60 * 1000);
 
@@ -123,8 +126,8 @@ export class CheckoutService {
         optionId: 'GHN_STANDARD',
         carrier: 'GHN',
         carrierName: 'Giao Hàng Nhanh',
-        serviceName: 'Tiêu chuẩn',
-        fee: baseFee,
+        serviceName: isFree ? 'Tiêu chuẩn (Miễn phí vận chuyển)' : 'Tiêu chuẩn',
+        fee,
         etaDaysMin: 2,
         etaDaysMax: 3,
         etaText: 'Dự kiến 2–3 ngày',
@@ -161,14 +164,16 @@ export class CheckoutService {
   public async quote(buyerId: string, body: unknown) {
     const lines = parseCartLines(body);
     const address = parseShippingAddress(body);
+    const isAuction = isRecord(body) && (Boolean(body.isAuction) || Boolean(body.auctionId));
     const targetSellerId =
       isRecord(body) && typeof body.targetSellerId === 'string' && body.targetSellerId.trim()
         ? String(body.targetSellerId).trim()
-        : undefined;
-    const isAuction = isRecord(body) && Boolean(body.isAuction);
+        : isRecord(body) && typeof body.sellerId === 'string' && body.sellerId.trim()
+          ? String(body.sellerId).trim()
+          : undefined;
     const priced = await this.priceCart(buyerId, lines, address, { targetSellerId, isAuction });
 
-    const shippingOptions = this.buildShippingOptions(priced.shippingFee);
+    const shippingOptions = this.buildShippingOptions(priced.shippingFee, priced.subtotal);
     const requestedOptionId =
       isRecord(body) && typeof body.shippingOptionId === 'string'
         ? String(body.shippingOptionId).trim().toUpperCase()
@@ -285,6 +290,13 @@ export class CheckoutService {
         ? String(body.promoCode).trim().toUpperCase()
         : undefined;
 
+    const targetSellerId =
+      isRecord(body) && typeof body.targetSellerId === 'string' && body.targetSellerId.trim()
+        ? String(body.targetSellerId).trim()
+        : isRecord(body) && typeof body.sellerId === 'string' && body.sellerId.trim()
+          ? String(body.sellerId).trim()
+          : undefined;
+
     const requestedOptionId =
       isRecord(body) && typeof body.shippingOptionId === 'string' && body.shippingOptionId.trim()
         ? String(body.shippingOptionId).trim().toUpperCase()
@@ -298,6 +310,7 @@ export class CheckoutService {
           buyerId,
           lines,
           address,
+          sellerId: targetSellerId || null,
           quoteId: quoteId || null,
           paymentMethod,
           promoCode: rawPromo || null,
@@ -327,11 +340,7 @@ export class CheckoutService {
       }
     }
 
-    const targetSellerId =
-      isRecord(body) && typeof body.targetSellerId === 'string' && body.targetSellerId.trim()
-        ? String(body.targetSellerId).trim()
-        : undefined;
-    const isAuction = isRecord(body) && Boolean(body.isAuction);
+    const isAuction = isRecord(body) && (Boolean(body.isAuction) || Boolean(body.auctionId));
     const priced = await this.priceCart(buyerId, lines, address, { targetSellerId, isAuction });
 
     let finalShippingFee = priced.shippingFee;
@@ -716,6 +725,7 @@ export class CheckoutService {
       estimatedDeliveryAt: order.estimatedDeliveryAt
         ? order.estimatedDeliveryAt.toISOString()
         : null,
+      escrowStatus: (order as any).escrowStatus || 'PENDING',
       expiresAt: order.expiresAt.toISOString(),
       checkoutUrl: payment.checkoutUrl || null,
       paymentLinkId: payment.paymentLinkId || null,
@@ -773,15 +783,16 @@ export class CheckoutService {
     }
 
     // Nếu chỉ định targetSellerId -> Lọc chỉ các sản phẩm của Seller đó để tách đơn
-    const activeLines = options?.targetSellerId
-      ? lines.filter((l) => allProducts.get(l.productId)?.sellerId === options.targetSellerId)
+    const targetSellerId = options?.targetSellerId;
+    const activeLines = targetSellerId
+      ? lines.filter((l) => allProducts.get(l.productId)?.sellerId === targetSellerId)
       : lines;
 
-    if (options?.targetSellerId && activeLines.length === 0) {
+    if (targetSellerId && activeLines.length === 0) {
       throw new CheckoutError(
         404,
         'SELLER_PRODUCTS_NOT_FOUND',
-        'Không tìm thấy sản phẩm của Seller được chỉ định trong giỏ hàng.',
+        `Không tìm thấy sản phẩm của Seller ${targetSellerId} trong giỏ hàng.`,
         { availableSellerIds: Array.from(sellers) },
       );
     }
@@ -822,16 +833,17 @@ export class CheckoutService {
     const subtotal = items.reduce((sum, item) => sum + item.subtotal, 0);
 
     // Tự động miễn phí vận chuyển cho đơn hàng từ 500.000đ trở lên (không áp dụng cho đấu giá)
-    const FREE_SHIPPING_THRESHOLD = 500_000;
-    const finalShippingFee =
-      !options?.isAuction && subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : shipping.fee;
+    const isFreeShipping = !options?.isAuction && subtotal >= FREE_SHIPPING_THRESHOLD;
+    const finalShippingFee = isFreeShipping ? 0 : shipping.fee;
 
     return {
       sellerId: Array.from(activeSellers)[0],
       items,
       stockByProduct,
       subtotal,
+      rawShippingFee: shipping.fee,
       shippingFee: finalShippingFee,
+      isFreeShipping,
       total: subtotal + finalShippingFee,
       availableSellerIds: Array.from(sellers),
     };
