@@ -61,6 +61,9 @@ export class GetOrderDetailUseCase {
       })),
       paymentTransactionId: order.paymentTransactionId,
       buyerReceivedAt: order.buyerReceivedAt?.toISOString() || null,
+      escrowStatus: order.escrowStatus || null,
+      escrowAmount: order.escrowAmount ?? null,
+      escrowReleasedAt: order.escrowReleasedAt ? order.escrowReleasedAt.toISOString() : null,
       createdAt: order.createdAt.toISOString(),
       updatedAt: order.updatedAt.toISOString(),
     };

@@ -17,7 +17,7 @@ export interface InventoryLedgerEntry {
   id: string;
   inventoryId: string;
   sku: string;
-  transactionType: InventoryAdjustmentType | 'RESERVE' | 'RELEASE' | 'COMMIT';
+  transactionType: InventoryAdjustmentType | 'RESERVE' | 'RELEASE' | 'COMMIT' | 'RETURN_RESTOCK';
   quantityChange: number;
   reason: string;
   operatorId?: string;

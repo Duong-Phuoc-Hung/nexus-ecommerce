@@ -20,6 +20,7 @@ const ORDER_TTL_MS = 15 * 60 * 1000;
 const RESERVATION_TTL_MS = 30 * 60 * 1000;
 const MAX_PAYMENT_ATTEMPTS = 3;
 const CURRENCY = 'VND';
+export const FREE_SHIPPING_THRESHOLD = 500_000;
 
 const PRODUCT_ID_PATTERN =
   /^([0-9]+|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$/;
@@ -113,7 +114,9 @@ export class CheckoutService {
     private readonly promotionService?: PromotionService,
   ) {}
 
-  public buildShippingOptions(baseFee: number): ShippingOption[] {
+  public buildShippingOptions(baseFee: number, subtotal?: number): ShippingOption[] {
+    const isFree = subtotal !== undefined && subtotal >= FREE_SHIPPING_THRESHOLD;
+    const fee = isFree ? 0 : baseFee;
     const now = Date.now();
     const standardDelivery = new Date(now + 3 * 24 * 60 * 60 * 1000);
 
@@ -122,8 +125,8 @@ export class CheckoutService {
         optionId: 'GHN_STANDARD',
         carrier: 'GHN',
         carrierName: 'Giao Hàng Nhanh',
-        serviceName: 'Tiêu chuẩn',
-        fee: baseFee,
+        serviceName: isFree ? 'Tiêu chuẩn (Miễn phí vận chuyển)' : 'Tiêu chuẩn',
+        fee,
         etaDaysMin: 2,
         etaDaysMax: 3,
         etaText: 'Dự kiến 2–3 ngày',
@@ -160,9 +163,14 @@ export class CheckoutService {
   public async quote(buyerId: string, body: unknown) {
     const lines = parseCartLines(body);
     const address = parseShippingAddress(body);
-    const priced = await this.priceCart(buyerId, lines, address);
+    const isAuction = isRecord(body) && (body.isAuction === true || Boolean(body.auctionId));
+    const targetSellerId =
+      isRecord(body) && typeof body.sellerId === 'string' && body.sellerId.trim()
+        ? body.sellerId.trim()
+        : undefined;
+    const priced = await this.priceCart(buyerId, lines, address, targetSellerId, isAuction);
 
-    const shippingOptions = this.buildShippingOptions(priced.shippingFee);
+    const shippingOptions = this.buildShippingOptions(priced.shippingFee, priced.subtotal);
     const requestedOptionId =
       isRecord(body) && typeof body.shippingOptionId === 'string'
         ? String(body.shippingOptionId).trim().toUpperCase()
@@ -279,6 +287,11 @@ export class CheckoutService {
         ? String(body.promoCode).trim().toUpperCase()
         : undefined;
 
+    const targetSellerId =
+      isRecord(body) && typeof body.sellerId === 'string' && body.sellerId.trim()
+        ? body.sellerId.trim()
+        : undefined;
+
     const requestedOptionId =
       isRecord(body) && typeof body.shippingOptionId === 'string' && body.shippingOptionId.trim()
         ? String(body.shippingOptionId).trim().toUpperCase()
@@ -292,6 +305,7 @@ export class CheckoutService {
           buyerId,
           lines,
           address,
+          sellerId: targetSellerId || null,
           quoteId: quoteId || null,
           paymentMethod,
           promoCode: rawPromo || null,
@@ -321,7 +335,8 @@ export class CheckoutService {
       }
     }
 
-    const priced = await this.priceCart(buyerId, lines, address);
+    const isAuction = isRecord(body) && (body.isAuction === true || Boolean(body.auctionId));
+    const priced = await this.priceCart(buyerId, lines, address, targetSellerId, isAuction);
 
     let finalShippingFee = priced.shippingFee;
     let finalDiscountAmount = 0;
@@ -705,6 +720,7 @@ export class CheckoutService {
       estimatedDeliveryAt: order.estimatedDeliveryAt
         ? order.estimatedDeliveryAt.toISOString()
         : null,
+      escrowStatus: (order as any).escrowStatus || 'PENDING',
       expiresAt: order.expiresAt.toISOString(),
       checkoutUrl: payment.checkoutUrl || null,
       paymentLinkId: payment.paymentLinkId || null,
@@ -716,7 +732,13 @@ export class CheckoutService {
     };
   }
 
-  private async priceCart(buyerId: string, lines: CartLineInput[], address: ShippingAddress) {
+  private async priceCart(
+    buyerId: string,
+    lines: CartLineInput[],
+    address: ShippingAddress,
+    targetSellerId?: string,
+    isAuction?: boolean,
+  ) {
     const items: PricedLine[] = [];
     const sellers = new Set<string>();
     const stockByProduct: Record<string, number> = {};
@@ -752,6 +774,12 @@ export class CheckoutService {
         );
       }
       sellers.add(product.sellerId);
+
+      // Task 12: Hỗ trợ tách đơn đa người bán (Selective checkout theo từng Seller)
+      if (targetSellerId && product.sellerId !== targetSellerId) {
+        continue;
+      }
+
       stockByProduct[product.id] = product.stockQuantity;
       const unitPrice = line.price !== undefined && line.price > 0 ? line.price : product.price;
       items.push({
@@ -763,15 +791,25 @@ export class CheckoutService {
       });
     }
 
-    if (sellers.size > 1) {
+    if (targetSellerId && items.length === 0) {
       throw new CheckoutError(
-        422,
-        'MIXED_SELLERS_NOT_SUPPORTED',
-        'Mỗi đơn hàng chỉ được chứa sản phẩm của một Seller.',
+        400,
+        'VALIDATION_ERROR',
+        `Không có sản phẩm nào thuộc người bán ${targetSellerId} trong giỏ hàng.`,
       );
     }
 
-    const shipping = await this.shipping.quote(address, lines);
+    if (!targetSellerId && sellers.size > 1) {
+      throw new CheckoutError(
+        422,
+        'MIXED_SELLERS_NOT_SUPPORTED',
+        'Giỏ hàng có sản phẩm từ nhiều người bán khác nhau. Vui lòng chọn sellerId để đặt hàng theo từng shop riêng biệt.',
+        { availableSellerIds: Array.from(sellers) },
+      );
+    }
+
+    const effectiveLines = items.map((i) => ({ productId: i.productId, quantity: i.quantity }));
+    const shipping = await this.shipping.quote(address, effectiveLines);
     if (!shipping.supported) {
       throw new CheckoutError(
         422,
@@ -781,13 +819,19 @@ export class CheckoutService {
     }
 
     const subtotal = items.reduce((sum, item) => sum + item.subtotal, 0);
+    // Task 13: Miễn phí vận chuyển tự động khi đơn hàng bán lẻ >= 500.000 VND (SRS 3.4.1)
+    const isFreeShipping = !isAuction && subtotal >= FREE_SHIPPING_THRESHOLD;
+    const shippingFee = isFreeShipping ? 0 : shipping.fee;
+
     return {
-      sellerId: Array.from(sellers)[0],
+      sellerId: targetSellerId || Array.from(sellers)[0],
       items,
       stockByProduct,
       subtotal,
-      shippingFee: shipping.fee,
-      total: subtotal + shipping.fee,
+      rawShippingFee: shipping.fee,
+      shippingFee,
+      isFreeShipping,
+      total: subtotal + shippingFee,
     };
   }
 }

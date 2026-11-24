@@ -181,6 +181,9 @@ export class PostgresOrderRepository implements IOrderRepository {
           status: order.status,
           shippingAddress: shippingAddressJson as any,
           trackingCode: order.trackingCode || null,
+          escrowStatus: order.escrowStatus || null,
+          escrowAmount: order.escrowAmount ?? null,
+          escrowReleasedAt: order.escrowReleasedAt || null,
           timeline: order.timeline as any,
           updatedAt: order.updatedAt,
         },
@@ -198,6 +201,9 @@ export class PostgresOrderRepository implements IOrderRepository {
           status: order.status,
           shippingAddress: shippingAddressJson as any,
           trackingCode: order.trackingCode || null,
+          escrowStatus: order.escrowStatus || 'PENDING',
+          escrowAmount: order.escrowAmount ?? 0,
+          escrowReleasedAt: order.escrowReleasedAt || null,
           timeline: order.timeline as any,
           createdAt: order.createdAt,
           updatedAt: order.updatedAt,
@@ -247,6 +253,9 @@ export class PostgresOrderRepository implements IOrderRepository {
         data: {
           status: order.status,
           trackingCode: order.trackingCode || null,
+          escrowStatus: order.escrowStatus || null,
+          escrowAmount: order.escrowAmount ?? null,
+          escrowReleasedAt: order.escrowReleasedAt || null,
           timeline: order.timeline as any,
           updatedAt: order.updatedAt,
         },
@@ -361,6 +370,17 @@ export class PostgresOrderRepository implements IOrderRepository {
       totalAmount: Number(orderRow.totalAmount),
       status: (orderRow.status as OrderStatus) || OrderStatus.PENDING,
       trackingCode: orderRow.trackingCode || undefined,
+      escrowStatus: (orderRow.escrowStatus as any) || (orderRow.escrow_status as any) || undefined,
+      escrowAmount:
+        orderRow.escrowAmount !== null && orderRow.escrowAmount !== undefined
+          ? Number(orderRow.escrowAmount)
+          : orderRow.escrow_amount !== null && orderRow.escrow_amount !== undefined
+            ? Number(orderRow.escrow_amount)
+            : undefined,
+      escrowReleasedAt:
+        orderRow.escrowReleasedAt || orderRow.escrow_released_at
+          ? new Date(orderRow.escrowReleasedAt || orderRow.escrow_released_at)
+          : null,
       timeline,
       createdAt: new Date(orderRow.createdAt),
       updatedAt: new Date(orderRow.updatedAt),

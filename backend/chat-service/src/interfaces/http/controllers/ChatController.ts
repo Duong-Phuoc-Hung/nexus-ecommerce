@@ -194,6 +194,49 @@ export class ChatController {
   }
 
   /**
+   * GET /api/v1/chat/conversations
+   * Lấy danh sách cuộc hội thoại theo quyền hạn người dùng (BUYER, SELLER, SUPPORT_STAFF, ADMIN)
+   */
+  public async listConversations(req: Request, res: Response): Promise<void> {
+    try {
+      const user = (req as AuthenticatedRequest).user;
+      if (!user) {
+        res.status(401).json({ success: false, error: 'Unauthorized.' });
+        return;
+      }
+
+      const role = (user.role || '').toUpperCase();
+      const channelType = req.query.channelType as ChannelType | undefined;
+      const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+      const orderId = typeof req.query.orderId === 'string' ? req.query.orderId : undefined;
+      const limit = req.query.limit ? Number(req.query.limit) : 50;
+
+      const filter: any = { channelType, status, orderId, limit };
+
+      if (role === 'BUYER') {
+        filter.buyerId = user.sub;
+      } else if (role === 'SELLER') {
+        filter.sellerId = user.sub;
+      } else if (role === 'SUPPORT_STAFF' || role === 'ADMIN') {
+        if (req.query.buyerId) filter.buyerId = String(req.query.buyerId);
+        if (req.query.sellerId) filter.sellerId = String(req.query.sellerId);
+      }
+
+      const convs = await this.conversationRepo.findAll(filter);
+      const accessibleConvs = convs.filter((c) => c.canAccess(user.sub, user.role));
+
+      res.status(200).json({
+        success: true,
+        data: accessibleConvs.map((c) => c.toDto()),
+      });
+    } catch (error: any) {
+      res
+        .status(500)
+        .json({ success: false, error: error.message || 'Lỗi lấy danh sách hội thoại.' });
+    }
+  }
+
+  /**
    * POST /api/v1/chat/conversations/:id/messages
    * Gửi tin nhắn vào cuộc hội thoại (kèm ảnh/video đính kèm)
    */

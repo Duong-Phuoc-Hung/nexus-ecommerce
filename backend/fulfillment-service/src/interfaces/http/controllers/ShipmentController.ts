@@ -407,12 +407,15 @@ export class ShipmentController {
       }
 
       const shipmentId = req.params.id as string;
-      const { returnedToSellerAt, condition } = req.body || {};
+      const { returnedToSellerAt, condition, sku, quantity, warehouseId } = req.body || {};
 
       const result = await this.confirmReturnUseCase.execute({
         shipmentId,
         returnedToSellerAt,
         condition: condition || 'INTACT',
+        sku,
+        quantity: typeof quantity === 'number' ? quantity : undefined,
+        warehouseId,
       });
 
       res.status(200).json({

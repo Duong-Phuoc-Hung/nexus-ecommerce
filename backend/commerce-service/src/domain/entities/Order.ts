@@ -18,6 +18,8 @@ export interface OrderItem {
   totalPrice: number;
 }
 
+export type EscrowStatus = 'PENDING' | 'HELD' | 'RELEASED' | 'REFUNDED';
+
 export interface OrderTimelineItem {
   status: string;
   title: string;
@@ -58,6 +60,9 @@ export interface OrderProps {
   refundTransactionId?: string;
   refundAmount?: number;
   refundStatus?: 'PENDING' | 'SUCCESS' | 'FAILED';
+  escrowStatus?: EscrowStatus;
+  escrowAmount?: number;
+  escrowReleasedAt?: Date | null;
   timeline?: OrderTimelineItem[];
   createdAt: Date;
   updatedAt: Date;
@@ -92,6 +97,9 @@ export class Order {
   private _refundTransactionId?: string;
   private _refundAmount?: number;
   private _refundStatus?: 'PENDING' | 'SUCCESS' | 'FAILED';
+  private _escrowStatus?: EscrowStatus;
+  private _escrowAmount?: number;
+  private _escrowReleasedAt?: Date | null;
   private _timeline: OrderTimelineItem[];
   private readonly _createdAt: Date;
   private _updatedAt: Date;
@@ -121,6 +129,11 @@ export class Order {
     this._refundTransactionId = props.refundTransactionId;
     this._refundAmount = props.refundAmount;
     this._refundStatus = props.refundStatus;
+    this._escrowStatus =
+      props.escrowStatus || (props.status === OrderStatus.PAID ? 'HELD' : 'PENDING');
+    this._escrowAmount =
+      props.escrowAmount ?? (this._escrowStatus === 'HELD' ? props.totalAmount : 0);
+    this._escrowReleasedAt = props.escrowReleasedAt ?? null;
     this._timeline = props.timeline || [
       {
         status: 'CREATED',
@@ -228,6 +241,18 @@ export class Order {
     return this._refundStatus;
   }
 
+  public get escrowStatus(): EscrowStatus | undefined {
+    return this._escrowStatus;
+  }
+
+  public get escrowAmount(): number | undefined {
+    return this._escrowAmount;
+  }
+
+  public get escrowReleasedAt(): Date | null | undefined {
+    return this._escrowReleasedAt;
+  }
+
   public get timeline(): OrderTimelineItem[] {
     return [...this._timeline];
   }
@@ -253,8 +278,36 @@ export class Order {
         timestamp: new Date(),
         note: 'BUYER_CONFIRMED_RECEIPT',
       });
+      // Tự động giải phóng tiền ký quỹ Escrow cho người bán (SRS 3.4)
+      this._escrowStatus = 'RELEASED';
+      this._escrowReleasedAt = new Date();
+      this._timeline.push({
+        status: 'ESCROW_RELEASED',
+        title: 'Giải ngân ký quỹ thành công cho Người bán',
+        timestamp: new Date(),
+        note: `Số tiền giải ngân: ${this._totalAmount.toLocaleString('vi-VN')} VND`,
+      });
       this._updatedAt = new Date();
     }
+  }
+
+  public releaseEscrow(note?: string): void {
+    if (
+      this._status !== OrderStatus.DELIVERED &&
+      this._status !== OrderStatus.COMPLETED &&
+      this._status !== OrderStatus.PAID
+    ) {
+      throw new Error('Chỉ có thể giải ngân tiền ký quỹ khi đơn hàng đã thanh toán hoặc đã giao.');
+    }
+    this._escrowStatus = 'RELEASED';
+    this._escrowReleasedAt = new Date();
+    this._timeline.push({
+      status: 'ESCROW_RELEASED',
+      title: 'Giải ngân ký quỹ thành công cho Người bán',
+      timestamp: new Date(),
+      note: note || `Số tiền giải ngân: ${this._totalAmount.toLocaleString('vi-VN')} VND`,
+    });
+    this._updatedAt = new Date();
   }
 
   public get createdAt(): Date {
@@ -271,9 +324,11 @@ export class Order {
     }
     this._status = OrderStatus.PAID;
     this._paymentTransactionId = transactionId;
+    this._escrowStatus = 'HELD';
+    this._escrowAmount = this._totalAmount;
     this._timeline.push({
       status: 'PAID',
-      title: 'Đã xác nhận thanh toán',
+      title: 'Đã xác nhận thanh toán (Tiền giữ an toàn trong tài khoản ký quỹ Escrow)',
       timestamp: new Date(),
     });
     this._updatedAt = new Date();
@@ -313,6 +368,7 @@ export class Order {
       throw new Error('Chỉ có thể hoàn tiền cho đơn hàng đã thanh toán.');
     }
     this._status = OrderStatus.REFUNDED;
+    this._escrowStatus = 'REFUNDED';
     this._timeline.push({
       status: 'REFUNDED',
       title: 'Đã kích hoạt hoàn tiền cho khách hàng',
@@ -346,10 +402,12 @@ export class Order {
     this._refundTransactionId = params.refundTransactionId;
     this._refundAmount = params.amount;
     this._refundStatus = 'SUCCESS';
+    this._escrowStatus = 'REFUNDED';
 
     this._timeline.push({
       status: 'REFUNDED',
-      title: 'Hoàn tiền thành công qua cổng thanh toán PayOS',
+      title:
+        'Hoàn tiền thành công qua cổng thanh toán PayOS (Giải phóng ký quỹ hoàn cho Người mua)',
       timestamp: new Date(),
       note: `Mã hoàn tiền (Refund Txn): ${params.refundTransactionId} · Số tiền: ${params.amount.toLocaleString(
         'vi-VN',

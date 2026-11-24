@@ -35,6 +35,37 @@ export class InMemoryConversationRepository implements IConversationRepository {
     return list;
   }
 
+  public async findAll(filter?: {
+    buyerId?: string;
+    sellerId?: string;
+    channelType?: ChannelType;
+    status?: string;
+    orderId?: string;
+    limit?: number;
+  }): Promise<Conversation[]> {
+    let list = Array.from(this.items.values());
+
+    if (filter?.buyerId) {
+      list = list.filter((c) => c.buyerId === filter.buyerId);
+    }
+    if (filter?.sellerId) {
+      list = list.filter((c) => c.sellerId === filter.sellerId);
+    }
+    if (filter?.channelType) {
+      list = list.filter((c) => c.channelType === filter.channelType);
+    }
+    if (filter?.status) {
+      list = list.filter((c) => c.status === filter.status);
+    }
+    if (filter?.orderId) {
+      list = list.filter((c) => c.orderId === filter.orderId);
+    }
+
+    list.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+    const limit = filter?.limit || 50;
+    return list.slice(0, limit);
+  }
+
   public async save(conversation: Conversation): Promise<void> {
     this.items.set(conversation.id, conversation);
   }

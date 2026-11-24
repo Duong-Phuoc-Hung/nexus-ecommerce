@@ -108,6 +108,11 @@ model Order {
   shippingServiceName      String?     @map("shipping_service_name") @db.VarChar(100)
   estimatedDeliveryAt      DateTime?   @map("estimated_delivery_at") @db.Timestamptz()
 
+  // Trạng thái ký quỹ Escrow: PENDING, HELD, RELEASED, REFUNDED (SRS 3.4)
+  escrowStatus             String?     @default("PENDING") @map("escrow_status") @db.VarChar(20)
+  escrowAmount             Decimal?    @default(0.00) @map("escrow_amount") @db.Decimal(12, 2)
+  escrowReleasedAt         DateTime?   @map("escrow_released_at") @db.Timestamptz()
+
   // Trạng thái đơn: PENDING_PAYMENT, PAID, PROCESSING, SHIPPED, DELIVERED, CANCELLED, REFUNDED
   status                   String      @default("PENDING_PAYMENT") @db.VarChar(30)
 

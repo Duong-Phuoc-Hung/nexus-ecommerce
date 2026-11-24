@@ -122,7 +122,11 @@ export function createApplication(): Application {
   );
   const createShipmentUseCase = new CreateShipmentUseCase(shipmentRepository);
   const requestRedeliveryUseCase = new RequestRedeliveryUseCase(shipmentRepository);
-  const confirmReturnUseCase = new ConfirmReturnUseCase(shipmentRepository, commerceOrderClient);
+  const confirmReturnUseCase = new ConfirmReturnUseCase(
+    shipmentRepository,
+    commerceOrderClient,
+    inventoryRepository,
+  );
 
   // 3. Use Cases - Tồn kho (Inventory)
   const getSkuInventoryUseCase = new GetSkuInventoryUseCase(inventoryRepository);

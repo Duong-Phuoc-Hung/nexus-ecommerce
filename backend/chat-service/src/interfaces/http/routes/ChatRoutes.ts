@@ -20,6 +20,9 @@ export function createChatRoutes(
   // 1. Mở hoặc tìm phòng chat theo orderId và channelType
   router.post('/conversations', requireAuth, (req, res) => controller.openConversation(req, res));
 
+  // 1.1 Lấy danh sách cuộc hội thoại theo người dùng (BUYER / SELLER / SUPPORT_STAFF / ADMIN)
+  router.get('/conversations', requireAuth, (req, res) => controller.listConversations(req, res));
+
   // 2. Chi tiết phòng chat
   router.get('/conversations/:id', requireAuth, protectHandover, (req, res) =>
     controller.getConversation(req, res),
