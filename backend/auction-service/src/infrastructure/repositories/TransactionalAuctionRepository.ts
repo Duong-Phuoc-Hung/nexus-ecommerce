@@ -1,6 +1,9 @@
 import { Prisma, PrismaClient } from '../database/generated/client';
 import { PrismaClientWrapper } from '../database/PrismaClient';
-import { IAuctionRepository } from '../../domain/repositories/IAuctionRepository';
+import {
+  IAuctionRepository,
+  AuctionSettlementRecord,
+} from '../../domain/repositories/IAuctionRepository';
 import { Auction, AuctionStatus, BidRecord } from '../../domain/entities/Auction';
 import { generateUuidV7 } from '../utils/uuid';
 import { AuctionMutationTransaction } from '../../application/auction-mutations';
@@ -26,6 +29,7 @@ export class TransactionalAuctionRepository implements IAuctionRepository {
     const records = await this.prisma.auctionRoom.findMany({
       where: {
         status: { in: ['ACTIVE', 'EXTENDED'] },
+        endTime: { gt: new Date() },
       },
       orderBy: { endTime: 'asc' },
     });
@@ -39,6 +43,12 @@ export class TransactionalAuctionRepository implements IAuctionRepository {
       const targetStatus = filters.status.toUpperCase();
       if (targetStatus === 'ACTIVE') {
         where.status = { in: ['ACTIVE', 'EXTENDED'] };
+        where.endTime = { gt: new Date() };
+      } else if (targetStatus === 'ENDED') {
+        where.OR = [
+          { status: { in: ['ENDED', 'SETTLED'] } },
+          { status: { in: ['ACTIVE', 'EXTENDED', 'SCHEDULED'] }, endTime: { lte: new Date() } },
+        ];
       } else if (targetStatus === 'UPCOMING') {
         where.status = 'SCHEDULED';
       } else {
@@ -141,8 +151,72 @@ export class TransactionalAuctionRepository implements IAuctionRepository {
     }));
   }
 
+  // Lưu thông tin chốt phiên đấu giá vào bảng auction_settlements qua Prisma ORM
+  public async saveSettlement(settlement: AuctionSettlementRecord): Promise<void> {
+    const settlementId = settlement.id || generateUuidV7();
+    await this.prisma.auctionSettlement.upsert({
+      where: { auctionId: settlement.auctionId },
+      create: {
+        id: settlementId,
+        auctionId: settlement.auctionId,
+        winnerId: settlement.winnerId,
+        winningBidAmount: settlement.winningBidAmount,
+        paymentDeadline: settlement.paymentDeadline,
+        orderId: settlement.orderId || null,
+        status: settlement.status || 'PENDING_PAYMENT',
+        settledAt: settlement.settledAt || new Date(),
+      },
+      update: {
+        winnerId: settlement.winnerId,
+        winningBidAmount: settlement.winningBidAmount,
+        paymentDeadline: settlement.paymentDeadline,
+        orderId: settlement.orderId ?? undefined,
+        status: settlement.status,
+      },
+    });
+  }
+
+  // Tra cứu thông tin chốt phiên theo auctionId
+  public async findSettlementByAuctionId(
+    auctionId: string,
+  ): Promise<AuctionSettlementRecord | null> {
+    const record = await this.prisma.auctionSettlement.findUnique({
+      where: { auctionId },
+    });
+    if (!record) return null;
+    return {
+      id: record.id,
+      auctionId: record.auctionId,
+      winnerId: record.winnerId,
+      winningBidAmount: Number(record.winningBidAmount),
+      paymentDeadline: record.paymentDeadline,
+      orderId: record.orderId || undefined,
+      status: record.status,
+      settledAt: record.settledAt,
+    };
+  }
+
   // Ánh xạ bản ghi Prisma sang Domain Entity Auction (Đọc trực tiếp audit từ DB, không dùng Map RAM)
   private mapModelToAuction(record: any): Auction {
+    let status = record.status as AuctionStatus;
+    const now = new Date();
+
+    // Tự động chuẩn hóa trạng thái theo thời gian thực (Life-cycle Synchronization)
+    if (status !== AuctionStatus.CANCELLED && status !== AuctionStatus.SETTLED) {
+      const isPastEndTime = record.endTime && new Date(record.endTime) <= now;
+      const isBuyNowReached =
+        record.buyNowPrice &&
+        Number(record.buyNowPrice) > 0 &&
+        record.winnerId &&
+        Number(record.currentPrice) >= Number(record.buyNowPrice);
+
+      if (isPastEndTime || isBuyNowReached) {
+        status = AuctionStatus.ENDED;
+      } else if (record.startTime && new Date(record.startTime) <= now) {
+        status = AuctionStatus.ACTIVE;
+      }
+    }
+
     return new Auction({
       id: String(record.id),
       productId: String(record.productId),
@@ -153,7 +227,7 @@ export class TransactionalAuctionRepository implements IAuctionRepository {
       highestBidderId: record.winnerId || undefined,
       bidIncrement: Number(record.bidStep),
       buyNowPrice: record.buyNowPrice ? Number(record.buyNowPrice) : undefined,
-      status: record.status as AuctionStatus,
+      status,
       startTime: record.startTime,
       endTime: record.endTime,
       actualEndTime: record.actualEndTime ? new Date(record.actualEndTime) : undefined,

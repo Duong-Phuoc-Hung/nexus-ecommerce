@@ -23,6 +23,7 @@ export function createAuctionRoutes(controller: AuctionController): Router {
   router.post('/:id/bids', optionalAuth, (req, res) => controller.placeBid(req, res));
   router.post('/:id/buy-now', requireAuth, (req, res) => controller.buyNow(req, res));
   router.post('/:id/checkout', requireAuth, (req, res) => controller.checkout(req, res));
+  router.post('/:id/settle', (req, res) => controller.settle(req, res));
   router.put('/:id', requireAuth, requireSellerOrAdmin, (req, res) => controller.update(req, res));
   router.post('/:id/cancel', requireAuctionAdminAuth, requireAuctionCancel, (req, res) =>
     controller.cancel(req, res),

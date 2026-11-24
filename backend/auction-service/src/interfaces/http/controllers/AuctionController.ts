@@ -14,6 +14,7 @@ import {
   CancelAuctionUseCase,
 } from '../../../application/use-cases/CancelAuctionUseCase';
 import { AuctionCheckoutUseCase } from '../../../application/use-cases/AuctionCheckoutUseCase';
+import { SettleAuctionUseCase } from '../../../application/use-cases/SettleAuctionUseCase';
 
 export class AuctionController {
   constructor(
@@ -26,6 +27,7 @@ export class AuctionController {
     private readonly cancelAuctionUseCase: Pick<CancelAuctionUseCase, 'execute'>,
     private readonly auctionRepository: IAuctionRepository,
     private readonly auctionCheckoutUseCase?: AuctionCheckoutUseCase,
+    private readonly settleAuctionUseCase?: SettleAuctionUseCase,
   ) {}
 
   // Lấy danh sách các phiên đấu giá (hỗ trợ lọc theo status, sellerId, từ khóa q hoặc mặc định là active)
@@ -546,6 +548,39 @@ export class AuctionController {
       res.status(400).json({
         success: false,
         error: error.message || 'Không thể chốt đơn thanh toán đấu giá.',
+      });
+    }
+  }
+
+  // Chốt phiên đấu giá khi có người thắng và phát event sang RabbitMQ (TASK-AUC-01)
+  public async settle(req: Request, res: Response): Promise<void> {
+    try {
+      if (!this.settleAuctionUseCase) {
+        res.status(500).json({ success: false, error: 'SettleAuctionUseCase is not configured.' });
+        return;
+      }
+      const auctionId = req.params.id as string;
+      const authUser = (req as AuthenticatedRequest).user;
+
+      const result = await this.settleAuctionUseCase.execute({
+        auctionId,
+        triggeredBy: authUser?.id,
+      });
+
+      res.status(200).json({
+        success: true,
+        message:
+          'Chốt phiên đấu giá thành công! Đã gửi thông tin đơn hàng tới hệ thống thanh toán.',
+        data: result,
+      });
+    } catch (error: any) {
+      if (error instanceof AuctionNotFoundException) {
+        res.status(404).json({ success: false, error: error.message });
+        return;
+      }
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Không thể chốt phiên đấu giá.',
       });
     }
   }
