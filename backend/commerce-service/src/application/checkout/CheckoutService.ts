@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import {
   CartLineInput,
+  CatalogProduct,
   CheckoutError,
   ICatalogClient,
   ICheckoutRepository,
