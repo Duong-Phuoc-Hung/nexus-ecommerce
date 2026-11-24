@@ -166,7 +166,13 @@ export function createAccountExtensionsRoutes(
         repository.activeRestrictions(user.id),
         repository.reputationHistory(user.id),
       ]);
-      const activeRestrictions = restrictions.map((r) => ({
+      const activeRestrictions = (
+        (restrictions || []) as Array<{
+          restriction: string;
+          reason?: string | null;
+          expiresAt?: Date | string | null;
+        }>
+      ).map((r) => ({
         feature: r.restriction === 'BAN_BIDDING' ? 'AUCTION_BID' : r.restriction,
         reason: r.reason,
         expiresAt: r.expiresAt,
@@ -188,10 +194,17 @@ export function createAccountExtensionsRoutes(
             user.role === 'BUYER' &&
             user.status === 'ACTIVE' &&
             user.reputationScore >= 50 &&
-            !activeRestrictions.some((r) => r.feature === 'AUCTION_BID'),
+            !activeRestrictions.some((r: { feature: string }) => r.feature === 'AUCTION_BID'),
           minScoreRequiredToBid: 50,
           activeRestrictions,
-          recentHistory: events.map((event) => ({
+          recentHistory: (
+            (events || []) as Array<{
+              id: string;
+              points: number;
+              reason?: string | null;
+              createdAt: Date | string;
+            }>
+          ).map((event) => ({
             id: event.id,
             delta: event.points,
             reason: event.reason,
