@@ -23,6 +23,16 @@ export class GetAuctionDetailUseCase {
       time: b.bidTime instanceof Date ? b.bidTime.getTime() : new Date(b.bidTime).getTime(),
     }));
 
+    // Đối với client / frontend, phiên đã SETTLED tương ứng với trạng thái kết thúc (ENDED)
+    const isSettled = (auction.status as string) === 'SETTLED';
+    const clientStatus = isSettled ? 'ENDED' : auction.status;
+    const effectiveEndTime =
+      (isSettled || auction.status === 'ENDED') && auction.actualEndTime
+        ? auction.actualEndTime.toISOString()
+        : auction.endTime instanceof Date
+          ? auction.endTime.toISOString()
+          : new Date(auction.endTime).toISOString();
+
     return {
       id: auction.id,
       productId: auction.productId,
@@ -34,15 +44,12 @@ export class GetAuctionDetailUseCase {
       highestBidderId: auction.highestBidderId,
       bidIncrement: auction.bidIncrement,
       buyNowPrice: auction.buyNowPrice,
-      status: auction.status,
+      status: clientStatus,
       startTime:
         auction.startTime instanceof Date
           ? auction.startTime.toISOString()
           : new Date(auction.startTime).toISOString(),
-      endTime:
-        auction.endTime instanceof Date
-          ? auction.endTime.toISOString()
-          : new Date(auction.endTime).toISOString(),
+      endTime: effectiveEndTime,
       actualEndTime: auction.actualEndTime
         ? auction.actualEndTime instanceof Date
           ? auction.actualEndTime.toISOString()

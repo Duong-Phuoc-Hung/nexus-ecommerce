@@ -92,6 +92,12 @@ export class AuctionController {
               ? 'Phiên đấu giá đã bị dừng hoặc hủy'
               : undefined;
 
+          // Đối với client / frontend, phiên đã SETTLED tương ứng với trạng thái kết thúc (ENDED)
+          const isSettled = (a.status as string) === 'SETTLED';
+          const clientStatus = isSettled ? 'ENDED' : a.status;
+          const effectiveEndTime =
+            (isSettled || a.status === 'ENDED') && a.actualEndTime ? a.actualEndTime : a.endTime;
+
           return {
             id: a.id,
             productId: a.productId,
@@ -103,9 +109,9 @@ export class AuctionController {
             bidIncrement: a.bidIncrement,
             buyNowPrice: a.buyNowPrice,
             imageUrl: a.imageUrl,
-            status: a.status,
+            status: clientStatus,
             startTime: a.startTime,
-            endTime: a.endTime,
+            endTime: effectiveEndTime,
             actualEndTime: a.actualEndTime,
             cancelReason: effectiveCancelReason,
             cancelledBy: canViewFullReason ? a.cancelledBy : undefined,
@@ -581,6 +587,17 @@ export class AuctionController {
         auctionId,
         triggeredBy: authUser?.id,
       });
+
+      // Bắn sự kiện Realtime xuống client để màn hình phòng đấu giá cập nhật kết quả kết thúc ngay lập tức
+      const io = getSocketServer();
+      if (io) {
+        io.to(`auction:${auctionId}`).emit('auction:bid_placed', {
+          auctionId,
+          currentHighestBid: result.finalPrice,
+          status: 'ENDED',
+          timestamp: new Date().toISOString(),
+        });
+      }
 
       res.status(200).json({
         success: true,
