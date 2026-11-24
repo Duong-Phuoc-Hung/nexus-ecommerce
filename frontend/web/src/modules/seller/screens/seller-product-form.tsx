@@ -9,12 +9,7 @@ import {
   type BackendProduct,
 } from '../api/seller-products.api';
 import { userMessage } from '@/lib/axios/http';
-import {
-  products as mockProducts,
-  PageHeading,
-  DemoNote,
-  optimizeImageFile,
-} from '../components/seller-shared';
+import { PageHeading, DemoNote, optimizeImageFile } from '../components/seller-shared';
 import {
   Select,
   SelectContent,
@@ -113,37 +108,7 @@ export function SellerProductForm({ productId }: { productId?: string }) {
       })
       .catch((err) => {
         if (!controller.signal.aborted) {
-          // Fallback sang mock nếu ID là mẫu mock
-          const fallback = mockProducts.find((p) => p.id === productId);
-          if (fallback) {
-            setProductData({
-              id: fallback.id,
-              title: fallback.name,
-              slug: fallback.sku,
-              categoryId: fallback.category,
-              price: fallback.price,
-              stockQuantity: fallback.stock,
-              status: fallback.status,
-            });
-            if (fallback.category) setSelectedCategory(fallback.category);
-            if (fallback.status) setSelectedStatus(fallback.status);
-            const isRemoved =
-              typeof window !== 'undefined' &&
-              localStorage.getItem(`nexus_prod_img_removed_${productId}`) === 'true';
-
-            if (!isRemoved) {
-              const cachedImg =
-                typeof window !== 'undefined'
-                  ? localStorage.getItem(`nexus_prod_img_${productId}`) || ''
-                  : '';
-              const initialImg = cachedImg || '';
-              if (initialImg) setImageUrl(initialImg);
-            } else {
-              setImageUrl('');
-            }
-          } else {
-            setProductError(userMessage(err));
-          }
+          setProductError(userMessage(err) || 'Không tìm thấy sản phẩm trên hệ thống.');
         }
       })
       .finally(() => {

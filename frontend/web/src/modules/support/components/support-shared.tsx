@@ -4,9 +4,7 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import { cases, orders, users, shipments } from '../fixtures/support';
 import type { SupportCase } from '../api/support.api';
-export { cases, orders, users, shipments } from '../fixtures/support';
 export const money = (amount: number) => `${new Intl.NumberFormat('vi-VN').format(amount)} ₫`;
 export const slug = (value: string) => value.toLowerCase().replaceAll(' ', '-');
 

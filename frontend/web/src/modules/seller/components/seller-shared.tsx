@@ -4,9 +4,7 @@ import Link from 'next/link';
 import { FormEvent, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import { products, auctions, orders, inventory } from '../fixtures/seller';
 import type { OrderListItem } from '@/modules/commerce/api/orders.api';
-export { products, auctions, orders, inventory } from '../fixtures/seller';
 export type { Product, ProductStatus } from '../types/product.types';
 export const currency = (value: number) => `${new Intl.NumberFormat('vi-VN').format(value)} ₫`;
 export const statusClass = (status: string) => status.toLowerCase().replaceAll(' ', '-');

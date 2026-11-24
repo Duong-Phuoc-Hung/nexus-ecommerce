@@ -5,13 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { sellerProductsApi, type BackendProduct } from '../api/seller-products.api';
 import { userMessage } from '@/lib/axios/http';
-import {
-  products as mockProducts,
-  currency,
-  statusClass,
-  PageHeading,
-  DemoNote,
-} from '../components/seller-shared';
+import { currency, statusClass, PageHeading, DemoNote } from '../components/seller-shared';
 import {
   Select,
   SelectContent,
