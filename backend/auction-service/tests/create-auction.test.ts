@@ -133,4 +133,26 @@ describe('CreateAuctionRoomUseCase', () => {
       { message: 'Thời gian bắt đầu (startTime) phải trước thời gian kết thúc (endTime).' },
     );
   });
+
+  it('báo lỗi khi startTime ở quá khứ vượt quá 5 phút', async () => {
+    const repo = new InMemoryAuctionRepository();
+    const useCase = new CreateAuctionRoomUseCase(repo);
+
+    // Thử tạo phiên với startTime là 10 phút trước hoặc ngày hôm qua
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+    const endTime = new Date(Date.now() + 3600 * 1000);
+
+    await assert.rejects(
+      async () => {
+        await useCase.execute({
+          productId: '13',
+          sellerId: 'sel_01',
+          startPrice: 5000000,
+          startTime: tenMinutesAgo,
+          endTime,
+        });
+      },
+      { message: 'Thời gian bắt đầu phiên đấu giá (startTime) không thể nằm trong quá khứ.' },
+    );
+  });
 });

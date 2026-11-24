@@ -126,10 +126,20 @@ export function MarketplaceCard({
         </p>
         {product.mode === 'fixed' && (
           <p className="mt-2 flex items-center gap-1 text-[11px] text-muted">
-            <MarketplaceIcon name="star" className="size-3 text-amber-600" filled />
-            <span>{product.rating?.toFixed(1) ?? '4.8'}</span>
-            <span className="mx-1 text-line">|</span>
-            <span>Đã bán {product.soldCount ?? 24}</span>
+            {typeof product.rating === 'number' && product.rating > 0 ? (
+              <>
+                <MarketplaceIcon name="star" className="size-3 text-amber-600" filled />
+                <span className="tabular-nums">{product.rating.toFixed(1)}</span>
+              </>
+            ) : (
+              <span>Chưa có đánh giá</span>
+            )}
+            {typeof product.soldCount === 'number' && product.soldCount > 0 && (
+              <>
+                <span className="mx-1 text-line">|</span>
+                <span className="tabular-nums">Đã bán {product.soldCount}</span>
+              </>
+            )}
           </p>
         )}
         <div className="mt-2 flex flex-wrap items-center justify-between gap-1 text-[10px] text-muted">

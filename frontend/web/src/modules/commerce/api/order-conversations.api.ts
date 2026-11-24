@@ -1248,24 +1248,45 @@ export function createOrderConversationsApi(request: RequestApi) {
       let lastError: string | undefined;
 
       for (const targetId of candidates) {
-        try {
-          const raw = await request<{
-            success?: boolean;
-            data?: BackendOrderCaseDto[];
-          }>(`/support/orders/${encodeURIComponent(targetId)}/cases`, { signal });
+        const endpoints = [
+          `/support/cases/by-order/${encodeURIComponent(targetId)}`,
+          `/support/orders/${encodeURIComponent(targetId)}/cases`,
+          `/orders/${encodeURIComponent(targetId)}/cases`,
+        ];
+        for (const endpoint of endpoints) {
+          try {
+            const raw = await request<{
+              success?: boolean;
+              data?: BackendOrderCaseDto[] | BackendOrderCaseDto | null;
+            }>(endpoint, { signal });
 
-          const list = unwrap<BackendOrderCaseDto[]>(raw);
-          allUnavailable = false;
-          if (Array.isArray(list) && list.length > 0) {
-            return { cases: mapCases(list, targetId), unavailable: false };
+            const unwrapped = unwrap<BackendOrderCaseDto[] | BackendOrderCaseDto | null>(raw);
+            const list = Array.isArray(unwrapped)
+              ? unwrapped
+              : unwrapped && typeof unwrapped === 'object'
+                ? [unwrapped]
+                : [];
+            allUnavailable = false;
+            if (list.length > 0) {
+              return { cases: mapCases(list, targetId), unavailable: false };
+            }
+            break;
+          } catch (err) {
+            if (signal?.aborted) throw err;
+            if (err instanceof ApiError && err.status === 404) {
+              continue;
+            }
+            if (
+              err instanceof ApiError &&
+              err.status === 400 &&
+              endpoint.includes('/support/orders/')
+            ) {
+              continue;
+            }
+            allUnavailable = false;
+            lastError = userMessage(err);
+            break;
           }
-        } catch (err) {
-          if (signal?.aborted) return { cases: [], unavailable: true };
-          if (err instanceof ApiError && err.status === 404) {
-            continue;
-          }
-          allUnavailable = false;
-          lastError = userMessage(err);
         }
       }
 

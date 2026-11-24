@@ -29,6 +29,8 @@ import { createOrderRoutes } from './interfaces/http/routes/OrderRoutes';
 import { createCheckoutRoutes } from './interfaces/http/routes/CheckoutRoutes';
 import { GhnCarrierClient } from './infrastructure/clients/GhnCarrierClient';
 import { PayOsGateway } from './infrastructure/clients/PayOsGateway';
+import { PostgresPromotionRepository } from './infrastructure/repositories/PostgresPromotionRepository';
+import { PromotionService } from './application/promotion/PromotionService';
 
 type OrderReader = Pick<IOrderRepository, 'search' | 'findById'>;
 
@@ -129,14 +131,17 @@ export function createApplication(adminOrderReader?: OrderReader): Application {
     },
   );
 
+  const promotionRepository = new PostgresPromotionRepository(pool);
+  const promotionService = new PromotionService(promotionRepository, catalogClient);
+
   const cartRepository: ICartRepository =
     process.env.USE_IN_MEMORY_DB === 'true'
       ? new InMemoryCartRepository()
       : new PostgresCartRepository(pool);
-  const cartService = new CartService(cartRepository, catalogClient);
+  const cartService = new CartService(cartRepository, catalogClient, promotionService);
   const cartController = new CartController(cartService);
 
-  app.use('/api/v1', createCheckoutRoutes(pool));
+  app.use('/api/v1', createCheckoutRoutes(pool, undefined, promotionService));
   app.use('/api/v1/cart', createCartRoutes(cartController));
   app.use('/api/v1/orders', createOrderRoutes(orderController));
 

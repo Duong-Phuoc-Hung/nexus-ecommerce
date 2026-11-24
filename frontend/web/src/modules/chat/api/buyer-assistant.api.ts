@@ -235,6 +235,24 @@ export const buyerAssistantApi = {
   },
 
   /**
+   * 4.4 POST /api/v1/chat/ask
+   * Hỏi đáp trực tiếp với Google Gemini AI theo ngữ cảnh trang hiện tại
+   */
+  async askAi(
+    question: string,
+    context?: Record<string, unknown>,
+  ): Promise<{ answer: string; modelUsed: string; isLiveAi: boolean }> {
+    const raw = await requestApi<{
+      success: boolean;
+      data: { answer: string; modelUsed: string; isLiveAi: boolean };
+    }>('/chat/ask', {
+      method: 'POST',
+      body: { question, context },
+    });
+    return unwrap<{ answer: string; modelUsed: string; isLiveAi: boolean }>(raw);
+  },
+
+  /**
    * 5. POST /api/v1/chat/faq
    * Tra cứu chính sách công khai khi chưa chọn đơn hoặc khách chưa đăng nhập
    */

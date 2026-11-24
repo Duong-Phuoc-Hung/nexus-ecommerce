@@ -37,12 +37,17 @@ export class RestrictUserFeaturesUseCase {
     if (
       !input.restriction ||
       typeof input.restriction !== 'string' ||
-      input.restriction.trim() === ''
+      input.restriction.trim() === '' ||
+      input.restriction.trim().length > 80
     ) {
       throw new Error('restriction type is required.');
     }
 
-    if (typeof input.durationDays !== 'number' || input.durationDays <= 0) {
+    if (
+      !Number.isSafeInteger(input.durationDays) ||
+      input.durationDays <= 0 ||
+      input.durationDays > 36500
+    ) {
       throw new Error('durationDays must be a positive number.');
     }
 
@@ -61,7 +66,9 @@ export class RestrictUserFeaturesUseCase {
       input.reason.trim(),
       input.operatorId || 'system',
     );
-    await this.userRepository.update(user);
+    const activeRestrictions = this.userRepository.saveRestriction
+      ? await this.userRepository.saveRestriction(user.id, restriction)
+      : (await this.userRepository.update(user), user.getActiveRestrictions());
 
     return {
       userId: user.id,
@@ -70,7 +77,7 @@ export class RestrictUserFeaturesUseCase {
       reason: restriction.reason,
       appliedBy: restriction.appliedBy,
       expiresAt: restriction.expiresAt,
-      activeRestrictions: user.getActiveRestrictions(),
+      activeRestrictions,
     };
   }
 }

@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   CreditCard,
   Headphones,
+  ImagePlus,
   Loader2,
   MessageCircle,
   Package,
@@ -16,6 +17,7 @@ import {
   RotateCcw,
   Send,
   ShieldAlert,
+  Sparkles,
   Store,
   Truck,
   X,
@@ -25,6 +27,7 @@ import { canOpenPostDeliveryCase, formatOrderStatus } from '@/modules/commerce/u
 import type { OrderDetail } from '@/modules/commerce/types/order.types';
 import { buyerAssistantApi } from '../api/buyer-assistant.api';
 import { useBuyerAssistant } from '../context/buyer-assistant-provider';
+import { BuyerInboxPanel } from './buyer-inbox-panel';
 import type {
   AssistantActionLink,
   AssistantChatMessage,
@@ -33,6 +36,42 @@ import type {
 } from '../types/buyer-assistant.types';
 
 const money = (amount: number) => `${Math.round(amount || 0).toLocaleString('vi-VN')} ₫`;
+
+const ALLOWED_VISION_MIMES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+type AllowedVisionMime = (typeof ALLOWED_VISION_MIMES)[number];
+const MAX_VISION_IMAGE_BYTES = 5 * 1024 * 1024;
+
+const DAMAGE_TYPE_LABELS: Record<string, string> = {
+  NỨT_VỠ: 'Nứt / vỡ',
+  MÓP_MÉO: 'Móp méo',
+  ƯỚT_RÁCH: 'Ướt / rách',
+  SAI_HÀNG: 'Sai sản phẩm',
+  BÌNH_THƯỜNG: 'Nguyên vẹn',
+  KHÁC: 'Cần kiểm tra',
+};
+
+const SEVERITY_LABELS: Record<string, string> = {
+  CAO: 'Mức độ cao',
+  TRUNG_BÌNH: 'Mức độ trung bình',
+  THẤP: 'Mức độ thấp',
+};
+
+function readFileAsBase64(file: File): Promise<{ dataUrl: string; base64: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '');
+      const commaIdx = dataUrl.indexOf(',');
+      if (commaIdx === -1) {
+        reject(new Error('Không đọc được nội dung ảnh.'));
+        return;
+      }
+      resolve({ dataUrl, base64: dataUrl.slice(commaIdx + 1) });
+    };
+    reader.onerror = () => reject(new Error('Không đọc được tệp ảnh.'));
+    reader.readAsDataURL(file);
+  });
+}
 
 function formatVietnamTime(value: string | number): string {
   return new Date(value).toLocaleString('vi-VN', {
@@ -68,6 +107,9 @@ export function BuyerAssistantWidget() {
     draftText,
     setDraftText,
     unreadCount,
+    activeWidgetView,
+    openMessagesInbox,
+    openAssistantChat,
     aiConversationIds,
     setAiConversationId,
     pendingAutoPrompt,
@@ -82,7 +124,9 @@ export function BuyerAssistantWidget() {
   const [ordersError, setOrdersError] = useState('');
 
   const triggerBtnRef = useRef<HTMLButtonElement | null>(null);
+  const dialogRef = useRef<HTMLElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const visionFileInputRef = useRef<HTMLInputElement | null>(null);
   const scrollBottomRef = useRef<HTMLDivElement | null>(null);
   const prevOpenRef = useRef<boolean>(false);
 
@@ -90,13 +134,17 @@ export function BuyerAssistantWidget() {
   useEffect(() => {
     if (isOpen && !prevOpenRef.current) {
       window.setTimeout(() => {
-        inputRef.current?.focus();
+        if (activeWidgetView === 'ASSISTANT') {
+          inputRef.current?.focus();
+        } else {
+          dialogRef.current?.focus();
+        }
       }, 40);
     } else if (!isOpen && prevOpenRef.current) {
       triggerBtnRef.current?.focus();
     }
     prevOpenRef.current = isOpen;
-  }, [isOpen]);
+  }, [activeWidgetView, isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -328,6 +376,194 @@ export function BuyerAssistantWidget() {
       }
     },
     [activeOrder, appendAssistantMessage],
+  );
+
+  // Hỏi đáp trực tiếp qua Google Gemini AI (`POST /api/v1/chat/ask`), fallback về FAQ nếu lỗi
+  const handleAskGemini = useCallback(
+    async (question: string) => {
+      try {
+        const recentHistory = messages
+          .filter((m) => m.sender === 'USER' || m.sender === 'ASSISTANT')
+          .slice(-4)
+          .map((m) => ({ role: m.sender, text: m.text }));
+
+        const res = await buyerAssistantApi.askAi(question, {
+          pageKind,
+          orderId: activeOrder?.id,
+          product: productContext
+            ? {
+                id: productContext.id,
+                title: productContext.title,
+                price: productContext.price,
+                stock: productContext.stock,
+                condition: productContext.condition,
+              }
+            : undefined,
+          auction: auctionContext
+            ? {
+                id: auctionContext.id,
+                title: auctionContext.title,
+                status: auctionContext.status,
+                currentPrice: auctionContext.currentPrice,
+              }
+            : undefined,
+          checkout: checkoutContext
+            ? {
+                stage: checkoutContext.stage,
+                itemsCount: checkoutContext.itemsCount,
+                subtotal: checkoutContext.subtotal,
+              }
+            : undefined,
+          history: recentHistory,
+        });
+
+        appendAssistantMessage({
+          text: res.answer,
+          aiModel: res.isLiveAi ? res.modelUsed : undefined,
+        });
+      } catch {
+        await handlePolicyFaq(question);
+      }
+    },
+    [
+      activeOrder?.id,
+      appendAssistantMessage,
+      auctionContext,
+      checkoutContext,
+      handlePolicyFaq,
+      messages,
+      pageKind,
+      productContext,
+    ],
+  );
+
+  // Giám định ảnh hàng hóa bằng Google Gemini Vision (`POST /api/v1/chat/assess-image`)
+  const handleVisionFileChange = useCallback(
+    async (file: File | null | undefined) => {
+      if (!file || busy) return;
+      if (!user) {
+        appendAssistantMessage({
+          text: 'Đăng nhập để dùng AI kiểm tra ảnh tình trạng sản phẩm cho đơn hàng của bạn.',
+          actions: [{ label: 'Đăng nhập', action: 'OPEN_LOGIN', variant: 'primary' }],
+        });
+        return;
+      }
+
+      const mime = file.type.toLowerCase() as AllowedVisionMime;
+      if (!ALLOWED_VISION_MIMES.includes(mime)) {
+        appendAssistantMessage({
+          text: 'Vui lòng chọn ảnh định dạng JPG, PNG hoặc WEBP.',
+        });
+        return;
+      }
+      if (file.size > MAX_VISION_IMAGE_BYTES) {
+        appendAssistantMessage({
+          text: 'Ảnh vượt quá giới hạn 5 MB. Vui lòng chọn ảnh dung lượng nhỏ hơn.',
+        });
+        return;
+      }
+
+      setBusy(true);
+      try {
+        const { dataUrl, base64 } = await readFileAsBase64(file);
+        const expectedItem =
+          activeOrder?.items?.[0]?.productName || productContext?.title || undefined;
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: makeLocalId('usr-img'),
+            sender: 'USER',
+            text: expectedItem
+              ? `Kiểm tra ảnh tình trạng sản phẩm: ${expectedItem}`
+              : 'Kiểm tra ảnh tình trạng sản phẩm',
+            imagePreviewUrl: dataUrl,
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+        scrollToBottom();
+
+        const verdict = await buyerAssistantApi.assessDamageImage({
+          imageBase64: base64,
+          mimeType: mime,
+          expectedItem,
+        });
+
+        const isOfflineFallback = Boolean(verdict.summary?.startsWith('[MOCK]'));
+        const cleanSummary = isOfflineFallback
+          ? verdict.summary.replace(/^\[MOCK\]\s*/i, '')
+          : verdict.summary;
+
+        const actions: AssistantActionLink[] = [];
+        if (verdict.is_damaged || isOfflineFallback) {
+          if (activeOrder && canOpenPostDeliveryCase(activeOrder.status)) {
+            actions.push({
+              label: 'Tạo khiếu nại đơn này',
+              action: 'OPEN_COMPLAINT',
+              orderId: activeOrder.id,
+              variant: 'primary',
+            });
+          } else if (activeOrder) {
+            actions.push({
+              label: 'Gặp hỗ trợ',
+              action: 'CHAT_SUPPORT',
+              orderId: activeOrder.id,
+              variant: 'primary',
+            });
+          } else {
+            actions.push({
+              label: 'Chọn đơn để khiếu nại',
+              action: 'SWITCH_ORDER',
+              variant: 'primary',
+            });
+          }
+          if (activeOrder) {
+            actions.push({
+              label: 'Nhắn người bán',
+              action: 'CHAT_SELLER',
+              orderId: activeOrder.id,
+              variant: 'secondary',
+            });
+          }
+        }
+
+        appendAssistantMessage({
+          text: verdict.is_damaged
+            ? 'Đã hoàn tất phân tích hình ảnh sản phẩm:'
+            : 'Kết quả kiểm tra hình ảnh sản phẩm:',
+          damageCard: {
+            isDamaged: verdict.is_damaged,
+            damageType: verdict.damage_type,
+            severity: verdict.severity,
+            summary: cleanSummary,
+            expectedItem,
+            isOfflineFallback,
+          },
+          actions: actions.length > 0 ? actions : undefined,
+        });
+      } catch {
+        appendAssistantMessage({
+          text: 'Chưa thể phân tích ảnh lúc này. Bạn thử gửi lại hoặc liên hệ hỗ trợ trực tiếp nhé.',
+          actions: activeOrder
+            ? [{ label: 'Gặp hỗ trợ', action: 'CHAT_SUPPORT', orderId: activeOrder.id }]
+            : undefined,
+        });
+      } finally {
+        setBusy(false);
+        if (visionFileInputRef.current) {
+          visionFileInputRef.current.value = '';
+        }
+      }
+    },
+    [
+      activeOrder,
+      appendAssistantMessage,
+      busy,
+      productContext?.title,
+      scrollToBottom,
+      setMessages,
+      user,
+    ],
   );
 
   // Xử lý câu hỏi & hành động của Buyer theo đúng ngữ cảnh + dữ liệu thật
@@ -706,8 +942,8 @@ export function BuyerAssistantWidget() {
           return;
         }
 
-        // 10. Mặc định: Tra cứu chính sách / FAQ qua chat-service (`POST /api/v1/chat/faq`)
-        await handlePolicyFaq(text);
+        // 10. Mặc định: Trả lời thông minh qua Google Gemini AI (`POST /api/v1/chat/ask`), fallback về FAQ
+        await handleAskGemini(text);
       } catch {
         appendAssistantMessage({
           text: 'Chưa gửi được yêu cầu do kết nối gián đoạn. Nội dung của bạn vẫn được giữ lại để thử lại.',
@@ -725,6 +961,7 @@ export function BuyerAssistantWidget() {
       auctionContext,
       busy,
       checkoutContext,
+      handleAskGemini,
       handleOpenOrderPicker,
       handlePolicyFaq,
       inspectAndShowOrderCard,
@@ -804,6 +1041,10 @@ export function BuyerAssistantWidget() {
         { label: 'Đơn tới đâu rồi?', prompt: `Đơn #${activeOrder.id} tới đâu rồi?` },
         { label: 'Kiểm tra thanh toán', prompt: 'Kiểm tra thanh toán' },
         {
+          label: 'Kiểm tra ảnh hàng lỗi',
+          onClick: () => visionFileInputRef.current?.click(),
+        },
+        {
           label: 'Nhắn người bán',
           onClick: () => handoffToOrderChannel(activeOrder.id, 'SELLER'),
         },
@@ -866,14 +1107,18 @@ export function BuyerAssistantWidget() {
           ref={triggerBtnRef}
           type="button"
           onClick={toggleOpen}
-          aria-label="Mở trợ lý Nexus"
+          aria-label={
+            unreadCount > 0
+              ? `Mở tin nhắn & trợ lý Nexus, ${unreadCount} tin chưa đọc`
+              : 'Mở trợ lý Nexus'
+          }
           aria-expanded={false}
           className={`fixed ${buttonPositionClass} z-40 grid size-13 place-items-center rounded-full bg-gradient-to-br from-[#9e0b0f] to-[#ed1c24] text-white shadow-xl transition-transform hover:scale-105 focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-[#9e0b0f]`}
         >
           <MessageCircle className="size-6" aria-hidden="true" />
           {unreadCount > 0 && (
-            <span className="absolute -top-1 -right-1 grid min-w-5 h-5 place-items-center rounded-full border-2 border-[#9e0b0f] bg-white px-1 text-[11px] font-bold text-[#9e0b0f]">
-              {unreadCount}
+            <span className="absolute -top-1 -right-1 grid min-w-5 h-5 place-items-center rounded-full border-2 border-[#9e0b0f] bg-white px-1 text-[11px] font-bold text-[#9e0b0f] tabular-nums">
+              {unreadCount > 99 ? '99+' : unreadCount}
             </span>
           )}
         </button>
@@ -882,30 +1127,82 @@ export function BuyerAssistantWidget() {
       {/* BẢNG HỘI THOẠI TRỢ LÝ NEXUS */}
       {isOpen && (
         <section
+          ref={dialogRef}
+          tabIndex={-1}
           role="dialog"
-          aria-label="Trợ lý Nexus"
+          aria-label="Hộp thoại & Trợ lý Nexus"
           className="fixed inset-x-2 bottom-2 top-14 z-50 flex flex-col overflow-hidden rounded-2xl border border-line bg-white shadow-2xl sm:inset-auto sm:bottom-6 sm:right-6 sm:h-[min(640px,calc(100dvh-48px))] sm:w-[410px]"
         >
           {/* Header gọn gàng */}
           <header className="flex items-center justify-between gap-2 border-b border-line bg-gradient-to-r from-[#9e0b0f] to-[#c8141c] px-4 py-3 text-white">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="grid size-8 shrink-0 place-items-center rounded-full bg-white/15">
-                <Bot className="size-4.5" aria-hidden="true" />
+                {user?.role === 'BUYER' && activeWidgetView !== 'ASSISTANT' ? (
+                  <MessageCircle className="size-4.5" aria-hidden="true" />
+                ) : (
+                  <Bot className="size-4.5" aria-hidden="true" />
+                )}
               </div>
               <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <strong className="text-sm font-bold leading-none">Trợ lý Nexus</strong>
-                  {activeOrder && (
-                    <span className="rounded-full bg-white/20 px-2 py-0.5 font-mono text-[11px] font-semibold">
-                      #{activeOrder.id}
-                    </span>
-                  )}
-                </div>
+                {user?.role === 'BUYER' ? (
+                  <div
+                    className="flex items-center gap-1 rounded-xl bg-black/15 p-0.5"
+                    role="tablist"
+                    aria-label="Chế độ trò chuyện"
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeWidgetView !== 'ASSISTANT'}
+                      onClick={openMessagesInbox}
+                      className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-white ${
+                        activeWidgetView !== 'ASSISTANT'
+                          ? 'bg-white text-[#9e0b0f] shadow-2xs'
+                          : 'text-white/90 hover:bg-white/10'
+                      }`}
+                    >
+                      <span>Tin nhắn</span>
+                      {unreadCount > 0 && (
+                        <span
+                          className={`grid h-4 min-w-4 place-items-center rounded-full px-1 text-[10px] font-bold tabular-nums ${
+                            activeWidgetView !== 'ASSISTANT'
+                              ? 'bg-[#ed1c24] text-white'
+                              : 'bg-white text-[#9e0b0f]'
+                          }`}
+                        >
+                          {unreadCount > 99 ? '99+' : unreadCount}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeWidgetView === 'ASSISTANT'}
+                      onClick={openAssistantChat}
+                      className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-white ${
+                        activeWidgetView === 'ASSISTANT'
+                          ? 'bg-white text-[#9e0b0f] shadow-2xs'
+                          : 'text-white/90 hover:bg-white/10'
+                      }`}
+                    >
+                      Trợ lý AI
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <strong className="text-sm font-bold leading-none">Trợ lý Nexus</strong>
+                    {activeOrder && (
+                      <span className="rounded-full bg-white/20 px-2 py-0.5 font-mono text-[11px] font-semibold">
+                        #{activeOrder.id}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
-              {user?.role === 'BUYER' && (
+              {user?.role === 'BUYER' && activeWidgetView === 'ASSISTANT' && (
                 <button
                   type="button"
                   onClick={() => void handleOpenOrderPicker()}
@@ -916,384 +1213,470 @@ export function BuyerAssistantWidget() {
               )}
               <button
                 type="button"
-                aria-label="Đóng trợ lý Nexus"
+                aria-label="Đóng hộp thoại"
                 onClick={() => setIsOpen(false)}
-                className="grid size-8 place-items-center rounded-lg text-white/90 hover:bg-white/15"
+                className="grid size-8 place-items-center rounded-lg text-white/90 hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-white"
               >
                 <X className="size-4.5" aria-hidden="true" />
               </button>
             </div>
           </header>
 
-          {/* Bộ chọn đơn nhanh (Đơn của tôi / Đổi đơn) kèm ảnh sản phẩm */}
-          {pickerOpen && (
-            <div className="border-b border-line bg-stone-50 p-3 max-h-60 overflow-y-auto">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-bold text-stone-800">Chọn đơn hàng của bạn</span>
-                <button
-                  type="button"
-                  onClick={() => setPickerOpen(false)}
-                  className="text-xs font-medium text-muted hover:text-stone-900"
-                >
-                  Đóng
-                </button>
-              </div>
-
-              {loadingOrders ? (
-                <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted">
-                  <Loader2 className="size-4 animate-spin text-brand-dark" />
-                  <span>Đang tải đơn của bạn…</span>
-                </div>
-              ) : ordersError ? (
-                <div className="flex items-center justify-between gap-2 rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs text-red-700">
-                  <span>{ordersError}</span>
-                  <button
-                    type="button"
-                    onClick={() => void loadMyOrders()}
-                    className="font-bold underline"
-                  >
-                    Thử lại
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  {ordersList.map((ord) => (
+          {user?.role === 'BUYER' && activeWidgetView !== 'ASSISTANT' ? (
+            <BuyerInboxPanel />
+          ) : (
+            <>
+              {/* Bộ chọn đơn nhanh (Đơn của tôi / Đổi đơn) kèm ảnh sản phẩm */}
+              {pickerOpen && (
+                <div className="border-b border-line bg-stone-50 p-3 max-h-60 overflow-y-auto">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-xs font-bold text-stone-800">Chọn đơn hàng của bạn</span>
                     <button
-                      key={ord.id}
                       type="button"
-                      onClick={() => void handleSelectOrderChoice(ord)}
-                      className={`flex w-full items-center gap-3 rounded-xl border p-2 text-left transition ${
-                        activeOrder?.id === ord.id
-                          ? 'border-brand bg-white ring-1 ring-brand/30'
-                          : 'border-line bg-white hover:border-stone-300'
-                      }`}
+                      onClick={() => setPickerOpen(false)}
+                      className="text-xs font-medium text-muted hover:text-stone-900"
                     >
-                      <div className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg border border-line bg-stone-100">
-                        {ord.imageUrl ? (
-                          <img src={ord.imageUrl} alt="" className="size-full object-cover" />
-                        ) : (
-                          <Package className="size-5 text-stone-400" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-1 text-xs">
-                          <strong className="font-mono text-stone-900">#{ord.id}</strong>
-                          <span className="text-[11px] font-semibold text-brand-dark">
-                            {money(ord.totalAmount)}
-                          </span>
-                        </div>
-                        <p className="truncate text-xs font-medium text-stone-800">{ord.title}</p>
-                        <div className="flex items-center justify-between text-[11px] text-muted">
-                          <span>{formatOrderStatus(ord.status)}</span>
-                          <span>{new Date(ord.createdAt).toLocaleDateString('vi-VN')}</span>
-                        </div>
-                      </div>
+                      Đóng
                     </button>
-                  ))}
+                  </div>
+
+                  {loadingOrders ? (
+                    <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted">
+                      <Loader2 className="size-4 animate-spin text-brand-dark" />
+                      <span>Đang tải đơn của bạn…</span>
+                    </div>
+                  ) : ordersError ? (
+                    <div className="flex items-center justify-between gap-2 rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs text-red-700">
+                      <span>{ordersError}</span>
+                      <button
+                        type="button"
+                        onClick={() => void loadMyOrders()}
+                        className="font-bold underline"
+                      >
+                        Thử lại
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {ordersList.map((ord) => (
+                        <button
+                          key={ord.id}
+                          type="button"
+                          onClick={() => void handleSelectOrderChoice(ord)}
+                          className={`flex w-full items-center gap-3 rounded-xl border p-2 text-left transition ${
+                            activeOrder?.id === ord.id
+                              ? 'border-brand bg-white ring-1 ring-brand/30'
+                              : 'border-line bg-white hover:border-stone-300'
+                          }`}
+                        >
+                          <div className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg border border-line bg-stone-100">
+                            {ord.imageUrl ? (
+                              <img src={ord.imageUrl} alt="" className="size-full object-cover" />
+                            ) : (
+                              <Package className="size-5 text-stone-400" />
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-1 text-xs">
+                              <strong className="font-mono text-stone-900">#{ord.id}</strong>
+                              <span className="text-[11px] font-semibold text-brand-dark">
+                                {money(ord.totalAmount)}
+                              </span>
+                            </div>
+                            <p className="truncate text-xs font-medium text-stone-800">
+                              {ord.title}
+                            </p>
+                            <div className="flex items-center justify-between text-[11px] text-muted">
+                              <span>{formatOrderStatus(ord.status)}</span>
+                              <span>{new Date(ord.createdAt).toLocaleDateString('vi-VN')}</span>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
-          )}
 
-          {/* Danh sách tin nhắn */}
-          <div className="flex-1 overflow-y-auto bg-stone-50/60 p-3.5 space-y-3">
-            {messages.map((msg) => {
-              if (msg.sender === 'SYSTEM') {
-                return (
-                  <div key={msg.id} className="flex justify-center">
-                    <span className="rounded-full border border-line bg-white px-3 py-1 text-[11px] font-semibold text-stone-700">
-                      {msg.text}
-                    </span>
-                  </div>
-                );
-              }
-
-              const isUser = msg.sender === 'USER';
-              return (
-                <div
-                  key={msg.id}
-                  className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
-                >
-                  <div
-                    className={`max-w-[90%] rounded-2xl px-3.5 py-2.5 text-xs sm:text-[13px] leading-relaxed ${
-                      isUser
-                        ? 'bg-stone-900 text-white'
-                        : msg.failed
-                          ? 'border border-red-200 bg-red-50 text-red-900'
-                          : 'border border-line bg-white text-stone-900 shadow-2xs'
-                    }`}
-                  >
-                    <p className="whitespace-pre-line">{msg.text}</p>
-
-                    {/* Thẻ tách riêng Thanh toán & Vận chuyển */}
-                    {msg.orderCard && (
-                      <div className="mt-2.5 rounded-xl border border-line bg-stone-50/80 p-3 space-y-2 text-xs">
-                        <div className="flex items-center justify-between border-b border-line pb-1.5">
-                          <strong className="font-mono text-stone-900">
-                            Đơn {msg.orderCard.orderNumberLabel}
-                          </strong>
-                          <span className="font-bold text-brand-dark">
-                            {money(msg.orderCard.totalAmount)}
-                          </span>
-                        </div>
-
-                        {/* Dòng 1: Thanh toán */}
-                        <div className="flex items-start gap-2">
-                          <CreditCard className="size-3.5 shrink-0 mt-0.5 text-stone-500" />
-                          <div className="min-w-0">
-                            <span className="text-[11px] text-muted block">Thanh toán</span>
-                            <span
-                              className={`font-semibold ${
-                                msg.orderCard.payment.status === 'PAID'
-                                  ? 'text-emerald-700'
-                                  : msg.orderCard.payment.status === 'PENDING'
-                                    ? 'text-amber-700'
-                                    : 'text-stone-900'
-                              }`}
-                            >
-                              {msg.orderCard.payment.label}
-                            </span>
-                            {msg.orderCard.payment.paidAt && (
-                              <span className="block text-[11px] text-muted">
-                                Lúc {formatVietnamTime(msg.orderCard.payment.paidAt)}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Dòng 2: Vận chuyển */}
-                        <div className="flex items-start gap-2">
-                          <Truck className="size-3.5 shrink-0 mt-0.5 text-stone-500" />
-                          <div className="min-w-0">
-                            <span className="text-[11px] text-muted block">Vận chuyển</span>
-                            <span className="font-semibold text-stone-900">
-                              {msg.orderCard.shipment.label}
-                            </span>
-                            {(msg.orderCard.shipment.carrier ||
-                              msg.orderCard.shipment.trackingCode) && (
-                              <span className="block text-[11px] text-stone-600">
-                                {[
-                                  msg.orderCard.shipment.carrier,
-                                  msg.orderCard.shipment.trackingCode,
-                                ]
-                                  .filter(Boolean)
-                                  .join(' · ')}
-                              </span>
-                            )}
-                            {msg.orderCard.shipment.currentLocation && (
-                              <span className="block text-[11px] text-muted">
-                                {msg.orderCard.shipment.currentLocation}
-                              </span>
-                            )}
-                            {msg.orderCard.shipment.updatedAt && (
-                              <span className="block text-[11px] text-muted">
-                                Cập nhật {formatVietnamTime(msg.orderCard.shipment.updatedAt)}
-                              </span>
-                            )}
-                            {msg.orderCard.shipment.estimatedDeliveryAt && (
-                              <span className="block text-[11px] text-emerald-700 font-medium">
-                                Dự kiến:{' '}
-                                {formatVietnamTime(msg.orderCard.shipment.estimatedDeliveryAt)}
-                              </span>
-                            )}
-                          </div>
-                        </div>
+              {/* Danh sách tin nhắn */}
+              <div className="flex-1 overflow-y-auto bg-stone-50/60 p-3.5 space-y-3">
+                {messages.map((msg) => {
+                  if (msg.sender === 'SYSTEM') {
+                    return (
+                      <div key={msg.id} className="flex justify-center">
+                        <span className="rounded-full border border-line bg-white px-3 py-1 text-[11px] font-semibold text-stone-700">
+                          {msg.text}
+                        </span>
                       </div>
-                    )}
+                    );
+                  }
 
-                    {/* Danh sách chọn nhanh tối đa 3 đơn khi hỏi trùng tên sản phẩm */}
-                    {msg.orderChoices && msg.orderChoices.length > 0 && (
-                      <div className="mt-2.5 space-y-1.5">
-                        {msg.orderChoices.map((ord) => (
-                          <button
-                            key={ord.id}
-                            type="button"
-                            onClick={() => void handleSelectOrderChoice(ord)}
-                            className="flex w-full items-center gap-2.5 rounded-xl border border-line bg-stone-50 p-2 text-left hover:border-brand hover:bg-white transition"
-                          >
-                            <div className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-lg border border-line bg-white">
-                              {ord.imageUrl ? (
-                                <img src={ord.imageUrl} alt="" className="size-full object-cover" />
-                              ) : (
-                                <Package className="size-4 text-stone-400" />
-                              )}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center justify-between text-[11px]">
-                                <strong className="font-mono text-stone-900">#{ord.id}</strong>
-                                <span className="font-semibold text-brand-dark">
-                                  {money(ord.totalAmount)}
-                                </span>
-                              </div>
-                              <p className="truncate text-xs font-medium text-stone-800">
-                                {ord.title}
-                              </p>
-                              <span className="text-[10px] text-muted">
-                                {formatOrderStatus(ord.status)} ·{' '}
-                                {new Date(ord.createdAt).toLocaleDateString('vi-VN')}
-                              </span>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Bảng giải thích các dòng tiền */}
-                    {msg.breakdownCard && (
-                      <div className="mt-2.5 rounded-xl border border-line bg-stone-50 p-2.5 text-xs space-y-1">
-                        <strong className="block text-stone-900">{msg.breakdownCard.title}</strong>
-                        {msg.breakdownCard.subtotal != null && (
-                          <div className="flex justify-between text-stone-700">
-                            <span>Tiền hàng</span>
-                            <span className="font-mono">{money(msg.breakdownCard.subtotal)}</span>
+                  const isUser = msg.sender === 'USER';
+                  return (
+                    <div
+                      key={msg.id}
+                      className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
+                    >
+                      <div
+                        className={`max-w-[90%] rounded-2xl px-3.5 py-2.5 text-xs sm:text-[13px] leading-relaxed ${
+                          isUser
+                            ? 'bg-stone-900 text-white'
+                            : msg.failed
+                              ? 'border border-red-200 bg-red-50 text-red-900'
+                              : 'border border-line bg-white text-stone-900 shadow-2xs'
+                        }`}
+                      >
+                        {msg.imagePreviewUrl && (
+                          <div className="mb-2 overflow-hidden rounded-xl border border-white/15 bg-black/10">
+                            <img
+                              src={msg.imagePreviewUrl}
+                              alt="Ảnh sản phẩm đính kèm"
+                              className="max-h-44 w-full object-cover"
+                            />
                           </div>
                         )}
-                        {msg.breakdownCard.shippingFee != null && (
-                          <div className="flex justify-between text-stone-700">
-                            <span>Phí vận chuyển</span>
-                            <span className="font-mono">
-                              {money(msg.breakdownCard.shippingFee)}
-                            </span>
-                          </div>
-                        )}
-                        {msg.breakdownCard.discountAmount != null &&
-                          msg.breakdownCard.discountAmount > 0 && (
-                            <div className="flex justify-between text-emerald-700">
-                              <span>Giảm giá</span>
-                              <span className="font-mono">
-                                -{money(msg.breakdownCard.discountAmount)}
-                              </span>
-                            </div>
-                          )}
-                        {msg.breakdownCard.totalAmount != null && (
-                          <div className="flex justify-between border-t border-line pt-1 font-bold text-stone-900">
-                            <span>Tổng cộng</span>
-                            <span className="font-mono text-brand-dark">
-                              {money(msg.breakdownCard.totalAmount)}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    )}
 
-                    {/* Nguồn dẫn chính sách từ BE FAQ */}
-                    {msg.citations && msg.citations.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1 border-t border-line pt-2">
-                        {msg.citations.map((c, idx) => (
-                          <span
-                            key={`${c.source}-${idx}`}
-                            className="inline-flex items-center gap-1 rounded-md bg-stone-100 px-2 py-0.5 text-[10px] font-medium text-stone-700"
-                          >
-                            <CheckCircle2 className="size-3 text-emerald-600" />
-                            {c.title || c.source}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                        <p className="whitespace-pre-line">{msg.text}</p>
 
-                    {/* Nút hành động ngay dưới thẻ/tin nhắn */}
-                    {(msg.actions?.length || msg.failed) && (
-                      <div className="mt-2.5 flex flex-wrap gap-1.5 pt-1">
-                        {msg.failed && msg.retryPayload && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void submitQuery(msg.retryPayload!, { reuseMessageId: msg.id })
-                            }
-                            className="inline-flex items-center gap-1 rounded-lg bg-brand-dark px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-brand"
-                          >
-                            <RotateCcw className="size-3" />
-                            Thử lại
-                          </button>
-                        )}
-                        {msg.actions?.map((act, idx) => (
-                          <button
-                            key={`${act.action}-${idx}`}
-                            type="button"
-                            onClick={() => handleActionClick(act)}
-                            className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
-                              act.variant === 'primary'
-                                ? 'bg-brand-dark text-white hover:bg-brand'
-                                : 'border border-line bg-stone-50 text-stone-800 hover:bg-stone-100'
+                        {/* Thẻ kết quả thẩm định ảnh từ Gemini Vision */}
+                        {msg.damageCard && (
+                          <div
+                            className={`mt-2.5 rounded-xl border p-3 text-xs space-y-2 ${
+                              msg.damageCard.isDamaged
+                                ? 'border-red-200 bg-red-50/70'
+                                : 'border-emerald-200 bg-emerald-50/60'
                             }`}
                           >
-                            {act.action === 'CHAT_SELLER' && <Store className="size-3" />}
-                            {act.action === 'CHAT_SUPPORT' && <Headphones className="size-3" />}
-                            {act.action === 'OPEN_COMPLAINT' && <ShieldAlert className="size-3" />}
-                            {act.action === 'RETRY_PAYMENT' && <RefreshCw className="size-3" />}
-                            <span>{act.label}</span>
-                            {act.action === 'OPEN_ORDER_DETAIL' && (
-                              <ArrowRight className="size-3" />
+                            <div className="flex flex-wrap items-center justify-between gap-1.5">
+                              <span className="inline-flex items-center gap-1 font-semibold text-stone-900">
+                                <Sparkles className="size-3.5 text-brand-dark" />
+                                <span>
+                                  {DAMAGE_TYPE_LABELS[msg.damageCard.damageType] ||
+                                    msg.damageCard.damageType}
+                                </span>
+                              </span>
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                  msg.damageCard.isDamaged
+                                    ? 'bg-red-100 text-red-800'
+                                    : 'bg-emerald-100 text-emerald-800'
+                                }`}
+                              >
+                                {msg.damageCard.isDamaged
+                                  ? SEVERITY_LABELS[msg.damageCard.severity] ||
+                                    msg.damageCard.severity
+                                  : 'Bình thường'}
+                              </span>
+                            </div>
+                            <p className="leading-relaxed text-stone-800">
+                              {msg.damageCard.summary}
+                            </p>
+                            {msg.damageCard.expectedItem && (
+                              <p className="text-[11px] text-stone-500">
+                                Đối chiếu: {msg.damageCard.expectedItem}
+                              </p>
                             )}
-                          </button>
-                        ))}
+                          </div>
+                        )}
+
+                        {/* Thẻ tách riêng Thanh toán & Vận chuyển */}
+                        {msg.orderCard && (
+                          <div className="mt-2.5 rounded-xl border border-line bg-stone-50/80 p-3 space-y-2 text-xs">
+                            <div className="flex items-center justify-between border-b border-line pb-1.5">
+                              <strong className="font-mono text-stone-900">
+                                Đơn {msg.orderCard.orderNumberLabel}
+                              </strong>
+                              <span className="font-bold text-brand-dark">
+                                {money(msg.orderCard.totalAmount)}
+                              </span>
+                            </div>
+
+                            {/* Dòng 1: Thanh toán */}
+                            <div className="flex items-start gap-2">
+                              <CreditCard className="size-3.5 shrink-0 mt-0.5 text-stone-500" />
+                              <div className="min-w-0">
+                                <span className="text-[11px] text-muted block">Thanh toán</span>
+                                <span
+                                  className={`font-semibold ${
+                                    msg.orderCard.payment.status === 'PAID'
+                                      ? 'text-emerald-700'
+                                      : msg.orderCard.payment.status === 'PENDING'
+                                        ? 'text-amber-700'
+                                        : 'text-stone-900'
+                                  }`}
+                                >
+                                  {msg.orderCard.payment.label}
+                                </span>
+                                {msg.orderCard.payment.paidAt && (
+                                  <span className="block text-[11px] text-muted">
+                                    Lúc {formatVietnamTime(msg.orderCard.payment.paidAt)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Dòng 2: Vận chuyển */}
+                            <div className="flex items-start gap-2">
+                              <Truck className="size-3.5 shrink-0 mt-0.5 text-stone-500" />
+                              <div className="min-w-0">
+                                <span className="text-[11px] text-muted block">Vận chuyển</span>
+                                <span className="font-semibold text-stone-900">
+                                  {msg.orderCard.shipment.label}
+                                </span>
+                                {(msg.orderCard.shipment.carrier ||
+                                  msg.orderCard.shipment.trackingCode) && (
+                                  <span className="block text-[11px] text-stone-600">
+                                    {[
+                                      msg.orderCard.shipment.carrier,
+                                      msg.orderCard.shipment.trackingCode,
+                                    ]
+                                      .filter(Boolean)
+                                      .join(' · ')}
+                                  </span>
+                                )}
+                                {msg.orderCard.shipment.currentLocation && (
+                                  <span className="block text-[11px] text-muted">
+                                    {msg.orderCard.shipment.currentLocation}
+                                  </span>
+                                )}
+                                {msg.orderCard.shipment.updatedAt && (
+                                  <span className="block text-[11px] text-muted">
+                                    Cập nhật {formatVietnamTime(msg.orderCard.shipment.updatedAt)}
+                                  </span>
+                                )}
+                                {msg.orderCard.shipment.estimatedDeliveryAt && (
+                                  <span className="block text-[11px] text-emerald-700 font-medium">
+                                    Dự kiến:{' '}
+                                    {formatVietnamTime(msg.orderCard.shipment.estimatedDeliveryAt)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Danh sách chọn nhanh tối đa 3 đơn khi hỏi trùng tên sản phẩm */}
+                        {msg.orderChoices && msg.orderChoices.length > 0 && (
+                          <div className="mt-2.5 space-y-1.5">
+                            {msg.orderChoices.map((ord) => (
+                              <button
+                                key={ord.id}
+                                type="button"
+                                onClick={() => void handleSelectOrderChoice(ord)}
+                                className="flex w-full items-center gap-2.5 rounded-xl border border-line bg-stone-50 p-2 text-left hover:border-brand hover:bg-white transition"
+                              >
+                                <div className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-lg border border-line bg-white">
+                                  {ord.imageUrl ? (
+                                    <img
+                                      src={ord.imageUrl}
+                                      alt=""
+                                      className="size-full object-cover"
+                                    />
+                                  ) : (
+                                    <Package className="size-4 text-stone-400" />
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center justify-between text-[11px]">
+                                    <strong className="font-mono text-stone-900">#{ord.id}</strong>
+                                    <span className="font-semibold text-brand-dark">
+                                      {money(ord.totalAmount)}
+                                    </span>
+                                  </div>
+                                  <p className="truncate text-xs font-medium text-stone-800">
+                                    {ord.title}
+                                  </p>
+                                  <span className="text-[10px] text-muted">
+                                    {formatOrderStatus(ord.status)} ·{' '}
+                                    {new Date(ord.createdAt).toLocaleDateString('vi-VN')}
+                                  </span>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Bảng giải thích các dòng tiền */}
+                        {msg.breakdownCard && (
+                          <div className="mt-2.5 rounded-xl border border-line bg-stone-50 p-2.5 text-xs space-y-1">
+                            <strong className="block text-stone-900">
+                              {msg.breakdownCard.title}
+                            </strong>
+                            {msg.breakdownCard.subtotal != null && (
+                              <div className="flex justify-between text-stone-700">
+                                <span>Tiền hàng</span>
+                                <span className="font-mono">
+                                  {money(msg.breakdownCard.subtotal)}
+                                </span>
+                              </div>
+                            )}
+                            {msg.breakdownCard.shippingFee != null && (
+                              <div className="flex justify-between text-stone-700">
+                                <span>Phí vận chuyển</span>
+                                <span className="font-mono">
+                                  {money(msg.breakdownCard.shippingFee)}
+                                </span>
+                              </div>
+                            )}
+                            {msg.breakdownCard.discountAmount != null &&
+                              msg.breakdownCard.discountAmount > 0 && (
+                                <div className="flex justify-between text-emerald-700">
+                                  <span>Giảm giá</span>
+                                  <span className="font-mono">
+                                    -{money(msg.breakdownCard.discountAmount)}
+                                  </span>
+                                </div>
+                              )}
+                            {msg.breakdownCard.totalAmount != null && (
+                              <div className="flex justify-between border-t border-line pt-1 font-bold text-stone-900">
+                                <span>Tổng cộng</span>
+                                <span className="font-mono text-brand-dark">
+                                  {money(msg.breakdownCard.totalAmount)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Nguồn dẫn chính sách từ BE FAQ */}
+                        {msg.citations && msg.citations.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1 border-t border-line pt-2">
+                            {msg.citations.map((c, idx) => (
+                              <span
+                                key={`${c.source}-${idx}`}
+                                className="inline-flex items-center gap-1 rounded-md bg-stone-100 px-2 py-0.5 text-[10px] font-medium text-stone-700"
+                              >
+                                <CheckCircle2 className="size-3 text-emerald-600" />
+                                {c.title || c.source}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Nút hành động ngay dưới thẻ/tin nhắn */}
+                        {(msg.actions?.length || msg.failed) && (
+                          <div className="mt-2.5 flex flex-wrap gap-1.5 pt-1">
+                            {msg.failed && msg.retryPayload && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  void submitQuery(msg.retryPayload!, { reuseMessageId: msg.id })
+                                }
+                                className="inline-flex items-center gap-1 rounded-lg bg-brand-dark px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-brand"
+                              >
+                                <RotateCcw className="size-3" />
+                                Thử lại
+                              </button>
+                            )}
+                            {msg.actions?.map((act, idx) => (
+                              <button
+                                key={`${act.action}-${idx}`}
+                                type="button"
+                                onClick={() => handleActionClick(act)}
+                                className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
+                                  act.variant === 'primary'
+                                    ? 'bg-brand-dark text-white hover:bg-brand'
+                                    : 'border border-line bg-stone-50 text-stone-800 hover:bg-stone-100'
+                                }`}
+                              >
+                                {act.action === 'CHAT_SELLER' && <Store className="size-3" />}
+                                {act.action === 'CHAT_SUPPORT' && <Headphones className="size-3" />}
+                                {act.action === 'OPEN_COMPLAINT' && (
+                                  <ShieldAlert className="size-3" />
+                                )}
+                                {act.action === 'RETRY_PAYMENT' && <RefreshCw className="size-3" />}
+                                <span>{act.label}</span>
+                                {act.action === 'OPEN_ORDER_DETAIL' && (
+                                  <ArrowRight className="size-3" />
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
+                  );
+                })}
+
+                {busy && (
+                  <div className="flex items-center gap-2 text-xs text-muted px-1">
+                    <Loader2 className="size-3.5 animate-spin text-brand-dark" />
+                    <span>Đang kiểm tra…</span>
                   </div>
-                </div>
-              );
-            })}
-
-            {busy && (
-              <div className="flex items-center gap-2 text-xs text-muted px-1">
-                <Loader2 className="size-3.5 animate-spin text-brand-dark" />
-                <span>Đang kiểm tra…</span>
+                )}
+                <div ref={scrollBottomRef} />
               </div>
-            )}
-            <div ref={scrollBottomRef} />
-          </div>
 
-          {/* Gợi ý thao tác nhanh theo ngữ cảnh trang */}
-          <div className="border-t border-line bg-white px-3 pt-2.5 pb-1.5 flex flex-wrap gap-1.5">
-            {quickChips.map((chip) => (
-              <button
-                key={chip.label}
-                type="button"
-                disabled={busy}
-                onClick={() => {
-                  if ('onClick' in chip && chip.onClick) {
-                    chip.onClick();
-                  } else if ('prompt' in chip && chip.prompt) {
-                    void submitQuery(chip.prompt);
-                  }
+              {/* Gợi ý thao tác nhanh theo ngữ cảnh trang */}
+              <div className="border-t border-line bg-white px-3 pt-2.5 pb-1.5 flex flex-wrap gap-1.5">
+                {quickChips.map((chip) => (
+                  <button
+                    key={chip.label}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      if ('onClick' in chip && chip.onClick) {
+                        chip.onClick();
+                      } else if ('prompt' in chip && chip.prompt) {
+                        void submitQuery(chip.prompt);
+                      }
+                    }}
+                    className="rounded-full border border-line bg-stone-50 px-2.5 py-1 text-[11px] font-semibold text-stone-800 hover:border-brand/40 hover:bg-brand-soft/40 disabled:opacity-50"
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Thanh nhập câu hỏi + đính kèm ảnh kiểm tra AI */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void submitQuery(draftText);
                 }}
-                className="rounded-full border border-line bg-stone-50 px-2.5 py-1 text-[11px] font-semibold text-stone-800 hover:border-brand/40 hover:bg-brand-soft/40 disabled:opacity-50"
+                className="flex items-center gap-2 border-t border-line bg-white p-3"
               >
-                {chip.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Thanh nhập câu hỏi */}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void submitQuery(draftText);
-            }}
-            className="flex items-center gap-2 border-t border-line bg-white p-3"
-          >
-            <input
-              ref={inputRef}
-              type="text"
-              value={draftText}
-              onChange={(e) => setDraftText(e.target.value)}
-              placeholder={
-                activeOrder
-                  ? `Hỏi về đơn #${activeOrder.id} hoặc chính sách…`
-                  : 'Nhập câu hỏi về đơn hàng, thanh toán…'
-              }
-              aria-label="Nhập câu hỏi cho Trợ lý Nexus"
-              className="h-10 flex-1 rounded-xl border border-line bg-stone-50 px-3 text-xs sm:text-sm text-stone-900 focus:border-brand focus:bg-white focus:outline-none"
-            />
-            <button
-              type="submit"
-              disabled={busy || !draftText.trim()}
-              aria-label="Gửi tin nhắn"
-              className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-dark text-white hover:bg-brand disabled:opacity-45"
-            >
-              <Send className="size-4" aria-hidden="true" />
-            </button>
-          </form>
+                <input
+                  ref={visionFileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => void handleVisionFileChange(e.target.files?.[0])}
+                />
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => visionFileInputRef.current?.click()}
+                  title="Gửi ảnh kiểm tra tình trạng sản phẩm"
+                  aria-label="Gửi ảnh kiểm tra tình trạng sản phẩm"
+                  className="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-stone-50 text-stone-700 transition hover:border-brand/40 hover:bg-brand-soft/40 hover:text-brand-dark disabled:opacity-45"
+                >
+                  <ImagePlus className="size-4" aria-hidden="true" />
+                </button>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={draftText}
+                  onChange={(e) => setDraftText(e.target.value)}
+                  placeholder={
+                    activeOrder
+                      ? `Hỏi về đơn #${activeOrder.id} hoặc gửi ảnh kiểm tra…`
+                      : 'Nhập câu hỏi hoặc gửi ảnh kiểm tra…'
+                  }
+                  aria-label="Nhập câu hỏi cho Trợ lý Nexus"
+                  className="h-10 flex-1 rounded-xl border border-line bg-stone-50 px-3 text-xs sm:text-sm text-stone-900 focus:border-brand focus:bg-white focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={busy || !draftText.trim()}
+                  aria-label="Gửi tin nhắn"
+                  className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-dark text-white hover:bg-brand disabled:opacity-45"
+                >
+                  <Send className="size-4" aria-hidden="true" />
+                </button>
+              </form>
+            </>
+          )}
         </section>
       )}
     </div>

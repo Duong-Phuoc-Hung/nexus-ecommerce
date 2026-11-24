@@ -206,6 +206,66 @@ test('Inventory API: POST /api/v1/fulfillments/inventory/adjust handles STOCK_IN
     const oversellJson = (await oversellRes.json()) as any;
     assert.equal(oversellJson.success, false);
     assert.match(oversellJson.error, /ALLOW_OVERSELL|không đủ/);
+
+    // 5. GET /api/v1/fulfillments/inventory/:sku/ledger tra cứu sổ biến động kho theo SKU
+    const ledgerRes = await fetch(
+      `${baseUrl}/api/v1/fulfillments/inventory/NX-AIRPODS-PRO-2/ledger`,
+      {
+        headers: { Authorization: `Bearer ${staffToken}` },
+      },
+    );
+    assert.equal(ledgerRes.status, 200);
+    const ledgerJson = (await ledgerRes.json()) as any;
+    assert.equal(ledgerJson.success, true);
+    assert.ok(Array.isArray(ledgerJson.data));
+    assert.ok(ledgerJson.data.length >= 2);
+    assert.equal(ledgerJson.data[0].sku, 'NX-AIRPODS-PRO-2');
+  });
+});
+
+test('Shipment Quotes API: POST /api/v1/fulfillments/shipments/quote tính toán cước động đối tác (GHN, GHTK, Viettel Post, J&T)', async () => {
+  await withFulfillmentServer(async (baseUrl) => {
+    const staffToken = createTestToken({
+      sub: 'usr_staff',
+      email: 'staff@nexus.vn',
+      role: 'SUPPORT_STAFF',
+    });
+
+    // 1. Cước nội thành TP.HCM (WH_001)
+    const quoteLocalRes = await fetch(`${baseUrl}/api/v1/fulfillments/shipments/quote`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${staffToken}`,
+      },
+      body: JSON.stringify({
+        warehouseId: 'WH_001',
+        city: 'TP. Hồ Chí Minh',
+      }),
+    });
+    assert.equal(quoteLocalRes.status, 200);
+    const quoteLocalJson = (await quoteLocalRes.json()) as any;
+    assert.equal(quoteLocalJson.success, true);
+    assert.equal(quoteLocalJson.data.length, 4);
+    assert.equal(quoteLocalJson.data[0].carrier, 'GHN');
+    assert.equal(quoteLocalJson.data[0].fee, 22000);
+
+    // 2. Cước liên tỉnh (Giao tới Hà Nội từ kho WH_001 TP.HCM)
+    const quoteInterRes = await fetch(`${baseUrl}/api/v1/fulfillments/shipments/quote`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${staffToken}`,
+      },
+      body: JSON.stringify({
+        warehouseId: 'WH_001',
+        city: 'Hà Nội',
+      }),
+    });
+    assert.equal(quoteInterRes.status, 200);
+    const quoteInterJson = (await quoteInterRes.json()) as any;
+    assert.equal(quoteInterJson.success, true);
+    assert.equal(quoteInterJson.data[0].fee, 35000);
   });
 });
 

@@ -7,7 +7,8 @@ export class PrismaClientWrapper {
 
   public static getInstance(): PrismaClient {
     if (!PrismaClientWrapper.instance) {
-      const host = process.env.FULFILLMENT_DB_HOST || process.env.DB_HOST || 'localhost';
+      const rawHost = process.env.FULFILLMENT_DB_HOST || process.env.DB_HOST || '127.0.0.1';
+      const host = rawHost === 'localhost' ? '127.0.0.1' : rawHost;
       const port = process.env.FULFILLMENT_DB_PORT || process.env.DB_PORT || '5436';
       const user = process.env.FULFILLMENT_DB_USER || process.env.DB_USER || 'nexus_fulfillment';
       const password =

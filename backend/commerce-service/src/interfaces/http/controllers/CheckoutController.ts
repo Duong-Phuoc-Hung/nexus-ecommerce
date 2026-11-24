@@ -47,6 +47,25 @@ export class CheckoutController {
       res.status(200).json({ success: true, data });
     });
 
+  public getPromotions = (req: Request, res: Response): Promise<void> =>
+    this.run(res, async () => {
+      const subtotalParam = req.query.subtotal ? Number(req.query.subtotal) : undefined;
+      const data = await this.service.getPromotions(this.buyerId(req), subtotalParam);
+      res.status(200).json({ success: true, data });
+    });
+
+  public validatePromotion = (req: Request, res: Response): Promise<void> =>
+    this.run(res, async () => {
+      const { code, items, subtotal } = req.body || {};
+      const data = await this.service.validatePromotion({
+        code: String(code || ''),
+        userId: this.buyerId(req),
+        subtotal: subtotal !== undefined ? Number(subtotal) : undefined,
+        items,
+      });
+      res.status(200).json({ success: true, data });
+    });
+
   public webhook = (req: Request, res: Response): Promise<void> =>
     this.run(res, async () => {
       const outcome = await this.service.handleWebhook(req.body);

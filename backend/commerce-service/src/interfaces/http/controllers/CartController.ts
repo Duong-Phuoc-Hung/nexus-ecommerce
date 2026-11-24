@@ -4,6 +4,7 @@ import {
   validateAddToCartInput,
   validateMergeCartInput,
   validateUpdateCartItemInput,
+  validateValidateCartInput,
 } from '../../../application/cart/dtos/AddToCartDto';
 import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
 
@@ -89,6 +90,20 @@ export class CartController {
         success: true,
         message: 'Đã gộp giỏ hàng thành công.',
         data: cart,
+      });
+    } catch (error) {
+      this.handleError(res, error);
+    }
+  };
+
+  public validateCart = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = this.getUserId(req);
+      const validatedInput = validateValidateCartInput(req.body);
+      const result = await this.cartService.validateCart(userId, validatedInput);
+      res.status(200).json({
+        success: true,
+        data: result,
       });
     } catch (error) {
       this.handleError(res, error);

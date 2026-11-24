@@ -2,11 +2,13 @@ import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import { IShipmentRepository } from './domain/repositories/IShipmentRepository';
 import { ISupportCaseRepository } from './domain/repositories/ISupportCaseRepository';
+import { IInventoryRepository } from './domain/repositories/IInventoryRepository';
 import { InMemoryShipmentRepository } from './infrastructure/repositories/InMemoryShipmentRepository';
 import { InMemoryInventoryRepository } from './infrastructure/repositories/InMemoryInventoryRepository';
 import { InMemorySupportCaseRepository } from './infrastructure/repositories/InMemorySupportCaseRepository';
 import { PostgresShipmentRepository } from './infrastructure/repositories/PostgresShipmentRepository';
 import { PostgresSupportCaseRepository } from './infrastructure/repositories/PostgresSupportCaseRepository';
+import { PostgresInventoryRepository } from './infrastructure/repositories/PostgresInventoryRepository';
 import { PrismaClientWrapper } from './infrastructure/database/PrismaClient';
 
 import { GetShipmentDetailUseCase } from './application/use-cases/GetShipmentDetailUseCase';
@@ -63,15 +65,17 @@ export function createApplication(): Application {
   // 1. Repositories (Hỗ trợ chuyển đổi linh hoạt PostgreSQL / In-Memory cho test & CI)
   let shipmentRepository: IShipmentRepository;
   let supportCaseRepository: ISupportCaseRepository;
-  const inventoryRepository = new InMemoryInventoryRepository();
+  let inventoryRepository: IInventoryRepository;
 
   if (process.env.USE_IN_MEMORY_DB === 'true') {
     shipmentRepository = new InMemoryShipmentRepository();
     supportCaseRepository = new InMemorySupportCaseRepository();
+    inventoryRepository = new InMemoryInventoryRepository();
   } else {
     const prisma = PrismaClientWrapper.getInstance();
     const pgShipmentRepo = new PostgresShipmentRepository(prisma);
     const pgSupportCaseRepo = new PostgresSupportCaseRepository(prisma);
+    const pgInventoryRepo = new PostgresInventoryRepository(prisma);
 
     // Kiểm soát nạp dữ liệu mẫu (Auto-Seeding):
     // - Vô hiệu hóa hoàn toàn khi chạy Production hoặc khi đặt ENABLE_AUTO_SEED=false.
@@ -89,10 +93,14 @@ export function createApplication(): Application {
       pgSupportCaseRepo.seedIfEmpty().catch((err: Error) => {
         console.warn('[FulfillmentService] Async support case seed warning:', err.message);
       });
+      pgInventoryRepo.seedIfEmpty().catch((err: Error) => {
+        console.warn('[FulfillmentService] Async inventory seed warning:', err.message);
+      });
     }
 
     shipmentRepository = pgShipmentRepo;
     supportCaseRepository = pgSupportCaseRepo;
+    inventoryRepository = pgInventoryRepo;
   }
 
   // 2. Use Cases - Vận đơn (Shipments)
@@ -142,6 +150,7 @@ export function createApplication(): Application {
   const inventoryController = new InventoryController(
     getSkuInventoryUseCase,
     adjustInventoryUseCase,
+    inventoryRepository,
   );
   const supportCaseController = new SupportCaseController(
     listSupportCasesUseCase,
