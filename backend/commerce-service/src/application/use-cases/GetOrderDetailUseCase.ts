@@ -33,6 +33,13 @@ export class GetOrderDetailUseCase {
       subtotal: order.subtotal,
       shippingFee: order.shippingFee,
       discountAmount: order.discountAmount,
+      promoCode: order.promoCode || null,
+      taxAmount: order.taxAmount,
+      shippingCarrier: order.shippingCarrier || null,
+      shippingServiceName: order.shippingServiceName || null,
+      estimatedDeliveryAt: order.estimatedDeliveryAt
+        ? order.estimatedDeliveryAt.toISOString()
+        : null,
       paymentMethod: order.paymentMethod,
       shippingAddress: order.shippingAddress,
       status: order.status,

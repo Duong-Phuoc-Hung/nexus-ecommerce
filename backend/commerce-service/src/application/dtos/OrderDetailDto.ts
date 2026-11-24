@@ -27,6 +27,11 @@ export interface OrderDetailDto {
   subtotal?: number;
   shippingFee?: number;
   discountAmount?: number;
+  promoCode?: string | null;
+  taxAmount?: number;
+  shippingCarrier?: string | null;
+  shippingServiceName?: string | null;
+  estimatedDeliveryAt?: string | null;
   paymentMethod?: string;
   shippingAddress?: {
     fullName?: string;

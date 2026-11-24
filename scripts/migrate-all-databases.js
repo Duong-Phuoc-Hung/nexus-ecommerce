@@ -118,7 +118,11 @@ for (const svc of SERVICES_CONFIG) {
   const sqlFiles = fs
     .readdirSync(svc.dir)
     .filter((f) => f.startsWith('V') && f.endsWith('.sql'))
-    .sort(); // Sắp xếp theo thứ tự version tăng dần V1, V2...
+    .sort((a, b) => {
+      const numA = parseInt(a.match(/^V(\d+)__/)?.[1] || '0', 10);
+      const numB = parseInt(b.match(/^V(\d+)__/)?.[1] || '0', 10);
+      return numA - numB;
+    });
 
   if (sqlFiles.length === 0) {
     console.log(`   ℹ️ Không có file migration .sql nào.\n`);

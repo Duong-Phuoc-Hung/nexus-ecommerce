@@ -4,9 +4,13 @@ import {
   AddToCartInputDto,
   CartDto,
   CartItemDto,
+  CartItemStatus,
+  CartSummaryDto,
   CartValidationError,
   MergeCartInputDto,
+  ValidateCartInputDto,
 } from './dtos/AddToCartDto';
+import { PromotionService } from '../promotion/PromotionService';
 
 export { CartValidationError } from './dtos/AddToCartDto';
 
@@ -14,6 +18,7 @@ export class CartService {
   constructor(
     private readonly repository: ICartRepository,
     private readonly catalog: ICatalogClient,
+    private readonly promotionService?: PromotionService,
   ) {}
 
   public async getCart(userId: string): Promise<CartDto> {
@@ -36,9 +41,10 @@ export class CartService {
 
       const title = product?.title || `Sản phẩm #${item.productId}`;
       const sellerId = product?.sellerId || '';
-      const price = product ? product.price : item.unitPrice;
-      const stock = product ? product.stockQuantity : 0;
-      const status = product ? product.status : isCatalogError ? 'UNKNOWN' : 'UNAVAILABLE';
+      const snapshotUnitPrice = Number(item.unitPrice);
+      const currentUnitPrice = product ? Number(product.price) : snapshotUnitPrice;
+      const availableStock = product ? Number(product.stockQuantity) : 0;
+      const productStatus = product ? product.status : isCatalogError ? 'UNKNOWN' : 'UNAVAILABLE';
       const availability: 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN' = product
         ? product.status === 'ACTIVE' && product.stockQuantity > 0
           ? 'AVAILABLE'
@@ -47,8 +53,37 @@ export class CartService {
           ? 'UNKNOWN'
           : 'UNAVAILABLE';
       const imageUrl = product?.imageUrl || null;
-      const itemSubtotal = price * item.quantity;
 
+      // Determine advanced item status according to SRS B05
+      let itemStatus: CartItemStatus = 'OK';
+      let warningMessage: string | null = null;
+      let canCheckout = true;
+
+      if (!product || product.status !== 'ACTIVE') {
+        itemStatus = 'UNAVAILABLE';
+        warningMessage = 'Sản phẩm hiện không khả dụng hoặc đã ngừng bán.';
+        canCheckout = false;
+      } else if (availableStock === 0) {
+        itemStatus = 'OUT_OF_STOCK';
+        warningMessage = 'Sản phẩm hiện đã hết hàng.';
+        canCheckout = false;
+      } else if (item.quantity > availableStock) {
+        itemStatus = 'INSUFFICIENT_STOCK';
+        warningMessage = `Số lượng trong giỏ (${item.quantity}) vượt quá tồn kho hiện có (${availableStock}).`;
+        canCheckout = false;
+      } else if (currentUnitPrice !== snapshotUnitPrice) {
+        itemStatus = 'PRICE_CHANGED';
+        const formattedOld = new Intl.NumberFormat('vi-VN').format(snapshotUnitPrice);
+        const formattedNew = new Intl.NumberFormat('vi-VN').format(currentUnitPrice);
+        if (currentUnitPrice > snapshotUnitPrice) {
+          warningMessage = `Giá sản phẩm vừa tăng từ ${formattedOld} ₫ lên ${formattedNew} ₫.`;
+        } else {
+          warningMessage = `Giá sản phẩm vừa giảm từ ${formattedOld} ₫ xuống ${formattedNew} ₫.`;
+        }
+        canCheckout = true;
+      }
+
+      const itemSubtotal = currentUnitPrice * item.quantity;
       subtotal += itemSubtotal;
       totalItems += item.quantity;
 
@@ -57,15 +92,31 @@ export class CartService {
         productId: item.productId,
         title,
         sellerId,
-        price,
-        stockQuantity: stock,
-        status,
+        price: currentUnitPrice,
+        stockQuantity: availableStock,
+        status: productStatus,
         quantity: item.quantity,
         subtotal: itemSubtotal,
         imageUrl,
         availability,
+        snapshotUnitPrice,
+        currentUnitPrice,
+        availableStock,
+        productStatus,
+        itemStatus,
+        warningMessage,
+        canCheckout,
       });
     }
+
+    const summary: CartSummaryDto = {
+      subtotal,
+      estimatedDiscount: 0,
+      estimatedTax: 0,
+      estimatedShipping: null,
+      estimatedTotal: subtotal,
+      currency: 'VND',
+    };
 
     return {
       id: cart.id,
@@ -75,6 +126,122 @@ export class CartService {
       subtotal,
       currency: 'VND',
       items,
+      summary,
+      hasBlockingIssues: items.some((i) => !i.canCheckout),
+      validatedAt: new Date().toISOString(),
+    };
+  }
+
+  public async validateCart(
+    userId: string,
+    input: ValidateCartInputDto,
+  ): Promise<{
+    items: CartItemDto[];
+    summary: CartSummaryDto;
+    promo: any | null;
+    hasBlockingIssues: boolean;
+    validatedAt: string;
+  }> {
+    const items: CartItemDto[] = [];
+    let subtotal = 0;
+
+    for (const line of input.items) {
+      let product: CatalogProduct | null = null;
+      let isCatalogError = false;
+
+      try {
+        product = await this.catalog.findProduct(line.productId);
+      } catch {
+        isCatalogError = true;
+      }
+
+      const title = product?.title || `Sản phẩm #${line.productId}`;
+      const sellerId = product?.sellerId || '';
+      const currentUnitPrice = product ? Number(product.price) : 0;
+      const availableStock = product ? Number(product.stockQuantity) : 0;
+      const productStatus = product ? product.status : isCatalogError ? 'UNKNOWN' : 'UNAVAILABLE';
+      const availability: 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN' = product
+        ? product.status === 'ACTIVE' && product.stockQuantity > 0
+          ? 'AVAILABLE'
+          : 'UNAVAILABLE'
+        : isCatalogError
+          ? 'UNKNOWN'
+          : 'UNAVAILABLE';
+      const imageUrl = product?.imageUrl || null;
+
+      let itemStatus: CartItemStatus = 'OK';
+      let warningMessage: string | null = null;
+      let canCheckout = true;
+
+      if (!product || product.status !== 'ACTIVE') {
+        itemStatus = 'UNAVAILABLE';
+        warningMessage = 'Sản phẩm hiện không khả dụng hoặc đã ngừng bán.';
+        canCheckout = false;
+      } else if (availableStock === 0) {
+        itemStatus = 'OUT_OF_STOCK';
+        warningMessage = 'Sản phẩm hiện đã hết hàng.';
+        canCheckout = false;
+      } else if (line.quantity > availableStock) {
+        itemStatus = 'INSUFFICIENT_STOCK';
+        warningMessage = `Số lượng đặt (${line.quantity}) vượt quá tồn kho hiện có (${availableStock}).`;
+        canCheckout = false;
+      }
+
+      const itemSubtotal = currentUnitPrice * line.quantity;
+      subtotal += itemSubtotal;
+
+      items.push({
+        id: line.productId,
+        productId: line.productId,
+        title,
+        sellerId,
+        price: currentUnitPrice,
+        stockQuantity: availableStock,
+        status: productStatus,
+        quantity: line.quantity,
+        subtotal: itemSubtotal,
+        imageUrl,
+        availability,
+        snapshotUnitPrice: currentUnitPrice,
+        currentUnitPrice,
+        availableStock,
+        productStatus,
+        itemStatus,
+        warningMessage,
+        canCheckout,
+      });
+    }
+
+    let promoResult: any = null;
+    let estimatedDiscount = 0;
+
+    if (input.promoCode && this.promotionService) {
+      promoResult = await this.promotionService.validatePromotion({
+        code: input.promoCode,
+        userId,
+        subtotal,
+        items: input.items,
+      });
+      if (promoResult.valid) {
+        estimatedDiscount = promoResult.discountAmount;
+      }
+    }
+
+    const summary: CartSummaryDto = {
+      subtotal,
+      estimatedDiscount,
+      estimatedTax: 0,
+      estimatedShipping: null,
+      estimatedTotal: Math.max(0, subtotal - estimatedDiscount),
+      currency: 'VND',
+    };
+
+    return {
+      items,
+      summary,
+      promo: promoResult,
+      hasBlockingIssues: items.some((i) => !i.canCheckout),
+      validatedAt: new Date().toISOString(),
     };
   }
 

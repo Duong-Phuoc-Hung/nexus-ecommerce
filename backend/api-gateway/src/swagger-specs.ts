@@ -2104,6 +2104,240 @@ export const commerceSpec = {
         },
       },
     },
+    '/api/v1/checkout/promotions': {
+      get: {
+        tags: ['Buyer / Giỏ hàng & Khuyến mãi & Vận chuyển'],
+        summary: 'Danh sách mã khuyến mãi đang có hiệu lực (SRS B14)',
+        description: `${PRIVATE} Lấy danh sách các voucher/khuyến mãi hợp lệ, còn số lượng và trong thời gian hiệu lực từ database.`,
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: jsonResponse('Danh sách khuyến mãi', {
+            success: true,
+            data: [
+              {
+                id: '1',
+                code: 'WELCOME10',
+                name: 'Giảm 10% cho khách hàng mới',
+                discountType: 'PERCENTAGE',
+                discountValue: 10,
+                maxDiscountAmount: 50000,
+                minOrderAmount: 100000,
+                validUntil: '2026-12-31T23:59:59.000Z',
+              },
+            ],
+          }),
+          401: unauthorized,
+        },
+      },
+    },
+    '/api/v1/checkout/promotions/validate': {
+      post: {
+        tags: ['Buyer / Giỏ hàng & Khuyến mãi & Vận chuyển'],
+        summary: 'Thẩm định & Tính giảm giá mã khuyến mãi (SRS B14)',
+        description: `${PRIVATE} Kiểm tra mã voucher có hợp lệ, còn lượt dùng và thỏa mãn giá trị đơn hàng tối thiểu không.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['code'],
+                properties: {
+                  code: { type: 'string', example: 'WELCOME10' },
+                  subtotal: { type: 'number', example: 500000 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Kết quả kiểm tra mã', {
+            success: true,
+            data: {
+              valid: true,
+              code: 'WELCOME10',
+              discountType: 'PERCENTAGE',
+              discountAmount: 50000,
+              finalTotal: 450000,
+              message: 'Áp dụng mã giảm giá thành công',
+            },
+          }),
+          400: errorResponse(
+            'Mã không hợp lệ',
+            'Mã khuyến mãi không hợp lệ hoặc đã hết lượt sử dụng.',
+          ),
+          401: unauthorized,
+        },
+      },
+    },
+    '/api/v1/checkout/quote': {
+      post: {
+        tags: ['Buyer / Giỏ hàng & Khuyến mãi & Vận chuyển'],
+        summary: 'Báo giá đơn hàng & Tùy chọn vận chuyển đa đơn vị (SRS B06/B08/B14)',
+        description: `${PRIVATE} Tính tổng tiền hàng, gợi ý các nhà vận chuyển (GHN, GHTK, Viettel Post) kèm cước phí và áp dụng mã giảm giá nếu có.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['items', 'shippingAddress'],
+                properties: {
+                  items: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        productId: { type: 'string', example: '1' },
+                        quantity: { type: 'integer', example: 2 },
+                      },
+                    },
+                  },
+                  shippingAddress: {
+                    type: 'object',
+                    properties: {
+                      fullName: { type: 'string', example: 'Nguyễn Văn A' },
+                      phone: { type: 'string', example: '0901234567' },
+                      province: { type: 'string', example: 'Hồ Chí Minh' },
+                      district: { type: 'string', example: 'Quận 9' },
+                      ward: { type: 'string', example: 'Hiệp Phú' },
+                      addressLine: { type: 'string', example: '123 Lê Văn Việt' },
+                    },
+                  },
+                  shippingOptionId: { type: 'string', example: 'GHN_STANDARD' },
+                  promotionCode: { type: 'string', example: 'WELCOME10' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Báo giá chi tiết', {
+            success: true,
+            data: {
+              subtotal: 500000,
+              shippingFee: 25000,
+              discountAmount: 50000,
+              finalAmount: 475000,
+              shippingOptions: [
+                {
+                  optionId: 'GHN_STANDARD',
+                  carrier: 'GHN',
+                  carrierName: 'Giao Hàng Nhanh',
+                  serviceName: 'Tiêu chuẩn',
+                  fee: 25000,
+                  etaText: 'Dự kiến 2–3 ngày',
+                  recommended: true,
+                },
+                {
+                  optionId: 'GHTK_FAST',
+                  carrier: 'GHTK',
+                  carrierName: 'Giao Hàng Tiết Kiệm',
+                  serviceName: 'Giao nhanh',
+                  fee: 38000,
+                  etaText: 'Dự kiến 1–2 ngày',
+                },
+                {
+                  optionId: 'VIETTEL_SAVING',
+                  carrier: 'VIETTEL_POST',
+                  carrierName: 'Viettel Post',
+                  serviceName: 'Tiết kiệm',
+                  fee: 20000,
+                  etaText: 'Dự kiến 3–4 ngày',
+                },
+              ],
+            },
+          }),
+          401: unauthorized,
+        },
+      },
+    },
+    '/api/v1/cart': {
+      get: {
+        tags: ['Buyer / Giỏ hàng & Khuyến mãi & Vận chuyển'],
+        summary: 'Xem chi tiết giỏ hàng kèm trạng thái realtime (SRS B05)',
+        description: `${PRIVATE} Trả về danh sách sản phẩm trong giỏ kèm trạng thái tồn kho realtime (AVAILABLE, OUT_OF_STOCK, PRICE_CHANGED, INSUFFICIENT_STOCK).`,
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: jsonResponse('Chi tiết giỏ hàng', {
+            success: true,
+            data: {
+              id: '1',
+              items: [
+                {
+                  id: '10',
+                  productId: '1',
+                  productName: 'Tai nghe Bluetooth Nexus Air',
+                  quantity: 2,
+                  price: 250000,
+                  stockQuantity: 50,
+                  itemStatus: 'AVAILABLE',
+                },
+              ],
+              totalItems: 2,
+              totalAmount: 500000,
+              hasUnavailableItems: false,
+            },
+          }),
+          401: unauthorized,
+        },
+      },
+    },
+    '/api/v1/cart/items': {
+      post: {
+        tags: ['Buyer / Giỏ hàng & Khuyến mãi & Vận chuyển'],
+        summary: 'Thêm sản phẩm vào giỏ hàng (SRS B05)',
+        description: `${PRIVATE} Kiểm tra tồn kho ngay khi thêm vào giỏ. Báo lỗi nếu sản phẩm hết hàng hoặc số lượng vượt quá tồn kho.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['productId', 'quantity'],
+                properties: {
+                  productId: { type: 'string', example: '1' },
+                  quantity: { type: 'integer', example: 1 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Thêm vào giỏ thành công', {
+            success: true,
+            message: 'Đã thêm sản phẩm vào giỏ hàng.',
+          }),
+          400: errorResponse(
+            'Lỗi tồn kho',
+            'Số lượng yêu cầu vượt quá số lượng còn lại trong kho.',
+          ),
+          401: unauthorized,
+        },
+      },
+    },
+    '/api/v1/cart/validate': {
+      post: {
+        tags: ['Buyer / Giỏ hàng & Khuyến mãi & Vận chuyển'],
+        summary: 'Kiểm tra giỏ hàng trước khi Checkout (SRS B05)',
+        description: `${PRIVATE} Kiểm tra toàn diện giỏ hàng: phát hiện sản phẩm hết hàng, thay đổi giá, hoặc không đủ số lượng để cảnh báo người dùng.`,
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: jsonResponse('Kết quả kiểm tra giỏ hàng', {
+            success: true,
+            data: {
+              allAvailable: true,
+              warnings: [],
+              validItemsCount: 1,
+            },
+          }),
+          401: unauthorized,
+        },
+      },
+    },
     '/api/v1/orders/checkout': {
       post: {
         tags: ['Orders & Checkout'],
