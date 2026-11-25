@@ -174,3 +174,26 @@ export function requireOrderPermission(
     });
   };
 }
+
+export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
+  const user = (req as AuthenticatedRequest).user;
+  if (!user) {
+    res.status(401).json({
+      success: false,
+      error: 'Authentication required. Vui lòng đăng nhập với tài khoản hợp lệ.',
+    });
+    return;
+  }
+
+  const role = (user.role || '').toUpperCase();
+  if (role !== 'ADMIN') {
+    res.status(403).json({
+      success: false,
+      error:
+        'Quyền truy cập bị từ chối. Chỉ tài khoản với vai trò ADMIN mới có quyền thực hiện thao tác này.',
+    });
+    return;
+  }
+
+  next();
+}

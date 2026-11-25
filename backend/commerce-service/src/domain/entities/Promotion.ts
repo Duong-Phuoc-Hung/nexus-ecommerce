@@ -21,9 +21,13 @@ export interface PromotionProps {
   usageLimit: number;
   usedCount: number;
   perUserLimit: number;
+  scope?: string;
+  categoryIds?: string[];
   startsAt: Date;
   endsAt: Date;
   status: PromotionStatus;
+  createdBy?: string | null;
+  updatedBy?: string | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -40,9 +44,15 @@ export class Promotion {
   public readonly usageLimit: number;
   public readonly usedCount: number;
   public readonly perUserLimit: number;
+  public readonly scope: string;
+  public readonly categoryIds: string[];
   public readonly startsAt: Date;
   public readonly endsAt: Date;
   public readonly status: PromotionStatus;
+  public readonly createdBy: string | null;
+  public readonly updatedBy: string | null;
+  public readonly createdAt: Date;
+  public readonly updatedAt: Date;
 
   constructor(props: PromotionProps) {
     this.id = props.id;
@@ -59,9 +69,15 @@ export class Promotion {
     this.usageLimit = Number(props.usageLimit || 1000);
     this.usedCount = Number(props.usedCount || 0);
     this.perUserLimit = Number(props.perUserLimit || 1);
+    this.scope = props.scope || 'ALL_USERS';
+    this.categoryIds = Array.isArray(props.categoryIds) ? props.categoryIds : [];
     this.startsAt = new Date(props.startsAt);
     this.endsAt = new Date(props.endsAt);
     this.status = props.status;
+    this.createdBy = props.createdBy ?? null;
+    this.updatedBy = props.updatedBy ?? null;
+    this.createdAt = props.createdAt ? new Date(props.createdAt) : new Date();
+    this.updatedAt = props.updatedAt ? new Date(props.updatedAt) : new Date();
   }
 
   public isWithinValidityPeriod(now: Date = new Date()): boolean {

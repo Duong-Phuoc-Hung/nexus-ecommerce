@@ -328,9 +328,13 @@ model Promotion {
   usageLimit        Int              @default(1000) @map("usage_limit")
   usedCount         Int              @default(0) @map("used_count")
   perUserLimit      Int              @default(1) @map("per_user_limit")
+  scope             String           @default("ALL_USERS") @map("scope") @db.VarChar(24)
+  categoryIds       Json             @default("[]") @map("category_ids")
   startsAt          DateTime         @default(now()) @map("starts_at") @db.Timestamptz()
   endsAt            DateTime         @map("ends_at") @db.Timestamptz()
   status            String           @default("ACTIVE") @map("status") @db.VarChar(20)
+  createdBy         String?          @map("created_by") @db.VarChar(64)
+  updatedBy         String?          @map("updated_by") @db.VarChar(64)
   createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt         DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 
@@ -338,6 +342,7 @@ model Promotion {
 
   @@index([code], map: "idx_promo_code")
   @@index([status, startsAt, endsAt], map: "idx_promo_status_dates")
+  @@index([scope], map: "idx_promo_scope")
   @@map("commerce_promotions")
 }
 
