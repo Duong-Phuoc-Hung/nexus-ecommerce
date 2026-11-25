@@ -3,6 +3,8 @@ export interface SearchOrdersQueryDto {
   buyerId?: string;
   sellerId?: string;
   status?: string;
+  fromDate?: string;
+  toDate?: string;
   page?: number;
   limit?: number;
   sortBy?: 'createdAt' | 'totalAmount' | 'status';
@@ -39,6 +41,8 @@ export interface OrderSearchItemDto {
   total: number; // Tương thích FE: order.total
   totalAmount: number; // Chuẩn DDD
   status: string;
+  paymentMethod?: string;
+  shippingAddress?: Record<string, unknown>;
   tracking: string; // Tương thích FE: order.tracking
   trackingCode?: string;
   itemsCount: number;

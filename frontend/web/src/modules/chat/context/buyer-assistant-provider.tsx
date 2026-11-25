@@ -14,6 +14,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import type { OrderDetail } from '@/modules/commerce/types/order.types';
 import { chatApi } from '../api/chat.api';
+import { getChatSocket } from '../utils/chat-socket';
 import type { ChatThreadItem } from '../types/chat.types';
 import type {
   ActiveAuctionContext,
@@ -52,12 +53,25 @@ function readInboxCache(userId: string): ChatThreadItem[] {
 function writeInboxCache(userId: string, threads: ChatThreadItem[]): void {
   if (typeof window === 'undefined' || !userId) return;
   try {
+    const storageKey = `${INBOX_CACHE_PREFIX}${userId}`;
+    const serializedThreads = JSON.stringify(threads);
+    const existingRaw = window.localStorage.getItem(storageKey);
+    if (existingRaw) {
+      try {
+        const prev = JSON.parse(existingRaw) as BuyerInboxCachePayload;
+        if (prev?.userId === userId && JSON.stringify(prev.threads) === serializedThreads) {
+          return; // Không ghi trùng lặp lên localStorage nếu dữ liệu không đổi
+        }
+      } catch {
+        // Bỏ qua cache lỗi định dạng và ghi đè lại
+      }
+    }
     const payload: BuyerInboxCachePayload = {
       userId,
       threads,
       updatedAt: new Date().toISOString(),
     };
-    window.localStorage.setItem(`${INBOX_CACHE_PREFIX}${userId}`, JSON.stringify(payload));
+    window.localStorage.setItem(storageKey, JSON.stringify(payload));
   } catch {
     // Bỏ qua lỗi quota trình duyệt
   }
@@ -204,8 +218,16 @@ export function BuyerAssistantProvider({ children }: { children: ReactNode }) {
     }
   }, [user?.id, user?.role, userKey]);
 
+  const userId = user?.id ?? '';
+  const userRole = user?.role ?? '';
+
+  const inboxThreadsRef = useRef<ChatThreadItem[]>(inboxThreads);
+  useEffect(() => {
+    inboxThreadsRef.current = inboxThreads;
+  }, [inboxThreads]);
+
   const refreshInbox = useCallback(async () => {
-    if (!user || user.role !== 'BUYER' || !user.id) {
+    if (!userId || userRole !== 'BUYER') {
       setInboxThreads([]);
       setInboxError('');
       setInboxLoading(false);
@@ -214,9 +236,9 @@ export function BuyerAssistantProvider({ children }: { children: ReactNode }) {
     if (inboxFetchingRef.current) return;
     inboxFetchingRef.current = true;
     const epochAtStart = inboxEpochRef.current;
-    const targetUserId = user.id;
+    const targetUserId = userId;
 
-    setInboxLoading((prev) => prev || inboxThreads.length === 0);
+    setInboxLoading((prev) => prev || inboxThreadsRef.current.length === 0);
     try {
       const threads = await chatApi.getBuyerThreads(targetUserId);
       if (epochAtStart !== inboxEpochRef.current) return;
@@ -235,39 +257,118 @@ export function BuyerAssistantProvider({ children }: { children: ReactNode }) {
       }
       inboxFetchingRef.current = false;
     }
-  }, [inboxThreads.length, user]);
+  }, [userId, userRole]);
 
-  // Polling hộp thư Buyer liên tục ngay cả khi widget đóng, đồng bộ khi online/focus/tab visible
+  // Đồng bộ hộp thư Buyer theo thời gian thực qua Socket.IO (cập nhật trực tiếp từ payload, không spam HTTP)
   useEffect(() => {
-    if (!user || user.role !== 'BUYER' || isHiddenRoute) return;
+    if (!userId || userRole !== 'BUYER' || isHiddenRoute) return;
 
     void refreshInbox();
-    const timer = window.setInterval(() => {
-      void refreshInbox();
-    }, 5000);
 
-    const handleSync = () => {
-      if (document.visibilityState === 'visible') {
+    let debounceTimer: number | null = null;
+    const scheduleSync = () => {
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => {
+        debounceTimer = null;
         void refreshInbox();
-      }
-    };
-    const handleCustomSync = () => {
-      void refreshInbox();
+      }, 450);
     };
 
-    window.addEventListener('focus', handleCustomSync);
-    window.addEventListener('online', handleCustomSync);
-    window.addEventListener('nexus:chat-sync', handleCustomSync);
-    document.addEventListener('visibilitychange', handleSync);
+    const onSocketMessage = (payload?: {
+      conversationId?: string;
+      actorId?: string;
+      lastSeq?: number;
+      message?: {
+        content?: string;
+        senderRole?: string;
+        senderId?: string;
+        createdAt?: string;
+        seq?: number;
+      };
+      reply?: {
+        content?: string;
+        senderRole?: string;
+        createdAt?: string;
+        seq?: number;
+      } | null;
+    }) => {
+      const convId = payload?.conversationId;
+      const latest = payload?.reply || payload?.message;
+      if (!convId || !latest) {
+        scheduleSync();
+        return;
+      }
+      const exists = inboxThreadsRef.current.some((t) => t.id === convId);
+      if (!exists) {
+        scheduleSync();
+        return;
+      }
+      const isFromOther = payload?.actorId !== userId || Boolean(payload?.reply);
+      setInboxThreads((prev) => {
+        const next = prev.map((thread) => {
+          if (thread.id !== convId) return thread;
+          const nextSeq = Math.max(
+            thread.lastSeq ?? 0,
+            Number(payload?.lastSeq ?? latest.seq ?? 0),
+          );
+          return {
+            ...thread,
+            lastMessage: latest.content || thread.lastMessage,
+            lastMessageTime: latest.createdAt || new Date().toISOString(),
+            lastMessageRole:
+              (latest.senderRole as ChatThreadItem['lastMessageRole']) || thread.lastMessageRole,
+            lastSeq: nextSeq,
+            unreadCount: isFromOther ? (thread.unreadCount ?? 0) + 1 : (thread.unreadCount ?? 0),
+          };
+        });
+        writeInboxCache(userId, next);
+        return next;
+      });
+    };
+
+    const onSocketRead = (payload?: {
+      conversationId?: string;
+      actorId?: string;
+      lastReadSeq?: number;
+      lastSeq?: number;
+    }) => {
+      if (!payload?.conversationId || payload.actorId !== userId) return;
+      setInboxThreads((prev) => {
+        const next = prev.map((thread) =>
+          thread.id === payload.conversationId
+            ? {
+                ...thread,
+                lastSeq: Math.max(thread.lastSeq ?? 0, Number(payload.lastSeq ?? 0)),
+                myLastReadSeq: Math.max(
+                  thread.myLastReadSeq ?? 0,
+                  Number(payload.lastReadSeq ?? 0),
+                ),
+                unreadCount: 0,
+              }
+            : thread,
+        );
+        writeInboxCache(userId, next);
+        return next;
+      });
+    };
+
+    const socket = getChatSocket();
+    socket.on('chat:message', onSocketMessage);
+    socket.on('chat:read', onSocketRead);
+    socket.on('chat:conversation_updated', scheduleSync);
+
+    window.addEventListener('online', scheduleSync);
+    window.addEventListener('nexus:chat-sync', scheduleSync);
 
     return () => {
-      window.clearInterval(timer);
-      window.removeEventListener('focus', handleCustomSync);
-      window.removeEventListener('online', handleCustomSync);
-      window.removeEventListener('nexus:chat-sync', handleCustomSync);
-      document.removeEventListener('visibilitychange', handleSync);
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      socket.off('chat:message', onSocketMessage);
+      socket.off('chat:read', onSocketRead);
+      socket.off('chat:conversation_updated', scheduleSync);
+      window.removeEventListener('online', scheduleSync);
+      window.removeEventListener('nexus:chat-sync', scheduleSync);
     };
-  }, [isHiddenRoute, refreshInbox, user]);
+  }, [isHiddenRoute, refreshInbox, userId, userRole]);
 
   const markConversationRead = useCallback(
     async (conversationId: string, lastReadSeq: number) => {
@@ -464,49 +565,87 @@ export function BuyerAssistantProvider({ children }: { children: ReactNode }) {
     return null;
   }, [pageKind, pageOrderContext, selectedOrder]);
 
-  const value: BuyerAssistantContextValue = {
-    isOpen,
-    setIsOpen,
-    toggleOpen,
-    collapseAssistant,
-    activeWidgetView,
-    setActiveWidgetView,
-    activeThreadId,
-    openMessagesInbox,
-    openConversationThread,
-    openAssistantChat,
-    returnToInbox,
-    inboxThreads,
-    inboxLoading,
-    inboxError,
-    refreshInbox,
-    markConversationRead,
-    pageKind,
-    pathname,
-    isHiddenRoute,
-    productContext,
-    setProductContext,
-    auctionContext,
-    setAuctionContext,
-    checkoutContext,
-    setCheckoutContext,
-    pageOrderContext,
-    setPageOrderContext,
-    activeOrder,
-    selectOrder,
-    messages,
-    setMessages,
-    draftText,
-    setDraftText,
-    unreadCount,
-    aiConversationIds,
-    setAiConversationId,
-    openAssistantWithOrder,
-    pendingAutoPrompt,
-    clearPendingAutoPrompt,
-    orderDetailTrigger,
-    handoffToOrderChannel,
-  };
+  const value = useMemo<BuyerAssistantContextValue>(
+    () => ({
+      isOpen,
+      setIsOpen,
+      toggleOpen,
+      collapseAssistant,
+      activeWidgetView,
+      setActiveWidgetView,
+      activeThreadId,
+      openMessagesInbox,
+      openConversationThread,
+      openAssistantChat,
+      returnToInbox,
+      inboxThreads,
+      inboxLoading,
+      inboxError,
+      refreshInbox,
+      markConversationRead,
+      pageKind,
+      pathname,
+      isHiddenRoute,
+      productContext,
+      setProductContext,
+      auctionContext,
+      setAuctionContext,
+      checkoutContext,
+      setCheckoutContext,
+      pageOrderContext,
+      setPageOrderContext,
+      activeOrder,
+      selectOrder,
+      messages,
+      setMessages,
+      draftText,
+      setDraftText,
+      unreadCount,
+      aiConversationIds,
+      setAiConversationId,
+      openAssistantWithOrder,
+      pendingAutoPrompt,
+      clearPendingAutoPrompt,
+      orderDetailTrigger,
+      handoffToOrderChannel,
+    }),
+    [
+      activeOrder,
+      activeThreadId,
+      activeWidgetView,
+      aiConversationIds,
+      auctionContext,
+      checkoutContext,
+      clearPendingAutoPrompt,
+      collapseAssistant,
+      draftText,
+      handoffToOrderChannel,
+      inboxError,
+      inboxLoading,
+      inboxThreads,
+      isHiddenRoute,
+      isOpen,
+      markConversationRead,
+      messages,
+      openAssistantChat,
+      openAssistantWithOrder,
+      openConversationThread,
+      openMessagesInbox,
+      orderDetailTrigger,
+      pageKind,
+      pageOrderContext,
+      pathname,
+      pendingAutoPrompt,
+      productContext,
+      refreshInbox,
+      returnToInbox,
+      selectOrder,
+      setAiConversationId,
+      setIsOpen,
+      toggleOpen,
+      unreadCount,
+    ],
+  );
 
   return <BuyerAssistantContext.Provider value={value}>{children}</BuyerAssistantContext.Provider>;
 }

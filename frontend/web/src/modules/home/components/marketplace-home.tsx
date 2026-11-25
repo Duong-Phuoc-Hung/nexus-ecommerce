@@ -1,5 +1,11 @@
 'use client';
-import { auctionApi, currentPrice, type Auction } from '@/modules/auction/api/auction.api';
+import {
+  auctionApi,
+  currentPrice,
+  isAuctionOpenForBidding,
+  type Auction,
+} from '@/modules/auction/api/auction.api';
+import { getAuctionSocket } from '@/modules/auction/utils/auction-socket';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
@@ -56,9 +62,25 @@ export function MarketplaceHome() {
           if (value.includes('sưu tầm') || value.includes('collect')) return 'collectibles';
           return 'tech';
         };
+        const nowMs = Date.now();
+        // Chỉ giữ các phiên còn hiệu lực (đang diễn ra / gia hạn / sắp mở), loại bỏ tuyệt đối ENDED / SETTLED / CANCELLED
+        const liveRows = rows.filter(
+          (item) =>
+            (isAuctionOpenForBidding(item.status) && item.endAt > nowMs) ||
+            (item.status === 'SCHEDULED' && item.endAt > nowMs),
+        );
+        const pickLiveAuction = (productId: string) =>
+          liveRows.find(
+            (item) => item.productId === productId && isAuctionOpenForBidding(item.status),
+          ) ?? liveRows.find((item) => item.productId === productId && item.status === 'SCHEDULED');
+
         const mapped = page.items.map((product): MarketplaceProduct => {
-          const auction = rows.find((item) => item.productId === product.id);
-          const endAt = auction?.endAt ?? Date.now();
+          const auction = pickLiveAuction(product.id);
+          const endAt = auction?.endAt ?? nowMs;
+          const isScheduled = auction?.status === 'SCHEDULED';
+          const isLiveOpen = Boolean(
+            auction && isAuctionOpenForBidding(auction.status) && endAt > nowMs,
+          );
           return {
             id: product.id,
             auctionId: auction?.id,
@@ -68,13 +90,15 @@ export function MarketplaceHome() {
             image: product.images[0] || '/images/nexus-product-placeholder.svg',
             imageAlt: product.title,
             mode: auction ? 'auction' : 'fixed',
-            status: auction?.status === 'SCHEDULED' ? 'scheduled' : 'active',
+            status: isScheduled ? 'scheduled' : isLiveOpen ? 'active' : 'active',
             price: auction ? currentPrice(auction) : (product.price ?? 0),
             rating: product.rating,
             soldCount: product.soldCount,
             startingPrice: auction?.startingPrice ?? product.price ?? 0,
             increment: auction?.increment ?? 0,
-            remainingSeconds: auction ? Math.max(0, Math.ceil((endAt - Date.now()) / 1000)) : 0,
+            remainingSeconds: auction
+              ? Math.max(0, Math.ceil(((isScheduled ? auction.startAt : endAt) - nowMs) / 1000))
+              : 0,
             bids: auction?.bidCount ?? auction?.bids.length ?? 0,
             bidCountKnown: auction ? auction.bidCount !== null : true,
             condition: product.condition || 'Đang cập nhật',
@@ -92,17 +116,40 @@ export function MarketplaceHome() {
       }
     };
     void load();
-    const off = auctionApi.subscribe(() => void load());
-    const timer = setInterval(
-      () => {
-        if (!document.hidden) void load();
-      },
-      appConfig.auctionSource === 'api' ? 15000 : 3000,
-    );
+    let debounceTimer: number | null = null;
+    const scheduleLoad = () => {
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => {
+        debounceTimer = null;
+        void load();
+      }, 350);
+    };
+
+    const off = auctionApi.subscribe(scheduleLoad);
+    const socket = appConfig.auctionSource === 'api' ? getAuctionSocket() : null;
+    const joinFeed = () => {
+      socket?.emit('join_auctions_feed');
+    };
+    socket?.on('connect', joinFeed);
+    if (socket?.connected) joinFeed();
+    socket?.on('auctions:changed', scheduleLoad);
+    socket?.on('auction:ended', scheduleLoad);
+    socket?.on('auction:settled', scheduleLoad);
+    socket?.on('auction:cancelled', scheduleLoad);
+    socket?.on('auction:started', scheduleLoad);
+    socket?.on('auction:bid_placed', scheduleLoad);
     return () => {
       active = false;
+      if (debounceTimer) window.clearTimeout(debounceTimer);
       off();
-      clearInterval(timer);
+      socket?.off('connect', joinFeed);
+      if (socket?.connected) socket.emit('leave_auctions_feed');
+      socket?.off('auctions:changed', scheduleLoad);
+      socket?.off('auction:ended', scheduleLoad);
+      socket?.off('auction:settled', scheduleLoad);
+      socket?.off('auction:cancelled', scheduleLoad);
+      socket?.off('auction:started', scheduleLoad);
+      socket?.off('auction:bid_placed', scheduleLoad);
     };
   }, []);
   const router = useRouter();
@@ -148,16 +195,27 @@ export function MarketplaceHome() {
   const sourceProducts = catalogProducts;
   const products = sourceProducts.flatMap((product) => {
     if (product.mode !== 'auction' || !auctionRows) return [product];
-    const a = auctionRows.find((row) => row.productId === product.id);
-    if (!a || a.status === 'ENDED' || a.status === 'CANCELLED') return [];
+    const nowMs = Date.now();
+    const a =
+      auctionRows.find(
+        (row) =>
+          row.productId === product.id && isAuctionOpenForBidding(row.status) && row.endAt > nowMs,
+      ) ??
+      auctionRows.find(
+        (row) => row.productId === product.id && row.status === 'SCHEDULED' && row.endAt > nowMs,
+      );
+    if (!a || a.status === 'ENDED' || a.status === 'CANCELLED' || a.endAt <= nowMs) return [];
+    const isLive = isAuctionOpenForBidding(a.status);
     return [
       {
         ...product,
+        auctionId: a.id,
         price: currentPrice(a),
         bids: a.bidCount ?? a.bids.length,
         bidCountKnown: a.bidCount !== null,
-        status: a.status === 'ACTIVE' ? ('active' as const) : ('scheduled' as const),
-        remainingSeconds: Math.max(0, Math.ceil((a.endAt - Date.now()) / 1000)) + elapsed,
+        status: isLive ? ('active' as const) : ('scheduled' as const),
+        remainingSeconds:
+          Math.max(0, Math.ceil(((isLive ? a.endAt : a.startAt) - nowMs) / 1000)) + elapsed,
       },
     ];
   });
@@ -174,14 +232,17 @@ export function MarketplaceHome() {
     return () => window.removeEventListener(FAVORITES_EVENT, syncFavorites);
   }, []);
 
+  const hasCountdownAuctions = Boolean(
+    auctionRows?.some((row) => isAuctionOpenForBidding(row.status) || row.status === 'SCHEDULED'),
+  );
   useEffect(() => {
+    if (!hasCountdownAuctions) return;
     const started = Date.now();
-    const interval = window.setInterval(
-      () => setElapsed(Math.floor((Date.now() - started) / 1000)),
-      1000,
-    );
+    const interval = window.setInterval(() => {
+      if (!document.hidden) setElapsed(Math.floor((Date.now() - started) / 1000));
+    }, 1000);
     return () => window.clearInterval(interval);
-  }, []);
+  }, [hasCountdownAuctions]);
 
   const activeAuctions = products.filter(
     (product) =>

@@ -37,6 +37,7 @@ export interface IUserRepository {
   search(criteria: UserSearchCriteria): Promise<UserSearchPage>;
   save(user: User): Promise<void>;
   update(user: User): Promise<void>;
+  updateReputationScore?(userId: string, score: number, trustLevel?: string): Promise<void>;
   updateProfileFields?(
     user: User,
     fields: Partial<Record<'fullName' | 'phone' | 'dateOfBirth' | 'gender', unknown>>,
@@ -46,7 +47,7 @@ export interface IUserRepository {
     points: number,
     reason: string,
     actorId: string,
-  ): Promise<{ score: number; history: ReputationAuditEntry[] }>;
+  ): Promise<{ score: number; previousScore: number; history: ReputationAuditEntry[] }>;
   saveRestriction?(
     userId: string,
     restriction: UserFeatureRestriction,

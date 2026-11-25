@@ -31,6 +31,8 @@ export function createCommerceApi(request: RequestApi) {
         sellerId?: string;
         q?: string;
         status?: string;
+        fromDate?: string;
+        toDate?: string;
         page?: number;
         limit?: number;
       },

@@ -15,8 +15,10 @@ export class RecoverProductUseCase {
   constructor(private readonly productRepository: IProductRepository) {}
 
   public async execute(input: RecoverProductInput): Promise<void> {
-    // 1. Tìm sản phẩm trong Database
-    const product = await this.productRepository.findById(input.productId);
+    // 1. Tìm sản phẩm trong Database (bao gồm cả sản phẩm đã xóa mềm)
+    const product = this.productRepository.findByIdIncludingDeleted
+      ? await this.productRepository.findByIdIncludingDeleted(input.productId)
+      : await this.productRepository.findById(input.productId);
     if (!product) {
       throw new ProductNotFoundException(input.productId);
     }
@@ -26,9 +28,9 @@ export class RecoverProductUseCase {
       throw new Error('FORBIDDEN: Bạn không có quyền khôi phục sản phẩm của người khác.');
     }
 
-    // 3. Gọi repository thực hiện khôi phục
+    // 3. Gọi repository thực hiện khôi phục theo đúng product.id và product.sellerId
     if (this.productRepository.recover) {
-      await this.productRepository.recover(input.productId, input.sellerId);
+      await this.productRepository.recover(product.id, product.sellerId);
     }
   }
 }

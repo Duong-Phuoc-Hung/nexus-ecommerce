@@ -1,24 +1,44 @@
 import { IUserRepository } from '../../domain/repositories/IUserRepository';
 import { UserNotFoundException } from '../../domain/exceptions/UserNotFoundException';
+import {
+  classifyReputationTier,
+  reputationLedgerStore,
+  ReputationLedgerEntry,
+  ReputationRuleCode,
+} from '../../infrastructure/state/ReputationLedgerStore';
 
 export interface AdjustUserReputationInput {
   userId: string;
   points: number;
   reason: string;
   operatorId: string;
+  operatorRole?: string;
+  internalNote?: string;
+  ruleCode?: ReputationRuleCode;
+  sourceId?: string;
 }
 
 export interface AdjustUserReputationOutput {
   userId: string;
   newReputationScore: number;
+  scoreBefore: number;
+  requestedDelta: number;
+  appliedDelta: number;
   adjustedPoints: number;
+  tier: string;
+  tierLabel: string;
   reason: string;
   adjustedBy: string;
+  entry: ReputationLedgerEntry;
   reputationHistory: Array<{
+    id?: string;
     points: number;
+    appliedDelta?: number;
+    scoreBefore?: number;
+    scoreAfter?: number;
     reason: string;
     adjustedBy: string;
-    createdAt: Date;
+    createdAt: Date | string;
   }>;
 }
 
@@ -43,33 +63,60 @@ export class AdjustUserReputationUseCase {
       throw new UserNotFoundException(input.userId);
     }
 
-    if (this.userRepository.adjustScore) {
-      const actor = input.operatorId || 'system';
-      const { score, history } = await this.userRepository.adjustScore(
-        user.id,
-        input.points,
-        input.reason.trim(),
-        actor,
-      );
-      return {
-        userId: user.id,
-        newReputationScore: score,
-        adjustedPoints: input.points,
-        reason: input.reason.trim(),
-        adjustedBy: actor,
-        reputationHistory: history,
-      };
+    const ruleCode: ReputationRuleCode = input.ruleCode || 'ADMIN_MANUAL_ADJUST';
+    const sourceId =
+      input.sourceId || `manual:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+
+    const { entry, newScore } = await reputationLedgerStore.recordEntryAsync({
+      userId: user.id,
+      currentScore: user.reputationScore,
+      ruleCode,
+      sourceType: 'ADMIN',
+      sourceId,
+      requestedDelta: Math.round(input.points),
+      reason: input.reason.trim(),
+      internalNote: input.internalNote,
+      actorId: input.operatorId || 'system',
+      actorRole: input.operatorRole || 'ADMIN',
+      allowDuplicateSource: ruleCode === 'ADMIN_MANUAL_ADJUST',
+    });
+
+    const tier = classifyReputationTier(newScore);
+    user.adjustReputation(entry.appliedDelta, input.reason.trim(), input.operatorId || 'system');
+    user.setReputationScore(newScore);
+
+    if (!reputationLedgerStore.hasPersistentPool()) {
+      if (this.userRepository.updateReputationScore) {
+        await this.userRepository.updateReputationScore(user.id, newScore, tier.code);
+      } else {
+        await this.userRepository.update(user);
+      }
     }
-    user.adjustReputation(input.points, input.reason.trim(), input.operatorId || 'system');
-    await this.userRepository.update(user);
+
+    const ledger = reputationLedgerStore.getLedger(user.id);
 
     return {
       userId: user.id,
-      newReputationScore: user.reputationScore,
-      adjustedPoints: input.points,
+      newReputationScore: newScore,
+      scoreBefore: entry.scoreBefore,
+      requestedDelta: entry.requestedDelta,
+      appliedDelta: entry.appliedDelta,
+      adjustedPoints: entry.appliedDelta,
+      tier: tier.code,
+      tierLabel: tier.label,
       reason: input.reason.trim(),
       adjustedBy: input.operatorId || 'system',
-      reputationHistory: user.reputationHistory,
+      entry,
+      reputationHistory: ledger.map((l) => ({
+        id: l.id,
+        points: l.appliedDelta,
+        appliedDelta: l.appliedDelta,
+        scoreBefore: l.scoreBefore,
+        scoreAfter: l.scoreAfter,
+        reason: l.reason,
+        adjustedBy: l.actorId,
+        createdAt: l.createdAt,
+      })),
     };
   }
 }

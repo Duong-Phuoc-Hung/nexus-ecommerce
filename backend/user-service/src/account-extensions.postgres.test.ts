@@ -49,6 +49,9 @@ test(
         'V5__profile_reputation_and_seller_reviews.sql',
         'V5__profile_reputation_and_seller_reviews.sql',
         'V6__admin_user_audit.sql',
+        'V7__persistent_token_revocations.sql',
+        'V8__persistent_reputation_ledger_and_appeals.sql',
+        'V9__admin_auction_settle.sql',
       ]) {
         await pool.query(await readFile(resolve(__dirname, '../prisma', migration), 'utf8'));
       }

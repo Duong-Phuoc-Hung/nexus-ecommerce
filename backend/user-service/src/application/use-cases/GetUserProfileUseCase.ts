@@ -32,6 +32,8 @@ export class GetUserProfileUseCase {
         ? {
             dateOfBirth: user.dateOfBirth,
             gender: user.gender,
+            identifyNumber: user.identifyNumber ?? null,
+            address: user.address ?? null,
             updatedAt: user.updatedAt.toISOString(),
           }
         : {}),

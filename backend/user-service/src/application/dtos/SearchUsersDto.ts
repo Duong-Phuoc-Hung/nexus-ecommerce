@@ -19,6 +19,11 @@ export interface UserSearchItemDto {
   fullName: string;
   name: string; // Alias hỗ trợ màn hình Frontend /support/users (user.name)
   email: string;
+  phone: string;
+  identifyNumber: string | null;
+  gender: string | null;
+  dateOfBirth: string | null;
+  address: string | null;
   role: string;
   status: string;
   reputationScore: number;

@@ -17,4 +17,16 @@ export class InMemoryReviewRepository implements IReviewRepository {
   public async findByUserAndProduct(userId: string, productId: string): Promise<Review | null> {
     return this.reviews.find((r) => r.userId === userId && r.productId === productId) || null;
   }
+
+  public async findByUserProductAndOrder(
+    userId: string,
+    productId: string,
+    orderId: string,
+  ): Promise<Review | null> {
+    return (
+      this.reviews.find(
+        (r) => r.userId === userId && r.productId === productId && r.orderId === orderId,
+      ) || null
+    );
+  }
 }

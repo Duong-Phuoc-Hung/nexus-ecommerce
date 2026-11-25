@@ -4,6 +4,7 @@ import {
   DisputeAnalysisResult,
   SuggestedVerdict,
 } from '../../application/dtos/ChatDtos';
+import { resolveGeminiModelChain } from './geminiModels';
 
 export interface DisputeArbiterAIOptions {
   apiKey?: string;
@@ -13,27 +14,27 @@ export interface DisputeArbiterAIOptions {
 
 /**
  * ADAPTER AI TRỌNG TÀI TRANH CHẤP: DisputeArbiterAI (AI Copilot Arbiter)
- * Đối chiếu bằng chứng Người mua và Người bán qua Google Gemini 1.5 Flash,
- * đưa ra kết luận lỗi (fault), độ tin cậy (confidence), phân tích (reasoning),
- * khuyến nghị (recommendation) và tự động tạo suggestedVerdict 4 trường để
- * Support Staff có thể ban hành phán quyết trong 1 cú click chuột.
+ * Đối chiếu bằng chứng Người mua và Người bán qua Google Gemini (ưu tiên GEMINI_MODEL
+ * + chuỗi GEMINI_FALLBACK_MODELS), đưa ra kết luận lỗi (fault), độ tin cậy (confidence),
+ * phân tích (reasoning), khuyến nghị (recommendation) và tự động tạo suggestedVerdict 4 trường
+ * để Support Staff có thể ban hành phán quyết trong 1 cú click chuột.
  *
  * Tích hợp Graceful Heuristic Fallback khi mất mạng, quota limit hoặc offline.
  */
 export class DisputeArbiterAI {
   private readonly apiKey?: string;
-  private readonly modelName: string;
+  private readonly explicitModelName?: string;
   private client?: any;
 
   constructor(options: DisputeArbiterAIOptions = {}) {
-    this.apiKey = options.apiKey || process.env.GEMINI_API_KEY;
-    this.modelName = options.modelName || process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+    this.apiKey = options.apiKey !== undefined ? options.apiKey : process.env.GEMINI_API_KEY;
+    this.explicitModelName = options.modelName;
 
     if (options.customClient) {
       this.client = options.customClient;
-    } else if (this.apiKey) {
+    } else if (this.apiKey?.trim()) {
       try {
-        this.client = new GoogleGenAI({ apiKey: this.apiKey });
+        this.client = new GoogleGenAI({ apiKey: this.apiKey.trim() });
       } catch (err: any) {
         console.warn(`[DisputeArbiterAI] Không thể khởi tạo GoogleGenAI client: ${err?.message}`);
       }
@@ -77,23 +78,36 @@ export class DisputeArbiterAI {
         '}';
 
       const prompt = this.buildPrompt(input);
+      const modelChain = resolveGeminiModelChain(
+        this.explicitModelName,
+        'GEMINI_MODEL',
+        'gemini-1.5-flash',
+      );
 
-      const response = await this.client.models.generateContent({
-        model: this.modelName,
-        contents: prompt,
-        config: {
-          systemInstruction,
-        },
-      });
+      for (const modelName of modelChain) {
+        try {
+          const response = await this.client.models.generateContent({
+            model: modelName,
+            contents: prompt,
+            config: {
+              systemInstruction,
+            },
+          });
 
-      const rawText = response.text || '';
-      const parsed = this.extractJson(rawText);
+          const rawText = response.text || '';
+          const parsed = this.extractJson(rawText);
 
-      if (parsed && parsed.fault && parsed.reasoning) {
-        return this.normalizeResult(parsed, input);
+          if (parsed && parsed.fault && parsed.reasoning) {
+            return this.normalizeResult(parsed, input);
+          }
+        } catch (modelErr: any) {
+          console.warn(
+            `[DisputeArbiterAI] Model "${modelName}" lỗi (${modelErr?.status || modelErr?.message || 'Unknown'}).`,
+          );
+        }
       }
 
-      // Nếu Gemini trả về không parse được JSON, dùng Heuristic Fallback
+      // Nếu tất cả model Gemini đều không parse được JSON hoặc lỗi, dùng Heuristic Fallback
       return this.heuristicArbiter(input);
     } catch (err: any) {
       console.warn(

@@ -11,6 +11,10 @@ import { ChatForbiddenException } from '../../../domain/exceptions/ChatForbidden
 import { DisputeArbiterAI } from '../../../infrastructure/ai/DisputeArbiterAI';
 import { HandoverConversationUseCase } from '../../../application/use-cases/HandoverConversationUseCase';
 import { HandoverConflictException } from '../../../domain/exceptions/HandoverConflictException';
+import { ILanguageModelProvider } from '../../../application/ports/ILanguageModelProvider';
+import { GeminiLlmProvider } from '../../../infrastructure/ai/GeminiLlmProvider';
+import { getGeminiRuntimeStatus } from '../../../infrastructure/ai/geminiModels';
+import { emitChatEvent } from '../../../infrastructure/websocket/socket';
 
 export class ChatController {
   constructor(
@@ -21,7 +25,74 @@ export class ChatController {
     private readonly messageRepo: IChatMessageRepository,
     private readonly handoverConversationUseCase: HandoverConversationUseCase,
     private readonly disputeArbiterAi: DisputeArbiterAI = new DisputeArbiterAI(),
+    private readonly llmProvider: ILanguageModelProvider = new GeminiLlmProvider(),
   ) {}
+
+  /**
+   * GET /api/v1/chat/ai/status
+   * Trả về trạng thái cấu hình Gemini AI (tuyệt đối không trả API key)
+   */
+  public getAiStatus(_req: Request, res: Response): void {
+    res.status(200).json({
+      success: true,
+      data: getGeminiRuntimeStatus(),
+    });
+  }
+
+  /**
+   * POST /api/v1/chat/ask
+   * Trợ lý AI hỏi đáp chung theo ngữ cảnh trang (Catalog, Product, Auction, Cart, Policy)
+   */
+  public async askAssistant(req: Request, res: Response): Promise<void> {
+    try {
+      const { question, context } = req.body || {};
+      if (typeof question !== 'string' || !question.trim() || question.length > 2000) {
+        res.status(400).json({
+          success: false,
+          error: 'Nội dung câu hỏi cần từ 1 đến 2000 ký tự.',
+        });
+        return;
+      }
+
+      const user = (req as AuthenticatedRequest).user;
+      const result = await this.llmProvider.generateReply(question.trim(), {
+        conversationId: 'assistant_general',
+        userId: user?.sub || 'guest',
+        userRole: user?.role || 'GUEST',
+        orderId: typeof context?.orderId === 'string' ? context.orderId : undefined,
+        pageContext: context && typeof context === 'object' ? context : undefined,
+      });
+
+      res.status(200).json({
+        success: true,
+        data: {
+          answer: result.content,
+          modelUsed: result.modelUsed,
+          isLiveAi: result.modelUsed !== 'rule-based-fallback',
+          metadata: result.metadata,
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Không thể kết nối Trợ lý AI lúc này.',
+      });
+    }
+  }
+
+  public async listConversations(req: Request, res: Response): Promise<void> {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user) {
+      res.status(401).json({ success: false, error: 'Unauthorized.' });
+      return;
+    }
+    try {
+      const conversations = await this.conversationRepo.findAccessible(user.sub, user.role);
+      res.status(200).json({ success: true, data: conversations.map((c) => c.toDto()) });
+    } catch {
+      res.status(503).json({ success: false, error: 'Không thể tải hộp thư. Vui lòng thử lại.' });
+    }
+  }
 
   public async handover(req: Request, res: Response): Promise<void> {
     const user = (req as AuthenticatedRequest).user;
@@ -47,6 +118,14 @@ export class ChatController {
         user.sub,
         user.role,
       );
+      emitChatEvent('chat:conversation_updated', {
+        conversationId: conversation.id,
+        userIds: [
+          conversation.buyerId,
+          conversation.channelType === 'BUYER_SELLER' ? conversation.sellerId : undefined,
+        ],
+        notifyStaff: true,
+      });
       res.status(200).json({ success: true, data: conversation.toDto() });
     } catch (error) {
       if (error instanceof ChatForbiddenException) {
@@ -115,9 +194,13 @@ export class ChatController {
         user.role,
       );
 
+      const summary = await this.conversationRepo.getReadSummary(conv.id, user.sub, conv.buyerId);
       res.status(200).json({
         success: true,
-        data: conv.toDto(),
+        data: {
+          ...conv.toDto(),
+          ...summary,
+        },
       });
     } catch (error: any) {
       if (error instanceof ChatForbiddenException) {
@@ -222,12 +305,33 @@ export class ChatController {
         user.role,
       );
 
+      const conv = await this.conversationRepo.findById(convId).catch(() => null);
+      const messageDto = result.message.toDto();
+      const replyDto = result.reply ? result.reply.toDto() : null;
+      emitChatEvent('chat:message', {
+        conversationId: convId,
+        userIds: [
+          conv?.buyerId,
+          conv?.channelType === 'BUYER_SELLER' ? conv?.sellerId : undefined,
+          user.sub,
+        ],
+        notifyStaff:
+          conv?.channelType === 'BUYER_SUPPORT' ||
+          (conv?.channelType === 'AI_BOT' && conv?.status === 'WAITING_STAFF'),
+        payload: {
+          actorId: user.sub,
+          message: messageDto,
+          reply: replyDto,
+          lastSeq: conv?.lastSeq ?? replyDto?.seq ?? messageDto.seq ?? 0,
+        },
+      });
+
       res.status(201).json({
         success: true,
         message: 'Gửi tin nhắn thành công.',
         data: {
-          message: result.message.toDto(),
-          reply: result.reply ? result.reply.toDto() : null,
+          message: messageDto,
+          reply: replyDto,
         },
       });
     } catch (error: any) {
@@ -289,14 +393,13 @@ export class ChatController {
         afterSeq,
       );
 
+      const summary = await this.conversationRepo.getReadSummary(convId, user.sub, conv.buyerId);
       res.status(200).json({
         success: true,
         data: messages.map((m) => m.toDto()),
         meta: {
           conversationId: convId,
-          lastSeq: conv.lastSeq,
-          buyerLastReadSeq: conv.buyerLastReadSeq,
-          counterpartLastReadSeq: conv.counterpartLastReadSeq,
+          ...summary,
           hasOlder: messages.length >= limit,
         },
       });
@@ -333,18 +436,39 @@ export class ChatController {
         return;
       }
 
-      const lastReadSeq = Number(req.body.lastReadSeq || req.body.seq || conv.lastSeq || 0);
+      const rawSeq = req.body?.lastReadSeq ?? req.body?.seq;
+      const lastReadSeq =
+        rawSeq !== undefined && rawSeq !== null && Number.isFinite(Number(rawSeq))
+          ? Math.max(0, Math.floor(Number(rawSeq)))
+          : (await this.conversationRepo.getReadSummary(convId, user.sub, conv.buyerId)).lastSeq;
+      await this.conversationRepo.markUserRead(convId, user.sub, lastReadSeq);
       conv.markRead(user.sub, user.role, lastReadSeq);
       await this.conversationRepo.update(conv);
+      const summary = await this.conversationRepo.getReadSummary(convId, user.sub, conv.buyerId);
+      emitChatEvent('chat:read', {
+        conversationId: convId,
+        userIds: [
+          conv.buyerId,
+          conv.channelType === 'BUYER_SELLER' ? conv.sellerId : undefined,
+          user.sub,
+        ],
+        notifyStaff: conv.channelType === 'BUYER_SUPPORT',
+        payload: {
+          actorId: user.sub,
+          readerRole: user.role,
+          lastReadSeq,
+          lastSeq: summary.lastSeq,
+          buyerLastReadSeq: summary.buyerLastReadSeq,
+          counterpartLastReadSeq: summary.counterpartLastReadSeq,
+        },
+      });
 
       res.status(200).json({
         success: true,
         message: 'Đã cập nhật trạng thái đã xem thành công.',
         data: {
           conversationId: convId,
-          lastSeq: conv.lastSeq,
-          buyerLastReadSeq: conv.buyerLastReadSeq,
-          counterpartLastReadSeq: conv.counterpartLastReadSeq,
+          ...summary,
         },
       });
     } catch (error: any) {
@@ -553,12 +677,31 @@ export class ChatController {
         user.role,
       );
 
+      const conv = await this.conversationRepo.findById(conversationId).catch(() => null);
+      const messageDto = result.message.toDto();
+      const replyDto = result.reply ? result.reply.toDto() : null;
+      emitChatEvent('chat:message', {
+        conversationId,
+        userIds: [
+          conv?.buyerId,
+          conv?.channelType === 'BUYER_SELLER' ? conv?.sellerId : undefined,
+          user.sub,
+        ],
+        notifyStaff: conv?.channelType === 'BUYER_SUPPORT',
+        payload: {
+          actorId: user.sub,
+          message: messageDto,
+          reply: replyDto,
+          lastSeq: conv?.lastSeq ?? replyDto?.seq ?? messageDto.seq ?? 0,
+        },
+      });
+
       res.status(201).json({
         success: true,
         message: 'Gửi tin nhắn thành công.',
         data: {
-          message: result.message.toDto(),
-          reply: result.reply ? result.reply.toDto() : null,
+          message: messageDto,
+          reply: replyDto,
         },
       });
     } catch (error: any) {

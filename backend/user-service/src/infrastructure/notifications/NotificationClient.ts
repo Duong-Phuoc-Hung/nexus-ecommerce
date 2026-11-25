@@ -16,7 +16,10 @@ export class NotificationClient {
     try {
       const response = await fetch(`${this.getBaseUrl()}/api/v1/notifications/email/otp`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-email-delivery-key': process.env.EMAIL_DELIVERY_SECRET || '',
+        },
         body: JSON.stringify({ email, otp, fullName }),
       });
 
@@ -47,12 +50,42 @@ export class NotificationClient {
     try {
       const response = await fetch(`${this.getBaseUrl()}/api/v1/notifications/email/welcome`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-email-delivery-key': process.env.EMAIL_DELIVERY_SECRET || '',
+        },
         body: JSON.stringify({ email, fullName }),
       });
       return response.ok;
     } catch (err: any) {
       console.warn('[NotificationClient] Lỗi gửi welcome email:', err.message);
+      return false;
+    }
+  }
+
+  /**
+   * Gọi Notification Service để gửi email khôi phục mật khẩu
+   */
+  public async sendPasswordResetEmail(
+    email: string,
+    resetToken: string,
+    fullName?: string,
+  ): Promise<boolean> {
+    try {
+      const response = await fetch(
+        `${this.getBaseUrl()}/api/v1/notifications/email/password-reset`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-email-delivery-key': process.env.EMAIL_DELIVERY_SECRET || '',
+          },
+          body: JSON.stringify({ email, resetToken, fullName }),
+        },
+      );
+      return response.ok;
+    } catch (err: any) {
+      console.warn('[NotificationClient] Lỗi gửi password reset email:', err.message);
       return false;
     }
   }

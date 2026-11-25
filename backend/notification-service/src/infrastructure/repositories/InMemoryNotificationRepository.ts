@@ -24,12 +24,20 @@ export class InMemoryNotificationRepository implements INotificationRepository {
     this.notifications.set(sampleNotification.id, sampleNotification);
   }
 
+  public async findAll(): Promise<Notification[]> {
+    return Array.from(this.notifications.values()).sort(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+    );
+  }
+
   public async findById(id: string): Promise<Notification | null> {
     return this.notifications.get(id) || null;
   }
 
   public async findByRecipientId(recipientId: string): Promise<Notification[]> {
-    return Array.from(this.notifications.values()).filter((n) => n.recipientId === recipientId);
+    return Array.from(this.notifications.values())
+      .filter((n) => n.recipientId === recipientId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 
   public async save(notification: Notification): Promise<void> {

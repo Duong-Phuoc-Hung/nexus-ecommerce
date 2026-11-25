@@ -42,39 +42,29 @@ export class RegisterUseCase {
 
     const normalizedEmail = dto.email.trim().toLowerCase();
 
-    // 2. Kiểm tra tài khoản đã tồn tại hay chưa
+    // 2. Kiểm tra tài khoản đã tồn tại hay chưa (Email & Số điện thoại — TRƯỚC khi đụng vào OTP)
     const existingUser = await this.userRepository.findByEmail(normalizedEmail);
     if (existingUser) {
       throw new UserAlreadyExistsException('Tài khoản với email này đã tồn tại trong hệ thống');
     }
 
-    // 3. Xác thực mã OTP từ Gmail (Bắt buộc 100% để chống bypass OTP)
-    if (this.otpStore) {
-      if (!dto.otp || !dto.otp.trim()) {
-        throw new Error('Vui lòng nhập mã xác thực OTP đã gửi qua hòm thư Gmail của bạn.');
-      }
-      const isValidOtp = await this.otpStore.verifyAndConsumeOtp(normalizedEmail, dto.otp);
-      if (!isValidOtp) {
-        throw new Error(
-          'Mã xác thực OTP không chính xác hoặc đã hết hạn (hoặc đã bị khóa do nhập sai quá nhiều lần). Vui lòng nhận lại mã mới.',
-        );
-      }
-    }
-
-    // 4. Kiểm tra số điện thoại (nếu có truyền)
     let normalizedPhone: string;
     if (dto.phone && dto.phone.trim()) {
-      const trimmedPhone = dto.phone.trim();
+      const trimmedPhone = dto.phone.trim().replace(/[\s.-]/g, '');
       const vnPhoneRegex = /^(0|\+84)(3|5|7|8|9)[0-9]{8}$/;
       if (!vnPhoneRegex.test(trimmedPhone)) {
-        throw new Error('Số điện thoại không đúng định dạng Việt Nam.');
+        throw new Error(
+          'Số điện thoại không đúng định dạng di động Việt Nam (10 số, bắt đầu bằng 03, 05, 07, 08 hoặc 09).',
+        );
       }
       normalizedPhone = trimmedPhone.startsWith('+84') ? '0' + trimmedPhone.slice(3) : trimmedPhone;
 
       if (this.userRepository.findByPhone) {
         const existingPhoneUser = await this.userRepository.findByPhone(normalizedPhone);
         if (existingPhoneUser) {
-          throw new UserAlreadyExistsException('Số điện thoại này đã được đăng ký trong hệ thống.');
+          throw new UserAlreadyExistsException(
+            'Số điện thoại này đã được đăng ký trong hệ thống. Vui lòng quay lại sửa số điện thoại.',
+          );
         }
       }
     } else {
@@ -82,10 +72,23 @@ export class RegisterUseCase {
       normalizedPhone = '09' + Math.floor(10000000 + Math.random() * 90000000);
     }
 
-    // 5. Băm mật khẩu an toàn bằng thư viện bcrypt
+    // 3. Xác thực mã OTP từ Gmail (chỉ kiểm tra, CHƯA xóa để lỗi lưu DB nếu có không làm mất mã hợp lệ)
+    if (this.otpStore) {
+      if (!dto.otp || !dto.otp.trim()) {
+        throw new Error('Vui lòng nhập mã xác thực OTP đã gửi qua hòm thư Gmail của bạn.');
+      }
+      const isValidOtp = await this.otpStore.verifyOtp(normalizedEmail, dto.otp, 5, false);
+      if (!isValidOtp) {
+        throw new Error(
+          'Mã xác thực OTP không chính xác hoặc đã hết hạn (hoặc đã bị khóa do nhập sai quá nhiều lần). Vui lòng nhận lại mã mới.',
+        );
+      }
+    }
+
+    // 4. Băm mật khẩu an toàn bằng thư viện bcrypt
     const passwordHash = await this.passwordHasher.hash(dto.password);
 
-    // 6. Tạo thực thể User mới (luôn là BUYER, không nhận role từ client)
+    // 5. Tạo thực thể User mới (luôn là BUYER, không nhận role từ client)
     const now = new Date();
     const generatedId = generateUuidV7();
     const role = UserRole.BUYER;
@@ -98,13 +101,18 @@ export class RegisterUseCase {
       passwordHash,
       role,
       status: UserStatus.ACTIVE,
-      reputationScore: 100,
+      reputationScore: 50,
       createdAt: now,
       updatedAt: now,
     });
 
-    // 7. Lưu thực thể vào cơ sở dữ liệu thông qua Repository
+    // 6. Lưu thực thể vào cơ sở dữ liệu thông qua Repository
     await this.userRepository.save(newUser);
+
+    // 7. Chỉ tiêu thụ (xóa) OTP sau khi lưu tài khoản thành công vào DB
+    if (this.otpStore) {
+      await this.otpStore.consumeOtp(normalizedEmail);
+    }
 
     // 8. Gửi email thông báo chào mừng trực tiếp qua NotificationClient
     if (this.notificationClient) {

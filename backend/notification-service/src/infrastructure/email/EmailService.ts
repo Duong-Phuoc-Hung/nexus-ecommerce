@@ -10,6 +10,15 @@ try {
   dotenv.config({ path: path.resolve(__dirname, '../../../../../.env') });
 } catch {}
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/\x27/g, '&#39;');
+}
+
 export interface SendEmailOptions {
   to: string;
   subject: string;
@@ -113,13 +122,13 @@ export class EmailService {
           <p style="color: #6b7280; margin: 4px 0 0; font-size: 13px;">E-Commerce & Real-Time Auction Platform</p>
         </div>
 
-        <h3 style="color: #1f2937; margin-top: 0;">Xin chào ${name},</h3>
+        <h3 style="color: #1f2937; margin-top: 0;">Xin chào ${escapeHtml(name)},</h3>
         <p style="color: #4b5563; font-size: 15px; line-height: 1.6;">
           Bạn vừa yêu cầu đăng ký tài khoản mới trên hệ thống Nexus. Dưới đây là mã xác thực dùng một lần (OTP) của bạn:
         </p>
 
         <div style="background-color: #f3f4f6; border: 2px dashed #3b82f6; border-radius: 10px; padding: 20px; text-align: center; margin: 30px 0;">
-          <span style="font-size: 36px; font-weight: 900; letter-spacing: 10px; color: #1d4ed8; font-family: monospace;">${otpCode}</span>
+          <span style="font-size: 36px; font-weight: 900; letter-spacing: 10px; color: #1d4ed8; font-family: monospace;">${escapeHtml(otpCode)}</span>
           <p style="color: #ef4444; font-size: 13px; font-weight: 600; margin: 10px 0 0;">Mã có hiệu lực trong vòng 5 phút (300 giây)</p>
         </div>
 
@@ -158,8 +167,8 @@ export class EmailService {
         </div>
 
         <div style="background-color: #f8fafc; border-left: 4px solid #3b82f6; border-radius: 6px; padding: 16px; margin: 25px 0;">
-          <p style="margin: 0; font-size: 14px; color: #334155;"><strong>Tài khoản:</strong> ${toEmail}</p>
-          <p style="margin: 6px 0 0; font-size: 14px; color: #334155;"><strong>Họ và tên:</strong> ${name}</p>
+          <p style="margin: 0; font-size: 14px; color: #334155;"><strong>Tài khoản:</strong> ${escapeHtml(toEmail)}</p>
+          <p style="margin: 6px 0 0; font-size: 14px; color: #334155;"><strong>Họ và tên:</strong> ${escapeHtml(name)}</p>
           <p style="margin: 6px 0 0; font-size: 14px; color: #334155;"><strong>Trạng thái:</strong> <span style="color: #16a34a; font-weight: bold;">HOẠT ĐỘNG (ACTIVE)</span></p>
         </div>
 
@@ -199,8 +208,8 @@ export class EmailService {
         <div style="text-align: center; margin-bottom: 25px;">
           <h1 style="color: #2563eb; margin: 0; font-size: 26px; font-weight: 800;">NEXUS</h1>
         </div>
-        <h3 style="color: #1f2937; margin-top: 0;">${title}</h3>
-        <p style="color: #4b5563; font-size: 15px; line-height: 1.6;">${body}</p>
+        <h3 style="color: #1f2937; margin-top: 0;">${escapeHtml(title)}</h3>
+        <p style="color: #4b5563; font-size: 15px; line-height: 1.6;">${escapeHtml(body)}</p>
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;" />
         <p style="color: #9ca3af; font-size: 12px; text-align: center; margin: 0;">
           Nexus E-Commerce Platform © 2026.

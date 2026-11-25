@@ -18,7 +18,7 @@ export class ResetPasswordUseCase {
       throw new Error('A valid password reset token is required.');
     }
 
-    const userId = this.tokenStore.consume(token.trim());
+    const userId = await this.tokenStore.consumeAsync(token.trim());
     if (!userId) {
       throw new Error('Password reset token is invalid or expired.');
     }
@@ -30,6 +30,6 @@ export class ResetPasswordUseCase {
 
     user.setPasswordHash(hashPassword(newPassword));
     await this.userRepository.update(user);
-    this.authTokenStore.revokeUserTokens(user.id);
+    await this.authTokenStore.revokeUserTokens(user.id);
   }
 }

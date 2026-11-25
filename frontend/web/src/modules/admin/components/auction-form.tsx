@@ -65,6 +65,7 @@ export function AuctionForm({ id }: { id?: string }) {
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   const [visibility, setVisibility] = useState<AuctionVisibility>('PUBLIC');
+  const [demoMode, setDemoMode] = useState(false);
   const [version, setVersion] = useState<number>();
   const [initialStartAt, setInitialStartAt] = useState<number | null>(null);
   const [startedWhileEditing, setStartedWhileEditing] = useState(false);
@@ -260,6 +261,8 @@ export function AuctionForm({ id }: { id?: string }) {
       increment: Number(increment),
       buyNowPrice: parsedBuyNow,
       visibility,
+      demoMode,
+      demoMultiplier: demoMode ? 1_000_000 : 1,
       startAt: new Date(start).getTime(),
       endAt: new Date(end).getTime(),
     };
@@ -287,12 +290,23 @@ export function AuctionForm({ id }: { id?: string }) {
       errors.buyNowPrice = 'Giá mua ngay phải là số nguyên lớn hơn giá khởi điểm.';
     }
 
-    if (!Number.isFinite(input.startAt) || input.startAt <= Date.now())
-      errors.start = 'Thời gian bắt đầu phải ở tương lai.';
+    const nowMs = Date.now();
+    if (!start.trim() || !Number.isFinite(input.startAt))
+      errors.start = 'Vui lòng chọn thời gian mở phiên hợp lệ.';
+    else if (input.startAt <= nowMs)
+      errors.start = 'Không thể chọn thời gian mở phiên trong quá khứ.';
 
-    const duration = input.endAt - input.startAt;
-    if (!Number.isFinite(duration) || duration < 3_600_000 || duration > 168 * 3_600_000)
-      errors.end = 'Thời lượng phiên phải từ 1 giờ đến 7 ngày.';
+    if (!end.trim() || !Number.isFinite(input.endAt))
+      errors.end = 'Vui lòng chọn thời gian đóng phiên hợp lệ.';
+    else if (input.endAt <= nowMs) errors.end = 'Thời gian đóng phiên phải nằm ở tương lai.';
+    else if (Number.isFinite(input.startAt) && input.endAt <= input.startAt)
+      errors.end = 'Thời gian đóng phiên phải sau thời gian mở phiên.';
+    else {
+      const duration = input.endAt - input.startAt;
+      if (duration < 3_600_000) errors.end = 'Thời lượng phiên tối thiểu là 1 giờ (60 phút).';
+      else if (duration > 168 * 3_600_000)
+        errors.end = 'Thời lượng phiên tối đa là 7 ngày (168 giờ).';
+    }
 
     setFields(errors);
     setError('');
@@ -518,12 +532,44 @@ export function AuctionForm({ id }: { id?: string }) {
 
               {/* Step 2: Pricing & optional Buy Now */}
               <section className="rounded-2xl border border-stone-200 bg-white p-5 sm:p-6">
-                <h2 className="flex items-center gap-3 text-base font-semibold text-stone-950">
-                  <span className="inline-flex size-7 items-center justify-center rounded-full bg-emerald-50 text-xs font-bold text-emerald-800">
-                    02
-                  </span>
-                  Giá khởi điểm, bước giá và giá mua ngay
-                </h2>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h2 className="flex items-center gap-3 text-base font-semibold text-stone-950">
+                    <span className="inline-flex size-7 items-center justify-center rounded-full bg-emerald-50 text-xs font-bold text-emerald-800">
+                      02
+                    </span>
+                    Giá khởi điểm, bước giá và giá mua ngay
+                  </h2>
+                  {!id && (
+                    <Button
+                      type="button"
+                      variant={demoMode ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => {
+                        const next = !demoMode;
+                        setDemoMode(next);
+                        if (next) {
+                          setPrice('1');
+                          setIncrement('1');
+                        }
+                      }}
+                      className={`min-h-9 rounded-xl text-xs font-semibold ${
+                        demoMode
+                          ? 'bg-emerald-700 text-white hover:bg-emerald-800'
+                          : 'border-emerald-700/30 text-emerald-900'
+                      }`}
+                    >
+                      {demoMode
+                        ? 'Đang bật chế độ Demo (1 ₫ = 1 triệu)'
+                        : 'Áp dụng preset Demo (1 ₫ / bước 1 ₫)'}
+                    </Button>
+                  )}
+                </div>
+                {demoMode && (
+                  <p className="mt-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-xs text-emerald-900">
+                    Phiên demo: <strong>1 ₫</strong> tương đương <strong>1.000.000 ₫</strong> giá
+                    trị minh họa. Lượt đầu đặt đúng 1 ₫, lượt sau từ 2 ₫.
+                  </p>
+                )}
 
                 <div className="mt-5 grid gap-4 sm:grid-cols-3">
                   <div>
@@ -623,6 +669,7 @@ export function AuctionForm({ id }: { id?: string }) {
                     <Input
                       id="start"
                       type="datetime-local"
+                      min={localDate(Date.now())}
                       value={start}
                       onChange={(e) => setStart(e.target.value)}
                       aria-invalid={!!fields.start}
@@ -646,6 +693,7 @@ export function AuctionForm({ id }: { id?: string }) {
                     <Input
                       id="end"
                       type="datetime-local"
+                      min={start || localDate(Date.now() + 3_600_000)}
                       value={end}
                       onChange={(e) => setEnd(e.target.value)}
                       aria-invalid={!!fields.end}
@@ -709,7 +757,8 @@ export function AuctionForm({ id }: { id?: string }) {
 
                 <p className="mt-4 text-xs text-stone-500">
                   Thời lượng phiên hợp lệ từ 1 giờ đến 7 ngày. Luật gia hạn chống sniping mặc định:
-                  cộng 5 phút nếu có lượt hợp lệ trong 5 phút cuối (tối đa 5 lần).
+                  cộng 5 phút (300 giây) nếu có lượt đặt giá hợp lệ trong 120 giây cuối (tối đa 3
+                  lần).
                 </p>
               </section>
             </fieldset>

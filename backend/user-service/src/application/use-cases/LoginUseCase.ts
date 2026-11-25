@@ -5,7 +5,10 @@ import { InvalidCredentialsException } from '../../domain/exceptions/InvalidCred
 import { UserInactiveException } from '../../domain/exceptions/UserInactiveException';
 import { UserNotFoundException } from '../../domain/exceptions/UserNotFoundException';
 import { createJwtToken, verifyPassword } from '../../infrastructure/security/auth';
-import { getRolePermissions } from '../../infrastructure/security/authorization';
+import {
+  getRolePermissions,
+  resolveRolePermissionsAsync,
+} from '../../infrastructure/security/authorization';
 import { authTokenStore } from '../../infrastructure/security/AuthTokenStore';
 import { IPasswordHasher } from '../ports/IPasswordHasher';
 import { ITokenService } from '../ports/ITokenService';
@@ -58,6 +61,12 @@ export class LoginUseCase {
         throw new AccountSuspendedException('Tài khoản của bạn đã bị khóa hoặc tạm dừng hoạt động');
       }
 
+      const hadPriorFailuresOrLock = user.failedLoginAttempts > 0 || user.lockedUntil !== null;
+
+      if (user.isLocked()) {
+        throw new AccountLockedException(user.lockedUntil);
+      }
+
       let isMatch = false;
       if (this.passwordHasher) {
         isMatch = await this.passwordHasher.compare(dto.password, user.passwordHash);
@@ -66,7 +75,17 @@ export class LoginUseCase {
       }
 
       if (!isMatch) {
+        user.recordFailedLoginAttempt();
+        await this.userRepository.update(user);
+        if (user.isLocked()) {
+          throw new AccountLockedException(user.lockedUntil);
+        }
         throw new InvalidCredentialsException('Email hoặc mật khẩu không chính xác');
+      }
+
+      if (hadPriorFailuresOrLock || user.failedLoginAttempts > 0 || user.lockedUntil) {
+        user.resetFailedLoginAttempts();
+        await this.userRepository.update(user);
       }
 
       if (this.tokenService) {
@@ -74,6 +93,7 @@ export class LoginUseCase {
           userId: user.id,
           email: user.email,
           roles: user.roles,
+          privileges: await resolveRolePermissionsAsync(user.role),
         });
 
         authTokenStore.track(tokenPair.accessToken, user.id);

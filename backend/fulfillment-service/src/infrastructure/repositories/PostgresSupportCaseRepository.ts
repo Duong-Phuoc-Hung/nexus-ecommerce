@@ -50,52 +50,44 @@ export class PostgresSupportCaseRepository implements ISupportCaseRepository {
   public async findById(id: string): Promise<SupportCase | null> {
     const cleanId = id.trim();
 
-    try {
-      const row = await this.prisma.supportCase.findFirst({
-        where: {
-          id: {
-            equals: cleanId,
-            mode: 'insensitive',
-          },
+    const row = await this.prisma.supportCase.findFirst({
+      where: {
+        id: {
+          equals: cleanId,
+          mode: 'insensitive',
         },
-      });
+      },
+    });
 
-      if (!row) {
-        return null;
-      }
-
-      return this.mapToDomain(row);
-    } catch (err) {
-      console.error('[PostgresSupportCaseRepository] findById error:', (err as Error).message);
+    if (!row) {
       return null;
     }
+
+    return this.mapToDomain(row);
+  }
+
+  public async findAllByOrderId(orderIds: string | string[]): Promise<SupportCase[]> {
+    const candidates = (Array.isArray(orderIds) ? orderIds : [orderIds])
+      .map((v) => String(v || '').trim())
+      .filter(Boolean);
+    if (candidates.length === 0) return [];
+
+    const orClauses = candidates.flatMap((cleanId) => [
+      { orderId: { equals: cleanId, mode: 'insensitive' as const } },
+      { orderCode: { equals: cleanId, mode: 'insensitive' as const } },
+    ]);
+
+    const rows = await this.prisma.supportCase.findMany({
+      where: { OR: orClauses },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return rows.map((r) => this.mapToDomain(r));
   }
 
   public async findByOrderId(orderId: string): Promise<SupportCase | null> {
-    const cleanId = orderId.trim();
-
-    try {
-      const row = await this.prisma.supportCase.findFirst({
-        where: {
-          OR: [
-            { orderId: { equals: cleanId, mode: 'insensitive' } },
-            { orderCode: { equals: cleanId, mode: 'insensitive' } },
-          ],
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
-      });
-
-      if (!row) {
-        return null;
-      }
-
-      return this.mapToDomain(row);
-    } catch (err) {
-      console.error('[PostgresSupportCaseRepository] findByOrderId error:', (err as Error).message);
-      return null;
-    }
+    const list = await this.findAllByOrderId(orderId);
+    return list[0] || null;
   }
 
   public async search(criteria: SupportCaseSearchCriteria): Promise<SupportCaseSearchPage> {

@@ -30,12 +30,16 @@ export class GetRefundStatusUseCase {
     }
 
     const refundTxnId = order.refundTransactionId;
-    const isRefunded = order.status === 'REFUNDED';
+    const isRefunded = order.status === 'REFUNDED' || order.refundStatus === 'SUCCESS';
     const refundStatus: 'PENDING' | 'SUCCESS' | 'FAILED' | 'NONE' = isRefunded
       ? 'SUCCESS'
-      : order.status === 'REFUND_REQUESTED'
+      : order.refundStatus === 'PENDING'
         ? 'PENDING'
-        : 'NONE';
+        : order.refundStatus === 'FAILED'
+          ? 'FAILED'
+          : order.status === 'REFUND_REQUESTED'
+            ? 'PENDING'
+            : 'NONE';
 
     return {
       orderId: order.id,
@@ -45,10 +49,13 @@ export class GetRefundStatusUseCase {
       refundAmount: order.refundAmount || (isRefunded ? order.totalAmount : undefined),
       completedAt: isRefunded ? order.updatedAt.toISOString() : undefined,
       canRefund:
-        order.status === 'PAID' ||
-        order.status === 'DELIVERED' ||
-        order.status === 'CANCELLED' ||
-        order.status === 'REFUND_REQUESTED',
+        !isRefunded &&
+        order.refundStatus !== 'PENDING' &&
+        (order.status === 'PAID' ||
+          order.status === 'DELIVERED' ||
+          order.status === 'CANCELLED' ||
+          order.status === 'RETURN_PENDING' ||
+          order.status === 'REFUND_REQUESTED'),
     };
   }
 }

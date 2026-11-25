@@ -204,8 +204,11 @@ model Review {
   moderatedHidden Boolean          @default(false) @map("moderated_hidden")
   moderationCases ModerationCase[]
 
+  orderId String? @map("order_id") @db.VarChar(64)
+
   @@index([productId], map: "idx_review_product")
   @@index([userId], map: "idx_review_user")
+  @@index([orderId], map: "idx_review_order")
   @@map("catalog_product_reviews")
 }
 

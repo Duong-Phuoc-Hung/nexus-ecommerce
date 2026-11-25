@@ -188,7 +188,7 @@ test('🎯 [ADMIN COMMERCE] Live DB & API Suite (SRS A15 / B14)', async (t) => {
         headers: { Authorization: `Bearer ${adminToken}` },
       });
       assert.equal(res.status, 200, 'Admin phải truy cập được dashboard summary');
-      const json = await res.json();
+      const json = JSON.parse(await res.text());
       assert.equal(json.success, true);
       assert.ok(json.data.orders, 'Phải có trường orders');
       assert.equal(typeof json.data.orders.pendingProcessing, 'number');
@@ -211,7 +211,7 @@ test('🎯 [ADMIN COMMERCE] Live DB & API Suite (SRS A15 / B14)', async (t) => {
         },
       );
       assert.equal(resInvalid.status, 400, 'from > to phải trả về 400 INVALID_DATE_RANGE');
-      const errJson = await resInvalid.json();
+      const errJson = JSON.parse(await resInvalid.text());
       assert.equal(errJson.success, false);
 
       // 3.2 Hợp lệ -> 200 và tính toán chuẩn
@@ -222,7 +222,7 @@ test('🎯 [ADMIN COMMERCE] Live DB & API Suite (SRS A15 / B14)', async (t) => {
         },
       );
       assert.equal(resValid.status, 200);
-      const reportJson = await resValid.json();
+      const reportJson = JSON.parse(await resValid.text());
       assert.equal(reportJson.success, true);
       const sum = reportJson.data.summary;
       assert.equal(typeof sum.netRevenue, 'number');
@@ -323,7 +323,7 @@ test('🎯 [ADMIN COMMERCE] Live DB & API Suite (SRS A15 / B14)', async (t) => {
         }),
       });
       assert.equal(resCreate.status, 201, 'Tạo voucher hợp lệ phải trả 201');
-      const createdJson = await resCreate.json();
+      const createdJson = JSON.parse(await resCreate.text());
       assert.equal(createdJson.success, true);
       const promoId = createdJson.data.id;
       assert.ok(promoId, 'Phải có id sinh ra');
@@ -348,7 +348,7 @@ test('🎯 [ADMIN COMMERCE] Live DB & API Suite (SRS A15 / B14)', async (t) => {
         headers: { Authorization: `Bearer ${adminToken}` },
       });
       assert.equal(resList.status, 200);
-      const listJson = await resList.json();
+      const listJson = JSON.parse(await resList.text());
       assert.equal(listJson.success, true);
       assert.ok(listJson.data.length >= 1);
       assert.equal(listJson.data[0].code, testCode);
@@ -364,7 +364,7 @@ test('🎯 [ADMIN COMMERCE] Live DB & API Suite (SRS A15 / B14)', async (t) => {
         }),
       });
       assert.equal(resUpdate.status, 200);
-      const updateJson = await resUpdate.json();
+      const updateJson = JSON.parse(await resUpdate.text());
       assert.equal(updateJson.data.name, 'Voucher Khuyến Mãi Test Admin (Đã cập nhật)');
       assert.equal(updateJson.data.usageLimit, 150);
 
@@ -381,7 +381,7 @@ test('🎯 [ADMIN COMMERCE] Live DB & API Suite (SRS A15 / B14)', async (t) => {
         },
       );
       assert.equal(resPause.status, 200);
-      const pauseJson = await resPause.json();
+      const pauseJson = JSON.parse(await resPause.text());
       assert.equal(pauseJson.data.status, 'PAUSED');
 
       // 5.8 Giáp lập lượt dùng thực tế trong DB: Ghi nhận 1 usage (orderId có thể null hoặc nối với đơn thật)
@@ -400,7 +400,7 @@ test('🎯 [ADMIN COMMERCE] Live DB & API Suite (SRS A15 / B14)', async (t) => {
         },
       );
       assert.equal(resUsages.status, 200);
-      const usagesJson = await resUsages.json();
+      const usagesJson = JSON.parse(await resUsages.text());
       assert.equal(usagesJson.success, true);
       assert.equal(usagesJson.data.length, 1);
       assert.equal(usagesJson.data[0].userId, 'test_buyer_id_01');
@@ -454,7 +454,7 @@ test('🎯 [ADMIN COMMERCE] Live DB & API Suite (SRS A15 / B14)', async (t) => {
         }),
       });
       assert.equal(resCreateUnused.status, 201);
-      const unusedId = (await resCreateUnused.json()).data.id;
+      const unusedId = JSON.parse(await resCreateUnused.text()).data.id;
 
       const resDeleteSuccess = await fetch(
         `${baseUrl}/api/v1/checkout/admin/promotions/${unusedId}`,

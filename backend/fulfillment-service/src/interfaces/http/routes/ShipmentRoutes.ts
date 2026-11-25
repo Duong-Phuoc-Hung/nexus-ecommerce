@@ -1,6 +1,10 @@
 import { Router } from 'express';
 import { ShipmentController } from '../controllers/ShipmentController';
-import { requireAuth, requireShipmentPermission } from '../../../infrastructure/security/auth';
+import {
+  requireAuth,
+  requireAuthOrScopedService,
+  requireShipmentPermission,
+} from '../../../infrastructure/security/auth';
 
 export function createShipmentRoutes(controller: ShipmentController): Router {
   const router = Router();
@@ -10,9 +14,17 @@ export function createShipmentRoutes(controller: ShipmentController): Router {
     controller.getDashboardSummary(req, res),
   );
 
-  // 1.1 Khởi tạo hoặc đăng ký vận đơn sandbox (hỗ trợ tạo đơn từ Commerce Service)
-  router.post('/shipments', requireAuth, requireShipmentPermission('CREATE'), (req, res) =>
-    controller.createShipment(req, res),
+  // 1.1 Khởi tạo hoặc đăng ký vận đơn (hỗ trợ Commerce Service với S2S scope)
+  router.post(
+    '/shipments',
+    requireAuthOrScopedService({
+      requiredScope: 'fulfillment:shipment:create',
+      allowedIssuers: ['commerce-service'],
+      resourceResolver: (req) =>
+        typeof req.body?.orderId === 'string' ? req.body.orderId.trim() : undefined,
+    }),
+    requireShipmentPermission('CREATE'),
+    (req, res) => controller.createShipment(req, res),
   );
 
   // 1.2 Tra cứu báo giá cước vận chuyển và ETA đối tác
@@ -31,7 +43,11 @@ export function createShipmentRoutes(controller: ShipmentController): Router {
   // 3.1. Chi tiết vận đơn theo mã đơn hàng phục vụ In phiếu gửi hàng & Tracking
   router.get(
     '/shipments/by-order/:orderId',
-    requireAuth,
+    requireAuthOrScopedService({
+      requiredScope: 'fulfillment:shipment:read',
+      allowedIssuers: ['chat-service', 'commerce-service'],
+      resourceResolver: (req) => String(req.params.orderId || '').trim(),
+    }),
     requireShipmentPermission('VIEW'),
     (req, res) => controller.getByOrderId(req, res),
   );

@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import { safeNextPath } from '@/lib/utils/navigation';
-import { addressApi } from '../api/address.api';
 import { AddressForm } from './address-form';
 import {
   ADDRESS_CHANGE_EVENT,
@@ -19,7 +18,7 @@ import {
   readContactPhone,
   saveAddressAsync,
   setDefaultAddressAsync,
-  syncAddressesFromServer,
+  syncAddressesFromServerWithStatus,
   type AddressInput,
   type ShippingAddress,
 } from '../utils/address-book';
@@ -38,21 +37,20 @@ export function BuyerAddressesPage() {
 
   useEffect(() => {
     if (!user?.id) return;
+    let active = true;
     const sync = () => setAddresses(readAddresses(user.id));
     sync();
     setSyncState('checking');
-    addressApi
-      .list()
-      .then(() => syncAddressesFromServer(user.id))
-      .then((items) => {
-        if (items.length) setAddresses(items);
-        setSyncState('server');
-      })
-      .catch(() => {
-        setSyncState('local');
-      });
+    void syncAddressesFromServerWithStatus(user.id).then(({ items, source }) => {
+      if (!active) return;
+      setAddresses(items);
+      setSyncState(source);
+    });
     window.addEventListener(ADDRESS_CHANGE_EVENT, sync);
-    return () => window.removeEventListener(ADDRESS_CHANGE_EVENT, sync);
+    return () => {
+      active = false;
+      window.removeEventListener(ADDRESS_CHANGE_EVENT, sync);
+    };
   }, [user?.id]);
 
   async function save(input: AddressInput, makeDefault: boolean) {

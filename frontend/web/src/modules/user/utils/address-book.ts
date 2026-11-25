@@ -1,3 +1,4 @@
+import { ApiError } from '@/lib/axios/http';
 import { addressApi, type BackendAddress } from '../api/address.api';
 
 export type ShippingAddress = {
@@ -74,23 +75,34 @@ export function readAddresses(userId: string): ShippingAddress[] {
 
 export function writeAddresses(userId: string, addresses: ShippingAddress[]) {
   if (typeof window === 'undefined' || !userId) return;
-  localStorage.setItem(addressKey(userId), JSON.stringify(addresses));
+  const key = addressKey(userId);
+  const serialized = JSON.stringify(addresses);
+  if (localStorage.getItem(key) !== serialized) {
+    localStorage.setItem(key, serialized);
+  }
   window.dispatchEvent(new Event(ADDRESS_CHANGE_EVENT));
 }
 
-export async function syncAddressesFromServer(userId: string): Promise<ShippingAddress[]> {
-  if (typeof window === 'undefined' || !userId) return [];
+export async function syncAddressesFromServerWithStatus(
+  userId: string,
+): Promise<{ items: ShippingAddress[]; source: 'server' | 'local' }> {
+  if (typeof window === 'undefined' || !userId) return { items: [], source: 'local' };
   try {
     const remote = await addressApi.list();
     if (Array.isArray(remote)) {
       const mapped = remote.map(fromBackendAddress);
       writeAddresses(userId, mapped);
-      return mapped;
+      return { items: mapped, source: 'server' };
     }
   } catch {
     // If backend is not reached yet, rely on local cache
   }
-  return readAddresses(userId);
+  return { items: readAddresses(userId), source: 'local' };
+}
+
+export async function syncAddressesFromServer(userId: string): Promise<ShippingAddress[]> {
+  const { items } = await syncAddressesFromServerWithStatus(userId);
+  return items;
 }
 
 export function saveContactPhone(userId: string, phone: string) {
@@ -156,8 +168,11 @@ export async function saveAddressAsync(
       await syncAddressesFromServer(userId);
       return mapped;
     }
-  } catch {
-    // Fallback locally if network or server table is not initialized yet
+  } catch (err) {
+    if (err instanceof ApiError && err.status && err.status >= 400 && err.status < 500) {
+      throw err;
+    }
+    // Fallback locally only if network or server table is unavailable
     return saveAddress(userId, input, options);
   }
 }

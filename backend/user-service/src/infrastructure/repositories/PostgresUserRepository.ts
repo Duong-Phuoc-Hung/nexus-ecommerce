@@ -1,6 +1,7 @@
 import { Pool, PoolClient } from 'pg';
 import { restrictionFeature } from '../../application/dtos/AdminUserDto';
 import { PostgresAdminRoleRepository } from './PostgresAdminRoleRepository';
+import { classifyReputationTier } from '../state/ReputationLedgerStore';
 import {
   IUserRepository,
   UserSearchCriteria,
@@ -44,13 +45,17 @@ export class PostgresUserRepository implements IUserRepository {
     });
   }
 
+  public getPool(): Pool {
+    return this.pool;
+  }
+
   public async findByEmail(email: string): Promise<User | null> {
     const query = `
-            SELECT u.id, u.email, u.phone, u.full_name, u.password_hash, u.status,
+            SELECT u.id, u.email, u.phone, u.full_name, u.identify_number, u.address, u.password_hash, u.status,
               u.failed_login_attempts, u.locked_until, u.created_at, u.updated_at,
               to_char(u.date_of_birth, 'YYYY-MM-DD') as birth_date, u.gender,
              COALESCE(r.role_code, 'BUYER') as role_code,
-             COALESCE(rep.score, 100) as reputation_score
+             COALESCE(rep.score, 50) as reputation_score
       FROM user_users u
       LEFT JOIN user_user_roles ur ON u.id = ur.user_id
       LEFT JOIN user_roles r ON ur.role_id = r.id
@@ -64,16 +69,17 @@ export class PostgresUserRepository implements IUserRepository {
       return null;
     }
 
-    return this.mapRowToUser(result.rows[0]);
+    const restrictions = await this.activeRestrictions(String(result.rows[0].id)).catch(() => []);
+    return this.mapRowToUser(result.rows[0], restrictions);
   }
 
   public async findById(id: string): Promise<User | null> {
     const query = `
-            SELECT u.id, u.email, u.phone, u.full_name, u.password_hash, u.status,
+            SELECT u.id, u.email, u.phone, u.full_name, u.identify_number, u.address, u.password_hash, u.status,
               u.failed_login_attempts, u.locked_until, u.created_at, u.updated_at,
               to_char(u.date_of_birth, 'YYYY-MM-DD') as birth_date, u.gender,
              COALESCE(r.role_code, 'BUYER') as role_code,
-             COALESCE(rep.score, 100) as reputation_score
+             COALESCE(rep.score, 50) as reputation_score
       FROM user_users u
       LEFT JOIN user_user_roles ur ON u.id = ur.user_id
       LEFT JOIN user_roles r ON ur.role_id = r.id
@@ -87,16 +93,17 @@ export class PostgresUserRepository implements IUserRepository {
       return null;
     }
 
-    return this.mapRowToUser(result.rows[0]);
+    const restrictions = await this.activeRestrictions(String(result.rows[0].id)).catch(() => []);
+    return this.mapRowToUser(result.rows[0], restrictions);
   }
 
   public async findByPhone(phone: string): Promise<User | null> {
     const query = `
-            SELECT u.id, u.email, u.phone, u.full_name, u.password_hash, u.status,
+            SELECT u.id, u.email, u.phone, u.full_name, u.identify_number, u.address, u.password_hash, u.status,
               u.failed_login_attempts, u.locked_until, u.created_at, u.updated_at,
               to_char(u.date_of_birth, 'YYYY-MM-DD') as birth_date, u.gender,
              COALESCE(r.role_code, 'BUYER') as role_code,
-             COALESCE(rep.score, 100) as reputation_score
+             COALESCE(rep.score, 50) as reputation_score
       FROM user_users u
       LEFT JOIN user_user_roles ur ON u.id = ur.user_id
       LEFT JOIN user_roles r ON ur.role_id = r.id
@@ -182,11 +189,11 @@ export class PostgresUserRepository implements IUserRepository {
 
     const dataParams = [...params, limit, offset];
     const dataQuery = `
-      SELECT u.id, u.email, u.full_name, u.password_hash, u.status,
+      SELECT u.id, u.email, u.phone, u.full_name, u.identify_number, u.address, u.password_hash, u.status,
              u.failed_login_attempts, u.locked_until, u.created_at, u.updated_at,
               to_char(u.date_of_birth, 'YYYY-MM-DD') as birth_date, u.gender,
              COALESCE(r.role_code, 'BUYER') as role_code,
-             COALESCE(rep.score, 100) as reputation_score
+             COALESCE(rep.score, 50) as reputation_score
       FROM user_users u
       LEFT JOIN user_user_roles ur ON u.id = ur.user_id
       LEFT JOIN user_roles r ON ur.role_id = r.id
@@ -240,13 +247,17 @@ export class PostgresUserRepository implements IUserRepository {
       `;
       await client.query(insertRoleQuery, [newUserId, user.role]);
 
-      // Khởi tạo điểm uy tín ban đầu (100 điểm)
+      // Khởi tạo điểm uy tín ban đầu (mặc định 50/100 theo chính sách Nexus v1)
+      const initialScore =
+        typeof user.reputationScore === 'number' && Number.isFinite(user.reputationScore)
+          ? Math.max(0, Math.min(100, Math.round(user.reputationScore)))
+          : 50;
       const insertReputationQuery = `
         INSERT INTO user_reputations (user_id, trust_level, score, total_orders, total_penalties)
-        VALUES ($1, 'NEWBORN', $2, 0, 0)
+        VALUES ($1, 'STANDARD', $2, 0, 0)
         ON CONFLICT (user_id) DO NOTHING;
       `;
-      await client.query(insertReputationQuery, [newUserId, user.reputationScore || 100]);
+      await client.query(insertReputationQuery, [newUserId, initialScore]);
 
       await client.query('COMMIT');
     } catch (err) {
@@ -283,6 +294,34 @@ export class PostgresUserRepository implements IUserRepository {
          SELECT $1, id FROM user_roles WHERE role_code = $2
          ON CONFLICT DO NOTHING;`,
         [user.id, user.role],
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Cập nhật điểm uy tín riêng biệt trong transaction (không ghi đè bảng user_user_roles - Mục 15)
+   */
+  public async updateReputationScore(
+    userId: string,
+    score: number,
+    trustLevel: string = 'STANDARD',
+  ): Promise<void> {
+    const safeScore = Math.max(0, Math.min(100, Math.round(score)));
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `INSERT INTO user_reputations (user_id, trust_level, score, total_orders, total_penalties)
+         VALUES ($1, $2, $3, 0, 0)
+         ON CONFLICT (user_id)
+         DO UPDATE SET score = EXCLUDED.score, trust_level = EXCLUDED.trust_level;`,
+        [userId, trustLevel, safeScore],
       );
       await client.query('COMMIT');
     } catch (error) {
@@ -392,11 +431,11 @@ export class PostgresUserRepository implements IUserRepository {
       const previous = await client.query('SELECT score FROM user_reputations WHERE user_id = $1', [
         userId,
       ]);
-      const oldScore = Number(previous.rows[0]?.score ?? 100);
-      const score = Math.min(2147483647, Math.max(0, oldScore + points));
+      const oldScore = Number(previous.rows[0]?.score ?? 50);
+      const score = Math.min(100, Math.max(0, oldScore + points));
       await client.query(
-        'INSERT INTO user_reputations (user_id, score) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET score = EXCLUDED.score, updated_at = NOW()',
-        [userId, score],
+        'INSERT INTO user_reputations (user_id, score, trust_level) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET score = EXCLUDED.score, trust_level = EXCLUDED.trust_level, updated_at = NOW()',
+        [userId, score, classifyReputationTier(score).code],
       );
       await client.query(
         `INSERT INTO user_reputation_events (user_id, delta, reason, actor_id, score_before, score_after, actor_name)
@@ -405,7 +444,7 @@ export class PostgresUserRepository implements IUserRepository {
       );
       const history = (await this.reputationHistory(userId, client)).reverse();
       await client.query('COMMIT');
-      return { score, history };
+      return { score, previousScore: oldScore, history };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -542,11 +581,108 @@ export class PostgresUserRepository implements IUserRepository {
     return rows[0] ?? null;
   }
 
+  public async findSellerReviewByOrderAndBuyer(orderId: string, buyerId: string) {
+    const { rows } = await this.pool.query(
+      `SELECT id::text, order_id AS "orderId", to_user_id::text AS "sellerId", rating, comment, created_at AS "createdAt"
+       FROM user_ratings
+       WHERE order_id = $1 AND from_user_id = $2 AND is_seller_review = TRUE
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [orderId, buyerId],
+    );
+    return rows[0] ?? null;
+  }
+
+  public async authoredReviews(userId: string, page: number, limit: number, rating?: number) {
+    const where = 'from_user_id = $1 AND ($2::smallint IS NULL OR user_ratings.rating = $2)';
+    const [count, list] = await Promise.all([
+      this.pool.query('SELECT count(*)::int AS total FROM user_ratings WHERE ' + where, [
+        userId,
+        rating ?? null,
+      ]),
+      this.pool.query(
+        `SELECT id::text, order_id AS "orderId", to_user_id::text AS "targetUserId", rating, comment, is_seller_review AS "isSellerReview", created_at
+         FROM user_ratings WHERE ${where}
+         ORDER BY created_at DESC, id DESC LIMIT $3 OFFSET $4`,
+        [userId, rating ?? null, limit, (page - 1) * limit],
+      ),
+    ]);
+    const total = Number(count.rows[0].total);
+    return {
+      items: list.rows.map((row) => ({
+        id: row.id,
+        orderId: row.orderId,
+        targetUserId: row.targetUserId,
+        direction: 'AUTHORED',
+        rating: row.rating,
+        comment: row.comment,
+        createdAt: row.created_at,
+      })),
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  public async listAllRolesWithPrivileges(): Promise<
+    Array<{
+      id: string;
+      code: string;
+      role: string;
+      name: string;
+      description: string;
+      permissions: string[];
+    }>
+  > {
+    const { rows } = await this.pool.query(
+      `SELECT r.id::text AS id,
+              r.role_code AS code,
+              r.role_name AS name,
+              COALESCE(r.description, '') AS description,
+              COALESCE(
+                ARRAY_AGG(p.code ORDER BY p.code) FILTER (WHERE p.code IS NOT NULL),
+                ARRAY[]::text[]
+              ) AS permissions
+       FROM user_roles r
+       LEFT JOIN user_role_privileges urp ON urp.role_id = r.id
+       LEFT JOIN user_privileges p ON p.id = urp.privilege_id
+       GROUP BY r.id, r.role_code, r.role_name, r.description
+       ORDER BY r.id ASC`,
+    );
+    return rows.map((row) => ({
+      id: String(row.id),
+      code: String(row.code),
+      role: String(row.code),
+      name: String(row.name),
+      description: String(row.description || ''),
+      permissions: Array.isArray(row.permissions) ? row.permissions.map(String) : [],
+    }));
+  }
+
+  public async getReputationStats(userId: string): Promise<{
+    completedOrders: number;
+    failedTransactions: number;
+  }> {
+    const { rows } = await this.pool.query(
+      `SELECT COALESCE(total_orders, 0)::int AS total_orders,
+              COALESCE(total_penalties, 0)::int AS total_penalties
+       FROM user_reputations
+       WHERE user_id = $1
+       LIMIT 1`,
+      [userId],
+    );
+    if (rows.length === 0) {
+      return { completedOrders: 0, failedTransactions: 0 };
+    }
+    return {
+      completedOrders: Number(rows[0].total_orders) || 0,
+      failedTransactions: Number(rows[0].total_penalties) || 0,
+    };
+  }
+
   public async close(): Promise<void> {
     await this.pool.end();
   }
 
-  private mapRowToUser(row: any): User {
+  private mapRowToUser(row: any, restrictions: UserFeatureRestriction[] = []): User {
     let role = UserRole.BUYER;
     if (row.role_code === 'ADMIN') role = UserRole.ADMIN;
     else if (row.role_code === 'SELLER') role = UserRole.SELLER;
@@ -556,19 +692,27 @@ export class PostgresUserRepository implements IUserRepository {
     if (row.status === 'SUSPENDED') status = UserStatus.SUSPENDED;
     else if (row.status === 'PENDING_VERIFICATION') status = UserStatus.PENDING_VERIFICATION;
 
+    const parsedScore =
+      row.reputation_score !== null && row.reputation_score !== undefined
+        ? Number(row.reputation_score)
+        : 50;
+
     return new User({
       id: String(row.id),
       email: row.email,
       fullName: row.full_name,
       phone: row.phone || '',
+      identifyNumber: row.identify_number ?? null,
+      address: row.address ?? null,
       passwordHash: row.password_hash,
       role: role,
       status: status,
       dateOfBirth: row.birth_date,
       gender: row.gender,
-      reputationScore: Number(row.reputation_score ?? 100),
+      reputationScore: Number.isFinite(parsedScore) ? Math.max(0, Math.min(100, parsedScore)) : 50,
       failedLoginAttempts: Number(row.failed_login_attempts) || 0,
       lockedUntil: row.locked_until ? new Date(row.locked_until) : null,
+      restrictions,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
     });

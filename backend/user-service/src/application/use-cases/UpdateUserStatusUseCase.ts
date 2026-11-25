@@ -64,7 +64,7 @@ export class UpdateUserStatusUseCase {
 
     // Nếu tài khoản bị SUSPENDED, thu hồi ngay lập tức toàn bộ access token đang hoạt động
     if (targetStatus === UserStatus.SUSPENDED) {
-      authTokenStore.revokeUserTokens(user.id);
+      await authTokenStore.revokeUserTokens(user.id);
     }
 
     return {

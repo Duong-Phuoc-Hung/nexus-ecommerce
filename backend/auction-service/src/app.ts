@@ -19,9 +19,13 @@ import { AuctionCheckoutUseCase } from './application/use-cases/AuctionCheckoutU
 import { SettleAuctionUseCase } from './application/use-cases/SettleAuctionUseCase';
 import { RabbitMqEventPublisher } from './infrastructure/messaging/RabbitMqEventPublisher';
 import { HttpCommerceOrderClient } from './infrastructure/clients/HttpCommerceOrderClient';
+import { AuctionLifecycleWorker } from './application/services/AuctionLifecycleWorker';
+
+import { IAuctionRepository } from './domain/repositories/IAuctionRepository';
 
 export function createApplication(
   healthChecker: () => Promise<RedisHealthStatus> = checkRedisHealth,
+  auctionRepositoryOverride?: IAuctionRepository,
 ): Application {
   const app = express();
 
@@ -76,15 +80,14 @@ export function createApplication(
     });
   });
 
-  const inMemory = process.env.USE_IN_MEMORY_DB === 'true';
-  const auctionRepository = inMemory
-    ? new InMemoryAuctionRepository()
-    : new TransactionalAuctionRepository();
-  const mutations = createAuctionMutations(
-    inMemory
-      ? createInMemoryAuctionTransaction(auctionRepository)
-      : createPostgresAuctionTransaction(),
-  );
+  const inMemory = Boolean(auctionRepositoryOverride) || process.env.USE_IN_MEMORY_DB === 'true';
+  const auctionRepository =
+    auctionRepositoryOverride ||
+    (inMemory ? new InMemoryAuctionRepository() : new TransactionalAuctionRepository());
+  const transaction = inMemory
+    ? createInMemoryAuctionTransaction(auctionRepository)
+    : createPostgresAuctionTransaction();
+  const mutations = createAuctionMutations(transaction);
 
   const getAuctionDetailUseCase = new GetAuctionDetailUseCase(auctionRepository);
   const createAuctionRoomUseCase = new CreateAuctionRoomUseCase(auctionRepository);
@@ -92,7 +95,12 @@ export function createApplication(
   const commerceOrderClient = new HttpCommerceOrderClient();
   const auctionCheckoutUseCase = new AuctionCheckoutUseCase(auctionRepository, commerceOrderClient);
   const eventPublisher = new RabbitMqEventPublisher();
-  const settleAuctionUseCase = new SettleAuctionUseCase(auctionRepository, eventPublisher);
+  const settleAuctionUseCase: Pick<SettleAuctionUseCase, 'execute'> = {
+    execute: (input) =>
+      transaction.run(input.auctionId, (repo) =>
+        new SettleAuctionUseCase(repo, eventPublisher).execute(input),
+      ),
+  };
 
   const auctionController = new AuctionController(
     getAuctionDetailUseCase,
@@ -108,6 +116,12 @@ export function createApplication(
   );
 
   app.use('/api/v1/auctions', createAuctionRoutes(auctionController));
+
+  // Khởi chạy background worker mở/đóng/chốt phiên theo lịch khi không chạy test unit cô lập
+  if (process.env.DISABLE_AUCTION_WORKER !== 'true' && process.env.NODE_ENV !== 'test') {
+    const worker = new AuctionLifecycleWorker(auctionRepository);
+    worker.start();
+  }
 
   return app;
 }

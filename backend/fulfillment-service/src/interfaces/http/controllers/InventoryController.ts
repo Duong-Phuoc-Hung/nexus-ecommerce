@@ -3,6 +3,7 @@ import { GetSkuInventoryUseCase } from '../../../application/use-cases/GetSkuInv
 import { AdjustInventoryUseCase } from '../../../application/use-cases/AdjustInventoryUseCase';
 import { IInventoryRepository } from '../../../domain/repositories/IInventoryRepository';
 import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
+import { PrismaClientWrapper } from '../../../infrastructure/database/PrismaClient';
 
 export class InventoryController {
   constructor(
@@ -110,6 +111,95 @@ export class InventoryController {
       res.status(500).json({
         success: false,
         error: error.message || 'Không thể tra cứu sổ biến động kho.',
+      });
+    }
+  }
+
+  /**
+   * GET /api/v1/fulfillments/inventory/warehouses
+   * Danh sách kho bãi vật lý đang hoạt động (SRS 3.6.1).
+   */
+  public async listWarehouses(_req: Request, res: Response): Promise<void> {
+    try {
+      if (process.env.USE_IN_MEMORY_DB === 'true') {
+        res.status(200).json({
+          success: true,
+          data: [
+            {
+              id: 'WH_001',
+              code: 'WH_001',
+              name: 'Kho Tổng TP.HCM',
+              city: 'Hồ Chí Minh',
+              address: 'Khu Công Nghệ Cao, TP. Thủ Đức',
+              isActive: true,
+            },
+          ],
+        });
+        return;
+      }
+
+      const prisma = PrismaClientWrapper.getInstance();
+      const rows = await prisma.warehouse.findMany({
+        where: { isActive: true },
+        orderBy: { id: 'asc' },
+      });
+      res.status(200).json({
+        success: true,
+        data: rows.map((w) => ({
+          id: w.code,
+          numericId: String(w.id),
+          code: w.code,
+          name: w.name,
+          city: w.city,
+          address: w.address,
+          isActive: w.isActive,
+        })),
+      });
+    } catch (error: any) {
+      console.error('[InventoryController.listWarehouses Error]:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Không thể tải danh sách kho hàng.',
+      });
+    }
+  }
+
+  /**
+   * GET /api/v1/fulfillments/carriers
+   * Danh sách đối tác vận chuyển đang hoạt động (GHN, GHTK, Viettel Post, J&T).
+   */
+  public async listCarriers(_req: Request, res: Response): Promise<void> {
+    try {
+      if (process.env.USE_IN_MEMORY_DB === 'true') {
+        res.status(200).json({
+          success: true,
+          data: [
+            { code: 'GHN', name: 'Giao Hàng Nhanh', isActive: true },
+            { code: 'GHTK', name: 'Giao Hàng Tiết Kiệm', isActive: true },
+          ],
+        });
+        return;
+      }
+
+      const prisma = PrismaClientWrapper.getInstance();
+      const rows = await prisma.carrier.findMany({
+        where: { isActive: true },
+        orderBy: { id: 'asc' },
+      });
+      res.status(200).json({
+        success: true,
+        data: rows.map((c) => ({
+          id: String(c.id),
+          code: c.carrierCode,
+          name: c.carrierName,
+          isActive: c.isActive,
+        })),
+      });
+    } catch (error: any) {
+      console.error('[InventoryController.listCarriers Error]:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Không thể tải danh sách đơn vị vận chuyển.',
       });
     }
   }
