@@ -102,6 +102,9 @@ model Product {
   // Thời điểm xóa mềm (Nếu khác NULL tức là sản phẩm đã bị xóa khỏi shop)
   deletedAt    DateTime?          @map("deleted_at") @db.Timestamptz()
 
+  moderationBlocked Boolean        @default(false) @map("moderation_blocked")
+  moderationCases ModerationCase[]
+
   category     Category           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   images       ProductImage[]
   attributes   ProductAttribute[]
@@ -201,6 +204,54 @@ model Review {
 
   @@index([productId], map: "idx_review_product")
   @@index([userId], map: "idx_review_user")
+  moderatedHidden Boolean @default(false) @map("moderated_hidden")
+  moderationCases ModerationCase[]
+
   @@map("catalog_product_reviews")
 }
 
+
+model ModerationCase {
+  id           String             @id @db.VarChar(36)
+  productId    String             @map("product_id") @db.VarChar(36)
+  reviewId     String?            @map("review_id") @db.VarChar(36)
+  kind         String             @db.VarChar(24)
+  status       String             @default("PENDING") @db.VarChar(20)
+  reporterId   String?            @map("reporter_id") @db.VarChar(36)
+  reportReason String?            @map("report_reason") @db.VarChar(500)
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt    DateTime           @default(now()) @map("updated_at") @db.Timestamptz()
+  product      Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  review       Review?            @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  actions      ModerationAction[]
+  reports      ModerationReport[]
+
+  @@index([status, createdAt(sort: Desc)], map: "idx_moderation_queue")
+  @@index([productId], map: "idx_moderation_product")
+  @@map("catalog_moderation_cases")
+}
+
+model ModerationAction {
+  id                BigInt         @id @default(autoincrement())
+  caseId            String         @map("case_id") @db.VarChar(36)
+  actorId           String         @map("actor_id") @db.VarChar(36)
+  decision          String         @db.VarChar(24)
+  reason            String?        @db.VarChar(500)
+  violationCategory String?        @map("violation_category") @db.VarChar(40)
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz()
+  moderationCase    ModerationCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId, id], map: "idx_moderation_action_case")
+  @@map("catalog_moderation_actions")
+}
+
+model ModerationReport {
+  caseId     String         @map("case_id") @db.VarChar(36)
+  reporterId String         @map("reporter_id") @db.VarChar(36)
+  reason     String         @db.VarChar(500)
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz()
+  moderationCase ModerationCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@id([caseId, reporterId])
+  @@map("catalog_moderation_reports")
+}

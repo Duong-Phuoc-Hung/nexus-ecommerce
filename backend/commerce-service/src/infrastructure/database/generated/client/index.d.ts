@@ -11274,9 +11274,12 @@ export namespace Prisma {
     usageLimit: number | null
     usedCount: number | null
     perUserLimit: number | null
+    scope: string | null
     startsAt: Date | null
     endsAt: Date | null
     status: string | null
+    createdBy: string | null
+    updatedBy: string | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -11293,9 +11296,12 @@ export namespace Prisma {
     usageLimit: number | null
     usedCount: number | null
     perUserLimit: number | null
+    scope: string | null
     startsAt: Date | null
     endsAt: Date | null
     status: string | null
+    createdBy: string | null
+    updatedBy: string | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -11312,9 +11318,13 @@ export namespace Prisma {
     usageLimit: number
     usedCount: number
     perUserLimit: number
+    scope: number
+    categoryIds: number
     startsAt: number
     endsAt: number
     status: number
+    createdBy: number
+    updatedBy: number
     createdAt: number
     updatedAt: number
     _all: number
@@ -11351,9 +11361,12 @@ export namespace Prisma {
     usageLimit?: true
     usedCount?: true
     perUserLimit?: true
+    scope?: true
     startsAt?: true
     endsAt?: true
     status?: true
+    createdBy?: true
+    updatedBy?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -11370,9 +11383,12 @@ export namespace Prisma {
     usageLimit?: true
     usedCount?: true
     perUserLimit?: true
+    scope?: true
     startsAt?: true
     endsAt?: true
     status?: true
+    createdBy?: true
+    updatedBy?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -11389,9 +11405,13 @@ export namespace Prisma {
     usageLimit?: true
     usedCount?: true
     perUserLimit?: true
+    scope?: true
+    categoryIds?: true
     startsAt?: true
     endsAt?: true
     status?: true
+    createdBy?: true
+    updatedBy?: true
     createdAt?: true
     updatedAt?: true
     _all?: true
@@ -11495,9 +11515,13 @@ export namespace Prisma {
     usageLimit: number
     usedCount: number
     perUserLimit: number
+    scope: string
+    categoryIds: JsonValue
     startsAt: Date
     endsAt: Date
     status: string
+    createdBy: string | null
+    updatedBy: string | null
     createdAt: Date
     updatedAt: Date
     _count: PromotionCountAggregateOutputType | null
@@ -11533,9 +11557,13 @@ export namespace Prisma {
     usageLimit?: boolean
     usedCount?: boolean
     perUserLimit?: boolean
+    scope?: boolean
+    categoryIds?: boolean
     startsAt?: boolean
     endsAt?: boolean
     status?: boolean
+    createdBy?: boolean
+    updatedBy?: boolean
     createdAt?: boolean
     updatedAt?: boolean
     usages?: boolean | Promotion$usagesArgs<ExtArgs>
@@ -11554,9 +11582,13 @@ export namespace Prisma {
     usageLimit?: boolean
     usedCount?: boolean
     perUserLimit?: boolean
+    scope?: boolean
+    categoryIds?: boolean
     startsAt?: boolean
     endsAt?: boolean
     status?: boolean
+    createdBy?: boolean
+    updatedBy?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["promotion"]>
@@ -11573,9 +11605,13 @@ export namespace Prisma {
     usageLimit?: boolean
     usedCount?: boolean
     perUserLimit?: boolean
+    scope?: boolean
+    categoryIds?: boolean
     startsAt?: boolean
     endsAt?: boolean
     status?: boolean
+    createdBy?: boolean
+    updatedBy?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }
@@ -11603,9 +11639,13 @@ export namespace Prisma {
       usageLimit: number
       usedCount: number
       perUserLimit: number
+      scope: string
+      categoryIds: Prisma.JsonValue
       startsAt: Date
       endsAt: Date
       status: string
+      createdBy: string | null
+      updatedBy: string | null
       createdAt: Date
       updatedAt: Date
     }, ExtArgs["result"]["promotion"]>
@@ -12013,9 +12053,13 @@ export namespace Prisma {
     readonly usageLimit: FieldRef<"Promotion", 'Int'>
     readonly usedCount: FieldRef<"Promotion", 'Int'>
     readonly perUserLimit: FieldRef<"Promotion", 'Int'>
+    readonly scope: FieldRef<"Promotion", 'String'>
+    readonly categoryIds: FieldRef<"Promotion", 'Json'>
     readonly startsAt: FieldRef<"Promotion", 'DateTime'>
     readonly endsAt: FieldRef<"Promotion", 'DateTime'>
     readonly status: FieldRef<"Promotion", 'String'>
+    readonly createdBy: FieldRef<"Promotion", 'String'>
+    readonly updatedBy: FieldRef<"Promotion", 'String'>
     readonly createdAt: FieldRef<"Promotion", 'DateTime'>
     readonly updatedAt: FieldRef<"Promotion", 'DateTime'>
   }
@@ -13551,9 +13595,13 @@ export namespace Prisma {
     usageLimit: 'usageLimit',
     usedCount: 'usedCount',
     perUserLimit: 'perUserLimit',
+    scope: 'scope',
+    categoryIds: 'categoryIds',
     startsAt: 'startsAt',
     endsAt: 'endsAt',
     status: 'status',
+    createdBy: 'createdBy',
+    updatedBy: 'updatedBy',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
   };
@@ -14533,9 +14581,13 @@ export namespace Prisma {
     usageLimit?: IntFilter<"Promotion"> | number
     usedCount?: IntFilter<"Promotion"> | number
     perUserLimit?: IntFilter<"Promotion"> | number
+    scope?: StringFilter<"Promotion"> | string
+    categoryIds?: JsonFilter<"Promotion">
     startsAt?: DateTimeFilter<"Promotion"> | Date | string
     endsAt?: DateTimeFilter<"Promotion"> | Date | string
     status?: StringFilter<"Promotion"> | string
+    createdBy?: StringNullableFilter<"Promotion"> | string | null
+    updatedBy?: StringNullableFilter<"Promotion"> | string | null
     createdAt?: DateTimeFilter<"Promotion"> | Date | string
     updatedAt?: DateTimeFilter<"Promotion"> | Date | string
     usages?: PromotionUsageListRelationFilter
@@ -14553,9 +14605,13 @@ export namespace Prisma {
     usageLimit?: SortOrder
     usedCount?: SortOrder
     perUserLimit?: SortOrder
+    scope?: SortOrder
+    categoryIds?: SortOrder
     startsAt?: SortOrder
     endsAt?: SortOrder
     status?: SortOrder
+    createdBy?: SortOrderInput | SortOrder
+    updatedBy?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     usages?: PromotionUsageOrderByRelationAggregateInput
@@ -14576,9 +14632,13 @@ export namespace Prisma {
     usageLimit?: IntFilter<"Promotion"> | number
     usedCount?: IntFilter<"Promotion"> | number
     perUserLimit?: IntFilter<"Promotion"> | number
+    scope?: StringFilter<"Promotion"> | string
+    categoryIds?: JsonFilter<"Promotion">
     startsAt?: DateTimeFilter<"Promotion"> | Date | string
     endsAt?: DateTimeFilter<"Promotion"> | Date | string
     status?: StringFilter<"Promotion"> | string
+    createdBy?: StringNullableFilter<"Promotion"> | string | null
+    updatedBy?: StringNullableFilter<"Promotion"> | string | null
     createdAt?: DateTimeFilter<"Promotion"> | Date | string
     updatedAt?: DateTimeFilter<"Promotion"> | Date | string
     usages?: PromotionUsageListRelationFilter
@@ -14596,9 +14656,13 @@ export namespace Prisma {
     usageLimit?: SortOrder
     usedCount?: SortOrder
     perUserLimit?: SortOrder
+    scope?: SortOrder
+    categoryIds?: SortOrder
     startsAt?: SortOrder
     endsAt?: SortOrder
     status?: SortOrder
+    createdBy?: SortOrderInput | SortOrder
+    updatedBy?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     _count?: PromotionCountOrderByAggregateInput
@@ -14623,9 +14687,13 @@ export namespace Prisma {
     usageLimit?: IntWithAggregatesFilter<"Promotion"> | number
     usedCount?: IntWithAggregatesFilter<"Promotion"> | number
     perUserLimit?: IntWithAggregatesFilter<"Promotion"> | number
+    scope?: StringWithAggregatesFilter<"Promotion"> | string
+    categoryIds?: JsonWithAggregatesFilter<"Promotion">
     startsAt?: DateTimeWithAggregatesFilter<"Promotion"> | Date | string
     endsAt?: DateTimeWithAggregatesFilter<"Promotion"> | Date | string
     status?: StringWithAggregatesFilter<"Promotion"> | string
+    createdBy?: StringNullableWithAggregatesFilter<"Promotion"> | string | null
+    updatedBy?: StringNullableWithAggregatesFilter<"Promotion"> | string | null
     createdAt?: DateTimeWithAggregatesFilter<"Promotion"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"Promotion"> | Date | string
   }
@@ -15622,9 +15690,13 @@ export namespace Prisma {
     usageLimit?: number
     usedCount?: number
     perUserLimit?: number
+    scope?: string
+    categoryIds?: JsonNullValueInput | InputJsonValue
     startsAt?: Date | string
     endsAt: Date | string
     status?: string
+    createdBy?: string | null
+    updatedBy?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     usages?: PromotionUsageCreateNestedManyWithoutPromotionInput
@@ -15642,9 +15714,13 @@ export namespace Prisma {
     usageLimit?: number
     usedCount?: number
     perUserLimit?: number
+    scope?: string
+    categoryIds?: JsonNullValueInput | InputJsonValue
     startsAt?: Date | string
     endsAt: Date | string
     status?: string
+    createdBy?: string | null
+    updatedBy?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     usages?: PromotionUsageUncheckedCreateNestedManyWithoutPromotionInput
@@ -15662,9 +15738,13 @@ export namespace Prisma {
     usageLimit?: IntFieldUpdateOperationsInput | number
     usedCount?: IntFieldUpdateOperationsInput | number
     perUserLimit?: IntFieldUpdateOperationsInput | number
+    scope?: StringFieldUpdateOperationsInput | string
+    categoryIds?: JsonNullValueInput | InputJsonValue
     startsAt?: DateTimeFieldUpdateOperationsInput | Date | string
     endsAt?: DateTimeFieldUpdateOperationsInput | Date | string
     status?: StringFieldUpdateOperationsInput | string
+    createdBy?: NullableStringFieldUpdateOperationsInput | string | null
+    updatedBy?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     usages?: PromotionUsageUpdateManyWithoutPromotionNestedInput
@@ -15682,9 +15762,13 @@ export namespace Prisma {
     usageLimit?: IntFieldUpdateOperationsInput | number
     usedCount?: IntFieldUpdateOperationsInput | number
     perUserLimit?: IntFieldUpdateOperationsInput | number
+    scope?: StringFieldUpdateOperationsInput | string
+    categoryIds?: JsonNullValueInput | InputJsonValue
     startsAt?: DateTimeFieldUpdateOperationsInput | Date | string
     endsAt?: DateTimeFieldUpdateOperationsInput | Date | string
     status?: StringFieldUpdateOperationsInput | string
+    createdBy?: NullableStringFieldUpdateOperationsInput | string | null
+    updatedBy?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     usages?: PromotionUsageUncheckedUpdateManyWithoutPromotionNestedInput
@@ -15702,9 +15786,13 @@ export namespace Prisma {
     usageLimit?: number
     usedCount?: number
     perUserLimit?: number
+    scope?: string
+    categoryIds?: JsonNullValueInput | InputJsonValue
     startsAt?: Date | string
     endsAt: Date | string
     status?: string
+    createdBy?: string | null
+    updatedBy?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -15721,9 +15809,13 @@ export namespace Prisma {
     usageLimit?: IntFieldUpdateOperationsInput | number
     usedCount?: IntFieldUpdateOperationsInput | number
     perUserLimit?: IntFieldUpdateOperationsInput | number
+    scope?: StringFieldUpdateOperationsInput | string
+    categoryIds?: JsonNullValueInput | InputJsonValue
     startsAt?: DateTimeFieldUpdateOperationsInput | Date | string
     endsAt?: DateTimeFieldUpdateOperationsInput | Date | string
     status?: StringFieldUpdateOperationsInput | string
+    createdBy?: NullableStringFieldUpdateOperationsInput | string | null
+    updatedBy?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -15740,9 +15832,13 @@ export namespace Prisma {
     usageLimit?: IntFieldUpdateOperationsInput | number
     usedCount?: IntFieldUpdateOperationsInput | number
     perUserLimit?: IntFieldUpdateOperationsInput | number
+    scope?: StringFieldUpdateOperationsInput | string
+    categoryIds?: JsonNullValueInput | InputJsonValue
     startsAt?: DateTimeFieldUpdateOperationsInput | Date | string
     endsAt?: DateTimeFieldUpdateOperationsInput | Date | string
     status?: StringFieldUpdateOperationsInput | string
+    createdBy?: NullableStringFieldUpdateOperationsInput | string | null
+    updatedBy?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -16715,9 +16811,13 @@ export namespace Prisma {
     usageLimit?: SortOrder
     usedCount?: SortOrder
     perUserLimit?: SortOrder
+    scope?: SortOrder
+    categoryIds?: SortOrder
     startsAt?: SortOrder
     endsAt?: SortOrder
     status?: SortOrder
+    createdBy?: SortOrder
+    updatedBy?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -16743,9 +16843,12 @@ export namespace Prisma {
     usageLimit?: SortOrder
     usedCount?: SortOrder
     perUserLimit?: SortOrder
+    scope?: SortOrder
     startsAt?: SortOrder
     endsAt?: SortOrder
     status?: SortOrder
+    createdBy?: SortOrder
+    updatedBy?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -16762,9 +16865,12 @@ export namespace Prisma {
     usageLimit?: SortOrder
     usedCount?: SortOrder
     perUserLimit?: SortOrder
+    scope?: SortOrder
     startsAt?: SortOrder
     endsAt?: SortOrder
     status?: SortOrder
+    createdBy?: SortOrder
+    updatedBy?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -18662,9 +18768,13 @@ export namespace Prisma {
     usageLimit?: number
     usedCount?: number
     perUserLimit?: number
+    scope?: string
+    categoryIds?: JsonNullValueInput | InputJsonValue
     startsAt?: Date | string
     endsAt: Date | string
     status?: string
+    createdBy?: string | null
+    updatedBy?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -18681,9 +18791,13 @@ export namespace Prisma {
     usageLimit?: number
     usedCount?: number
     perUserLimit?: number
+    scope?: string
+    categoryIds?: JsonNullValueInput | InputJsonValue
     startsAt?: Date | string
     endsAt: Date | string
     status?: string
+    createdBy?: string | null
+    updatedBy?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -18785,9 +18899,13 @@ export namespace Prisma {
     usageLimit?: IntFieldUpdateOperationsInput | number
     usedCount?: IntFieldUpdateOperationsInput | number
     perUserLimit?: IntFieldUpdateOperationsInput | number
+    scope?: StringFieldUpdateOperationsInput | string
+    categoryIds?: JsonNullValueInput | InputJsonValue
     startsAt?: DateTimeFieldUpdateOperationsInput | Date | string
     endsAt?: DateTimeFieldUpdateOperationsInput | Date | string
     status?: StringFieldUpdateOperationsInput | string
+    createdBy?: NullableStringFieldUpdateOperationsInput | string | null
+    updatedBy?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -18804,9 +18922,13 @@ export namespace Prisma {
     usageLimit?: IntFieldUpdateOperationsInput | number
     usedCount?: IntFieldUpdateOperationsInput | number
     perUserLimit?: IntFieldUpdateOperationsInput | number
+    scope?: StringFieldUpdateOperationsInput | string
+    categoryIds?: JsonNullValueInput | InputJsonValue
     startsAt?: DateTimeFieldUpdateOperationsInput | Date | string
     endsAt?: DateTimeFieldUpdateOperationsInput | Date | string
     status?: StringFieldUpdateOperationsInput | string
+    createdBy?: NullableStringFieldUpdateOperationsInput | string | null
+    updatedBy?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }

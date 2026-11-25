@@ -1,7 +1,12 @@
 import { Request, Response, Router } from 'express';
 import { PostgresUserRepository } from '../../../infrastructure/repositories/PostgresUserRepository';
 import { BcryptPasswordHasher } from '../../../infrastructure/security/BcryptPasswordHasher';
-import { requireAuth, requirePermission } from '../../../infrastructure/security/authorization';
+import {
+  requireAuth,
+  requirePermission,
+  verifiedAdmin,
+} from '../../../infrastructure/security/authorization';
+import { restrictionFeature, trustTier } from '../../../application/dtos/AdminUserDto';
 
 class ApiError extends Error {
   constructor(
@@ -33,13 +38,6 @@ function route(handler: (req: Request, res: Response) => Promise<void>) {
       }
     }
   };
-}
-
-function trust(score: number) {
-  if (score >= 90) return { trustTier: 'HIGH', trustTierLabel: 'Tin cậy cao' };
-  if (score >= 70) return { trustTier: 'STANDARD', trustTierLabel: 'Tiêu chuẩn' };
-  if (score >= 50) return { trustTier: 'WATCH', trustTierLabel: 'Cần theo dõi' };
-  return { trustTier: 'RESTRICTED', trustTierLabel: 'Bị giới hạn' };
 }
 
 function positiveInteger(input: unknown, fallback: number, max: number): number {
@@ -173,7 +171,7 @@ export function createAccountExtensionsRoutes(
           expiresAt?: Date | string | null;
         }>
       ).map((r) => ({
-        feature: r.restriction === 'BAN_BIDDING' ? 'AUCTION_BID' : r.restriction,
+        feature: restrictionFeature(r.restriction),
         reason: r.reason,
         expiresAt: r.expiresAt,
       }));
@@ -182,7 +180,7 @@ export function createAccountExtensionsRoutes(
         data: {
           userId: user.id,
           reputationScore: user.reputationScore,
-          ...trust(user.reputationScore),
+          ...trustTier(user.reputationScore),
           stats: {
             completedTransactions: null,
             failedTransactions: null,
@@ -228,7 +226,7 @@ export function createAccountExtensionsRoutes(
           status: user.status,
           joinedAt: user.createdAt,
           reputationScore: user.reputationScore,
-          ...trust(user.reputationScore),
+          ...trustTier(user.reputationScore),
           ...ratings,
           completedOrders: null,
           successRate: null,
@@ -240,14 +238,17 @@ export function createAccountExtensionsRoutes(
   router.get(
     '/:sellerId/reviews',
     route(async (req, res) => {
-      const user = await seller(String(req.params.sellerId));
+      const admin = verifiedAdmin(req);
+      const userId = String(req.params.sellerId);
+      const user = admin ? await repository.findById(userId) : await seller(userId);
+      if (!user) throw new ApiError(404, 'USER_NOT_FOUND', 'Không tìm thấy tài khoản.');
       const page = positiveInteger(req.query.page, 1, 100000);
-      const limit = positiveInteger(req.query.limit, 10, 100);
+      const limit = positiveInteger(req.query.limit, admin ? 20 : 10, 100);
       const rating =
         req.query.rating === undefined ? undefined : positiveInteger(req.query.rating, 1, 5);
       res.json({
         success: true,
-        data: await repository.sellerReviews(user.id, page, limit, rating),
+        data: await repository.sellerReviews(user.id, page, limit, rating, admin),
       });
     }),
   );

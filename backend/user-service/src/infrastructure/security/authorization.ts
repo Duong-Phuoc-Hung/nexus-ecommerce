@@ -131,6 +131,13 @@ export function hasPermission(role: string | undefined, permission: string): boo
   return permissions.includes(permission);
 }
 
+export function verifiedAdmin(req: Request): boolean {
+  const token = req.headers.authorization?.match(/^Bearer\s+(\S+)$/i)?.[1];
+  return Boolean(
+    token && !authTokenStore.isRevoked(token) && verifyJwtToken(token, true)?.role === 'ADMIN',
+  );
+}
+
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization || '';
   const token = authHeader

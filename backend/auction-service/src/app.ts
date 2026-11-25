@@ -16,6 +16,8 @@ import {
   createInMemoryAuctionTransaction,
 } from './application/auction-mutations';
 import { AuctionCheckoutUseCase } from './application/use-cases/AuctionCheckoutUseCase';
+import { SettleAuctionUseCase } from './application/use-cases/SettleAuctionUseCase';
+import { RabbitMqEventPublisher } from './infrastructure/messaging/RabbitMqEventPublisher';
 import { HttpCommerceOrderClient } from './infrastructure/clients/HttpCommerceOrderClient';
 import { HttpUserReputationClient } from './infrastructure/clients/HttpUserReputationClient';
 
@@ -92,6 +94,8 @@ export function createApplication(
   const getBidHistoryUseCase = new GetBidHistoryUseCase(auctionRepository);
   const commerceOrderClient = new HttpCommerceOrderClient();
   const auctionCheckoutUseCase = new AuctionCheckoutUseCase(auctionRepository, commerceOrderClient);
+  const eventPublisher = new RabbitMqEventPublisher();
+  const settleAuctionUseCase = new SettleAuctionUseCase(auctionRepository, eventPublisher);
 
   const auctionController = new AuctionController(
     getAuctionDetailUseCase,
@@ -103,6 +107,7 @@ export function createApplication(
     mutations.cancel,
     auctionRepository,
     auctionCheckoutUseCase,
+    settleAuctionUseCase,
   );
 
   app.use('/api/v1/auctions', createAuctionRoutes(auctionController));

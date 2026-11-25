@@ -1,6 +1,9 @@
 import { PrismaClient } from '../database/generated/client';
 import { PrismaClientWrapper } from '../database/PrismaClient';
-import { IAuctionRepository } from '../../domain/repositories/IAuctionRepository';
+import {
+  IAuctionRepository,
+  AuctionSettlementRecord,
+} from '../../domain/repositories/IAuctionRepository';
 import { Auction, AuctionStatus, BidRecord } from '../../domain/entities/Auction';
 import { generateUuidV7 } from '../utils/uuid';
 
@@ -8,6 +11,7 @@ export class PostgresAuctionRepository implements IAuctionRepository {
   private _prisma?: PrismaClient;
   private fallbackMemory: Map<string, Auction> = new Map();
   private fallbackBids: Map<string, BidRecord[]> = new Map();
+  private fallbackSettlements: Map<string, AuctionSettlementRecord> = new Map();
 
   constructor(prisma?: PrismaClient) {
     if (prisma) {
@@ -61,13 +65,16 @@ export class PostgresAuctionRepository implements IAuctionRepository {
       const records = await this.prisma.auctionRoom.findMany({
         where: {
           status: { in: ['ACTIVE', 'EXTENDED'] },
+          endTime: { gt: new Date() },
         },
         orderBy: { endTime: 'asc' },
       });
       return records.map((r: any) => this.mapModelToAuction(r));
     } catch {
       return Array.from(this.fallbackMemory.values()).filter(
-        (a) => a.status === AuctionStatus.ACTIVE || a.status === AuctionStatus.EXTENDED,
+        (a) =>
+          (a.status === AuctionStatus.ACTIVE || a.status === AuctionStatus.EXTENDED) &&
+          a.endTime > new Date(),
       );
     }
   }
@@ -76,7 +83,22 @@ export class PostgresAuctionRepository implements IAuctionRepository {
   public async findAll(filters?: { status?: string; sellerId?: string }): Promise<Auction[]> {
     try {
       const where: any = {};
-      if (filters?.status && filters.status.toUpperCase() !== 'ALL') where.status = filters.status;
+      if (filters?.status && filters.status.toUpperCase() !== 'ALL') {
+        const targetStatus = filters.status.toUpperCase();
+        if (targetStatus === 'ACTIVE') {
+          where.status = { in: ['ACTIVE', 'EXTENDED'] };
+          where.endTime = { gt: new Date() };
+        } else if (targetStatus === 'ENDED') {
+          where.OR = [
+            { status: { in: ['ENDED', 'SETTLED'] } },
+            { status: { in: ['ACTIVE', 'EXTENDED', 'SCHEDULED'] }, endTime: { lte: new Date() } },
+          ];
+        } else if (targetStatus === 'UPCOMING') {
+          where.status = 'SCHEDULED';
+        } else {
+          where.status = targetStatus;
+        }
+      }
       if (filters?.sellerId) where.sellerId = filters.sellerId;
 
       const records = await this.prisma.auctionRoom.findMany({
@@ -200,8 +222,79 @@ export class PostgresAuctionRepository implements IAuctionRepository {
     }
   }
 
+  public async saveSettlement(settlement: AuctionSettlementRecord): Promise<void> {
+    try {
+      const settlementId = settlement.id || generateUuidV7();
+      await this.prisma.auctionSettlement.upsert({
+        where: { auctionId: settlement.auctionId },
+        create: {
+          id: settlementId,
+          auctionId: settlement.auctionId,
+          winnerId: settlement.winnerId,
+          winningBidAmount: settlement.winningBidAmount,
+          paymentDeadline: settlement.paymentDeadline,
+          orderId: settlement.orderId || null,
+          status: settlement.status || 'PENDING_PAYMENT',
+          settledAt: settlement.settledAt || new Date(),
+        },
+        update: {
+          winnerId: settlement.winnerId,
+          winningBidAmount: settlement.winningBidAmount,
+          paymentDeadline: settlement.paymentDeadline,
+          orderId: settlement.orderId ?? undefined,
+          status: settlement.status,
+        },
+      });
+      this.fallbackSettlements.set(settlement.auctionId, settlement);
+    } catch {
+      this.fallbackSettlements.set(settlement.auctionId, settlement);
+    }
+  }
+
+  public async findSettlementByAuctionId(
+    auctionId: string,
+  ): Promise<AuctionSettlementRecord | null> {
+    try {
+      const record = await this.prisma.auctionSettlement.findUnique({
+        where: { auctionId },
+      });
+      if (!record) return null;
+      return {
+        id: record.id,
+        auctionId: record.auctionId,
+        winnerId: record.winnerId,
+        winningBidAmount: Number(record.winningBidAmount),
+        paymentDeadline: record.paymentDeadline,
+        orderId: record.orderId || undefined,
+        status: record.status,
+        settledAt: record.settledAt,
+      };
+    } catch {
+      return this.fallbackSettlements.get(auctionId) || null;
+    }
+  }
+
   // Ánh xạ bản ghi Prisma sang Domain Entity Auction
   private mapModelToAuction(record: any): Auction {
+    let status = record.status as AuctionStatus;
+    const now = new Date();
+
+    // Tự động chuẩn hóa trạng thái theo thời gian thực (Life-cycle Synchronization)
+    if (status !== AuctionStatus.CANCELLED && status !== AuctionStatus.SETTLED) {
+      const isPastEndTime = record.endTime && new Date(record.endTime) <= now;
+      const isBuyNowReached =
+        record.buyNowPrice &&
+        Number(record.buyNowPrice) > 0 &&
+        record.winnerId &&
+        Number(record.currentPrice) >= Number(record.buyNowPrice);
+
+      if (isPastEndTime || isBuyNowReached) {
+        status = AuctionStatus.ENDED;
+      } else if (record.startTime && new Date(record.startTime) <= now) {
+        status = AuctionStatus.ACTIVE;
+      }
+    }
+
     return new Auction({
       id: String(record.id),
       productId: String(record.productId),
@@ -212,7 +305,7 @@ export class PostgresAuctionRepository implements IAuctionRepository {
       highestBidderId: record.winnerId || undefined,
       bidIncrement: Number(record.bidStep),
       buyNowPrice: record.buyNowPrice ? Number(record.buyNowPrice) : undefined,
-      status: record.status as AuctionStatus,
+      status,
       startTime: record.startTime,
       endTime: record.endTime,
       actualEndTime: record.actualEndTime ? new Date(record.actualEndTime) : undefined,

@@ -2014,6 +2014,45 @@ export const auctionSpec = {
         },
       },
     },
+    '/api/v1/auctions/{id}/settle': {
+      post: {
+        tags: ['Auction Settlement'],
+        summary: 'Chốt phiên đấu giá & Bắn Event sang RabbitMQ (TASK-AUC-01)',
+        description:
+          'Chốt kết quả phiên đấu giá khi có người thắng. Lưu bản ghi vào bảng auction_settlements với hạn thanh toán 48h và phát domain event auction.settled.won sang RabbitMQ.',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã phòng đấu giá cần chốt',
+            schema: { type: 'string', example: '01932f01-0102-7000-8000-000000000002' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Chốt phiên đấu giá thành công', {
+            success: true,
+            message:
+              'Chốt phiên đấu giá thành công! Đã gửi thông tin đơn hàng tới hệ thống thanh toán.',
+            data: {
+              auctionId: '01932f01-0102-7000-8000-000000000002',
+              winnerId: 'usr_buyer_123',
+              sellerId: 'usr_seller_456',
+              productId: 'prod_101',
+              finalPrice: 25000000,
+              paymentDeadline: '2026-11-25T16:00:00.000Z',
+              status: 'PENDING_PAYMENT',
+              settledAt: '2026-11-23T16:00:00.000Z',
+            },
+          }),
+          400: errorResponse(
+            'Lỗi nghiệp vụ',
+            'Không thể chốt phiên đấu giá do chưa có lượt đặt giá hợp lệ.',
+          ),
+          404: errorResponse('Không tìm thấy phiên', 'Auction with ID "1" was not found.'),
+        },
+      },
+    },
   },
 };
 
@@ -2028,6 +2067,445 @@ export const commerceSpec = {
   servers: [{ url: '/', description: 'API Gateway (Same Origin)' }],
   components: commonComponents,
   paths: {
+    '/api/v1/orders/admin/dashboard-summary': {
+      get: {
+        tags: ['Admin / Dashboard & Reports'],
+        summary: 'Chỉ số tổng hợp thực cho Dashboard Admin (/admin)',
+        description: `${PRIVATE} Quyền: ADMIN. Tổng hợp số đơn chờ xử lý, đơn chờ hoàn tiền, số đơn và doanh thu trong ngày và trong tháng hiện tại. Đồng thời gọi liên service (user-service, auction-service, fulfillment-service) với timeout 2s và fallback an toàn null khi service ngoài tắt.`,
+        security: [{ BearerAuth: [] }],
+        responses: {
+          200: jsonResponse('Lấy chỉ số Dashboard thành công', {
+            success: true,
+            data: {
+              orders: {
+                pendingProcessing: 12,
+                refundPending: 2,
+                todayCount: 18,
+                todayRevenue: 48500000,
+                monthRevenue: 312900000,
+              },
+              sellerApplicationsPending: 3,
+              auctions: { scheduled: 4, active: 6, extended: 1 },
+              openDisputes: 2,
+              generatedAt: '2026-11-24T12:00:00.000Z',
+            },
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+    },
+    '/api/v1/orders/admin/reports': {
+      get: {
+        tags: ['Admin / Dashboard & Reports'],
+        summary: 'Dữ liệu KPI & bảng đối soát theo kỳ (/admin/reports)',
+        description: `${PRIVATE} Quyền: ADMIN. Thống kê KPI tổng hợp và bảng đối soát đơn hàng gom nhóm theo kỳ (ngày, tuần, tháng). Khoảng thời gian mặc định 30 ngày gần nhất, tối đa 365 ngày.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'from',
+            in: 'query',
+            required: false,
+            description: 'Từ ngày (định dạng YYYY-MM-DD, mặc định 30 ngày trước)',
+            schema: { type: 'string', example: '2026-11-01' },
+          },
+          {
+            name: 'to',
+            in: 'query',
+            required: false,
+            description: 'Đến ngày (định dạng YYYY-MM-DD, mặc định hôm nay)',
+            schema: { type: 'string', example: '2026-11-24' },
+          },
+          {
+            name: 'granularity',
+            in: 'query',
+            required: false,
+            description: 'Đơn vị gom nhóm dữ liệu (day | week | month, mặc định day)',
+            schema: { type: 'string', enum: ['day', 'week', 'month'], example: 'day' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Lấy báo cáo thành công', {
+            success: true,
+            data: {
+              from: '2026-11-01',
+              to: '2026-11-24',
+              granularity: 'day',
+              summary: {
+                netRevenue: 152400000,
+                grossRevenue: 164900000,
+                refundedAmount: 12500000,
+                totalOrders: 84,
+                completedOrders: 71,
+                cancelledOrders: 4,
+                refundedOrders: 2,
+                cancelRefundRate: 7.14,
+                completedAuctions: 14,
+              },
+              rows: [
+                {
+                  period: '2026-11-24',
+                  orders: 12,
+                  completedOrders: 10,
+                  cancelledOrRefunded: 1,
+                  revenue: 24500000,
+                  refundedAmount: 1200000,
+                  completedAuctions: 3,
+                },
+              ],
+            },
+          }),
+          400: errorResponse(
+            'Khoảng thời gian không hợp lệ',
+            'Khoảng thời gian không hợp lệ (from phải nhỏ hơn hoặc bằng to).',
+          ),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+    },
+    '/api/v1/orders/admin/reports/export': {
+      get: {
+        tags: ['Admin / Dashboard & Reports'],
+        summary: 'Xuất báo cáo đối soát CSV UTF-8 BOM (/admin/reports)',
+        description: `${PRIVATE} Quyền: ADMIN. Tải về file CSV có gắn UTF-8 BOM (\\uFEFF) giúp Excel trên Windows mở trực tiếp tiếng Việt không lỗi font. Tên tệp dạng nexus-report-YYYY-MM-DD_YYYY-MM-DD.csv.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'from',
+            in: 'query',
+            required: false,
+            description: 'Từ ngày (YYYY-MM-DD)',
+            schema: { type: 'string', example: '2026-11-01' },
+          },
+          {
+            name: 'to',
+            in: 'query',
+            required: false,
+            description: 'Đến ngày (YYYY-MM-DD)',
+            schema: { type: 'string', example: '2026-11-24' },
+          },
+          {
+            name: 'granularity',
+            in: 'query',
+            required: false,
+            description: 'Gom nhóm (day | week | month)',
+            schema: { type: 'string', enum: ['day', 'week', 'month'], example: 'day' },
+          },
+          {
+            name: 'format',
+            in: 'query',
+            required: false,
+            description: 'Định dạng xuất (csv)',
+            schema: { type: 'string', example: 'csv' },
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Tải về tệp CSV UTF-8 thành công',
+            content: { 'text/csv': { schema: { type: 'string' } } },
+          },
+          400: errorResponse('Lỗi tham số', 'Khoảng thời gian thống kê tối đa là 365 ngày.'),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+    },
+    '/api/v1/checkout/admin/promotions': {
+      get: {
+        tags: ['Admin / Promotions & Vouchers'],
+        summary: 'Danh sách chiến dịch & mã giảm giá (/admin/promotions)',
+        description: `${PRIVATE} Quyền: ADMIN. Lọc theo từ khóa q (mã, tên), trạng thái status (ALL, ACTIVE, PAUSED, SCHEDULED, EXPIRED) và phân trang. Tự động tính toán displayStatus dựa trên thời gian thực.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'q',
+            in: 'query',
+            required: false,
+            description: 'Tìm kiếm theo mã code hoặc tên khuyến mãi',
+            schema: { type: 'string', example: 'NEXUS' },
+          },
+          {
+            name: 'status',
+            in: 'query',
+            required: false,
+            description: 'Bộ lọc trạng thái (ALL | ACTIVE | PAUSED | SCHEDULED | EXPIRED)',
+            schema: {
+              type: 'string',
+              enum: ['ALL', 'ACTIVE', 'PAUSED', 'SCHEDULED', 'EXPIRED'],
+              example: 'ALL',
+            },
+          },
+          {
+            name: 'page',
+            in: 'query',
+            required: false,
+            schema: { type: 'integer', example: 1 },
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            required: false,
+            schema: { type: 'integer', example: 20 },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Lấy danh sách mã giảm giá thành công', {
+            success: true,
+            data: [
+              {
+                id: '01934000-0001-7000-8000-000000000001',
+                code: 'NEXUS50K',
+                name: 'Ưu đãi đơn tháng 11',
+                description: 'Giảm trực tiếp 50.000đ cho đơn từ 500.000đ',
+                discountType: 'FIXED',
+                discountValue: 50000,
+                maxDiscountAmount: 50000,
+                minOrderAmount: 500000,
+                usageLimit: 500,
+                usedCount: 12,
+                perUserLimit: 1,
+                scope: 'ALL_USERS',
+                categoryIds: [],
+                startsAt: '2026-11-01T00:00:00.000Z',
+                endsAt: '2026-12-31T23:59:59.000Z',
+                status: 'ACTIVE',
+                displayStatus: 'ACTIVE',
+                createdBy: 'admin-id',
+                updatedBy: 'admin-id',
+              },
+            ],
+            pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+          }),
+          401: unauthorized,
+          403: forbidden,
+        },
+      },
+      post: {
+        tags: ['Admin / Promotions & Vouchers'],
+        summary: 'Tạo mã giảm giá mới (đồng bộ B14 Buyer)',
+        description: `${PRIVATE} Quyền: ADMIN. Tạo chiến dịch voucher mới. Validate: mã code regex /^[A-Z0-9_-]{3,32}$/ lưu UPPERCASE; nếu PERCENT thì 1-90% và bắt buộc maxDiscountAmount > 0; endsAt > startsAt; usageLimit >= 1; perUserLimit >= 1; minOrderAmount >= 0.`,
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['code', 'name', 'discountType', 'discountValue', 'startsAt', 'endsAt'],
+                properties: {
+                  code: { type: 'string', example: 'NEXUS50K' },
+                  name: { type: 'string', example: 'Ưu đãi đơn tháng 11' },
+                  description: {
+                    type: 'string',
+                    example: 'Giảm trực tiếp 50.000đ cho đơn từ 500.000đ',
+                  },
+                  discountType: { type: 'string', enum: ['FIXED', 'PERCENT'], example: 'FIXED' },
+                  discountValue: { type: 'number', example: 50000 },
+                  maxDiscountAmount: { type: 'number', example: 50000 },
+                  minOrderAmount: { type: 'number', example: 500000 },
+                  usageLimit: { type: 'integer', example: 500 },
+                  perUserLimit: { type: 'integer', example: 1 },
+                  scope: {
+                    type: 'string',
+                    enum: ['ALL_USERS', 'NEW_BUYERS', 'CATEGORY'],
+                    example: 'ALL_USERS',
+                  },
+                  categoryIds: { type: 'array', items: { type: 'string' }, example: [] },
+                  startsAt: { type: 'string', example: '2026-11-24T00:00:00.000Z' },
+                  endsAt: { type: 'string', example: '2026-12-31T23:59:59.000Z' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: jsonResponse('Tạo mã giảm giá thành công', {
+            success: true,
+            data: { id: 'uuid-v7', code: 'NEXUS50K', name: 'Ưu đãi đơn tháng 11' },
+          }),
+          400: errorResponse('Dữ liệu không hợp lệ', 'Mã khuyến mãi không hợp lệ.'),
+          401: unauthorized,
+          403: forbidden,
+          409: errorResponse('Trùng mã code', 'Mã khuyến mãi NEXUS50K đã tồn tại trong hệ thống.'),
+        },
+      },
+    },
+    '/api/v1/checkout/admin/promotions/{id}': {
+      put: {
+        tags: ['Admin / Promotions & Vouchers'],
+        summary: 'Sửa cấu hình/hạn mức/thời gian mã giảm giá',
+        description: `${PRIVATE} Quyền: ADMIN. Cập nhật thông tin voucher. Ràng buộc: không được đổi code nếu mã đã phát sinh lượt dùng (usedCount > 0); không được giảm usageLimit thấp hơn usedCount.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', example: '01934000-0001-7000-8000-000000000001' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', example: 'NEXUS50K' },
+                  name: { type: 'string', example: 'Ưu đãi đơn tháng 11 (Cập nhật)' },
+                  description: { type: 'string', example: 'Mô tả chi tiết' },
+                  discountType: { type: 'string', enum: ['FIXED', 'PERCENT'], example: 'FIXED' },
+                  discountValue: { type: 'number', example: 50000 },
+                  maxDiscountAmount: { type: 'number', example: 50000 },
+                  minOrderAmount: { type: 'number', example: 500000 },
+                  usageLimit: { type: 'integer', example: 600 },
+                  perUserLimit: { type: 'integer', example: 2 },
+                  scope: { type: 'string', example: 'ALL_USERS' },
+                  categoryIds: { type: 'array', items: { type: 'string' }, example: [] },
+                  startsAt: { type: 'string', example: '2026-11-24T00:00:00.000Z' },
+                  endsAt: { type: 'string', example: '2026-12-31T23:59:59.000Z' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Cập nhật mã thành công', {
+            success: true,
+            data: { id: 'uuid', name: 'Đã cập nhật' },
+          }),
+          400: errorResponse(
+            'Hạn mức không hợp lệ',
+            'Không thể hạ hạn mức tổng thấp hơn số lượt đã sử dụng thực tế.',
+          ),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy', 'Không tìm thấy mã khuyến mãi.'),
+          409: errorResponse(
+            'Mã bị khóa',
+            'Mã khuyến mãi đã có đơn hàng sử dụng, không được phép thay đổi ký tự mã code.',
+          ),
+        },
+      },
+      delete: {
+        tags: ['Admin / Promotions & Vouchers'],
+        summary: 'Xóa mã giảm giá chưa từng phát sinh lượt dùng',
+        description: `${PRIVATE} Quyền: ADMIN. Chỉ cho phép xóa khi usedCount === 0. Nếu đã có đơn áp dụng mã sẽ trả 409 PROMOTION_ALREADY_USED và hướng dẫn chuyển sang PAUSED.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', example: '01934000-0001-7000-8000-000000000001' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Xóa thành công', {
+            success: true,
+            message: 'Đã xóa mã khuyến mãi thành công.',
+          }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy', 'Không tìm thấy mã khuyến mãi.'),
+          409: errorResponse(
+            'Mã đã dùng',
+            'Mã khuyến mãi đã có đơn hàng sử dụng trong lịch sử giao dịch, không thể xóa để bảo toàn dữ liệu kế toán. Bạn có thể chuyển trạng thái sang Tạm dừng (PAUSED).',
+          ),
+        },
+      },
+    },
+    '/api/v1/checkout/admin/promotions/{id}/status': {
+      patch: {
+        tags: ['Admin / Promotions & Vouchers'],
+        summary: 'Bật / Tạm dừng mã giảm giá có ghi lý do',
+        description: `${PRIVATE} Quyền: ADMIN. Chuyển trạng thái giữa ACTIVE và PAUSED kèm theo lý do tạm dừng/kích hoạt.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', example: '01934000-0001-7000-8000-000000000001' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['status'],
+                properties: {
+                  status: { type: 'string', enum: ['ACTIVE', 'PAUSED'], example: 'PAUSED' },
+                  reason: { type: 'string', example: 'Tạm dừng do điều chỉnh ngân sách marketing' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: jsonResponse('Cập nhật trạng thái thành công', {
+            success: true,
+            data: { id: 'uuid', status: 'PAUSED' },
+          }),
+          400: errorResponse(
+            'Trạng thái không hợp lệ',
+            "Trạng thái cập nhật chỉ chấp nhận 'ACTIVE' hoặc 'PAUSED'.",
+          ),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy', 'Không tìm thấy mã khuyến mãi.'),
+        },
+      },
+    },
+    '/api/v1/checkout/admin/promotions/{id}/usages': {
+      get: {
+        tags: ['Admin / Promotions & Vouchers'],
+        summary: 'Tra cứu lịch sử lượt áp dụng của một mã giảm giá',
+        description: `${PRIVATE} Quyền: ADMIN. Lấy danh sách các đơn hàng và người dùng đã áp dụng mã này kèm số tiền đã giảm và thời gian sử dụng. Hỗ trợ phân trang page, limit.`,
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', example: '01934000-0001-7000-8000-000000000001' },
+          },
+          {
+            name: 'page',
+            in: 'query',
+            required: false,
+            schema: { type: 'integer', example: 1 },
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            required: false,
+            schema: { type: 'integer', example: 20 },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Lấy lịch sử sử dụng thành công', {
+            success: true,
+            data: [
+              {
+                id: '1',
+                orderId: 'ORD-20261124-001',
+                userId: '01a15822-43b8-78c3-a246-16bff78bc6e8',
+                discountAmount: 50000,
+                usedAt: '2026-11-24T10:15:30.000Z',
+              },
+            ],
+            pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+          }),
+          401: unauthorized,
+          403: forbidden,
+          404: errorResponse('Không tìm thấy', 'Không tìm thấy mã khuyến mãi.'),
+        },
+      },
+    },
     '/api/v1/orders': {
       get: {
         tags: ['Support Staff / Tra cứu đơn hàng'],

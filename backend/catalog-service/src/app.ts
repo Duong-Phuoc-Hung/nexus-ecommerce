@@ -30,6 +30,9 @@ import { PostgresReviewRepository } from './infrastructure/repositories/Postgres
 import { InMemoryReviewRepository } from './infrastructure/repositories/InMemoryReviewRepository';
 import { CreateProductReviewUseCase } from './application/use-cases/CreateProductReviewUseCase';
 import { GetProductReviewsUseCase } from './application/use-cases/GetProductReviewsUseCase';
+import { ModerationService } from './application/use-cases/ModerationService';
+import { PostgresModerationRepository } from './infrastructure/repositories/PostgresModerationRepository';
+import { createModerationRoutes } from './interfaces/http/routes/ModerationRoutes';
 
 export function createApplication(): Application {
   const app = express();
@@ -100,6 +103,7 @@ export function createApplication(): Application {
     getProductReviewsUseCase,
   );
 
+  app.use('/api/v1/products', createModerationRoutes(new ModerationService(new PostgresModerationRepository())));
   app.use('/api/v1/products', createProductRoutes(productController));
 
   // YÊU THÍCH (FAVORITES / WISHLIST):

@@ -31,6 +31,9 @@ import { GhnCarrierClient } from './infrastructure/clients/GhnCarrierClient';
 import { PayOsGateway } from './infrastructure/clients/PayOsGateway';
 import { PostgresPromotionRepository } from './infrastructure/repositories/PostgresPromotionRepository';
 import { PromotionService } from './application/promotion/PromotionService';
+import { AdminDashboardReportService } from './application/admin/AdminDashboardReportService';
+import { AdminPromotionService } from './application/admin/AdminPromotionService';
+import { AdminCommerceController } from './interfaces/http/controllers/AdminCommerceController';
 
 type OrderReader = Pick<IOrderRepository, 'search' | 'findById'>;
 
@@ -134,6 +137,19 @@ export function createApplication(adminOrderReader?: OrderReader): Application {
   const promotionRepository = new PostgresPromotionRepository(pool);
   const promotionService = new PromotionService(promotionRepository, catalogClient);
 
+  const prisma = PrismaClientWrapper.getInstance();
+  const pgAdminOrderReader =
+    adminOrderReader instanceof PostgresAdminOrderReader
+      ? adminOrderReader
+      : new PostgresAdminOrderReader(prisma);
+
+  const adminDashboardReportService = new AdminDashboardReportService(pgAdminOrderReader);
+  const adminPromotionService = new AdminPromotionService(promotionRepository);
+  const adminCommerceController = new AdminCommerceController(
+    adminDashboardReportService,
+    adminPromotionService,
+  );
+
   const cartRepository: ICartRepository =
     process.env.USE_IN_MEMORY_DB === 'true'
       ? new InMemoryCartRepository()
@@ -141,9 +157,12 @@ export function createApplication(adminOrderReader?: OrderReader): Application {
   const cartService = new CartService(cartRepository, catalogClient, promotionService);
   const cartController = new CartController(cartService);
 
-  app.use('/api/v1', createCheckoutRoutes(pool, undefined, promotionService));
+  app.use(
+    '/api/v1',
+    createCheckoutRoutes(pool, undefined, promotionService, adminCommerceController),
+  );
   app.use('/api/v1/cart', createCartRoutes(cartController));
-  app.use('/api/v1/orders', createOrderRoutes(orderController));
+  app.use('/api/v1/orders', createOrderRoutes(orderController, adminCommerceController));
 
   return app;
 }

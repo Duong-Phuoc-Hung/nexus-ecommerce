@@ -105,6 +105,159 @@ export class PostgresAdminOrderReader {
     };
   }
 
+  public async getDashboardOrderMetrics(): Promise<{
+    pendingProcessing: number;
+    refundPending: number;
+    todayCount: number;
+    todayRevenue: number;
+    monthRevenue: number;
+  }> {
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        pending_processing: bigint;
+        refund_pending: bigint;
+        today_count: bigint;
+        today_revenue: Prisma.Decimal;
+        month_revenue: Prisma.Decimal;
+      }>
+    >`
+      SELECT
+        COUNT(*) FILTER (WHERE status IN ('PENDING', 'PENDING_PAYMENT', 'PAID', 'PROCESSING')) AS pending_processing,
+        COUNT(*) FILTER (WHERE status IN ('REFUND_PENDING', 'DISPUTED') OR (status = 'PAID' AND timeline::text ILIKE '%REFUND_REQUESTED%')) AS refund_pending,
+        COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE) AS today_count,
+        COALESCE(SUM(total_amount) FILTER (WHERE status IN ('PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'COMPLETED') AND created_at >= CURRENT_DATE), 0) AS today_revenue,
+        COALESCE(SUM(total_amount) FILTER (WHERE status IN ('PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'COMPLETED') AND created_at >= date_trunc('month', CURRENT_DATE)), 0) AS month_revenue
+      FROM commerce_orders
+    `;
+    const r = rows[0] || {};
+    return {
+      pendingProcessing: Number(r.pending_processing || 0),
+      refundPending: Number(r.refund_pending || 0),
+      todayCount: Number(r.today_count || 0),
+      todayRevenue: Number(r.today_revenue || 0),
+      monthRevenue: Number(r.month_revenue || 0),
+    };
+  }
+
+  public async getReports(params: {
+    from: Date;
+    to: Date;
+    granularity: 'day' | 'week' | 'month';
+  }): Promise<{
+    summary: {
+      netRevenue: number;
+      grossRevenue: number;
+      refundedAmount: number;
+      totalOrders: number;
+      completedOrders: number;
+      cancelledOrders: number;
+      refundedOrders: number;
+      cancelRefundRate: number;
+      completedAuctions: number;
+    };
+    rows: Array<{
+      period: string;
+      orders: number;
+      completedOrders: number;
+      cancelledOrRefunded: number;
+      revenue: number;
+      refundedAmount: number;
+      completedAuctions: number;
+    }>;
+  }> {
+    const from = params.from;
+    const to = params.to;
+
+    const summaryRows = await this.prisma.$queryRaw<
+      Array<{
+        total_orders: bigint;
+        completed_orders: bigint;
+        cancelled_orders: bigint;
+        refunded_orders: bigint;
+        gross_revenue: Prisma.Decimal;
+        refunded_amount: Prisma.Decimal;
+      }>
+    >`
+      SELECT
+        COUNT(*) AS total_orders,
+        COUNT(*) FILTER (WHERE status IN ('DELIVERED', 'COMPLETED')) AS completed_orders,
+        COUNT(*) FILTER (WHERE status = 'CANCELLED') AS cancelled_orders,
+        COUNT(*) FILTER (WHERE status = 'REFUNDED') AS refunded_orders,
+        COALESCE(SUM(total_amount) FILTER (WHERE status IN ('PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'COMPLETED')), 0) AS gross_revenue,
+        COALESCE(SUM(total_amount) FILTER (WHERE status = 'REFUNDED'), 0) AS refunded_amount
+      FROM commerce_orders
+      WHERE created_at >= ${from} AND created_at <= ${to}
+    `;
+
+    const s = summaryRows[0] || {};
+    const totalOrders = Number(s.total_orders || 0);
+    const completedOrders = Number(s.completed_orders || 0);
+    const cancelledOrders = Number(s.cancelled_orders || 0);
+    const refundedOrders = Number(s.refunded_orders || 0);
+    const grossRevenue = Number(s.gross_revenue || 0);
+    const refundedAmount = Number(s.refunded_amount || 0);
+    const netRevenue = Math.max(0, grossRevenue - refundedAmount);
+    const cancelRefundRate =
+      totalOrders > 0
+        ? Math.round(((cancelledOrders + refundedOrders) / totalOrders) * 10000) / 100
+        : 0;
+
+    let periodFormat = Prisma.sql`to_char(created_at, 'YYYY-MM-DD')`;
+    if (params.granularity === 'week') {
+      periodFormat = Prisma.sql`to_char(date_trunc('week', created_at), 'YYYY-"W"IW')`;
+    } else if (params.granularity === 'month') {
+      periodFormat = Prisma.sql`to_char(date_trunc('month', created_at), 'YYYY-MM')`;
+    }
+
+    const rowData = await this.prisma.$queryRaw<
+      Array<{
+        period: string;
+        orders: bigint;
+        completed_orders: bigint;
+        cancelled_or_refunded: bigint;
+        revenue: Prisma.Decimal;
+        refunded_amount: Prisma.Decimal;
+      }>
+    >`
+      SELECT
+        ${periodFormat} AS period,
+        COUNT(*) AS orders,
+        COUNT(*) FILTER (WHERE status IN ('DELIVERED', 'COMPLETED')) AS completed_orders,
+        COUNT(*) FILTER (WHERE status IN ('CANCELLED', 'REFUNDED')) AS cancelled_or_refunded,
+        COALESCE(SUM(total_amount) FILTER (WHERE status IN ('PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'COMPLETED')), 0) AS revenue,
+        COALESCE(SUM(total_amount) FILTER (WHERE status = 'REFUNDED'), 0) AS refunded_amount
+      FROM commerce_orders
+      WHERE created_at >= ${from} AND created_at <= ${to}
+      GROUP BY period
+      ORDER BY period ASC
+    `;
+
+    const rows = rowData.map((r) => ({
+      period: r.period,
+      orders: Number(r.orders || 0),
+      completedOrders: Number(r.completed_orders || 0),
+      cancelledOrRefunded: Number(r.cancelled_or_refunded || 0),
+      revenue: Number(r.revenue || 0),
+      refundedAmount: Number(r.refunded_amount || 0),
+      completedAuctions: 0,
+    }));
+
+    return {
+      summary: {
+        netRevenue,
+        grossRevenue,
+        refundedAmount,
+        totalOrders,
+        completedOrders,
+        cancelledOrders,
+        refundedOrders,
+        cancelRefundRate,
+        completedAuctions: 0,
+      },
+      rows,
+    };
+  }
+
   private toOrder(row: OrderRow): Order {
     const rawAddress =
       typeof row.shipping_address === 'string'

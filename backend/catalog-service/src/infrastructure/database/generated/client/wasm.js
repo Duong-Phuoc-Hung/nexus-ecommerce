@@ -151,7 +151,8 @@ exports.Prisma.ProductScalarFieldEnum = {
   allowAuction: 'allowAuction',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
-  deletedAt: 'deletedAt'
+  deletedAt: 'deletedAt',
+  moderationBlocked: 'moderationBlocked'
 };
 
 exports.Prisma.ProductImageScalarFieldEnum = {
@@ -186,7 +187,37 @@ exports.Prisma.ReviewScalarFieldEnum = {
   rating: 'rating',
   comment: 'comment',
   createdAt: 'createdAt',
+  updatedAt: 'updatedAt',
+  moderatedHidden: 'moderatedHidden'
+};
+
+exports.Prisma.ModerationCaseScalarFieldEnum = {
+  id: 'id',
+  productId: 'productId',
+  reviewId: 'reviewId',
+  kind: 'kind',
+  status: 'status',
+  reporterId: 'reporterId',
+  reportReason: 'reportReason',
+  createdAt: 'createdAt',
   updatedAt: 'updatedAt'
+};
+
+exports.Prisma.ModerationActionScalarFieldEnum = {
+  id: 'id',
+  caseId: 'caseId',
+  actorId: 'actorId',
+  decision: 'decision',
+  reason: 'reason',
+  violationCategory: 'violationCategory',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.ModerationReportScalarFieldEnum = {
+  caseId: 'caseId',
+  reporterId: 'reporterId',
+  reason: 'reason',
+  createdAt: 'createdAt'
 };
 
 exports.Prisma.SortOrder = {
@@ -211,7 +242,10 @@ exports.Prisma.ModelName = {
   ProductImage: 'ProductImage',
   ProductAttribute: 'ProductAttribute',
   Favorite: 'Favorite',
-  Review: 'Review'
+  Review: 'Review',
+  ModerationCase: 'ModerationCase',
+  ModerationAction: 'ModerationAction',
+  ModerationReport: 'ModerationReport'
 };
 
 /**

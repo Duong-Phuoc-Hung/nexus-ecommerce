@@ -1,15 +1,38 @@
 import { Router } from 'express';
 import { OrderController } from '../controllers/OrderController';
-import { requireAuth, requireOrderPermission } from '../../../infrastructure/security/auth';
+import { AdminCommerceController } from '../controllers/AdminCommerceController';
+import {
+  requireAuth,
+  requireOrderPermission,
+  requireAdmin,
+} from '../../../infrastructure/security/auth';
 
 import { requireAuth as requireOrderReadAuth } from '../../../infrastructure/security/order-read-auth';
 
-export function createOrderRoutes(controller: OrderController): Router {
+export function createOrderRoutes(
+  controller: OrderController,
+  adminController?: AdminCommerceController,
+): Router {
   const router = Router();
+  const adminOnly = [requireAuth, requireAdmin];
 
   router.get('/', requireOrderReadAuth, requireOrderPermission('LIST'), (req, res) =>
     controller.listOrders(req, res),
   );
+
+  // =========================================================================
+  // ADMIN DASHBOARD & REPORTS (SRS A15) - Phải đặt TRƯỚC route động /:id
+  // =========================================================================
+  if (adminController) {
+    router.get('/admin/dashboard-summary', ...adminOnly, (req, res) =>
+      adminController.getDashboardSummary(req, res),
+    );
+    router.get('/admin/reports/export', ...adminOnly, (req, res) =>
+      adminController.exportReports(req, res),
+    );
+    router.get('/admin/reports', ...adminOnly, (req, res) => adminController.getReports(req, res));
+  }
+
   router.get('/:id', requireOrderReadAuth, requireOrderPermission('VIEW'), (req, res) =>
     controller.getById(req, res),
   );

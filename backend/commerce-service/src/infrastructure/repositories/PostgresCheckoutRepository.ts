@@ -181,8 +181,11 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
     }
 
     const order = await this.loadOrderPrisma(this.prisma, String(existing.orderId));
+    if (!order || order.status === 'CANCELLED') {
+      return null;
+    }
     const payment = await this.loadLatestPaymentPrisma(this.prisma, String(existing.orderId));
-    if (!order || !payment) {
+    if (!payment) {
       return null;
     }
 
@@ -215,13 +218,18 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
         }
         if (existing.orderId) {
           const order = await this.loadOrderPrisma(this.prisma, String(existing.orderId));
-          const payment = await this.loadLatestPaymentPrisma(this.prisma, String(existing.orderId));
-          return {
-            order: order!,
-            payment: payment!,
-            replay: true,
-            requestHash: params.requestHash,
-          };
+          if (order && order.status !== 'CANCELLED') {
+            const payment = await this.loadLatestPaymentPrisma(
+              this.prisma,
+              String(existing.orderId),
+            );
+            return {
+              order: order,
+              payment: payment!,
+              replay: true,
+              requestHash: params.requestHash,
+            };
+          }
         }
       }
     }
@@ -255,13 +263,15 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
           }
           if (existing.orderId) {
             const order = await this.loadOrderPrisma(tx, String(existing.orderId));
-            const payment = await this.loadLatestPaymentPrisma(tx, String(existing.orderId));
-            return {
-              order: order!,
-              payment: payment!,
-              replay: true,
-              requestHash: params.requestHash,
-            };
+            if (order && order.status !== 'CANCELLED') {
+              const payment = await this.loadLatestPaymentPrisma(tx, String(existing.orderId));
+              return {
+                order: order,
+                payment: payment!,
+                replay: true,
+                requestHash: params.requestHash,
+              };
+            }
           }
         }
       }
@@ -303,7 +313,8 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
         '0',
       );
       const nowFormatted = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-      const orderCode = `ORD-${nowFormatted}-${seqNum}`;
+      const prefix = params.orderType === 'AUCTION' ? 'ORD-AUC' : 'ORD';
+      const orderCode = `${prefix}-${nowFormatted}-${seqNum}`;
 
       const initialStatus = params.paymentMethod === 'COD' ? 'PROCESSING' : 'PENDING_PAYMENT';
       const order = await tx.order.create({
@@ -391,13 +402,19 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
         });
       }
 
-      // Sinh PayOS order code
-      const payosSeqRes = await tx.$queryRaw<
-        Array<{ nextval: bigint }>
-      >`SELECT nextval('commerce_payos_order_code_seq')`;
-      const payosOrderCode = Number(
-        payosSeqRes[0]?.nextval || Math.floor(1000000 + Math.random() * 9000000),
-      );
+      // Sinh PayOS order code đảm bảo không bao giờ trùng lặp (kể cả sau khi reset sequence DB)
+      let nextSeq = 1;
+      try {
+        const payosSeqRes = await tx.$queryRaw<
+          Array<{ nextval: bigint }>
+        >`SELECT nextval('commerce_payos_order_code_seq')`;
+        if (payosSeqRes[0]?.nextval) {
+          nextSeq = Number(payosSeqRes[0].nextval);
+        }
+      } catch {
+        nextSeq = Math.floor(1000 + Math.random() * 9000);
+      }
+      const payosOrderCode = Math.floor(Date.now() / 1000) * 1000 + (nextSeq % 1000);
 
       await tx.payment.create({
         data: {
@@ -512,12 +529,18 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
 
   public async createPaymentAttempt(orderId: string, amount: number, expiresAt: Date) {
     return this.prisma.$transaction(async (tx) => {
-      const payosSeqRes = await tx.$queryRaw<
-        Array<{ nextval: bigint }>
-      >`SELECT nextval('commerce_payos_order_code_seq')`;
-      const payosOrderCode = Number(
-        payosSeqRes[0]?.nextval || Math.floor(1000000 + Math.random() * 9000000),
-      );
+      let nextSeq = 1;
+      try {
+        const payosSeqRes = await tx.$queryRaw<
+          Array<{ nextval: bigint }>
+        >`SELECT nextval('commerce_payos_order_code_seq')`;
+        if (payosSeqRes[0]?.nextval) {
+          nextSeq = Number(payosSeqRes[0].nextval);
+        }
+      } catch {
+        nextSeq = Math.floor(1000 + Math.random() * 9000);
+      }
+      const payosOrderCode = Math.floor(Date.now() / 1000) * 1000 + (nextSeq % 1000);
 
       const row = await tx.payment.create({
         data: {
