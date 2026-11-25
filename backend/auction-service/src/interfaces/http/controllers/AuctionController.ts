@@ -14,6 +14,7 @@ import {
   CancelAuctionUseCase,
 } from '../../../application/use-cases/CancelAuctionUseCase';
 import { AuctionCheckoutUseCase } from '../../../application/use-cases/AuctionCheckoutUseCase';
+import { SettleAuctionUseCase } from '../../../application/use-cases/SettleAuctionUseCase';
 import { getSocketServer } from '../../../infrastructure/websocket/socket';
 
 export class AuctionController {
@@ -27,6 +28,7 @@ export class AuctionController {
     private readonly cancelAuctionUseCase: Pick<CancelAuctionUseCase, 'execute'>,
     private readonly auctionRepository: IAuctionRepository,
     private readonly auctionCheckoutUseCase?: AuctionCheckoutUseCase,
+    private readonly settleAuctionUseCase?: SettleAuctionUseCase,
   ) {}
 
   // Lấy danh sách các phiên đấu giá (hỗ trợ lọc theo status, sellerId, từ khóa q hoặc mặc định là active)
@@ -90,6 +92,12 @@ export class AuctionController {
               ? 'Phiên đấu giá đã bị dừng hoặc hủy'
               : undefined;
 
+          // Đối với client / frontend, phiên đã SETTLED tương ứng với trạng thái kết thúc (ENDED)
+          const isSettled = (a.status as string) === 'SETTLED';
+          const clientStatus = isSettled ? 'ENDED' : a.status;
+          const effectiveEndTime =
+            (isSettled || a.status === 'ENDED') && a.actualEndTime ? a.actualEndTime : a.endTime;
+
           return {
             id: a.id,
             productId: a.productId,
@@ -101,9 +109,9 @@ export class AuctionController {
             bidIncrement: a.bidIncrement,
             buyNowPrice: a.buyNowPrice,
             imageUrl: a.imageUrl,
-            status: a.status,
+            status: clientStatus,
             startTime: a.startTime,
-            endTime: a.endTime,
+            endTime: effectiveEndTime,
             actualEndTime: a.actualEndTime,
             cancelReason: effectiveCancelReason,
             cancelledBy: canViewFullReason ? a.cancelledBy : undefined,
@@ -561,6 +569,50 @@ export class AuctionController {
       res.status(400).json({
         success: false,
         error: error.message || 'Không thể chốt đơn thanh toán đấu giá.',
+      });
+    }
+  }
+
+  // Chốt phiên đấu giá khi có người thắng và phát event sang RabbitMQ (TASK-AUC-01)
+  public async settle(req: Request, res: Response): Promise<void> {
+    try {
+      if (!this.settleAuctionUseCase) {
+        res.status(500).json({ success: false, error: 'SettleAuctionUseCase is not configured.' });
+        return;
+      }
+      const auctionId = req.params.id as string;
+      const authUser = (req as AuthenticatedRequest).user;
+
+      const result = await this.settleAuctionUseCase.execute({
+        auctionId,
+        triggeredBy: authUser?.id,
+      });
+
+      // Bắn sự kiện Realtime xuống client để màn hình phòng đấu giá cập nhật kết quả kết thúc ngay lập tức
+      const io = getSocketServer();
+      if (io) {
+        io.to(`auction:${auctionId}`).emit('auction:bid_placed', {
+          auctionId,
+          currentHighestBid: result.finalPrice,
+          status: 'ENDED',
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message:
+          'Chốt phiên đấu giá thành công! Đã gửi thông tin đơn hàng tới hệ thống thanh toán.',
+        data: result,
+      });
+    } catch (error: any) {
+      if (error instanceof AuctionNotFoundException) {
+        res.status(404).json({ success: false, error: error.message });
+        return;
+      }
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Không thể chốt phiên đấu giá.',
       });
     }
   }

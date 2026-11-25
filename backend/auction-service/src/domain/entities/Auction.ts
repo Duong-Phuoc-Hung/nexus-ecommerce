@@ -3,6 +3,7 @@ export enum AuctionStatus {
   ACTIVE = 'ACTIVE',
   EXTENDED = 'EXTENDED',
   ENDED = 'ENDED',
+  SETTLED = 'SETTLED',
   CANCELLED = 'CANCELLED',
 }
 
@@ -156,6 +157,16 @@ export class Auction {
       throw new Error(`Mức giá đặt tối thiểu phải là ${minRequiredBid} VND.`);
     }
 
+    // Nếu mức giá đặt đạt hoặc vượt mức Mua ngay (Buy Now Price), kết thúc phiên ngay lập tức
+    if (this._buyNowPrice && this._buyNowPrice > 0 && amount >= this._buyNowPrice) {
+      this._currentHighestBid = amount;
+      this._highestBidderId = bidderId;
+      this._status = AuctionStatus.ENDED;
+      this._actualEndTime = now;
+      this._updatedAt = now;
+      return;
+    }
+
     this._currentHighestBid = amount;
     this._highestBidderId = bidderId;
 
@@ -167,6 +178,24 @@ export class Auction {
     }
 
     this._updatedAt = new Date();
+  }
+
+  // Nghiệp vụ chốt phiên đấu giá khi có người thắng (SRS 3.5.2)
+  public settle(now: Date = new Date()): void {
+    if (this._status === AuctionStatus.CANCELLED) {
+      throw new Error('Không thể chốt phiên đấu giá đã bị hủy.');
+    }
+    if (this._status === AuctionStatus.SETTLED) {
+      throw new Error('Phiên đấu giá này đã được chốt trước đó.');
+    }
+    if (!this._highestBidderId) {
+      throw new Error('Không thể chốt phiên đấu giá khi không có người trả giá.');
+    }
+    this._status = AuctionStatus.SETTLED;
+    if (!this._actualEndTime) {
+      this._actualEndTime = now;
+    }
+    this._updatedAt = now;
   }
 
   // Nghiệp vụ mua thẳng (Buy It Now) kết thúc phiên ngay lập tức

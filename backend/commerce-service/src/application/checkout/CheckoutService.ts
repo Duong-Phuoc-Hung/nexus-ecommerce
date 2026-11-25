@@ -311,7 +311,8 @@ export class CheckoutService {
             'Idempotency-Key đã được dùng cho một yêu cầu khác.',
           );
         }
-        if (existing.order) {
+        // Chỉ replay nếu đơn hàng cũ chưa bị hủy (tránh kẹt đơn hết hạn)
+        if (existing.order && existing.order.status !== 'CANCELLED') {
           const payment =
             paymentMethod === 'COD'
               ? existing.payment
@@ -431,6 +432,16 @@ export class CheckoutService {
       finalTotalAmount = Math.max(0, priced.subtotal - finalDiscountAmount + finalShippingFee);
     }
 
+    const rawOrderType =
+      isRecord(body) && typeof body.orderType === 'string'
+        ? body.orderType.toUpperCase()
+        : undefined;
+    const isAuction =
+      rawOrderType === 'AUCTION' ||
+      (isRecord(body) && (body.source === 'AUCTION' || !!body.auctionId)) ||
+      idempotencyKey?.startsWith('auc-');
+    const orderType: 'AUCTION' | 'STANDARD' = isAuction ? 'AUCTION' : 'STANDARD';
+
     const created = await this.repository.createOrder({
       buyerId,
       sellerId: priced.sellerId,
@@ -443,6 +454,7 @@ export class CheckoutService {
       shippingFee: finalShippingFee,
       totalAmount: finalTotalAmount,
       paymentMethod,
+      orderType,
       idempotencyKey,
       requestHash,
       orderExpiresAt: new Date(Date.now() + ORDER_TTL_MS),

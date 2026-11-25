@@ -6,6 +6,7 @@ import {
   ShippingAddressInput,
   AuctionOrderCheckoutResult,
 } from '../ports/ICommerceOrderClient';
+import { generateUuidV7 } from '../../infrastructure/utils/uuid';
 
 export interface AuctionCheckoutInput {
   auctionId: string;
@@ -29,8 +30,8 @@ export class AuctionCheckoutUseCase {
       throw new AuctionNotFoundException(auctionId);
     }
 
-    // 2. Kiểm tra trạng thái phiên: Phải kết thúc (ENDED) mới được chốt đơn
-    if (auction.status !== AuctionStatus.ENDED) {
+    // 2. Kiểm tra trạng thái phiên: Phải kết thúc (ENDED) hoặc đã chốt (SETTLED) mới được chốt đơn
+    if (auction.status !== AuctionStatus.ENDED && auction.status !== AuctionStatus.SETTLED) {
       throw new Error(`Phiên đấu giá chưa kết thúc (Trạng thái hiện tại: ${auction.status}).`);
     }
 
@@ -51,14 +52,62 @@ export class AuctionCheckoutUseCase {
       );
     }
 
-    // 5. Gọi sang Commerce Service để chốt đơn hàng và sinh link VietQR PayOS
+    // 5. Kiểm tra tính bất biến (Idempotency): Nếu phiên đấu giá đã có đơn hàng hợp lệ chưa bị hủy thì trả về đơn cũ
+    let existingSettlement = null;
+    if (this.auctionRepository.findSettlementByAuctionId) {
+      existingSettlement = await this.auctionRepository.findSettlementByAuctionId(auctionId);
+      if (existingSettlement && existingSettlement.orderId) {
+        if (this.commerceOrderClient.getOrder) {
+          const existingOrder = await this.commerceOrderClient.getOrder(
+            existingSettlement.orderId,
+            buyerToken,
+          );
+          // Chỉ tái sử dụng nếu đơn hàng còn hiệu lực và chưa bị hủy/thất bại
+          const isDead =
+            !existingOrder ||
+            existingOrder.status === 'CANCELLED' ||
+            existingOrder.status === 'FAILED' ||
+            existingOrder.payment?.status === 'CANCELLED' ||
+            existingOrder.payment?.status === 'FAILED' ||
+            existingOrder.payment?.status === 'EXPIRED';
+
+          if (!isDead) {
+            return existingOrder;
+          }
+        }
+      }
+    }
+
+    // 6. Gọi sang Commerce Service để chốt đơn hàng và sinh link VietQR PayOS
     const orderResult = await this.commerceOrderClient.createOrder({
+      auctionId: auction.id,
       buyerToken,
       buyerId,
       productId: auction.productId,
       amount: auction.currentHighestBid,
       shippingAddress,
     });
+
+    // 7. Liên kết mã đơn hàng Commerce vào bản ghi chốt phiên đấu giá
+    if (this.auctionRepository.saveSettlement) {
+      try {
+        const settlementToSave = existingSettlement || {
+          id: generateUuidV7(),
+          auctionId,
+          winnerId: buyerId,
+          winningBidAmount: auction.currentHighestBid,
+          paymentDeadline: new Date(Date.now() + 48 * 3600 * 1000),
+          status: 'PENDING',
+          settledAt: new Date(),
+        };
+        await this.auctionRepository.saveSettlement({
+          ...settlementToSave,
+          orderId: orderResult.orderId,
+        });
+      } catch (err) {
+        console.warn('[AuctionCheckout] Could not link orderId to settlement:', err);
+      }
+    }
 
     return orderResult;
   }

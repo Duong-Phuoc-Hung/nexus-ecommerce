@@ -2014,6 +2014,45 @@ export const auctionSpec = {
         },
       },
     },
+    '/api/v1/auctions/{id}/settle': {
+      post: {
+        tags: ['Auction Settlement'],
+        summary: 'Chốt phiên đấu giá & Bắn Event sang RabbitMQ (TASK-AUC-01)',
+        description:
+          'Chốt kết quả phiên đấu giá khi có người thắng. Lưu bản ghi vào bảng auction_settlements với hạn thanh toán 48h và phát domain event auction.settled.won sang RabbitMQ.',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Mã phòng đấu giá cần chốt',
+            schema: { type: 'string', example: '01932f01-0102-7000-8000-000000000002' },
+          },
+        ],
+        responses: {
+          200: jsonResponse('Chốt phiên đấu giá thành công', {
+            success: true,
+            message:
+              'Chốt phiên đấu giá thành công! Đã gửi thông tin đơn hàng tới hệ thống thanh toán.',
+            data: {
+              auctionId: '01932f01-0102-7000-8000-000000000002',
+              winnerId: 'usr_buyer_123',
+              sellerId: 'usr_seller_456',
+              productId: 'prod_101',
+              finalPrice: 25000000,
+              paymentDeadline: '2026-11-25T16:00:00.000Z',
+              status: 'PENDING_PAYMENT',
+              settledAt: '2026-11-23T16:00:00.000Z',
+            },
+          }),
+          400: errorResponse(
+            'Lỗi nghiệp vụ',
+            'Không thể chốt phiên đấu giá do chưa có lượt đặt giá hợp lệ.',
+          ),
+          404: errorResponse('Không tìm thấy phiên', 'Auction with ID "1" was not found.'),
+        },
+      },
+    },
   },
 };
 

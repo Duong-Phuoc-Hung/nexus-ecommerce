@@ -194,6 +194,7 @@ export interface CreateOrderParams {
   shippingFee: number;
   totalAmount: number;
   paymentMethod?: 'PAYOS' | 'COD';
+  orderType?: 'AUCTION' | 'STANDARD';
   idempotencyKey?: string;
   requestHash: string;
   orderExpiresAt: Date;
