@@ -26,6 +26,8 @@ export class SearchOrdersUseCase {
         query.status?.trim() && query.status.trim().toLowerCase() !== 'all'
           ? query.status.trim().toUpperCase()
           : undefined,
+      fromDate: query.fromDate?.trim() || undefined,
+      toDate: query.toDate?.trim() || undefined,
       page,
       limit,
       sortBy: this.validateSortBy(query.sortBy),
@@ -55,6 +57,8 @@ export class SearchOrdersUseCase {
         total: order.totalAmount,
         totalAmount: order.totalAmount,
         status: order.status,
+        paymentMethod: order.paymentMethod,
+        shippingAddress: order.shippingAddress,
         tracking: order.trackingCode || '—',
         trackingCode: order.trackingCode,
         itemsCount: order.items.length,

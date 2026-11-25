@@ -7,6 +7,7 @@ import { generateUuidV7 } from '../../infrastructure/utils/uuid';
 export interface CreateProductReviewInput {
   productId: string;
   userId: string;
+  orderId?: string | null;
   userName?: string;
   rating: number;
   comment?: string;
@@ -24,10 +25,23 @@ export class CreateProductReviewUseCase {
       throw new ProductNotFoundException(`Không tìm thấy sản phẩm với mã: ${input.productId}`);
     }
 
+    const normalizedOrderId = input.orderId ? String(input.orderId).trim() : null;
+    if (normalizedOrderId && this.reviewRepository.findByUserProductAndOrder) {
+      const existing = await this.reviewRepository.findByUserProductAndOrder(
+        input.userId,
+        input.productId,
+        normalizedOrderId,
+      );
+      if (existing) {
+        throw new Error('DUPLICATE_REVIEW: Bạn đã đánh giá sản phẩm này cho đơn hàng này.');
+      }
+    }
+
     const review = new Review({
       id: generateUuidV7(),
       productId: input.productId,
       userId: input.userId,
+      orderId: normalizedOrderId,
       userName: input.userName,
       rating: Number(input.rating),
       comment: input.comment || '',

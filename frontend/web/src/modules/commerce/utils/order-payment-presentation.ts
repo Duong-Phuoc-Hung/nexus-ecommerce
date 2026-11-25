@@ -10,6 +10,9 @@ export interface LivePaymentStatusSnapshot {
   paymentMethod?: string | null;
   amount?: number | null;
   amountDue?: number | null;
+  checkoutUrl?: string | null;
+  expired?: boolean;
+  expiresAt?: string;
 }
 
 export interface OrderPaymentPresentation {

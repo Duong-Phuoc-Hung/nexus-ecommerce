@@ -32,6 +32,8 @@ export type Gender = 'MALE' | 'FEMALE' | 'OTHER' | 'UNSPECIFIED';
 export interface UserProps {
   dateOfBirth?: string | null;
   gender?: Gender | null;
+  identifyNumber?: string | null;
+  address?: string | null;
   id: string;
   email: string;
   fullName: string;
@@ -64,6 +66,8 @@ export class User {
   private _phone: string;
   public dateOfBirth: string | null;
   public gender: Gender | null;
+  public identifyNumber: string | null;
+  public address: string | null;
   private _role: UserRole;
   private _status: UserStatus;
   private _reputationScore: number;
@@ -82,6 +86,8 @@ export class User {
     this._phone = props.phone || '';
     this.dateOfBirth = props.dateOfBirth ?? null;
     this.gender = props.gender ?? null;
+    this.identifyNumber = props.identifyNumber ?? null;
+    this.address = props.address ?? null;
     this._role = props.role;
     this._status = props.status;
     this._reputationScore = props.reputationScore;
@@ -188,12 +194,17 @@ export class User {
   }
 
   public updateReputation(delta: number): void {
-    this._reputationScore = Math.max(0, this._reputationScore + delta);
+    this._reputationScore = Math.max(0, Math.min(100, Math.round(this._reputationScore + delta)));
+    this._updatedAt = new Date();
+  }
+
+  public setReputationScore(score: number): void {
+    this._reputationScore = Math.max(0, Math.min(100, Math.round(score)));
     this._updatedAt = new Date();
   }
 
   public adjustReputation(points: number, reason: string, operatorId: string): void {
-    this._reputationScore = Math.max(0, this._reputationScore + points);
+    this._reputationScore = Math.max(0, Math.min(100, Math.round(this._reputationScore + points)));
     this._reputationHistory.push({
       points,
       reason,

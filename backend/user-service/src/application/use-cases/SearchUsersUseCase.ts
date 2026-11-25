@@ -17,7 +17,16 @@ export class SearchUsersUseCase {
     const page = Math.max(1, Number(query.page) || 1);
     const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
 
-    // Chuẩn hóa và bảo vệ tiêu chí lọc
+    // Chuẩn hóa và bảo vệ tiêu chí lọc (SRS A-F139-04: mặc định sắp xếp theo fullName tăng dần)
+    const resolvedSortBy = this.validateSortBy(query.sortBy);
+    const resolvedSortOrder: 'asc' | 'desc' = query.sortOrder
+      ? query.sortOrder.toLowerCase() === 'desc'
+        ? 'desc'
+        : 'asc'
+      : resolvedSortBy === 'fullName'
+        ? 'asc'
+        : 'desc';
+
     const criteria: UserSearchCriteria = {
       q: query.q?.trim() || undefined,
       email: query.email?.trim().toLowerCase() || undefined,
@@ -25,8 +34,8 @@ export class SearchUsersUseCase {
       status: query.status?.trim().toUpperCase() || undefined,
       page,
       limit,
-      sortBy: this.validateSortBy(query.sortBy),
-      sortOrder: query.sortOrder?.toLowerCase() === 'asc' ? 'asc' : 'desc',
+      sortBy: resolvedSortBy,
+      sortOrder: resolvedSortOrder,
     };
 
     const searchResult = await this.userRepository.search(criteria);
@@ -36,6 +45,11 @@ export class SearchUsersUseCase {
       fullName: user.fullName,
       name: user.fullName, // Frontend compatibility alias
       email: user.email,
+      phone: user.phone || '',
+      identifyNumber: user.identifyNumber ?? null,
+      gender: user.gender ?? null,
+      dateOfBirth: user.dateOfBirth ?? null,
+      address: user.address ?? null,
       role: user.role,
       status: user.status,
       reputationScore: user.reputationScore,
@@ -59,13 +73,13 @@ export class SearchUsersUseCase {
 
   private validateSortBy(sortBy?: string): 'createdAt' | 'fullName' | 'email' | 'reputationScore' {
     switch (sortBy) {
+      case 'createdAt':
       case 'fullName':
       case 'email':
       case 'reputationScore':
         return sortBy;
-      case 'createdAt':
       default:
-        return 'createdAt';
+        return 'fullName';
     }
   }
 }

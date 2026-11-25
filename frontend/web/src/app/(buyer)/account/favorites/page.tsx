@@ -14,6 +14,7 @@ import {
   FAVORITES_EVENT,
   readFavorites,
   removeFavorite,
+  syncFavoritesFromApi,
   type FavoriteProduct,
 } from '@/modules/commerce/utils/favorites';
 
@@ -60,6 +61,17 @@ export default function BuyerFavoritesPage() {
     window.addEventListener(FAVORITES_EVENT, sync);
     return () => window.removeEventListener(FAVORITES_EVENT, sync);
   }, []);
+
+  useEffect(() => {
+    if (phase !== 'ready' || user?.role !== 'BUYER' || !user?.id) return;
+    let active = true;
+    void syncFavoritesFromApi().then((list) => {
+      if (active) setItems(list);
+    });
+    return () => {
+      active = false;
+    };
+  }, [phase, user?.id, user?.role]);
 
   return (
     <>

@@ -1,4 +1,5 @@
 import { CatalogProduct, ICatalogClient } from '../../application/checkout/ports';
+import { buildServiceAuthHeader } from '../security/internal-service-auth';
 
 interface CatalogProductBody {
   success?: boolean;
@@ -55,7 +56,15 @@ export class HttpCatalogClient implements ICatalogClient {
     try {
       const response = await fetch(`${this.baseUrl}/api/v1/products/${productId}/deduct-stock`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...buildServiceAuthHeader({
+            issuer: 'commerce-service',
+            audience: 'catalog-service',
+            scope: 'catalog:stock:deduct',
+            resource: productId,
+          }),
+        },
         body: JSON.stringify({
           orderId,
           quantity,
@@ -80,6 +89,40 @@ export class HttpCatalogClient implements ICatalogClient {
     } catch (err: any) {
       console.warn(
         `[HttpCatalogClient] Gọi API trừ tồn kho sản phẩm ${productId} thất bại:`,
+        err?.message || err,
+      );
+      return false;
+    }
+  }
+
+  public async restoreStock(
+    productId: string,
+    quantity: number,
+    orderId: string,
+  ): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/v1/products/${productId}/restore-stock`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...buildServiceAuthHeader({
+            issuer: 'commerce-service',
+            audience: 'catalog-service',
+            scope: 'catalog:stock:restore',
+            resource: productId,
+          }),
+        },
+        body: JSON.stringify({
+          orderId,
+          quantity,
+          reason: 'ORDER_CANCELLED_STOCK_RESTORE',
+        }),
+        signal: AbortSignal.timeout(5000),
+      });
+      return response.ok;
+    } catch (err: any) {
+      console.warn(
+        `[HttpCatalogClient] Gọi API hoàn tồn kho sản phẩm ${productId} thất bại:`,
         err?.message || err,
       );
       return false;

@@ -2,11 +2,13 @@ import { Prisma, PrismaClient } from '../database/generated/client';
 import { PrismaClientWrapper } from '../database/PrismaClient';
 import {
   IAuctionRepository,
+  PersistedSettlement,
   AuctionSettlementRecord,
 } from '../../domain/repositories/IAuctionRepository';
 import { Auction, AuctionStatus, BidRecord } from '../../domain/entities/Auction';
 import { generateUuidV7 } from '../utils/uuid';
 import { AuctionMutationTransaction } from '../../application/auction-mutations';
+import { auctionRuntimeStore } from '../state/AuctionRuntimeStore';
 
 export class TransactionalAuctionRepository implements IAuctionRepository {
   constructor(private readonly client?: Prisma.TransactionClient) {}
@@ -21,6 +23,10 @@ export class TransactionalAuctionRepository implements IAuctionRepository {
       where: { id },
     });
     if (!record) return null;
+    await this.hydrateRoomAclFromDb(
+      [String(record.id)],
+      new Map([[String(record.id), record.endTime]]),
+    );
     return this.mapModelToAuction(record);
   }
 
@@ -33,6 +39,10 @@ export class TransactionalAuctionRepository implements IAuctionRepository {
       },
       orderBy: { endTime: 'asc' },
     });
+    await this.hydrateRoomAclFromDb(
+      records.map((r: any) => String(r.id)),
+      new Map(records.map((r: any) => [String(r.id), r.endTime])),
+    );
     return records.map((r: any) => this.mapModelToAuction(r));
   }
 
@@ -63,6 +73,10 @@ export class TransactionalAuctionRepository implements IAuctionRepository {
       where,
       orderBy: { createdAt: 'desc' },
     });
+    await this.hydrateRoomAclFromDb(
+      records.map((r: any) => String(r.id)),
+      new Map(records.map((r: any) => [String(r.id), r.endTime])),
+    );
     return records.map((r: any) => this.mapModelToAuction(r));
   }
 
@@ -169,31 +183,159 @@ export class TransactionalAuctionRepository implements IAuctionRepository {
       update: {
         winnerId: settlement.winnerId,
         winningBidAmount: settlement.winningBidAmount,
-        paymentDeadline: settlement.paymentDeadline,
+
         orderId: settlement.orderId ?? undefined,
         status: settlement.status,
       },
     });
   }
 
-  // Tra cứu thông tin chốt phiên theo auctionId
-  public async findSettlementByAuctionId(
-    auctionId: string,
-  ): Promise<AuctionSettlementRecord | null> {
-    const record = await this.prisma.auctionSettlement.findUnique({
+  public async findSettlementByAuctionId(auctionId: string): Promise<PersistedSettlement | null> {
+    const row = await this.prisma.auctionSettlement.findUnique({
       where: { auctionId },
     });
-    if (!record) return null;
+    if (!row) return null;
     return {
-      id: record.id,
-      auctionId: record.auctionId,
-      winnerId: record.winnerId,
-      winningBidAmount: Number(record.winningBidAmount),
-      paymentDeadline: record.paymentDeadline,
-      orderId: record.orderId || undefined,
-      status: record.status,
-      settledAt: record.settledAt,
+      id: String(row.id),
+      auctionId: String(row.auctionId),
+      winnerId: String(row.winnerId),
+      winningBidAmount: Number(row.winningBidAmount),
+      paymentDeadline: row.paymentDeadline,
+      orderId: row.orderId ? String(row.orderId) : null,
+      status: (row.status as PersistedSettlement['status']) || 'PENDING_PAYMENT',
+      settledAt: row.settledAt,
     };
+  }
+
+  public async upsertSettlement(data: {
+    auctionId: string;
+    winnerId: string;
+    winningBidAmount: number;
+    paymentDeadline: Date;
+    orderId?: string | null;
+    status?: 'PENDING_PAYMENT' | 'PAID' | 'TIMEOUT_PENALIZED';
+    settledAt?: Date;
+  }): Promise<PersistedSettlement> {
+    const row = await this.prisma.auctionSettlement.upsert({
+      where: { auctionId: data.auctionId },
+      create: {
+        id: generateUuidV7(),
+        auctionId: data.auctionId,
+        winnerId: data.winnerId,
+        winningBidAmount: data.winningBidAmount,
+        paymentDeadline: data.paymentDeadline,
+        orderId: data.orderId ?? null,
+        status: data.status ?? 'PENDING_PAYMENT',
+        settledAt: data.settledAt ?? new Date(),
+      },
+      update: {
+        winnerId: data.winnerId,
+        winningBidAmount: data.winningBidAmount,
+        ...(data.orderId !== undefined ? { orderId: data.orderId } : {}),
+        ...(data.status && data.status !== 'PENDING_PAYMENT' ? { status: data.status } : {}),
+      },
+    });
+    return {
+      id: String(row.id),
+      auctionId: String(row.auctionId),
+      winnerId: String(row.winnerId),
+      winningBidAmount: Number(row.winningBidAmount),
+      paymentDeadline: row.paymentDeadline,
+      orderId: row.orderId ? String(row.orderId) : null,
+      status: (row.status as PersistedSettlement['status']) || 'PENDING_PAYMENT',
+      settledAt: row.settledAt,
+    };
+  }
+
+  public async saveRoomAcl(
+    auctionId: string,
+    visibility: 'PUBLIC' | 'RESTRICTED',
+    invitedUserIds: string[],
+  ): Promise<void> {
+    const cleanInvited = Array.isArray(invitedUserIds)
+      ? invitedUserIds.map((u) => String(u).trim()).filter(Boolean)
+      : [];
+    try {
+      await this.prisma.$executeRaw`
+        UPDATE auction_rooms
+        SET visibility = ${visibility},
+            invited_user_ids = ${cleanInvited}::text[]
+        WHERE id = ${auctionId}
+      `;
+    } catch (err: any) {
+      console.warn('[TransactionalAuctionRepository.saveRoomAcl] Warning:', err?.message);
+    }
+  }
+
+  public async loadRoomAcl(auctionId: string): Promise<{
+    visibility: 'PUBLIC' | 'RESTRICTED';
+    invitedUserIds: string[];
+    endTime?: Date;
+  } | null> {
+    try {
+      const rows = await this.prisma.$queryRaw<
+        Array<{
+          id: string;
+          end_time: Date;
+          visibility: string | null;
+          invited_user_ids: string[] | null;
+        }>
+      >`
+        SELECT id, end_time, visibility, invited_user_ids
+        FROM auction_rooms
+        WHERE id = ${auctionId}
+        LIMIT 1
+      `;
+      if (!rows.length) return null;
+      const row = rows[0];
+      // Fail-Closed policy: chỉ coi là PUBLIC khi cột visibility === 'PUBLIC'
+      const resolvedVisibility: 'PUBLIC' | 'RESTRICTED' =
+        row.visibility === 'PUBLIC' ? 'PUBLIC' : 'RESTRICTED';
+      const resolvedInvited =
+        row.visibility === 'RESTRICTED' && Array.isArray(row.invited_user_ids)
+          ? row.invited_user_ids.map(String)
+          : [];
+      return {
+        visibility: resolvedVisibility,
+        invitedUserIds: resolvedInvited,
+        endTime: row.end_time ? new Date(row.end_time) : undefined,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private async hydrateRoomAclFromDb(ids: string[], endTimes: Map<string, Date>): Promise<void> {
+    if (!ids.length) return;
+    try {
+      const rows = await this.prisma.$queryRaw<
+        Array<{
+          id: string;
+          visibility: string | null;
+          invited_user_ids: string[] | null;
+        }>
+      >`
+        SELECT id, visibility, invited_user_ids
+        FROM auction_rooms
+        WHERE id = ANY(${ids}::text[])
+      `;
+      for (const row of rows) {
+        const auctionId = String(row.id);
+        const resolvedVisibility: 'PUBLIC' | 'RESTRICTED' =
+          row.visibility === 'PUBLIC' ? 'PUBLIC' : 'RESTRICTED';
+        const resolvedInvited =
+          row.visibility === 'RESTRICTED' && Array.isArray(row.invited_user_ids)
+            ? row.invited_user_ids.map(String)
+            : [];
+        auctionRuntimeStore.ensureMeta(auctionId, {
+          endTime: endTimes.get(auctionId) || new Date(Date.now() + 3600_000),
+          visibility: resolvedVisibility,
+          invitedUserIds: resolvedInvited,
+        });
+      }
+    } catch {
+      // Nếu cột V3 chưa chạy ở môi trường test cô lập cũ, bỏ qua hydration
+    }
   }
 
   // Ánh xạ bản ghi Prisma sang Domain Entity Auction (Đọc trực tiếp audit từ DB, không dùng Map RAM)
@@ -202,15 +344,13 @@ export class TransactionalAuctionRepository implements IAuctionRepository {
     const now = new Date();
 
     // Tự động chuẩn hóa trạng thái theo thời gian thực (Life-cycle Synchronization)
-    if (status !== AuctionStatus.CANCELLED && status !== AuctionStatus.SETTLED) {
+    if (
+      status !== AuctionStatus.ENDED &&
+      status !== AuctionStatus.CANCELLED &&
+      status !== AuctionStatus.SETTLED
+    ) {
       const isPastEndTime = record.endTime && new Date(record.endTime) <= now;
-      const isBuyNowReached =
-        record.buyNowPrice &&
-        Number(record.buyNowPrice) > 0 &&
-        record.winnerId &&
-        Number(record.currentPrice) >= Number(record.buyNowPrice);
-
-      if (isPastEndTime || isBuyNowReached) {
+      if (isPastEndTime) {
         status = AuctionStatus.ENDED;
       } else if (record.startTime && new Date(record.startTime) <= now) {
         status = AuctionStatus.ACTIVE;

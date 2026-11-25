@@ -81,7 +81,9 @@ export class PostgresInventoryRepository implements IInventoryRepository {
     let productIdCounter = BigInt(1001);
     for (const inv of allSamples) {
       const created = await this.prisma.skuInventory.upsert({
-        where: { skuCode: inv.sku.toUpperCase() },
+        where: {
+          warehouseId_skuCode: { warehouseId: defaultWarehouse.id, skuCode: inv.sku.toUpperCase() },
+        },
         update: {
           totalQuantity: inv.onHand,
           availableQuantity: inv.available,
@@ -121,9 +123,14 @@ export class PostgresInventoryRepository implements IInventoryRepository {
     warehouseId: string = SkuInventory.DEFAULT_WAREHOUSE_ID,
   ): Promise<SkuInventory | null> {
     const trimmedSku = sku.trim().toUpperCase();
+    const targetWarehouseCode = (warehouseId || SkuInventory.DEFAULT_WAREHOUSE_ID).trim();
+
     const row = await this.prisma.skuInventory.findFirst({
       where: {
         skuCode: trimmedSku,
+        warehouse: {
+          code: targetWarehouseCode,
+        },
       },
       include: {
         warehouse: true,
@@ -180,47 +187,61 @@ export class PostgresInventoryRepository implements IInventoryRepository {
 
   public async save(inventory: SkuInventory, ledger?: InventoryLedgerEntry): Promise<void> {
     const trimmedSku = inventory.sku.trim().toUpperCase();
-    let warehouse = await this.prisma.warehouse.findUnique({
-      where: { code: inventory.warehouseId || SkuInventory.DEFAULT_WAREHOUSE_ID },
-    });
+    const targetWarehouseCode = (inventory.warehouseId || SkuInventory.DEFAULT_WAREHOUSE_ID).trim();
 
-    if (!warehouse) {
-      warehouse = await this.prisma.warehouse.findFirst();
-    }
+    await this.prisma.$transaction(async (tx) => {
+      const warehouse = await tx.warehouse.findUnique({
+        where: { code: targetWarehouseCode },
+      });
 
-    const warehouseId = warehouse?.id || BigInt(1);
+      if (!warehouse) {
+        throw new Error(
+          `Không tìm thấy kho "${targetWarehouseCode}" trong hệ thống (từ chối ghi nhầm sang kho mặc định).`,
+        );
+      }
 
-    const saved = await this.prisma.skuInventory.upsert({
-      where: { skuCode: trimmedSku },
-      update: {
-        totalQuantity: inventory.onHand,
-        availableQuantity: inventory.available,
-        reservedQuantity: inventory.reserved,
-        unavailableQuantity: inventory.unavailableQuantity,
-      },
-      create: {
-        warehouseId,
-        productId: BigInt(Math.floor(1000 + Math.random() * 9000)),
-        skuCode: trimmedSku,
-        totalQuantity: inventory.onHand,
-        availableQuantity: inventory.available,
-        reservedQuantity: inventory.reserved,
-        unavailableQuantity: inventory.unavailableQuantity,
-      },
-    });
-
-    if (ledger) {
-      await this.prisma.inventoryLedger.create({
-        data: {
-          inventoryId: saved.id,
-          transactionType: ledger.transactionType,
-          quantityDelta: ledger.quantityChange,
-          reason: ledger.reason,
-          referenceId: ledger.operatorId ? `OP:${ledger.operatorId}` : undefined,
-          createdAt: ledger.createdAt || new Date(),
+      const existing = await tx.skuInventory.findFirst({
+        where: {
+          warehouseId: warehouse.id,
+          skuCode: trimmedSku,
         },
       });
-    }
+
+      const saved = existing
+        ? await tx.skuInventory.update({
+            where: { id: existing.id },
+            data: {
+              totalQuantity: inventory.onHand,
+              availableQuantity: inventory.available,
+              reservedQuantity: inventory.reserved,
+              unavailableQuantity: inventory.unavailableQuantity,
+            },
+          })
+        : await tx.skuInventory.create({
+            data: {
+              warehouseId: warehouse.id,
+              productId: BigInt(Math.floor(1000 + Math.random() * 9000)),
+              skuCode: trimmedSku,
+              totalQuantity: inventory.onHand,
+              availableQuantity: inventory.available,
+              reservedQuantity: inventory.reserved,
+              unavailableQuantity: inventory.unavailableQuantity,
+            },
+          });
+
+      if (ledger) {
+        await tx.inventoryLedger.create({
+          data: {
+            inventoryId: saved.id,
+            transactionType: ledger.transactionType,
+            quantityDelta: ledger.quantityChange,
+            reason: ledger.reason,
+            referenceId: ledger.operatorId ? `OP:${ledger.operatorId}` : undefined,
+            createdAt: ledger.createdAt || new Date(),
+          },
+        });
+      }
+    });
   }
 
   public async getLedger(sku?: string): Promise<InventoryLedgerEntry[]> {

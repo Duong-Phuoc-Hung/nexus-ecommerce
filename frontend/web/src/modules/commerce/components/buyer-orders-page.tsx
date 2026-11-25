@@ -12,6 +12,8 @@ import {
   QrCode,
   RefreshCw,
   Search,
+  ShieldAlert,
+  Star,
   Truck,
 } from 'lucide-react';
 import { StoreHeader } from '@/components/layout/store-header';
@@ -20,6 +22,8 @@ import { Input } from '@/components/ui/input';
 import { userMessage } from '@/lib/axios/http';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import { commerceApi } from '../api/commerce.api';
+import { isAuctionOrder } from '../api/orders.api';
+import { AuctionOrderBadge } from './auction-order-badge';
 import type { OrderSummary } from '../types/order.types';
 import {
   formatVndCurrency,
@@ -54,6 +58,14 @@ function toneDotClasses(tone: 'info' | 'danger' | 'success' | 'neutral'): string
   }
 }
 
+const TAB_STATUS_QUERY: Record<OrderFilterTab, string | undefined> = {
+  ALL: undefined,
+  PROCESSING: 'PENDING,PENDING_PAYMENT,PAID,CONFIRMED,PROCESSING,PACKING',
+  SHIPPED: 'SHIPPED',
+  DELIVERED: 'DELIVERED,COMPLETED',
+  CANCELLED: 'CANCELLED,REFUNDED,REFUND_REQUESTED',
+};
+
 export default function BuyerOrdersPage() {
   const { user, phase } = useSession();
   const [orders, setOrders] = useState<OrderSummary[]>([]);
@@ -80,7 +92,18 @@ export default function BuyerOrdersPage() {
       }
       setLoading(true);
       commerceApi
-        .listOrders({ buyerId: user.id, q: search || undefined, page, limit: 20 }, signal)
+        .listOrders(
+          {
+            buyerId: user.id,
+            q: search || undefined,
+            status: TAB_STATUS_QUERY[activeTab],
+            fromDate: fromDate || undefined,
+            toDate: toDate || undefined,
+            page,
+            limit: 20,
+          },
+          signal,
+        )
         .then((r) => {
           setOrders(r.items);
           setTotal(r.total);
@@ -94,7 +117,7 @@ export default function BuyerOrdersPage() {
           if (!signal?.aborted) setLoading(false);
         });
     },
-    [canViewBuyerHistory, page, search, user],
+    [activeTab, canViewBuyerHistory, fromDate, page, search, toDate, user],
   );
 
   useEffect(() => {
@@ -112,37 +135,8 @@ export default function BuyerOrdersPage() {
     [orders],
   );
 
-  const filteredOrders = useMemo(() => {
-    const fromMs = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : null;
-    const toMs = toDate ? new Date(`${toDate}T23:59:59.999`).getTime() : null;
-    return enrichedOrders.filter(({ order, view }) => {
-      if (fromMs !== null && Number.isFinite(fromMs)) {
-        const ts = Date.parse(order.createdAt || order.date || '');
-        if (Number.isFinite(ts) && ts < fromMs) return false;
-      }
-      if (toMs !== null && Number.isFinite(toMs)) {
-        const ts = Date.parse(order.createdAt || order.date || '');
-        if (Number.isFinite(ts) && ts > toMs) return false;
-      }
-      if (activeTab === 'ALL') return true;
-      if (activeTab === 'PROCESSING') {
-        return (
-          !view.isClosed &&
-          !['SHIPPED', 'DELIVERED', 'COMPLETED'].includes(view.normalizedOrderStatus)
-        );
-      }
-      if (activeTab === 'SHIPPED') {
-        return view.normalizedOrderStatus === 'SHIPPED';
-      }
-      if (activeTab === 'DELIVERED') {
-        return ['DELIVERED', 'COMPLETED'].includes(view.normalizedOrderStatus);
-      }
-      if (activeTab === 'CANCELLED') {
-        return view.isClosed;
-      }
-      return true;
-    });
-  }, [activeTab, enrichedOrders, fromDate, toDate]);
+  // Bộ lọc status/search/fromDate/toDate đã được xử lý server-side trước phân trang (SRS B-F319-02)
+  const filteredOrders = enrichedOrders;
 
   const filterTabs: Array<{ key: OrderFilterTab; label: string }> = [
     { key: 'ALL', label: 'Tất cả' },
@@ -209,7 +203,10 @@ export default function BuyerOrdersPage() {
                     type="button"
                     role="tab"
                     aria-selected={active}
-                    onClick={() => setActiveTab(tab.key)}
+                    onClick={() => {
+                      setActiveTab(tab.key);
+                      setPage(1);
+                    }}
                     className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
                       active
                         ? 'bg-stone-900 text-white shadow-2xs'
@@ -246,14 +243,20 @@ export default function BuyerOrdersPage() {
                 type="date"
                 aria-label="Từ ngày"
                 value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
+                onChange={(e) => {
+                  setFromDate(e.target.value);
+                  setPage(1);
+                }}
                 className="min-h-10 rounded-xl bg-white text-sm"
               />
               <Input
                 type="date"
                 aria-label="Đến ngày"
                 value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
+                onChange={(e) => {
+                  setToDate(e.target.value);
+                  setPage(1);
+                }}
                 className="min-h-10 rounded-xl bg-white text-sm"
               />
               <Button
@@ -338,8 +341,9 @@ export default function BuyerOrdersPage() {
                     {filteredOrders.map(({ order, view }) => (
                       <tr key={order.id} className="hover:bg-stone-50/50 transition-colors">
                         <td className="px-5 py-4 align-top">
-                          <div className="font-mono text-xs font-bold text-stone-900">
-                            #{view.displayCode}
+                          <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs font-bold text-stone-900">
+                            <span>#{view.displayCode}</span>
+                            {isAuctionOrder(order) && <AuctionOrderBadge />}
                           </div>
                           <div className="mt-0.5 font-medium text-stone-800 line-clamp-1 max-w-[280px]">
                             {order.product}
@@ -385,6 +389,33 @@ export default function BuyerOrdersPage() {
 
                         <td className="px-5 py-4 align-top text-right">
                           <div className="flex flex-wrap items-center justify-end gap-2">
+                            {!isReadOnlySellerHistory &&
+                              ['DELIVERED', 'COMPLETED'].includes(view.normalizedOrderStatus) && (
+                                <Link
+                                  href={`/account/orders/${encodeURIComponent(order.id)}#order-review-section`}
+                                  className="inline-flex h-9 items-center gap-1 rounded-xl border border-amber-300 bg-amber-50 px-3 text-xs font-semibold text-amber-950 hover:bg-amber-100"
+                                >
+                                  <Star className="size-3.5 text-amber-600" aria-hidden="true" />
+                                  Đánh giá đơn hàng
+                                </Link>
+                              )}
+
+                            {!isReadOnlySellerHistory &&
+                              [
+                                'REFUND_REQUESTED',
+                                'RETURN_PENDING',
+                                'APPROVED_REFUND',
+                                'REFUNDED',
+                              ].includes(view.normalizedOrderStatus) && (
+                                <Link
+                                  href={`/account/orders/${encodeURIComponent(order.id)}#order-dispute-section`}
+                                  className="inline-flex h-9 items-center gap-1 rounded-xl border border-sky-300 bg-sky-50 px-3 text-xs font-semibold text-sky-900 hover:bg-sky-100"
+                                >
+                                  <ShieldAlert className="size-3.5" aria-hidden="true" />
+                                  Xem kết quả khiếu nại
+                                </Link>
+                              )}
+
                             {view.canTrackShipment && (
                               <Link
                                 href={`/account/orders/${encodeURIComponent(order.id)}`}
@@ -416,8 +447,9 @@ export default function BuyerOrdersPage() {
                   <article key={order.id} className="p-4 space-y-3">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <div className="font-mono text-xs font-bold text-stone-900">
-                          #{view.displayCode}
+                        <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs font-bold text-stone-900">
+                          <span>#{view.displayCode}</span>
+                          {isAuctionOrder(order) && <AuctionOrderBadge />}
                         </div>
                         <div className="text-[11px] text-muted">{order.date}</div>
                       </div>
@@ -460,6 +492,31 @@ export default function BuyerOrdersPage() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                      {!isReadOnlySellerHistory &&
+                        ['DELIVERED', 'COMPLETED'].includes(view.normalizedOrderStatus) && (
+                          <Link
+                            href={`/account/orders/${encodeURIComponent(order.id)}#order-review-section`}
+                            className="inline-flex h-10 items-center gap-1 rounded-xl border border-amber-300 bg-amber-50 px-3 text-xs font-semibold text-amber-950"
+                          >
+                            <Star className="size-3.5 text-amber-600" aria-hidden="true" />
+                            Đánh giá đơn hàng
+                          </Link>
+                        )}
+                      {!isReadOnlySellerHistory &&
+                        [
+                          'REFUND_REQUESTED',
+                          'RETURN_PENDING',
+                          'APPROVED_REFUND',
+                          'REFUNDED',
+                        ].includes(view.normalizedOrderStatus) && (
+                          <Link
+                            href={`/account/orders/${encodeURIComponent(order.id)}#order-dispute-section`}
+                            className="inline-flex h-10 items-center gap-1 rounded-xl border border-sky-300 bg-sky-50 px-3 text-xs font-semibold text-sky-900"
+                          >
+                            <ShieldAlert className="size-3.5" aria-hidden="true" />
+                            Xem kết quả khiếu nại
+                          </Link>
+                        )}
                       {view.canTrackShipment && (
                         <Link
                           href={`/account/orders/${encodeURIComponent(order.id)}`}

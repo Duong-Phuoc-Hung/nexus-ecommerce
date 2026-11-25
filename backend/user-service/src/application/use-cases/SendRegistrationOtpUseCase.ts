@@ -15,6 +15,7 @@ export class SendRegistrationOtpUseCase {
   public async execute(
     email: string,
     fullName?: string,
+    phone?: string,
   ): Promise<{ success: boolean; message: string; devOtp?: string }> {
     if (!email || !email.trim()) {
       throw new Error('Email không được để trống.');
@@ -26,10 +27,31 @@ export class SendRegistrationOtpUseCase {
       throw new Error('Định dạng email không hợp lệ.');
     }
 
-    // 1. Kiểm tra tài khoản đã tồn tại hay chưa
+    // 1. Kiểm tra tài khoản đã tồn tại hay chưa (cả Email lẫn Số điện thoại nếu truyền kèm)
     const existing = await this.userRepository.findByEmail(normalizedEmail);
     if (existing) {
       throw new UserAlreadyExistsException('Email này đã được đăng ký trong hệ thống.');
+    }
+
+    if (phone && phone.trim()) {
+      const cleanedPhone = phone.trim().replace(/[\s.-]/g, '');
+      const vnPhoneRegex = /^(0|\+84)(3|5|7|8|9)[0-9]{8}$/;
+      if (!vnPhoneRegex.test(cleanedPhone)) {
+        throw new Error(
+          'Số điện thoại không đúng định dạng di động Việt Nam (10 số, bắt đầu bằng 03, 05, 07, 08 hoặc 09).',
+        );
+      }
+      const normalizedPhone = cleanedPhone.startsWith('+84')
+        ? '0' + cleanedPhone.slice(3)
+        : cleanedPhone;
+      if (this.userRepository.findByPhone) {
+        const existingPhone = await this.userRepository.findByPhone(normalizedPhone);
+        if (existingPhone) {
+          throw new UserAlreadyExistsException(
+            'Số điện thoại này đã được đăng ký cho tài khoản khác. Vui lòng dùng số khác.',
+          );
+        }
+      }
     }
 
     // 2. Kiểm tra Cooldown (mỗi email chỉ được yêu cầu lại sau 60 giây)
@@ -79,7 +101,10 @@ export class SendRegistrationOtpUseCase {
 
     // TUYỆT ĐỐI BẢO MẬT: Chỉ xuất devOtp khi đang chạy tự động trong test suite (NODE_ENV === 'test')
     // hoặc khi lập trình viên chủ động bật cờ EXPOSE_DEV_OTP === 'true' trên môi trường dev local
-    if (process.env.NODE_ENV === 'test' || process.env.EXPOSE_DEV_OTP === 'true') {
+    if (
+      process.env.NODE_ENV === 'test' ||
+      (process.env.NODE_ENV === 'development' && process.env.EXPOSE_DEV_OTP === 'true')
+    ) {
       response.devOtp = otpCode;
     }
 

@@ -2,6 +2,7 @@ export interface ReviewProps {
   id: string;
   productId: string;
   userId: string;
+  orderId?: string | null;
   userName?: string;
   rating: number;
   comment: string;
@@ -17,6 +18,7 @@ export class Review {
   private readonly _id: string;
   private readonly _productId: string;
   private readonly _userId: string;
+  private readonly _orderId: string | null;
   private readonly _userName: string;
   private _rating: number;
   private _comment: string;
@@ -33,6 +35,7 @@ export class Review {
     this._id = props.id;
     this._productId = props.productId;
     this._userId = props.userId;
+    this._orderId = props.orderId ? String(props.orderId).trim() : null;
     this._userName = props.userName || 'Người mua ẩn danh';
     this._rating = props.rating;
     this._comment = props.comment ? props.comment.trim() : '';
@@ -50,6 +53,10 @@ export class Review {
 
   public get userId(): string {
     return this._userId;
+  }
+
+  public get orderId(): string | null {
+    return this._orderId;
   }
 
   public get userName(): string {

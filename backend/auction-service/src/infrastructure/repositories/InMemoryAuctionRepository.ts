@@ -72,7 +72,11 @@ export class InMemoryAuctionRepository implements IAuctionRepository {
   }
 
   public async saveSettlement(settlement: AuctionSettlementRecord): Promise<void> {
-    this.settlements.set(settlement.auctionId, settlement);
+    const previous = this.settlements.get(settlement.auctionId);
+    this.settlements.set(settlement.auctionId, {
+      ...settlement,
+      paymentDeadline: previous?.paymentDeadline ?? settlement.paymentDeadline,
+    });
   }
 
   public async findSettlementByAuctionId(

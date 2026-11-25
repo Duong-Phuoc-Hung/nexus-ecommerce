@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import { chatApi } from '../api/chat.api';
+import { getChatSocket } from '../utils/chat-socket';
 import { useBuyerAssistant } from '../context/buyer-assistant-provider';
 import type { ChatMessageDto, ChatThreadItem } from '../types/chat.types';
 
@@ -126,7 +127,7 @@ export function BuyerInboxPanel() {
     }
   }, []);
 
-  // Tải & poll tin nhắn khi đang mở đúng phòng trong widget
+  // Tải & nhận tin nhắn thời gian thực qua Socket.IO khi đang mở phòng trong widget
   useEffect(() => {
     reqSeqRef.current += 1;
     prevTailKeyRef.current = '';
@@ -142,13 +143,41 @@ export function BuyerInboxPanel() {
     void loadThreadMessages(activeThreadId, true);
     window.setTimeout(() => inputRef.current?.focus(), 40);
 
-    const timer = window.setInterval(() => {
+    const socket = getChatSocket();
+    const onSocketMessage = (payload?: {
+      conversationId?: string;
+      message?: ChatMessageDto;
+      reply?: ChatMessageDto | null;
+    }) => {
+      if (payload?.conversationId && payload.conversationId !== activeThreadId) return;
+      const incoming = [payload?.message, payload?.reply].filter(Boolean) as ChatMessageDto[];
+      if (incoming.length > 0) {
+        setThreadMessages((prev) => {
+          const existingIds = new Set(prev.map((m) => m.id).filter(Boolean));
+          const existingSeqs = new Set(prev.map((m) => Number(m.seq ?? 0)).filter((s) => s > 0));
+          const merged = [...prev];
+          for (const msg of incoming) {
+            const seq = Number(msg.seq ?? 0);
+            if ((!msg.id || !existingIds.has(msg.id)) && (!seq || !existingSeqs.has(seq))) {
+              merged.push(msg);
+            }
+          }
+          return merged.sort((a, b) => {
+            const aSeq = Number(a.seq ?? 0);
+            const bSeq = Number(b.seq ?? 0);
+            if (aSeq && bSeq && aSeq !== bSeq) return aSeq - bSeq;
+            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+          });
+        });
+        return;
+      }
       void loadThreadMessages(activeThreadId, false);
-    }, 3000);
+    };
+    socket.on('chat:message', onSocketMessage);
 
     return () => {
       reqSeqRef.current += 1;
-      window.clearInterval(timer);
+      socket.off('chat:message', onSocketMessage);
     };
   }, [activeThreadId, activeWidgetView, isOpen, loadThreadMessages]);
 

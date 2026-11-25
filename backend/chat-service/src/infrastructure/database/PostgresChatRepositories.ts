@@ -1,14 +1,78 @@
 import { Pool } from 'pg';
 import { IConversationRepository } from '../../domain/repositories/IConversationRepository';
 import { IChatMessageRepository } from '../../domain/repositories/IChatMessageRepository';
-import { IPolicyRepository } from '../../domain/repositories/IPolicyRepository';
-import { Conversation, ChannelType } from '../../domain/entities/Conversation';
+import { Conversation, ChannelType, MessageSenderRole } from '../../domain/entities/Conversation';
 import { ChatMessage, ChatAttachment } from '../../domain/entities/ChatMessage';
-import { PlatformPolicy } from '../../domain/entities/PlatformPolicy';
-import { getSeedPolicies } from '../seeds/policySeeds';
 
 export class PostgresConversationRepository implements IConversationRepository {
+  private readCursorsEnsured: Promise<void> | null = null;
+
   constructor(private readonly pool: Pool) {}
+
+  private ensureReadCursorTable(): Promise<void> {
+    if (!this.readCursorsEnsured) {
+      this.readCursorsEnsured = this.pool
+        .query(
+          `CREATE TABLE IF NOT EXISTS chat_read_cursors (
+            conversation_id VARCHAR(36) NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
+            user_id VARCHAR(36) NOT NULL,
+            last_read_seq INTEGER NOT NULL DEFAULT 0,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (conversation_id, user_id)
+          );
+          CREATE INDEX IF NOT EXISTS idx_chat_read_cursors_user ON chat_read_cursors(user_id);`,
+        )
+        .then(() => undefined)
+        .catch((err) => {
+          this.readCursorsEnsured = null;
+          throw err;
+        });
+    }
+    return this.readCursorsEnsured;
+  }
+
+  public async findAccessible(userId: string, role: string): Promise<Conversation[]> {
+    await this.ensureReadCursorTable();
+    const staff = ['ADMIN', 'SUPPORT_STAFF'].includes(role.toUpperCase());
+    const result = await this.pool.query(
+      `SELECT
+        c.*,
+        COALESCE((SELECT MAX((m.metadata->>'seq')::integer) FROM chat_messages m WHERE m.conversation_id = c.id), 0) AS last_seq,
+        COALESCE((SELECT rc.last_read_seq FROM chat_read_cursors rc WHERE rc.conversation_id = c.id AND rc.user_id = $1), 0) AS my_last_read_seq,
+        COALESCE((SELECT rc.last_read_seq FROM chat_read_cursors rc WHERE rc.conversation_id = c.id AND rc.user_id = c.buyer_id), 0) AS buyer_last_read_seq,
+        COALESCE((SELECT MAX(rc.last_read_seq) FROM chat_read_cursors rc WHERE rc.conversation_id = c.id AND rc.user_id <> c.buyer_id), 0) AS counterpart_last_read_seq,
+        COALESCE((
+          SELECT COUNT(*)::int
+          FROM chat_messages m
+          WHERE m.conversation_id = c.id
+            AND m.sender_id <> $1
+            AND m.sender_role <> 'SYSTEM'
+            AND COALESCE((m.metadata->>'seq')::integer, 0) > COALESCE(
+              (SELECT rc.last_read_seq FROM chat_read_cursors rc WHERE rc.conversation_id = c.id AND rc.user_id = $1),
+              0
+            )
+        ), 0) AS unread_count,
+        lm.content AS last_message_content,
+        lm.sender_role AS last_message_role,
+        lm.created_at AS last_message_at
+      FROM chat_conversations c
+      LEFT JOIN LATERAL (
+        SELECT m.content, m.sender_role, m.created_at
+        FROM chat_messages m
+        WHERE m.conversation_id = c.id
+        ORDER BY COALESCE((m.metadata->>'seq')::integer, 0) DESC, m.created_at DESC
+        LIMIT 1
+      ) lm ON TRUE
+      WHERE
+        ($2::boolean AND (c.channel_type = 'BUYER_SUPPORT' OR
+          (c.channel_type = 'AI_BOT' AND c.status = 'WAITING_STAFF'))) OR
+        (NOT $2::boolean AND (c.buyer_id = $1 OR
+          (c.seller_id = $1 AND c.channel_type = 'BUYER_SELLER')))
+      ORDER BY COALESCE(lm.created_at, c.updated_at) DESC`,
+      [userId, staff],
+    );
+    return result.rows.map((row) => this.mapRowToConversation(row));
+  }
 
   public async findById(id: string): Promise<Conversation | null> {
     try {
@@ -90,12 +154,90 @@ export class PostgresConversationRepository implements IConversationRepository {
         ],
       );
     } catch (err: any) {
-      console.warn('[PostgresConversationRepository.save fallback]:', err.message);
+      console.warn('[PostgresConversationRepository.save]: database write failed');
+      throw err;
     }
   }
 
   public async update(conversation: Conversation): Promise<void> {
     await this.save(conversation);
+  }
+
+  public async markUserRead(
+    conversationId: string,
+    userId: string,
+    lastReadSeq: number,
+  ): Promise<number> {
+    await this.ensureReadCursorTable();
+    const safeSeq = Math.max(0, Math.floor(lastReadSeq));
+    const res = await this.pool.query(
+      `INSERT INTO chat_read_cursors (conversation_id, user_id, last_read_seq, updated_at)
+       VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+       ON CONFLICT (conversation_id, user_id) DO UPDATE SET
+         last_read_seq = GREATEST(chat_read_cursors.last_read_seq, EXCLUDED.last_read_seq),
+         updated_at = CURRENT_TIMESTAMP
+       RETURNING last_read_seq`,
+      [conversationId, userId, safeSeq],
+    );
+    return Number(res.rows[0]?.last_read_seq ?? safeSeq);
+  }
+
+  public async getUnreadCount(conversationId: string, userId: string): Promise<number> {
+    await this.ensureReadCursorTable();
+    const res = await this.pool.query(
+      `SELECT COUNT(*)::int AS unread_count
+       FROM chat_messages m
+       WHERE m.conversation_id = $1
+         AND m.sender_id <> $2
+         AND m.sender_role <> 'SYSTEM'
+         AND COALESCE((m.metadata->>'seq')::integer, 0) > COALESCE(
+           (SELECT rc.last_read_seq FROM chat_read_cursors rc WHERE rc.conversation_id = $1 AND rc.user_id = $2),
+           0
+         )`,
+      [conversationId, userId],
+    );
+    return Number(res.rows[0]?.unread_count ?? 0);
+  }
+
+  public async getReadSummary(
+    conversationId: string,
+    userId: string,
+    buyerId: string,
+  ): Promise<{
+    lastSeq: number;
+    myLastReadSeq: number;
+    buyerLastReadSeq: number;
+    counterpartLastReadSeq: number;
+    unreadCount: number;
+  }> {
+    await this.ensureReadCursorTable();
+    const res = await this.pool.query(
+      `SELECT
+        COALESCE((SELECT MAX((m.metadata->>'seq')::integer) FROM chat_messages m WHERE m.conversation_id = $1), 0) AS last_seq,
+        COALESCE((SELECT rc.last_read_seq FROM chat_read_cursors rc WHERE rc.conversation_id = $1 AND rc.user_id = $2), 0) AS my_last_read_seq,
+        COALESCE((SELECT rc.last_read_seq FROM chat_read_cursors rc WHERE rc.conversation_id = $1 AND rc.user_id = $3), 0) AS buyer_last_read_seq,
+        COALESCE((SELECT MAX(rc.last_read_seq) FROM chat_read_cursors rc WHERE rc.conversation_id = $1 AND rc.user_id <> $3), 0) AS counterpart_last_read_seq,
+        COALESCE((
+          SELECT COUNT(*)::int
+          FROM chat_messages m
+          WHERE m.conversation_id = $1
+            AND m.sender_id <> $2
+            AND m.sender_role <> 'SYSTEM'
+            AND COALESCE((m.metadata->>'seq')::integer, 0) > COALESCE(
+              (SELECT rc.last_read_seq FROM chat_read_cursors rc WHERE rc.conversation_id = $1 AND rc.user_id = $2),
+              0
+            )
+        ), 0) AS unread_count`,
+      [conversationId, userId, buyerId],
+    );
+    const row = res.rows[0] || {};
+    return {
+      lastSeq: Number(row.last_seq ?? 0),
+      myLastReadSeq: Number(row.my_last_read_seq ?? 0),
+      buyerLastReadSeq: Number(row.buyer_last_read_seq ?? 0),
+      counterpartLastReadSeq: Number(row.counterpart_last_read_seq ?? 0),
+      unreadCount: Number(row.unread_count ?? 0),
+    };
   }
 
   private mapRowToConversation(row: any): Conversation {
@@ -107,6 +249,14 @@ export class PostgresConversationRepository implements IConversationRepository {
       sellerId: row.seller_id,
       supportCaseId: row.support_case_id || undefined,
       status: row.status,
+      lastSeq: Number(row.last_seq ?? 0),
+      buyerLastReadSeq: Number(row.buyer_last_read_seq ?? 0),
+      counterpartLastReadSeq: Number(row.counterpart_last_read_seq ?? 0),
+      myLastReadSeq: Number(row.my_last_read_seq ?? 0),
+      unreadCount: Number(row.unread_count ?? 0),
+      lastMessage: row.last_message_content ?? null,
+      lastMessageRole: (row.last_message_role as MessageSenderRole | null) ?? null,
+      lastMessageAt: row.last_message_at ? new Date(row.last_message_at) : null,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
     });
@@ -143,23 +293,24 @@ export class PostgresChatMessageRepository implements IChatMessageRepository {
         query += ` AND created_at > $${params.length}`;
       }
 
-      query += ` ORDER BY created_at ASC LIMIT $${params.length + 1}`;
-      params.push(limit);
-
-      const res = await this.pool.query(query, params);
-      let items = res.rows.map((r) => this.mapRowToMessage(r));
-
       if (typeof beforeSeq === 'number') {
-        items = items.filter((m) => (m.seq !== undefined ? m.seq < beforeSeq : true));
+        params.push(beforeSeq);
+        query += ` AND (metadata->>'seq')::integer < $${params.length}`;
       }
       if (typeof afterSeq === 'number') {
-        items = items.filter((m) => (m.seq !== undefined ? m.seq > afterSeq : true));
+        params.push(afterSeq);
+        query += ` AND (metadata->>'seq')::integer > $${params.length}`;
       }
+      const incremental = Boolean(after) || typeof afterSeq === 'number';
+      query += ` ORDER BY created_at ${incremental ? 'ASC' : 'DESC'}, id ${incremental ? 'ASC' : 'DESC'} LIMIT $${params.length + 1}`;
+      params.push(limit);
+      const res = await this.pool.query(query, params);
+      const items = res.rows.map((r) => this.mapRowToMessage(r));
+      if (!incremental) items.reverse();
 
       return items;
     } catch (err: any) {
-      console.warn('[PostgresChatMessageRepository.findByConversationId fallback]:', err.message);
-      return [];
+      throw err;
     }
   }
 
@@ -184,10 +335,15 @@ export class PostgresChatMessageRepository implements IChatMessageRepository {
   public async getNextSeq(conversationId: string): Promise<number> {
     try {
       const res = await this.pool.query(
-        'SELECT COUNT(*) as count FROM chat_messages WHERE conversation_id = $1',
+        `SELECT GREATEST(
+          COALESCE(MAX((metadata->>'seq')::integer), 0),
+          COUNT(*)::integer
+        ) AS max_seq
+        FROM chat_messages
+        WHERE conversation_id = $1`,
         [conversationId],
       );
-      return parseInt(res.rows[0]?.count || '0', 10) + 1;
+      return parseInt(res.rows[0]?.max_seq || '0', 10) + 1;
     } catch {
       return 1;
     }
@@ -222,7 +378,8 @@ export class PostgresChatMessageRepository implements IChatMessageRepository {
         ],
       );
     } catch (err: any) {
-      console.warn('[PostgresChatMessageRepository.save fallback]:', err.message);
+      console.warn('[PostgresChatMessageRepository.save]: database write failed');
+      throw err;
     }
   }
 

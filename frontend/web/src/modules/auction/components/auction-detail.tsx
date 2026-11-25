@@ -12,8 +12,10 @@ import {
   Clock3,
   Gavel,
   Info,
+  Loader2,
   RefreshCw,
   ShieldCheck,
+  Trophy,
   WifiOff,
   ZoomIn,
 } from 'lucide-react';
@@ -30,7 +32,6 @@ import { StoreHeader } from '@/components/layout/store-header';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import { useBuyerAssistant } from '@/modules/chat/context/buyer-assistant-provider';
 import { appConfig } from '@/configs/app.config';
-import { getAuctionSocket } from '../utils/auction-socket';
 import {
   auctionApi,
   currentPrice,
@@ -53,7 +54,9 @@ import {
   getDisplayTimezoneLabel,
 } from './auction-ui';
 import { Auction3DViewer } from './auction-3d-viewer';
+import { getAuctionSocket } from '../utils/auction-socket';
 import { SellerReputationTrigger } from '@/modules/user/components/seller-reputation-drawer';
+import { useMyReputation } from '@/modules/user/hooks/use-my-reputation';
 
 function remaining(ms: number) {
   const s = Math.max(0, Math.ceil(ms / 1000));
@@ -83,6 +86,15 @@ export function AuctionDetail({ id }: { id: string }) {
 
   const { user, phase } = useSession();
   const { setAuctionContext } = useBuyerAssistant();
+  const {
+    data: myReputation,
+    error: myReputationError,
+    refresh: refreshMyReputation,
+  } = useMyReputation(phase === 'ready' && user?.role === 'BUYER');
+  const [uncertainSubmission, setUncertainSubmission] = useState<{
+    amount: number;
+    key: string;
+  } | null>(null);
 
   const [auction, setAuction] = useState<Auction | null>(null);
   const [error, setError] = useState('');
@@ -113,6 +125,8 @@ export function AuctionDetail({ id }: { id: string }) {
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
   const [checkoutResult, setCheckoutResult] = useState<AuctionCheckoutResult | null>(null);
+  const checkoutLockRef = useRef(false);
+  const deadlineRefreshTriggeredRef = useRef(false);
 
   const prevStateRef = useRef<{
     status?: Auction['status'];
@@ -197,50 +211,107 @@ export function AuctionDetail({ id }: { id: string }) {
 
   useEffect(() => {
     void refresh();
-    const off = auctionApi.subscribe(() => void refresh());
+    let debounceTimer: number | null = null;
+    const scheduleRefresh = () => {
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => {
+        debounceTimer = null;
+        void refresh();
+      }, 250);
+    };
+
+    const off = auctionApi.subscribe(scheduleRefresh);
     const socket = id && appConfig.auctionSource === 'api' ? getAuctionSocket() : null;
+    let hasConnectedOnce = Boolean(socket?.connected);
     const joinRoom = () => {
       socket?.emit('join_auction', id);
-      void refresh();
+      if (hasConnectedOnce) {
+        scheduleRefresh();
+      }
+      hasConnectedOnce = true;
     };
     const onBidPlaced = (event?: { auctionId?: string }) => {
-      if (event?.auctionId === id) void refresh();
+      if (!event?.auctionId || String(event.auctionId) === String(id)) {
+        scheduleRefresh();
+      }
     };
-    socket?.on('connect', joinRoom);
     socket?.on('auction:bid_placed', onBidPlaced);
+    socket?.on('auction:buy_now', onBidPlaced);
+    socket?.on('auction:updated', onBidPlaced);
+    socket?.on('auction:cancelled', onBidPlaced);
+    socket?.on('auction:started', onBidPlaced);
+    socket?.on('auction:ended', onBidPlaced);
+    const onOutbid = (data?: {
+      auctionId?: string;
+      outbidUserId?: string;
+      nextMinBid?: number;
+    }) => {
+      if (data?.auctionId && String(data.auctionId) !== String(id)) return;
+      if (data?.outbidUserId && user?.id && data.outbidUserId === user.id) {
+        setAnnouncement('Bạn bị vượt giá');
+        setNotice(
+          data.nextMinBid
+            ? `Bạn vừa bị vượt giá. Mức tối thiểu mới là ${auctionMoney(data.nextMinBid)}.`
+            : 'Bạn vừa bị vượt giá.',
+        );
+      }
+      scheduleRefresh();
+    };
+    socket?.on('auction:outbid', onOutbid);
+    socket?.on('connect', joinRoom);
     if (socket?.connected) socket.emit('join_auction', id);
-    const timer = setInterval(() => {
-      if (!document.hidden) void refresh();
-    }, 3000);
+
+    // Không polling HTTP 3 giây liên tục — chỉ đồng bộ qua Socket.IO & khi mạng hồi phục
     const onOnline = () => {
       setIsOffline(false);
       void refresh(true);
     };
     const onOffline = () => setIsOffline(true);
-    const onVisibility = () => {
-      if (!document.hidden) void refresh();
-    };
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
-    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       requestVersion.current++;
+      if (debounceTimer) window.clearTimeout(debounceTimer);
       off();
       socket?.off('connect', joinRoom);
       socket?.off('auction:bid_placed', onBidPlaced);
+      socket?.off('auction:buy_now', onBidPlaced);
+      socket?.off('auction:updated', onBidPlaced);
+      socket?.off('auction:cancelled', onBidPlaced);
       if (socket?.connected) socket.emit('leave_auction', id);
-      clearInterval(timer);
+      socket?.off('auction:outbid', onOutbid);
+      socket?.off('auction:started', onBidPlaced);
+      socket?.off('auction:ended', onBidPlaced);
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
-      document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [id, refresh]);
+  }, [id, refresh, user?.id]);
 
   useEffect(() => {
     setNow(Date.now() + offset);
-    const timer = setInterval(() => setNow(Date.now() + offset), 1000);
+    const timer = setInterval(() => {
+      if (!document.hidden) setNow(Date.now() + offset);
+    }, 1000);
     return () => clearInterval(timer);
   }, [offset]);
+
+  // Khi phiên đã ENDED và hạn thanh toán paymentDueAt vừa điểm (còn <= 0ms),
+  // gọi refresh() đúng 1 lần để đồng bộ trạng thái TIMEOUT / PAID từ Backend (không polling lặp).
+  useEffect(() => {
+    if (!auction || auction.status !== 'ENDED') {
+      deadlineRefreshTriggeredRef.current = false;
+      return;
+    }
+    const paySt = (auction.settlement?.paymentStatus || '').toUpperCase();
+    const dueAt = auction.settlement?.paymentDueAt;
+    if (paySt === 'PENDING' && dueAt && now >= dueAt && !deadlineRefreshTriggeredRef.current) {
+      deadlineRefreshTriggeredRef.current = true;
+      const t = window.setTimeout(() => {
+        void refresh(true);
+      }, 1500);
+      return () => window.clearTimeout(t);
+    }
+  }, [auction, now, refresh]);
 
   useEffect(() => {
     if (!auction) {
@@ -279,6 +350,7 @@ export function AuctionDetail({ id }: { id: string }) {
   }, [user?.id, user?.role]);
 
   const isOwnAuction = Boolean(user?.id && auction?.sellerId && auction.sellerId === user.id);
+  const reputationBlocked = Boolean(user?.role === 'BUYER' && myReputation && !myReputation.canBid);
 
   const allowed =
     phase === 'ready' &&
@@ -286,6 +358,7 @@ export function AuctionDetail({ id }: { id: string }) {
     user.role === 'BUYER' &&
     user.status === 'ACTIVE' &&
     !isOwnAuction &&
+    !reputationBlocked &&
     (!user.permissions || user.permissions.includes('AUCTION.BID'));
 
   const isOpenForBidding =
@@ -312,16 +385,28 @@ export function AuctionDetail({ id }: { id: string }) {
       setPage(1);
       setHasNewBidsOnFirstPage(false);
       setConfirmation(null);
+      setUncertainSubmission(null);
       setNotice(
         appConfig.auctionSource === 'mock'
-          ? 'Đã ghi nhận giá trên thiết bị này (chế độ thử nghiệm cục bộ).'
+          ? `Đã ghi nhận ${auctionMoney(confirmation.amount)} (cục bộ).`
           : result.status === 'EXTENDED'
-            ? 'Đặt giá thành công! Phiên vừa được tự động gia hạn thêm thời gian.'
-            : 'Đặt giá thành công!',
+            ? `Đã ghi nhận ${auctionMoney(confirmation.amount)}. Phiên được tự động gia hạn thêm 5 phút.`
+            : `Đã ghi nhận ${auctionMoney(confirmation.amount)} lúc ${new Date().toLocaleTimeString('vi-VN')}.`,
       );
     } catch (e) {
-      setConfirmation(null);
-      setNotice(e instanceof Error ? e.message : 'Không gửi được giá.');
+      const msg = e instanceof Error ? e.message : 'Không gửi được giá.';
+      const maybeNetwork = /timeout|network|kết nối|failed to fetch|mất mạng/i.test(msg);
+      if (maybeNetwork) {
+        // Mục 3.6 & G01: Giữ khóa cũ, đồng bộ lại trước khi cho thử lại
+        setUncertainSubmission({ amount: confirmation.amount, key: confirmation.key });
+        setConfirmation(null);
+        setNotice(
+          'Mất kết nối sau khi gửi. Hệ thống đang giữ mã yêu cầu cũ — vui lòng đồng bộ lại lịch sử trước khi thử lại.',
+        );
+      } else {
+        setConfirmation(null);
+        setNotice(msg);
+      }
       await refresh(true);
     } finally {
       setBusy(false);
@@ -340,6 +425,12 @@ export function AuctionDetail({ id }: { id: string }) {
       setBuyNowConfirmOpen(false);
       setNotice('Mua ngay thành công! Bạn đã giành chiến thắng phiên đấu giá này.');
       setAnnouncement('Bạn đã mua ngay thành công và thắng phiên đấu giá.');
+
+      // Tự động tạo đơn trúng đấu giá và chuyển sang trang VietQR PayOS nếu đã có địa chỉ nhận hàng
+      const defaultAddr = savedAddresses.find((a) => a.isDefault) ?? savedAddresses[0];
+      if (defaultAddr && appConfig.auctionSource === 'api') {
+        void handleWinnerCheckout(result, true);
+      }
     } catch (e) {
       setBuyNowConfirmOpen(false);
       setNotice(e instanceof Error ? e.message : 'Không thể thực hiện mua ngay.');
@@ -349,35 +440,49 @@ export function AuctionDetail({ id }: { id: string }) {
     }
   }
 
-  async function handleWinnerCheckout() {
-    if (!auction || !user || checkoutBusy) return;
+  async function handleWinnerCheckout(targetAuction?: Auction, autoRedirectToPayOs = true) {
+    const activeAuction = targetAuction || auction;
+    if (!activeAuction || !user || checkoutBusy || checkoutLockRef.current) return;
     const defaultAddr = savedAddresses.find((a) => a.isDefault) ?? savedAddresses[0];
     if (!defaultAddr) {
-      setCheckoutError(
-        'Bạn chưa có địa chỉ nhận hàng mặc định. Hãy bổ sung địa chỉ trước khi chốt đơn.',
-      );
+      setCheckoutError('Cần địa chỉ nhận hàng mặc định trước khi tạo đơn.');
       return;
     }
+    checkoutLockRef.current = true;
     setCheckoutBusy(true);
     setCheckoutError('');
     try {
-      const res = await auctionApi.checkout(auction.id, {
-        fullName: defaultAddr.recipientName,
-        phone: defaultAddr.phone,
-        province: defaultAddr.province,
-        ward: defaultAddr.ward || undefined,
-        addressLine: defaultAddr.street,
-        country: 'VN',
-      });
+      const idempotencyKey = `auction-checkout:${activeAuction.id}:${user.id}`;
+      const res = await auctionApi.checkout(
+        activeAuction.id,
+        {
+          fullName: defaultAddr.recipientName,
+          phone: defaultAddr.phone,
+          province: defaultAddr.province,
+          ward: defaultAddr.ward || undefined,
+          addressLine: defaultAddr.street,
+          country: 'VN',
+        },
+        idempotencyKey,
+      );
       setCheckoutResult(res);
-      setNotice(
-        'Tạo đơn hàng thắng đấu giá thành công! Vui lòng hoàn tất thanh toán VietQR PayOS.',
-      );
+      setNotice(`Đã tạo đơn #${res.orderCode || res.orderId}.`);
+      try {
+        sessionStorage.setItem('nexus-pending-payos-order', res.orderId);
+        sessionStorage.setItem('nexus-pending-payos-auction', activeAuction.id);
+      } catch {
+        // Ignore sessionStorage errors
+      }
+      const payUrl = res.payment?.checkoutUrl?.trim();
+      if (autoRedirectToPayOs && payUrl && /^https?:\/\//i.test(payUrl)) {
+        window.location.assign(payUrl);
+        return;
+      }
+      void refresh(true);
     } catch (e) {
-      setCheckoutError(
-        e instanceof Error ? e.message : 'Không thể tạo đơn thanh toán cho phiên này.',
-      );
+      setCheckoutError(e instanceof Error ? e.message : 'Không thể tạo đơn thanh toán.');
     } finally {
+      checkoutLockRef.current = false;
       setCheckoutBusy(false);
     }
   }
@@ -818,9 +923,90 @@ export function AuctionDetail({ id }: { id: string }) {
                         />
                         <p id="minimum-bid-hint" className="mt-2 text-xs text-stone-600">
                           {isFirstBid
-                            ? `Bạn có thể đặt từ ${auctionMoney(minBid)} cho lượt đầu.`
+                            ? `Lượt đầu từ ${auctionMoney(minBid)} · Bước giá ${auctionMoney(auction.increment)}.`
                             : `Mức tối thiểu tiếp theo là ${auctionMoney(minBid)} (giá dẫn + bước giá).`}
                         </p>
+                        {auction.demoMode && (
+                          <p className="mt-1 text-xs font-medium text-emerald-800">
+                            Quy đổi demo: 1 ₫ tương đương{' '}
+                            {(auction.demoMultiplier ?? 1_000_000).toLocaleString('vi-VN')} ₫ giá
+                            trị minh họa.
+                          </p>
+                        )}
+                        {user?.role === 'BUYER' && (
+                          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-stone-50 px-3 py-2 text-xs">
+                            {myReputation ? (
+                              <>
+                                <span
+                                  className={
+                                    myReputation.canBid
+                                      ? 'font-medium text-stone-700'
+                                      : 'font-semibold text-red-700'
+                                  }
+                                >
+                                  Uy tín {myReputation.score}/100 ·{' '}
+                                  {myReputation.canBid
+                                    ? 'Đủ điểm đặt giá'
+                                    : 'Cần 50 điểm để đặt giá'}
+                                </span>
+                                <Link
+                                  href={`/account/reputation?returnTo=${encodeURIComponent('/auctions/' + id)}`}
+                                  className="font-semibold text-emerald-800 underline underline-offset-4 hover:text-emerald-950"
+                                >
+                                  Xem nhiệm vụ
+                                </Link>
+                              </>
+                            ) : myReputationError ? (
+                              <>
+                                <span className="text-amber-800">Chưa kiểm tra được uy tín</span>
+                                <button
+                                  type="button"
+                                  onClick={refreshMyReputation}
+                                  className="font-semibold text-emerald-800 underline underline-offset-4"
+                                >
+                                  Thử lại
+                                </button>
+                              </>
+                            ) : (
+                              <span className="text-stone-500">
+                                Đang kiểm tra điều kiện uy tín…
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {uncertainSubmission && (
+                          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                            <span>
+                              Chưa rõ kết quả lượt {auctionMoney(uncertainSubmission.amount)}. Đồng
+                              bộ rồi gửi lại cùng khóa?
+                            </span>
+                            <div className="flex gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void refresh(true)}
+                                className="h-8 rounded-lg bg-white px-2.5 text-xs"
+                              >
+                                Đồng bộ
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() =>
+                                  setConfirmation({
+                                    amount: uncertainSubmission.amount,
+                                    version: auction.version,
+                                    key: uncertainSubmission.key,
+                                  })
+                                }
+                                className="h-8 rounded-lg bg-emerald-700 px-2.5 text-xs text-white"
+                              >
+                                Gửi lại
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex flex-wrap gap-2">
@@ -868,6 +1054,7 @@ export function AuctionDetail({ id }: { id: string }) {
                           </Button>
                           {auction.buyNowPrice &&
                             auction.buyNowPrice > 0 &&
+                            isFirstBid &&
                             appConfig.auctionSource === 'api' && (
                               <Button
                                 type="button"
@@ -897,173 +1084,355 @@ export function AuctionDetail({ id }: { id: string }) {
                       )}
                     </form>
                   ) : (
-                    /* KHỐI KẾT QUẢ SAU KHI ĐÓNG / HỦY / SẮP MỞ */
-                    <div className="mt-5 space-y-3 rounded-2xl border border-line bg-stone-50 p-5 text-sm">
-                      {auction.status === 'CANCELLED' ? (
-                        <>
-                          <p className="font-bold text-red-800">Phiên đấu giá đã bị hủy</p>
-                          <p className="text-xs leading-5 text-stone-700">
-                            {auction.cancelReason ||
-                              'Phiên đã ngừng nhận giá theo quyết định điều hành và không phát sinh đơn hàng.'}
-                          </p>
-                        </>
-                      ) : auction.status === 'SCHEDULED' ? (
-                        <>
-                          <p className="font-bold text-sky-900">Phiên chưa bắt đầu</p>
-                          <p className="text-xs leading-5 text-stone-700">
-                            Thời gian mở phiên:{' '}
-                            <strong>{auctionDateWithTz(auction.startAt)}</strong>. Hãy quay lại đúng
-                            giờ để đặt mức đầu từ{' '}
-                            <strong>{auctionMoney(auction.startingPrice)}</strong>.
-                          </p>
-                        </>
-                      ) : buyerWon ? (
-                        <>
-                          <p className="font-bold text-emerald-900">
-                            Chúc mừng! Bạn là người thắng phiên đấu giá
-                          </p>
-                          <p className="text-xs leading-5 text-stone-700">
-                            Giá chốt:{' '}
-                            <strong className="tabular-nums">
-                              {auctionMoney(
-                                auction.settlement?.finalPrice ?? currentPrice(auction),
-                              )}
-                            </strong>
-                            {auction.settlement?.paymentDueAt && (
-                              <>
-                                {' '}
-                                · Hạn thanh toán:{' '}
-                                <strong>
-                                  {auctionDateWithTz(auction.settlement.paymentDueAt)}
-                                </strong>
-                              </>
-                            )}
-                          </p>
-                          {checkoutResult ? (
-                            <div className="space-y-2.5 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3.5 text-xs text-emerald-950">
-                              <p className="font-semibold">
-                                Đã tạo đơn hàng #
-                                {checkoutResult.orderCode || checkoutResult.orderId}
-                              </p>
-                              <div className="flex flex-wrap gap-2">
-                                {checkoutResult.payment?.checkoutUrl && (
-                                  <Button
-                                    asChild
-                                    className="min-h-11 rounded-xl bg-emerald-700 text-xs font-semibold text-white hover:bg-emerald-800"
-                                  >
-                                    <a
-                                      href={checkoutResult.payment.checkoutUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                    >
-                                      Thanh toán VietQR PayOS
-                                      <ArrowUpRight className="ml-1 size-3.5" aria-hidden="true" />
-                                    </a>
-                                  </Button>
-                                )}
-                                <Button
-                                  asChild
-                                  variant="outline"
-                                  className="min-h-11 rounded-xl bg-white text-xs font-semibold"
-                                >
-                                  <Link
-                                    href={`/account/orders/${encodeURIComponent(checkoutResult.orderId)}`}
-                                  >
-                                    Xem đơn hàng
-                                  </Link>
-                                </Button>
+                    /* KHỐI KẾT QUẢ CÔNG KHAI SAU KHI ĐÓNG / HỦY / SẮP MỞ */
+                    (() => {
+                      if (auction.status === 'CANCELLED') {
+                        return (
+                          <div className="mt-5 space-y-2 rounded-2xl border border-red-200 bg-red-50/70 p-5 text-sm">
+                            <p className="font-bold text-red-900">Phiên đấu giá đã bị hủy</p>
+                            <p className="text-xs leading-5 text-red-800/90">
+                              {auction.cancelReason ||
+                                'Phiên đã ngừng nhận giá và không phát sinh đơn hàng.'}
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      if (auction.status === 'SCHEDULED') {
+                        return (
+                          <div className="mt-5 space-y-2 rounded-2xl border border-sky-200 bg-sky-50/70 p-5 text-sm">
+                            <p className="font-bold text-sky-950">Phiên sắp diễn ra</p>
+                            <p className="text-xs leading-5 text-sky-900">
+                              Mở lúc <strong>{auctionDateWithTz(auction.startAt)}</strong> · Giá
+                              khởi điểm{' '}
+                              <strong className="tabular-nums">
+                                {auctionMoney(auction.startingPrice)}
+                              </strong>
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      const settlement = auction.settlement;
+                      const topBid = history[0];
+                      const hasWinner = Boolean(
+                        settlement?.winnerId ||
+                        settlement?.outcome === 'WON' ||
+                        (history.length > 0 && topBid),
+                      );
+                      const finalPrice =
+                        settlement?.winningBidAmount ??
+                        settlement?.finalPrice ??
+                        currentPrice(auction);
+                      const closedAt = settlement?.settledAt ?? auction.endAt;
+                      const isPrivilegedViewer = Boolean(
+                        user &&
+                        (user.role === 'ADMIN' ||
+                          user.role === 'SUPPORT_STAFF' ||
+                          user.id === auction.sellerId),
+                      );
+                      const winnerLabel = buyerWon
+                        ? 'Bạn'
+                        : isPrivilegedViewer && settlement?.winnerName
+                          ? settlement.winnerName
+                          : settlement?.winnerAlias ||
+                            topBid?.displayAlias ||
+                            (settlement?.winnerId
+                              ? `Buyer ••••${settlement.winnerId.slice(-4).toUpperCase()}`
+                              : 'Người thắng phiên');
+                      const payStatus = (settlement?.paymentStatus || '').toUpperCase();
+                      const isPaid = payStatus === 'PAID' || payStatus === 'COMPLETED';
+                      const isTimeout =
+                        payStatus === 'TIMEOUT' || payStatus === 'TIMEOUT_PENALIZED';
+                      const resolvedOrderId =
+                        checkoutResult?.orderId || settlement?.orderId || null;
+                      const resolvedOrderCode =
+                        checkoutResult?.orderCode || settlement?.orderCode || resolvedOrderId;
+                      const resolvedCheckoutUrl =
+                        checkoutResult?.payment?.checkoutUrl || settlement?.paymentUrl || null;
+
+                      if (!hasWinner) {
+                        return (
+                          <div className="mt-5 space-y-1.5 rounded-2xl border border-line bg-stone-50 p-5 text-sm">
+                            <p className="font-bold text-stone-900">
+                              Phiên đã kết thúc · Chưa có lượt đặt
+                            </p>
+                            <p className="text-xs text-stone-600 tabular-nums">
+                              Đóng lúc {auctionDateWithTz(closedAt)} · Không phát sinh đơn hàng.
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div
+                          id="winner-checkout"
+                          className={`mt-5 space-y-4 rounded-2xl border p-5 text-sm ${
+                            buyerWon
+                              ? 'border-emerald-200 bg-gradient-to-br from-emerald-50/90 via-white to-amber-50/40'
+                              : 'border-amber-200/80 bg-gradient-to-br from-amber-50/60 via-white to-stone-50'
+                          }`}
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`grid size-8 place-items-center rounded-xl ${
+                                  buyerWon
+                                    ? 'bg-emerald-700 text-white'
+                                    : 'bg-amber-500/15 text-amber-800'
+                                }`}
+                              >
+                                <Trophy className="size-4" aria-hidden="true" />
+                              </span>
+                              <div>
+                                <p className="font-bold text-stone-950">
+                                  {buyerWon
+                                    ? 'Chúc mừng! Bạn đã thắng phiên này'
+                                    : 'Kết quả phiên đấu giá'}
+                                </p>
                               </div>
                             </div>
-                          ) : auction.settlement?.orderId ? (
-                            <Button
-                              asChild
-                              className="min-h-11 w-full rounded-xl bg-emerald-700 text-white hover:bg-emerald-800"
-                            >
-                              <Link
-                                href={`/account/orders/${encodeURIComponent(auction.settlement.orderId)}`}
-                              >
-                                Tới đơn hàng & thanh toán
-                              </Link>
-                            </Button>
-                          ) : (
-                            <div className="space-y-2.5">
-                              {(() => {
-                                const defaultAddr =
-                                  savedAddresses.find((a) => a.isDefault) ?? savedAddresses[0];
-                                return defaultAddr ? (
-                                  <p className="text-xs text-stone-700">
-                                    Giao tới:{' '}
-                                    <strong>
-                                      {defaultAddr.recipientName} ({defaultAddr.phone})
-                                    </strong>{' '}
-                                    — {defaultAddr.street}, {defaultAddr.province}.
-                                  </p>
-                                ) : (
-                                  <p className="text-xs text-amber-900">
-                                    Bạn cần có địa chỉ nhận hàng để chốt đơn thắng đấu giá và tạo mã
-                                    VietQR thanh toán.
-                                  </p>
-                                );
-                              })()}
-                              {checkoutError && (
-                                <p role="alert" className="text-xs font-medium text-red-700">
-                                  {checkoutError}
-                                </p>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {settlement?.closedReason === 'BUY_NOW' && (
+                                <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-[11px] font-semibold text-violet-800">
+                                  Chốt bằng Mua ngay
+                                </span>
                               )}
-                              <div className="flex flex-wrap gap-2">
-                                {appConfig.auctionSource === 'api' && savedAddresses.length > 0 && (
-                                  <Button
-                                    type="button"
-                                    disabled={checkoutBusy}
-                                    onClick={() => void handleWinnerCheckout()}
-                                    className="min-h-11 rounded-xl bg-emerald-700 text-xs font-semibold text-white hover:bg-emerald-800"
-                                  >
-                                    {checkoutBusy
-                                      ? 'Đang tạo đơn…'
-                                      : 'Chốt đơn & Thanh toán VietQR'}
-                                  </Button>
-                                )}
-                                <Button
-                                  asChild
-                                  variant="outline"
-                                  className="min-h-11 rounded-xl text-xs font-semibold"
-                                >
-                                  <Link href="/account/addresses">
-                                    {savedAddresses.length > 0
-                                      ? 'Đổi địa chỉ nhận hàng'
-                                      : 'Bổ sung địa chỉ nhận hàng'}
-                                  </Link>
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  disabled={refreshing}
-                                  onClick={() => void refresh(true)}
-                                  className="min-h-11 rounded-xl text-xs font-semibold"
-                                >
-                                  <RefreshCw
-                                    className={`mr-1.5 size-3.5 ${refreshing ? 'motion-safe:animate-spin' : ''}`}
-                                    aria-hidden="true"
-                                  />
-                                  Tải lại trạng thái đơn
-                                </Button>
-                              </div>
+                              {isPaid && (
+                                <span className="rounded-full border border-emerald-200 bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-900">
+                                  Đã thanh toán
+                                </span>
+                              )}
+                              {isTimeout && (
+                                <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-[11px] font-semibold text-red-800">
+                                  Quá hạn 24h
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <dl className="grid grid-cols-1 gap-3 rounded-xl border border-stone-200/80 bg-white/90 p-3.5 text-xs sm:grid-cols-3">
+                            <div>
+                              <dt className="text-stone-500">Người chiến thắng</dt>
+                              <dd className="mt-0.5 font-semibold text-stone-950">{winnerLabel}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-stone-500">Giá trúng đấu giá</dt>
+                              <dd className="mt-0.5 text-sm font-bold text-emerald-800 tabular-nums">
+                                {auctionMoney(finalPrice)}
+                              </dd>
+                              {auction.demoMode && (
+                                <dd className="text-[11px] text-stone-500 tabular-nums">
+                                  ≈{' '}
+                                  {(
+                                    finalPrice * (auction.demoMultiplier ?? 1_000_000)
+                                  ).toLocaleString('vi-VN')}{' '}
+                                  ₫
+                                </dd>
+                              )}
+                            </div>
+                            <div>
+                              <dt className="text-stone-500">Thời điểm chốt</dt>
+                              <dd className="mt-0.5 font-medium text-stone-900 tabular-nums">
+                                {auctionDateWithTz(closedAt)}
+                              </dd>
+                            </div>
+                          </dl>
+
+                          {buyerWon && (
+                            <div className="space-y-3 border-t border-stone-200/70 pt-3">
+                              {isPaid ? (
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                  <p className="text-xs font-medium text-emerald-900">
+                                    Đơn #{resolvedOrderCode || '—'} đã thanh toán thành công.
+                                  </p>
+                                  {resolvedOrderId && (
+                                    <Button
+                                      asChild
+                                      className="min-h-11 rounded-xl bg-emerald-700 text-xs font-semibold text-white hover:bg-emerald-800"
+                                    >
+                                      <Link
+                                        href={`/account/orders/${encodeURIComponent(resolvedOrderId)}`}
+                                      >
+                                        Xem đơn mua
+                                      </Link>
+                                    </Button>
+                                  )}
+                                </div>
+                              ) : isTimeout ? (
+                                <p className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs font-medium text-red-800">
+                                  Đã quá hạn thanh toán 24 giờ theo quy định SRS. Quyền tạo đơn đã
+                                  đóng.
+                                </p>
+                              ) : resolvedOrderId ? (
+                                <div className="space-y-2.5 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3.5 text-xs text-emerald-950">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <p className="font-semibold">
+                                      Đơn thắng đấu giá #{resolvedOrderCode}
+                                    </p>
+                                    {settlement?.paymentDueAt && (
+                                      <span className="text-stone-700 tabular-nums">
+                                        Hạn:{' '}
+                                        <strong>
+                                          {auctionDateWithTz(settlement.paymentDueAt)}
+                                        </strong>
+                                        {settlement.paymentDueAt > now && (
+                                          <span className="ml-1.5 rounded-md bg-amber-100 px-1.5 py-0.5 font-mono text-[11px] font-bold text-amber-900">
+                                            Còn {remaining(settlement.paymentDueAt - now)}
+                                          </span>
+                                        )}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {resolvedCheckoutUrl ? (
+                                      <Button
+                                        asChild
+                                        className="min-h-11 rounded-xl bg-emerald-700 text-xs font-semibold text-white hover:bg-emerald-800"
+                                      >
+                                        <a
+                                          href={resolvedCheckoutUrl}
+                                          onClick={() => {
+                                            try {
+                                              if (resolvedOrderId) {
+                                                sessionStorage.setItem(
+                                                  'nexus-pending-payos-order',
+                                                  resolvedOrderId,
+                                                );
+                                              }
+                                              sessionStorage.setItem(
+                                                'nexus-pending-payos-auction',
+                                                auction.id,
+                                              );
+                                            } catch {
+                                              // Ignore storage errors
+                                            }
+                                          }}
+                                        >
+                                          Thanh toán VietQR PayOS
+                                          <ArrowUpRight
+                                            className="ml-1 size-3.5"
+                                            aria-hidden="true"
+                                          />
+                                        </a>
+                                      </Button>
+                                    ) : (
+                                      <Button
+                                        type="button"
+                                        disabled={checkoutBusy}
+                                        onClick={() => void handleWinnerCheckout(auction, true)}
+                                        className="min-h-11 rounded-xl bg-emerald-700 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-70"
+                                      >
+                                        {checkoutBusy ? (
+                                          <>
+                                            <Loader2
+                                              className="mr-1.5 size-4 animate-spin"
+                                              aria-hidden="true"
+                                            />
+                                            Đang mở cổng PayOS…
+                                          </>
+                                        ) : (
+                                          <>
+                                            Thanh toán lại qua VietQR PayOS
+                                            <ArrowUpRight
+                                              className="ml-1 size-3.5"
+                                              aria-hidden="true"
+                                            />
+                                          </>
+                                        )}
+                                      </Button>
+                                    )}
+                                    <Button
+                                      asChild
+                                      variant={resolvedCheckoutUrl ? 'outline' : 'default'}
+                                      className={`min-h-11 rounded-xl text-xs font-semibold ${
+                                        resolvedCheckoutUrl
+                                          ? 'bg-white'
+                                          : 'bg-emerald-700 text-white hover:bg-emerald-800'
+                                      }`}
+                                    >
+                                      <Link
+                                        href={`/account/orders/${encodeURIComponent(resolvedOrderId)}`}
+                                      >
+                                        {resolvedCheckoutUrl
+                                          ? 'Xem đơn hàng'
+                                          : 'Thanh toán & Xem đơn'}
+                                      </Link>
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="space-y-2.5">
+                                  {settlement?.paymentDueAt && (
+                                    <p className="text-xs text-stone-700 tabular-nums">
+                                      Hạn thanh toán:{' '}
+                                      <strong>{auctionDateWithTz(settlement.paymentDueAt)}</strong>
+                                      {settlement.paymentDueAt > now && (
+                                        <span className="ml-1.5 rounded-md bg-amber-100 px-1.5 py-0.5 font-mono text-[11px] font-bold text-amber-900">
+                                          Còn {remaining(settlement.paymentDueAt - now)}
+                                        </span>
+                                      )}
+                                    </p>
+                                  )}
+                                  {(() => {
+                                    const defaultAddr =
+                                      savedAddresses.find((a) => a.isDefault) ?? savedAddresses[0];
+                                    return defaultAddr ? (
+                                      <p className="text-xs text-stone-700">
+                                        Giao tới: <strong>{defaultAddr.recipientName}</strong> (
+                                        {defaultAddr.phone}) — {defaultAddr.street},{' '}
+                                        {defaultAddr.province}
+                                      </p>
+                                    ) : (
+                                      <p className="text-xs text-amber-900">
+                                        Thêm địa chỉ nhận hàng để tạo đơn thanh toán.
+                                      </p>
+                                    );
+                                  })()}
+                                  {checkoutError && (
+                                    <p role="alert" className="text-xs font-medium text-red-700">
+                                      {checkoutError}
+                                    </p>
+                                  )}
+                                  <div className="flex flex-wrap gap-2">
+                                    {appConfig.auctionSource === 'api' &&
+                                      savedAddresses.length > 0 && (
+                                        <Button
+                                          type="button"
+                                          disabled={checkoutBusy}
+                                          onClick={() => void handleWinnerCheckout()}
+                                          className="min-h-11 rounded-xl bg-emerald-700 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-70"
+                                        >
+                                          {checkoutBusy ? (
+                                            <>
+                                              <Loader2
+                                                className="mr-1.5 size-4 animate-spin"
+                                                aria-hidden="true"
+                                              />
+                                              Đang tạo đơn hàng…
+                                            </>
+                                          ) : (
+                                            'Tạo đơn thanh toán'
+                                          )}
+                                        </Button>
+                                      )}
+                                    <Button
+                                      asChild
+                                      variant="outline"
+                                      className="min-h-11 rounded-xl bg-white text-xs font-semibold"
+                                    >
+                                      <Link href="/account/addresses">
+                                        {savedAddresses.length > 0 ? 'Đổi địa chỉ' : 'Thêm địa chỉ'}
+                                      </Link>
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
-                        </>
-                      ) : (
-                        <>
-                          <p className="font-bold text-stone-900">Phiên đấu giá đã kết thúc</p>
-                          <p className="text-xs leading-5 text-stone-700">
-                            {auction.bidHistoryAvailable === false
-                              ? 'Phiên đã đóng; hệ thống đang chờ backend đồng bộ kết quả chốt và lịch sử.'
-                              : history.length > 0
-                                ? 'Phiên đã chốt mức giá cuối. Xem lịch sử trả giá bên dưới để đối chiếu.'
-                                : 'Phiên kết thúc mà chưa có lượt trả giá nào; không phát sinh đơn hàng.'}
-                          </p>
-                        </>
-                      )}
-                    </div>
+                        </div>
+                      );
+                    })()
                   )}
 
                   {notice && (
@@ -1304,14 +1673,28 @@ export function AuctionDetail({ id }: { id: string }) {
       >
         <DialogContent className="p-6 sm:p-7">
           <DialogTitle>Xác nhận mức giá</DialogTitle>
-          <DialogDescription className="mt-2">
-            {appConfig.auctionSource === 'mock'
-              ? 'Thao tác này chỉ lưu cục bộ ở chế độ phát triển để kiểm tra luồng giao diện.'
-              : 'Xác nhận gửi mức giá của bạn tới máy chủ Nexus.'}
+          <DialogDescription className="mt-1.5 text-sm text-stone-700">
+            {auction?.title}
           </DialogDescription>
-          <p className="my-5 text-3xl font-bold text-emerald-800 tabular-nums">
-            {auctionMoney(confirmation?.amount ?? 0)}
-          </p>
+          <div className="my-4 rounded-2xl border border-line bg-stone-50 p-4">
+            <p className="text-xs text-stone-500">Số tiền cam kết</p>
+            <p className="mt-1 text-3xl font-bold text-emerald-800 tabular-nums">
+              {auctionMoney(confirmation?.amount ?? 0)}
+            </p>
+            {auction?.demoMode && (
+              <p className="mt-1 text-xs text-stone-600 tabular-nums">
+                Quy đổi demo: tương đương{' '}
+                {(
+                  (confirmation?.amount ?? 0) * (auction.demoMultiplier ?? 1_000_000)
+                ).toLocaleString('vi-VN')}{' '}
+                ₫ giá trị minh họa.
+              </p>
+            )}
+            <p className="mt-2.5 text-xs text-stone-600">
+              Nếu thắng phiên, bạn cần thanh toán đơn hàng trong vòng{' '}
+              <strong>{auction?.paymentWindowHours ?? 24} giờ</strong> từ khi đơn sẵn sàng.
+            </p>
+          </div>
           <div className="flex flex-wrap justify-end gap-3">
             <DialogClose asChild>
               <Button variant="outline" disabled={busy} className="min-h-11">
@@ -1323,7 +1706,7 @@ export function AuctionDetail({ id }: { id: string }) {
               onClick={() => void confirmBid()}
               className="min-h-11 bg-emerald-700 text-white hover:bg-emerald-800"
             >
-              {busy ? 'Đang gửi giá…' : 'Xác nhận đặt giá'}
+              {busy ? 'Đang gửi giá…' : `Xác nhận đặt ${auctionMoney(confirmation?.amount ?? 0)}`}
             </Button>
           </div>
         </DialogContent>

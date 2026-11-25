@@ -95,8 +95,9 @@ export const resources: Record<string, ResourceConfig> = {
     path: '/notifications/event-logs',
     columns: [
       ['eventId', 'Mã sự kiện'],
-      ['eventType', 'Loại sự kiện'],
-      ['occurredAt', 'Thời gian'],
+      ['type', 'Loại sự kiện'],
+      ['sourceService', 'Dịch vụ'],
+      ['createdAt', 'Thời gian'],
     ],
   },
   audit: {

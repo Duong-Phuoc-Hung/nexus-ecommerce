@@ -43,6 +43,22 @@ export class PostgresProductRepository implements IProductRepository {
     return this.mapRowToProduct(row);
   }
 
+  // 1b. Tìm sản phẩm bao gồm cả sản phẩm đã xóa mềm (phục vụ RecoverProductUseCase - GAP-BRK-04)
+  public async findByIdIncludingDeleted(id: string): Promise<Product | null> {
+    let row = await this.prisma.product.findFirst({
+      where: { id },
+      include: { images: { orderBy: { displayOrder: 'asc' } }, attributes: true },
+    });
+    if (!row) {
+      row = await this.prisma.product.findFirst({
+        where: { slug: id },
+        include: { images: { orderBy: { displayOrder: 'asc' } }, attributes: true },
+      });
+    }
+    if (!row) return null;
+    return this.mapRowToProduct(row);
+  }
+
   // 2. Lấy danh sách sản phẩm đang bán ngoài trang chủ
   public async findAll(limit: number = 20, offset: number = 0): Promise<Product[]> {
     const rows = await this.prisma.product.findMany({

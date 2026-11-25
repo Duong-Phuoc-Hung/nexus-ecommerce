@@ -1,3 +1,5 @@
+import { buildServiceAuthHeader } from '../../infrastructure/security/internal-service-auth';
+
 export interface ShipmentTrackingInfo {
   orderId: string;
   trackingCode: string;
@@ -30,13 +32,16 @@ export class OrderTrackingTool {
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
+        ...buildServiceAuthHeader({
+          issuer: 'chat-service',
+          audience: 'fulfillment-service',
+          scope: 'fulfillment:shipment:read',
+          resource: rawId,
+          actor: options?.buyerId
+            ? { sub: options.buyerId, role: options.role || 'BUYER' }
+            : undefined,
+        }),
       };
-      if (options?.buyerId) {
-        headers['x-user-id'] = options.buyerId;
-        headers['x-user-role'] = options.role || 'BUYER';
-      } else {
-        headers['x-user-role'] = options?.role || 'BUYER';
-      }
 
       // Chuẩn URL: /api/v1/fulfillments/shipments/by-order/:id?readOnly=true
       const res = await fetch(

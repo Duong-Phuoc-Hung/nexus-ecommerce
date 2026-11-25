@@ -113,6 +113,7 @@ export function BuyerNotificationsPage() {
   const [items, setItems] = useState<BuyerNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [markingAll, setMarkingAll] = useState(false);
 
   const [prefs, setPrefs] = useState<NotificationPreferences>(DEFAULT_PREFS);
   const [savingPrefs, setSavingPrefs] = useState(false);
@@ -136,9 +137,9 @@ export function BuyerNotificationsPage() {
           ? ((unwrapped as Record<string, unknown>).items as unknown[])
           : [];
       setItems(list.map(mapNotificationRow));
-    } catch {
-      // Nếu dịch vụ chưa mở danh sách cá nhân, giữ trạng thái rỗng gọn gàng
+    } catch (err) {
       setItems([]);
+      setError(userMessage(err) || 'Không thể tải danh sách thông báo.');
     } finally {
       setLoading(false);
     }
@@ -174,6 +175,34 @@ export function BuyerNotificationsPage() {
     return items.filter((item) => item.category === categoryFilter);
   }, [categoryFilter, items]);
 
+  const unreadCount = useMemo(() => items.filter((item) => !item.read).length, [items]);
+
+  async function markOneRead(notificationId: string) {
+    setItems((prev) =>
+      prev.map((item) => (item.id === notificationId ? { ...item, read: true } : item)),
+    );
+    try {
+      await requestApi(`/notifications/${encodeURIComponent(notificationId)}/read`, {
+        method: 'PATCH',
+      });
+    } catch {
+      // Keep UI responsive; next reload will reconcile with server state
+    }
+  }
+
+  async function markAllRead() {
+    if (markingAll || unreadCount === 0) return;
+    setMarkingAll(true);
+    try {
+      await requestApi('/notifications/read-all', { method: 'POST' });
+      setItems((prev) => prev.map((item) => ({ ...item, read: true })));
+    } catch (err) {
+      setError(userMessage(err) || 'Không thể đánh dấu tất cả thông báo đã đọc.');
+    } finally {
+      setMarkingAll(false);
+    }
+  }
+
   async function savePreferences() {
     if (!user?.id || savingPrefs) return;
     setSavingPrefs(true);
@@ -184,20 +213,15 @@ export function BuyerNotificationsPage() {
       orderEmail: true,
       orderPush: true,
     };
-    writeLocalPrefs(user.id, nextPrefs);
     try {
       await requestApi('/notifications/preferences', {
         method: 'PUT',
         body: nextPrefs,
       });
+      writeLocalPrefs(user.id, nextPrefs);
       setPrefsNotice('Đã lưu tùy chọn thông báo.');
     } catch (err) {
-      const msg = userMessage(err);
-      if (msg.includes('404') || msg.toLowerCase().includes('không tìm thấy')) {
-        setPrefsNotice('Đã lưu tùy chọn trên thiết bị này.');
-      } else {
-        setPrefsError(msg);
-      }
+      setPrefsError(userMessage(err) || 'Không thể lưu tùy chọn thông báo.');
     } finally {
       setSavingPrefs(false);
     }
@@ -217,19 +241,33 @@ export function BuyerNotificationsPage() {
               Tài khoản
             </Link>
             {user && tab === 'history' && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void loadNotifications()}
-                disabled={loading}
-                className="min-h-11 rounded-xl border-stone-300"
-              >
-                <RefreshCw
-                  className={`size-4 ${loading ? 'motion-safe:animate-spin' : ''}`}
-                  aria-hidden="true"
-                />
-                Làm mới
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                {unreadCount > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void markAllRead()}
+                    disabled={markingAll || loading}
+                    className="min-h-11 rounded-xl border-stone-300"
+                  >
+                    <CheckCircle2 className="size-4" aria-hidden="true" />
+                    {markingAll ? 'Đang xử lý…' : `Đánh dấu tất cả đã đọc (${unreadCount})`}
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void loadNotifications()}
+                  disabled={loading}
+                  className="min-h-11 rounded-xl border-stone-300"
+                >
+                  <RefreshCw
+                    className={`size-4 ${loading ? 'motion-safe:animate-spin' : ''}`}
+                    aria-hidden="true"
+                  />
+                  Làm mới
+                </Button>
+              </div>
             )}
           </div>
 
@@ -389,19 +427,37 @@ export function BuyerNotificationsPage() {
                               </p>
                             </div>
                           </div>
-                          {item.href && (
-                            <Button
-                              asChild
-                              variant="outline"
-                              size="sm"
-                              className="min-h-10 shrink-0 rounded-xl"
-                            >
-                              <Link href={item.href}>
-                                Mở chi tiết
-                                <ArrowUpRight className="size-3.5" aria-hidden="true" />
-                              </Link>
-                            </Button>
-                          )}
+                          <div className="flex shrink-0 items-center gap-2">
+                            {!item.read && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => void markOneRead(item.id)}
+                                className="min-h-10 rounded-xl text-xs text-stone-600 hover:text-stone-950"
+                              >
+                                Đánh dấu đã đọc
+                              </Button>
+                            )}
+                            {item.href && (
+                              <Button
+                                asChild
+                                variant="outline"
+                                size="sm"
+                                className="min-h-10 shrink-0 rounded-xl"
+                              >
+                                <Link
+                                  href={item.href}
+                                  onClick={() => {
+                                    if (!item.read) void markOneRead(item.id);
+                                  }}
+                                >
+                                  Mở chi tiết
+                                  <ArrowUpRight className="size-3.5" aria-hidden="true" />
+                                </Link>
+                              </Button>
+                            )}
+                          </div>
                         </li>
                       ))}
                     </ul>

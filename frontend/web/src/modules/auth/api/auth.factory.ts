@@ -19,20 +19,24 @@ export function createAuthApi(request: RequestApi) {
         await request('/auth/register', { method: 'POST', body: input }),
       );
     },
-    async sendRegistrationOtp(email: string, fullName?: string) {
+    async sendRegistrationOtp(email: string, fullName?: string, phone?: string) {
       return request<{ success: boolean; message: string; devOtp?: string }>('/auth/send-otp', {
         method: 'POST',
-        body: { email, fullName },
+        body: { email, fullName, ...(phone ? { phone } : {}) },
       });
     },
-    async login(email: string, password: string, remember = false) {
-      const result = unwrap<{ token: string; user: SessionUser }>(
-        await request('/auth/login', { method: 'POST', body: { email, password } }),
-      );
-      if (!result.token || !result.user?.id || !result.user.role)
+    async login(email: string, password: string, remember = true) {
+      const result = unwrap<{
+        token: string;
+        accessToken?: string;
+        refreshToken?: string;
+        user: SessionUser;
+      }>(await request('/auth/login', { method: 'POST', body: { email, password } }));
+      const accessToken = result.accessToken || result.token;
+      if (!accessToken || !result.user?.id || !result.user.role)
         throw new ApiError('Phản hồi đăng nhập thiếu thông tin phiên.');
-      saveSession(result.token, result.user, remember);
-      return result;
+      saveSession(accessToken, result.user, remember, result.refreshToken);
+      return { ...result, token: accessToken };
     },
     async logout() {
       try {

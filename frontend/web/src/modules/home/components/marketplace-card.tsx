@@ -91,11 +91,11 @@ export function MarketplaceCard({
             <MarketplaceIcon name="heart" className="size-[18px]" filled={favorite} />
           </Button>
         )}
-        {product.mode === 'auction' && (
+        {product.mode === 'auction' && !ended && (
           <div className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-2 rounded-lg bg-white/95 px-3 py-2 text-xs font-semibold text-ink shadow-sm">
             <span className="flex items-center gap-1.5">
               <MarketplaceIcon name="clock" className="size-3.5" />
-              {product.status === 'scheduled' ? 'Mở sau' : ended ? 'Hết thời gian' : 'Còn lại'}
+              {product.status === 'scheduled' ? 'Mở sau' : 'Còn lại'}
             </span>
             <span className="font-mono text-brand-dark tabular-nums">
               {timeLeft(product.remainingSeconds - elapsed)}

@@ -27,6 +27,9 @@ import { ConfirmOrderReceiptUseCase } from './application/use-cases/ConfirmOrder
 import { OrderController } from './interfaces/http/controllers/OrderController';
 import { createOrderRoutes } from './interfaces/http/routes/OrderRoutes';
 import { createCheckoutRoutes } from './interfaces/http/routes/CheckoutRoutes';
+import { createAuctionOrderRoutes } from './interfaces/http/routes/AuctionOrderRoutes';
+import { createInvoiceRoutes } from './interfaces/http/routes/InvoiceRoutes';
+import { InvoiceService } from './application/services/InvoiceService';
 import { GhnCarrierClient } from './infrastructure/clients/GhnCarrierClient';
 import { PayOsGateway } from './infrastructure/clients/PayOsGateway';
 import { PostgresPromotionRepository } from './infrastructure/repositories/PostgresPromotionRepository';
@@ -37,7 +40,10 @@ import { AdminCommerceController } from './interfaces/http/controllers/AdminComm
 
 type OrderReader = Pick<IOrderRepository, 'search' | 'findById'>;
 
-export function createApplication(adminOrderReader?: OrderReader): Application {
+export function createApplication(
+  adminOrderReader?: OrderReader,
+  orderRepositoryOverride?: IOrderRepository,
+): Application {
   const app = express();
 
   app.use(cors());
@@ -66,7 +72,9 @@ export function createApplication(adminOrderReader?: OrderReader): Application {
   let orderRepository: IOrderRepository;
   const pool = getCommerceDbPool();
 
-  if (process.env.USE_IN_MEMORY_DB === 'true') {
+  if (orderRepositoryOverride) {
+    orderRepository = orderRepositoryOverride;
+  } else if (process.env.USE_IN_MEMORY_DB === 'true') {
     orderRepository = new InMemoryOrderRepository();
   } else {
     const prisma = PrismaClientWrapper.getInstance();
@@ -92,7 +100,12 @@ export function createApplication(adminOrderReader?: OrderReader): Application {
 
   const getOrderDetailUseCase = new GetOrderDetailUseCase(orderRepository);
   const searchOrdersUseCase = new SearchOrdersUseCase(orderRepository);
-  const cancelOrderUseCase = new CancelOrderUseCase(orderRepository, getOrderDetailUseCase);
+  const catalogClient = new HttpCatalogClient();
+  const cancelOrderUseCase = new CancelOrderUseCase(
+    orderRepository,
+    getOrderDetailUseCase,
+    catalogClient,
+  );
   const refundOrderUseCase = new RefundOrderUseCase(orderRepository, getOrderDetailUseCase);
   const rejectRefundUseCase = new RejectRefundUseCase(orderRepository, getOrderDetailUseCase);
   const ghnCarrierClient = new GhnCarrierClient();
@@ -105,7 +118,6 @@ export function createApplication(adminOrderReader?: OrderReader): Application {
   const payOsGateway = new PayOsGateway();
   const executeRefundUseCase = new ExecuteRefundUseCase(orderRepository, payOsGateway);
   const getRefundStatusUseCase = new GetRefundStatusUseCase(orderRepository);
-  const catalogClient = new HttpCatalogClient();
   const updateOrderStatusUseCase = new UpdateOrderStatusUseCase(
     orderRepository,
     getOrderDetailUseCase,
@@ -115,6 +127,8 @@ export function createApplication(adminOrderReader?: OrderReader): Application {
     orderRepository,
     getOrderDetailUseCase,
   );
+
+  const invoiceService = new InvoiceService(pool);
 
   const orderController = new OrderController(
     getOrderDetailUseCase,
@@ -132,6 +146,8 @@ export function createApplication(adminOrderReader?: OrderReader): Application {
       search: new SearchOrdersUseCase(adminOrderReader),
       detail: new GetOrderDetailUseCase(adminOrderReader),
     },
+    pool,
+    invoiceService,
   );
 
   const promotionRepository = new PostgresPromotionRepository(pool);
@@ -161,6 +177,8 @@ export function createApplication(adminOrderReader?: OrderReader): Application {
     '/api/v1',
     createCheckoutRoutes(pool, undefined, promotionService, adminCommerceController),
   );
+  app.use('/api/v1', createAuctionOrderRoutes(pool));
+  app.use('/api/v1', createInvoiceRoutes(invoiceService));
   app.use('/api/v1/cart', createCartRoutes(cartController));
   app.use('/api/v1/orders', createOrderRoutes(orderController, adminCommerceController));
 

@@ -10,6 +10,8 @@ export interface ShippingAddressInput {
 
 export interface CreateAuctionOrderInput {
   auctionId?: string;
+  sellerId?: string;
+  productTitle?: string;
   buyerToken?: string;
   buyerId: string;
   productId: string;

@@ -6954,6 +6954,7 @@ export namespace Prisma {
     createdAt: Date | null
     updatedAt: Date | null
     moderatedHidden: boolean | null
+    orderId: string | null
   }
 
   export type ReviewMaxAggregateOutputType = {
@@ -6966,6 +6967,7 @@ export namespace Prisma {
     createdAt: Date | null
     updatedAt: Date | null
     moderatedHidden: boolean | null
+    orderId: string | null
   }
 
   export type ReviewCountAggregateOutputType = {
@@ -6978,6 +6980,7 @@ export namespace Prisma {
     createdAt: number
     updatedAt: number
     moderatedHidden: number
+    orderId: number
     _all: number
   }
 
@@ -7000,6 +7003,7 @@ export namespace Prisma {
     createdAt?: true
     updatedAt?: true
     moderatedHidden?: true
+    orderId?: true
   }
 
   export type ReviewMaxAggregateInputType = {
@@ -7012,6 +7016,7 @@ export namespace Prisma {
     createdAt?: true
     updatedAt?: true
     moderatedHidden?: true
+    orderId?: true
   }
 
   export type ReviewCountAggregateInputType = {
@@ -7024,6 +7029,7 @@ export namespace Prisma {
     createdAt?: true
     updatedAt?: true
     moderatedHidden?: true
+    orderId?: true
     _all?: true
   }
 
@@ -7123,6 +7129,7 @@ export namespace Prisma {
     createdAt: Date
     updatedAt: Date
     moderatedHidden: boolean
+    orderId: string | null
     _count: ReviewCountAggregateOutputType | null
     _avg: ReviewAvgAggregateOutputType | null
     _sum: ReviewSumAggregateOutputType | null
@@ -7154,6 +7161,7 @@ export namespace Prisma {
     createdAt?: boolean
     updatedAt?: boolean
     moderatedHidden?: boolean
+    orderId?: boolean
     product?: boolean | ProductDefaultArgs<ExtArgs>
     moderationCases?: boolean | Review$moderationCasesArgs<ExtArgs>
     _count?: boolean | ReviewCountOutputTypeDefaultArgs<ExtArgs>
@@ -7169,6 +7177,7 @@ export namespace Prisma {
     createdAt?: boolean
     updatedAt?: boolean
     moderatedHidden?: boolean
+    orderId?: boolean
     product?: boolean | ProductDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["review"]>
 
@@ -7182,6 +7191,7 @@ export namespace Prisma {
     createdAt?: boolean
     updatedAt?: boolean
     moderatedHidden?: boolean
+    orderId?: boolean
   }
 
   export type ReviewInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
@@ -7209,6 +7219,7 @@ export namespace Prisma {
       createdAt: Date
       updatedAt: Date
       moderatedHidden: boolean
+      orderId: string | null
     }, ExtArgs["result"]["review"]>
     composites: {}
   }
@@ -7613,6 +7624,7 @@ export namespace Prisma {
     readonly createdAt: FieldRef<"Review", 'DateTime'>
     readonly updatedAt: FieldRef<"Review", 'DateTime'>
     readonly moderatedHidden: FieldRef<"Review", 'Boolean'>
+    readonly orderId: FieldRef<"Review", 'String'>
   }
     
 
@@ -11024,7 +11036,8 @@ export namespace Prisma {
     comment: 'comment',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt',
-    moderatedHidden: 'moderatedHidden'
+    moderatedHidden: 'moderatedHidden',
+    orderId: 'orderId'
   };
 
   export type ReviewScalarFieldEnum = (typeof ReviewScalarFieldEnum)[keyof typeof ReviewScalarFieldEnum]
@@ -11594,6 +11607,7 @@ export namespace Prisma {
     createdAt?: DateTimeFilter<"Review"> | Date | string
     updatedAt?: DateTimeFilter<"Review"> | Date | string
     moderatedHidden?: BoolFilter<"Review"> | boolean
+    orderId?: StringNullableFilter<"Review"> | string | null
     product?: XOR<ProductRelationFilter, ProductWhereInput>
     moderationCases?: ModerationCaseListRelationFilter
   }
@@ -11608,6 +11622,7 @@ export namespace Prisma {
     createdAt?: SortOrder
     updatedAt?: SortOrder
     moderatedHidden?: SortOrder
+    orderId?: SortOrderInput | SortOrder
     product?: ProductOrderByWithRelationInput
     moderationCases?: ModerationCaseOrderByRelationAggregateInput
   }
@@ -11625,6 +11640,7 @@ export namespace Prisma {
     createdAt?: DateTimeFilter<"Review"> | Date | string
     updatedAt?: DateTimeFilter<"Review"> | Date | string
     moderatedHidden?: BoolFilter<"Review"> | boolean
+    orderId?: StringNullableFilter<"Review"> | string | null
     product?: XOR<ProductRelationFilter, ProductWhereInput>
     moderationCases?: ModerationCaseListRelationFilter
   }, "id">
@@ -11639,6 +11655,7 @@ export namespace Prisma {
     createdAt?: SortOrder
     updatedAt?: SortOrder
     moderatedHidden?: SortOrder
+    orderId?: SortOrderInput | SortOrder
     _count?: ReviewCountOrderByAggregateInput
     _avg?: ReviewAvgOrderByAggregateInput
     _max?: ReviewMaxOrderByAggregateInput
@@ -11659,6 +11676,7 @@ export namespace Prisma {
     createdAt?: DateTimeWithAggregatesFilter<"Review"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"Review"> | Date | string
     moderatedHidden?: BoolWithAggregatesFilter<"Review"> | boolean
+    orderId?: StringNullableWithAggregatesFilter<"Review"> | string | null
   }
 
   export type ModerationCaseWhereInput = {
@@ -12294,6 +12312,7 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     moderatedHidden?: boolean
+    orderId?: string | null
     product: ProductCreateNestedOneWithoutReviewsInput
     moderationCases?: ModerationCaseCreateNestedManyWithoutReviewInput
   }
@@ -12308,6 +12327,7 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     moderatedHidden?: boolean
+    orderId?: string | null
     moderationCases?: ModerationCaseUncheckedCreateNestedManyWithoutReviewInput
   }
 
@@ -12320,6 +12340,7 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     moderatedHidden?: BoolFieldUpdateOperationsInput | boolean
+    orderId?: NullableStringFieldUpdateOperationsInput | string | null
     product?: ProductUpdateOneRequiredWithoutReviewsNestedInput
     moderationCases?: ModerationCaseUpdateManyWithoutReviewNestedInput
   }
@@ -12334,6 +12355,7 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     moderatedHidden?: BoolFieldUpdateOperationsInput | boolean
+    orderId?: NullableStringFieldUpdateOperationsInput | string | null
     moderationCases?: ModerationCaseUncheckedUpdateManyWithoutReviewNestedInput
   }
 
@@ -12347,6 +12369,7 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     moderatedHidden?: boolean
+    orderId?: string | null
   }
 
   export type ReviewUpdateManyMutationInput = {
@@ -12358,6 +12381,7 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     moderatedHidden?: BoolFieldUpdateOperationsInput | boolean
+    orderId?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type ReviewUncheckedUpdateManyInput = {
@@ -12370,6 +12394,7 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     moderatedHidden?: BoolFieldUpdateOperationsInput | boolean
+    orderId?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type ModerationCaseCreateInput = {
@@ -13136,6 +13161,7 @@ export namespace Prisma {
     createdAt?: SortOrder
     updatedAt?: SortOrder
     moderatedHidden?: SortOrder
+    orderId?: SortOrder
   }
 
   export type ReviewAvgOrderByAggregateInput = {
@@ -13152,6 +13178,7 @@ export namespace Prisma {
     createdAt?: SortOrder
     updatedAt?: SortOrder
     moderatedHidden?: SortOrder
+    orderId?: SortOrder
   }
 
   export type ReviewMinOrderByAggregateInput = {
@@ -13164,6 +13191,7 @@ export namespace Prisma {
     createdAt?: SortOrder
     updatedAt?: SortOrder
     moderatedHidden?: SortOrder
+    orderId?: SortOrder
   }
 
   export type ReviewSumOrderByAggregateInput = {
@@ -14577,6 +14605,7 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     moderatedHidden?: boolean
+    orderId?: string | null
     moderationCases?: ModerationCaseCreateNestedManyWithoutReviewInput
   }
 
@@ -14589,6 +14618,7 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     moderatedHidden?: boolean
+    orderId?: string | null
     moderationCases?: ModerationCaseUncheckedCreateNestedManyWithoutReviewInput
   }
 
@@ -14784,6 +14814,7 @@ export namespace Prisma {
     createdAt?: DateTimeFilter<"Review"> | Date | string
     updatedAt?: DateTimeFilter<"Review"> | Date | string
     moderatedHidden?: BoolFilter<"Review"> | boolean
+    orderId?: StringNullableFilter<"Review"> | string | null
   }
 
   export type ProductCreateWithoutImagesInput = {
@@ -15330,6 +15361,7 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     moderatedHidden?: boolean
+    orderId?: string | null
     product: ProductCreateNestedOneWithoutReviewsInput
   }
 
@@ -15343,6 +15375,7 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     moderatedHidden?: boolean
+    orderId?: string | null
   }
 
   export type ReviewCreateOrConnectWithoutModerationCasesInput = {
@@ -15477,6 +15510,7 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     moderatedHidden?: BoolFieldUpdateOperationsInput | boolean
+    orderId?: NullableStringFieldUpdateOperationsInput | string | null
     product?: ProductUpdateOneRequiredWithoutReviewsNestedInput
   }
 
@@ -15490,6 +15524,7 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     moderatedHidden?: BoolFieldUpdateOperationsInput | boolean
+    orderId?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type ModerationActionUpsertWithWhereUniqueWithoutModerationCaseInput = {
@@ -15862,6 +15897,7 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     moderatedHidden?: boolean
+    orderId?: string | null
   }
 
   export type ModerationCaseUpdateWithoutProductInput = {
@@ -15973,6 +16009,7 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     moderatedHidden?: BoolFieldUpdateOperationsInput | boolean
+    orderId?: NullableStringFieldUpdateOperationsInput | string | null
     moderationCases?: ModerationCaseUpdateManyWithoutReviewNestedInput
   }
 
@@ -15985,6 +16022,7 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     moderatedHidden?: BoolFieldUpdateOperationsInput | boolean
+    orderId?: NullableStringFieldUpdateOperationsInput | string | null
     moderationCases?: ModerationCaseUncheckedUpdateManyWithoutReviewNestedInput
   }
 
@@ -15997,6 +16035,7 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     moderatedHidden?: BoolFieldUpdateOperationsInput | boolean
+    orderId?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type ModerationCaseCreateManyReviewInput = {

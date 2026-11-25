@@ -173,54 +173,234 @@ export class PayOsGateway implements IPaymentGateway {
     }
   }
 
+  private isRefundDemoMode(): boolean {
+    return process.env.NODE_ENV !== 'production' && process.env.PAYOS_REFUND_DEMO_MODE === 'true';
+  }
+
   /**
-   * Kích hoạt hoàn tiền thật qua cổng thanh toán PayOS / Ngân hàng (SRS 2.3, 3.4)
-   * Hỗ trợ Dual-Mode: Live PayOS API & Resilient Sandbox simulation
+   * Kích hoạt hoàn tiền qua cổng thanh toán PayOS / Ngân hàng.
+   * Không bao giờ trả SUCCESS giả khi provider chưa xác nhận giao dịch.
+   * Chỉ cho phép giả lập khi bật tường minh PAYOS_REFUND_DEMO_MODE=true ngoài production.
    */
   public async executeRefund(request: RefundRequest): Promise<RefundResponse> {
     const sanitizedId = String(request.orderId)
       .replace(/[^a-zA-Z0-9]/g, '')
       .slice(-8);
-    const refundTxnId = `rf_payos_${sanitizedId}_${Date.now().toString(36)}`;
+    const requestRef =
+      request.idempotencyKey?.trim() || `rf_req_${sanitizedId}_${Date.now().toString(36)}`;
 
-    if (this.isConfigured() && process.env.PAYOS_DISBURSEMENT_API_KEY) {
+    if (this.isRefundDemoMode()) {
+      return {
+        refundTransactionId: `rf_demo_${sanitizedId}_${Date.now().toString(36)}`,
+        status: 'SUCCESS',
+        amount: request.amount,
+        completedAt: new Date(),
+        providerConfirmed: true,
+        demoMode: true,
+      };
+    }
+
+    const disbursementKey = process.env.PAYOS_DISBURSEMENT_API_KEY?.trim();
+    if (!this.isConfigured() || !disbursementKey) {
+      return {
+        refundTransactionId: '',
+        status: 'FAILED',
+        amount: request.amount,
+        completedAt: new Date(),
+        providerConfirmed: false,
+        errorCode: 'REFUND_PROVIDER_NOT_CONFIGURED',
+        errorMessage:
+          'Cổng giải ngân hoàn tiền PayOS chưa được cấu hình (thiếu PAYOS_DISBURSEMENT_API_KEY hoặc thông tin kết nối PayOS).',
+      };
+    }
+
+    try {
+      const response = await fetch(`${this.config.baseUrl}/v2/disbursement/refund`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-client-id': this.config.clientId,
+          'x-api-key': disbursementKey,
+          'idempotency-key': requestRef,
+        },
+        body: JSON.stringify({
+          orderCode: request.orderCode,
+          amount: request.amount,
+          reason: request.reason || 'Hoàn tiền khiếu nại',
+          referenceId: requestRef,
+        }),
+        signal: AbortSignal.timeout(10000),
+      });
+
+      if (response.status >= 500 || response.status === 429) {
+        return {
+          refundTransactionId: requestRef,
+          status: 'PENDING',
+          amount: request.amount,
+          completedAt: new Date(),
+          providerConfirmed: false,
+          needsReconciliation: true,
+          errorCode: 'REFUND_PROVIDER_UNAVAILABLE',
+          errorMessage: `PayOS tạm thời phản hồi HTTP ${response.status}; cần đối soát trạng thái trước khi thử lại.`,
+        };
+      }
+
+      let body: any = null;
       try {
-        const response = await fetch(`${this.config.baseUrl}/v2/disbursement/refund`, {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            'x-client-id': this.config.clientId,
-            'x-api-key': process.env.PAYOS_DISBURSEMENT_API_KEY,
-          },
-          body: JSON.stringify({
-            orderCode: request.orderCode,
-            amount: request.amount,
-            reason: request.reason || 'Hoàn tiền khiếu nại',
-          }),
-          signal: AbortSignal.timeout(10000),
-        });
-        const body = (await response.json()) as any;
-        if (response.ok && body.code === '00' && body.data?.refundTransactionId) {
+        body = await response.json();
+      } catch {
+        return {
+          refundTransactionId: requestRef,
+          status: 'PENDING',
+          amount: request.amount,
+          completedAt: new Date(),
+          providerConfirmed: false,
+          needsReconciliation: true,
+          errorCode: 'REFUND_PROVIDER_INVALID_RESPONSE',
+          errorMessage: 'Phản hồi từ PayOS không hợp lệ; giữ trạng thái PENDING để đối soát.',
+        };
+      }
+
+      if (response.ok && body?.code === '00' && body?.data?.refundTransactionId) {
+        const providerStatus = String(body.data.status || 'SUCCESS').toUpperCase();
+        if (providerStatus === 'PENDING' || providerStatus === 'PROCESSING') {
           return {
-            refundTransactionId: body.data.refundTransactionId,
+            refundTransactionId: String(body.data.refundTransactionId),
+            status: 'PENDING',
+            amount: request.amount,
+            completedAt: new Date(),
+            providerConfirmed: false,
+            needsReconciliation: true,
+          };
+        }
+        if (providerStatus === 'SUCCESS' || providerStatus === 'COMPLETED') {
+          return {
+            refundTransactionId: String(body.data.refundTransactionId),
             status: 'SUCCESS',
             amount: request.amount,
             completedAt: new Date(),
+            providerConfirmed: true,
           };
         }
-      } catch (err: any) {
-        console.warn(
-          '[PayOsGateway] Live refund endpoint fallback to resilient sandbox:',
-          err.message,
-        );
+        return {
+          refundTransactionId: String(body.data.refundTransactionId),
+          status: 'FAILED',
+          amount: request.amount,
+          completedAt: new Date(),
+          providerConfirmed: false,
+          errorCode: 'REFUND_PROVIDER_REJECTED',
+          errorMessage: body?.desc || `PayOS trả trạng thái hoàn tiền ${providerStatus}.`,
+        };
       }
+
+      return {
+        refundTransactionId: String(body?.data?.refundTransactionId || ''),
+        status: 'FAILED',
+        amount: request.amount,
+        completedAt: new Date(),
+        providerConfirmed: false,
+        errorCode: 'REFUND_PROVIDER_REJECTED',
+        errorMessage:
+          body?.desc || body?.message || `PayOS từ chối hoàn tiền (HTTP ${response.status}).`,
+      };
+    } catch (err: any) {
+      // Timeout hoặc lỗi mạng: giao dịch có thể đã tới PayOS -> giữ PENDING để đối soát trước khi retry
+      return {
+        refundTransactionId: requestRef,
+        status: 'PENDING',
+        amount: request.amount,
+        completedAt: new Date(),
+        providerConfirmed: false,
+        needsReconciliation: true,
+        errorCode: 'REFUND_PROVIDER_TIMEOUT',
+        errorMessage: `Không nhận được xác nhận từ PayOS (${err?.message || 'network/timeout'}); cần đối soát trước khi thử lại.`,
+      };
+    }
+  }
+
+  public async getRefundStatus(refundTransactionId: string): Promise<{
+    status: 'PENDING' | 'SUCCESS' | 'FAILED' | 'UNKNOWN';
+    providerConfirmed: boolean;
+    refundTransactionId?: string;
+    completedAt?: Date;
+    errorMessage?: string;
+  }> {
+    if (this.isRefundDemoMode()) {
+      return {
+        status: 'SUCCESS',
+        providerConfirmed: true,
+        refundTransactionId,
+        completedAt: new Date(),
+      };
     }
 
-    return {
-      refundTransactionId: refundTxnId,
-      status: 'SUCCESS',
-      amount: request.amount,
-      completedAt: new Date(),
-    };
+    const disbursementKey = process.env.PAYOS_DISBURSEMENT_API_KEY?.trim();
+    if (!this.isConfigured() || !disbursementKey) {
+      return {
+        status: 'UNKNOWN',
+        providerConfirmed: false,
+        refundTransactionId,
+        errorMessage: 'PayOS disbursement gateway chưa được cấu hình.',
+      };
+    }
+
+    try {
+      const response = await fetch(
+        `${this.config.baseUrl}/v2/disbursement/refund/${encodeURIComponent(refundTransactionId)}`,
+        {
+          method: 'GET',
+          headers: {
+            'x-client-id': this.config.clientId,
+            'x-api-key': disbursementKey,
+          },
+          signal: AbortSignal.timeout(6000),
+        },
+      );
+      if (!response.ok) {
+        return {
+          status: 'UNKNOWN',
+          providerConfirmed: false,
+          refundTransactionId,
+          errorMessage: `PayOS reconciliation HTTP ${response.status}`,
+        };
+      }
+      const body = (await response.json()) as any;
+      const rawStatus = String(body?.data?.status || '').toUpperCase();
+      if (body?.code === '00' && (rawStatus === 'SUCCESS' || rawStatus === 'COMPLETED')) {
+        return {
+          status: 'SUCCESS',
+          providerConfirmed: true,
+          refundTransactionId: String(body.data.refundTransactionId || refundTransactionId),
+          completedAt: body.data.completedAt ? new Date(body.data.completedAt) : new Date(),
+        };
+      }
+      if (rawStatus === 'PENDING' || rawStatus === 'PROCESSING') {
+        return {
+          status: 'PENDING',
+          providerConfirmed: false,
+          refundTransactionId: String(body?.data?.refundTransactionId || refundTransactionId),
+        };
+      }
+      if (rawStatus === 'FAILED' || rawStatus === 'CANCELLED' || rawStatus === 'REJECTED') {
+        return {
+          status: 'FAILED',
+          providerConfirmed: false,
+          refundTransactionId: String(body?.data?.refundTransactionId || refundTransactionId),
+          errorMessage: body?.desc || 'Provider xác nhận giao dịch hoàn tiền thất bại.',
+        };
+      }
+      return {
+        status: 'UNKNOWN',
+        providerConfirmed: false,
+        refundTransactionId,
+      };
+    } catch (err: any) {
+      return {
+        status: 'UNKNOWN',
+        providerConfirmed: false,
+        refundTransactionId,
+        errorMessage: err?.message || 'Reconciliation request failed',
+      };
+    }
   }
 }

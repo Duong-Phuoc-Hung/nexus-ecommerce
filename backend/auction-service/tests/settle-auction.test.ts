@@ -36,8 +36,8 @@ describe('SettleAuctionUseCase (TASK-AUC-01)', () => {
     assert.strictEqual(result.finalPrice, 65000000);
     assert.strictEqual(result.status, 'PENDING_PAYMENT');
 
-    // 2. Kiểm tra hạn nộp tiền là đúng 48 tiếng kể từ thời điểm chốt phiên
-    const expectedDeadlineApprox = Date.now() + 48 * 60 * 60 * 1000;
+    // 2. Kiểm tra hạn nộp tiền là đúng 24 tiếng kể từ khi phiên kết thúc
+    const expectedDeadlineApprox = auction.endTime.getTime() + 24 * 60 * 60 * 1000;
     assert.ok(Math.abs(result.paymentDeadline.getTime() - expectedDeadlineApprox) < 5000);
 
     // 3. Kiểm tra trạng thái phiên đổi sang SETTLED

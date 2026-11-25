@@ -39,6 +39,7 @@ import {
   auctionMoney,
   getDisplayTimezoneLabel,
 } from '@/modules/auction/components/auction-ui';
+import { getAuctionSocket } from '@/modules/auction/utils/auction-socket';
 
 const BID_PAGE_SIZE = 10;
 
@@ -139,6 +140,8 @@ export function AuctionManagementDetail({ id }: { id: string }) {
 
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
+  const [cancelPublicReason, setCancelPublicReason] = useState('');
+  const [cancelInternalNote, setCancelInternalNote] = useState('');
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelError, setCancelError] = useState('');
   const [cancelConflict, setCancelConflict] = useState(false);
@@ -175,8 +178,29 @@ export function AuctionManagementDetail({ id }: { id: string }) {
   useEffect(() => {
     void load(false);
     const off = auctionApi.subscribe(() => void load(true));
-    return off;
-  }, [load]);
+    const socket = getAuctionSocket();
+    socket.emit('join_auction', id);
+    const onSocketUpdate = (data?: { auctionId?: string }) => {
+      if (data?.auctionId && String(data.auctionId) !== String(id)) return;
+      void load(true);
+    };
+    socket.on('auction:bid_placed', onSocketUpdate);
+    socket.on('auction:buy_now', onSocketUpdate);
+    socket.on('auction:updated', onSocketUpdate);
+    socket.on('auction:cancelled', onSocketUpdate);
+    socket.on('auction:started', onSocketUpdate);
+    socket.on('auction:ended', onSocketUpdate);
+    return () => {
+      off();
+      socket.emit('leave_auction', id);
+      socket.off('auction:bid_placed', onSocketUpdate);
+      socket.off('auction:buy_now', onSocketUpdate);
+      socket.off('auction:updated', onSocketUpdate);
+      socket.off('auction:cancelled', onSocketUpdate);
+      socket.off('auction:started', onSocketUpdate);
+      socket.off('auction:ended', onSocketUpdate);
+    };
+  }, [id, load]);
 
   const handleCopyId = async () => {
     try {
@@ -233,9 +257,14 @@ export function AuctionManagementDetail({ id }: { id: string }) {
     setCancelError('');
     setCancelConflict(false);
     try {
-      await auctionApi.cancel(auction.id, cancelReason, auction.version, user);
+      await auctionApi.cancel(auction.id, cancelReason, auction.version, user, {
+        publicReason: cancelPublicReason || undefined,
+        internalNote: cancelInternalNote || undefined,
+      });
       setCancelOpen(false);
       setCancelReason('');
+      setCancelPublicReason('');
+      setCancelInternalNote('');
       setNotice('Phiên đã chuyển sang trạng thái Đã hủy và ghi nhận lý do vào nhật ký.');
       await load(true);
     } catch (err) {
@@ -888,11 +917,46 @@ export function AuctionManagementDetail({ id }: { id: string }) {
               maxLength={500}
               value={cancelReason}
               onChange={(e) => setCancelReason(e.target.value)}
-              rows={4}
+              rows={3}
               placeholder="Ghi rõ nguyên nhân sự cố hoặc quyết định điều hành (1–500 ký tự)…"
               aria-describedby={cancelError ? 'admin-cancel-error' : undefined}
               className="w-full rounded-xl border border-stone-300 p-3 text-sm text-stone-900 focus-visible:outline-2 focus-visible:outline-emerald-700"
             />
+          </div>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div>
+              <label
+                htmlFor="admin-cancel-public"
+                className="block text-xs font-semibold text-stone-800"
+              >
+                Lý do công khai cho Buyer (tùy chọn)
+              </label>
+              <Input
+                id="admin-cancel-public"
+                maxLength={250}
+                value={cancelPublicReason}
+                onChange={(e) => setCancelPublicReason(e.target.value)}
+                placeholder="Bỏ trống để dùng thông báo chung"
+                className="mt-1 min-h-10 rounded-xl text-xs"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="admin-cancel-internal"
+                className="block text-xs font-semibold text-stone-800"
+              >
+                Ghi chú nội bộ (chỉ Admin xem)
+              </label>
+              <Input
+                id="admin-cancel-internal"
+                maxLength={250}
+                value={cancelInternalNote}
+                onChange={(e) => setCancelInternalNote(e.target.value)}
+                placeholder="Mã biên bản / đối soát nội bộ…"
+                className="mt-1 min-h-10 rounded-xl text-xs"
+              />
+            </div>
           </div>
 
           {cancelError && (

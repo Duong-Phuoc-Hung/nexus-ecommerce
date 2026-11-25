@@ -230,6 +230,22 @@ export class SupportCase {
   }
 
   /**
+   * Cập nhật bổ sung bằng chứng / mã vận đơn hoàn trả từ Người mua (D4)
+   */
+  public updateBuyerEvidence(evidence: DisputeEvidence): void {
+    if (!evidence) {
+      throw new Error('Bằng chứng của người mua không được để trống.');
+    }
+    this._buyerEvidence = {
+      photos: evidence.photos || this._buyerEvidence?.photos || [],
+      videos: evidence.videos || this._buyerEvidence?.videos || [],
+      note: evidence.note || this._buyerEvidence?.note,
+      submittedAt: new Date(),
+    };
+    this._updatedAt = new Date();
+  }
+
+  /**
    * Cập nhật bằng chứng đối chất của Người bán (Video đóng gói, ảnh niêm phong)
    */
   public submitSellerEvidence(evidence: DisputeEvidence): void {

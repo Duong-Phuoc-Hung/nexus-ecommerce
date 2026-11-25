@@ -1,4 +1,5 @@
 import { ShipmentStatus } from '../../domain/entities/Shipment';
+import { buildServiceAuthHeader } from '../security/internal-service-auth';
 
 /**
  * Ánh xạ trạng thái vận chuyển (Fulfillment / 3PL Carrier) sang trạng thái đơn hàng (Commerce Order Status).
@@ -65,13 +66,19 @@ export class CommerceOrderClient implements ICommerceOrderClient {
       note: note || `Đồng bộ tự động từ Vận chuyển (Fulfillment status: ${shipmentStatus})`,
     });
 
+    const s2sHeaders = buildServiceAuthHeader({
+      issuer: 'fulfillment-service',
+      audience: 'commerce-service',
+      scope: 'order:status:sync',
+      resource: cleanOrderId,
+    });
+
     try {
       const response = await fetch(targetUrl, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': 'usr_system_fulfillment',
-          'x-user-role': 'ADMIN',
+          ...s2sHeaders,
         },
         body: bodyPayload,
         signal: AbortSignal.timeout(4000),
@@ -87,8 +94,7 @@ export class CommerceOrderClient implements ICommerceOrderClient {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-user-id': 'usr_system_fulfillment',
-            'x-user-role': 'ADMIN',
+            ...s2sHeaders,
           },
           body: bodyPayload,
           signal: AbortSignal.timeout(4000),

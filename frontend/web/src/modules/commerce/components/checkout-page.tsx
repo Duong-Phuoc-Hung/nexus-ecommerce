@@ -408,7 +408,22 @@ export default function CheckoutPage() {
       window.location.assign(checkoutUrl);
       return;
     } catch (e) {
-      setError(userMessage(e));
+      const errCode = (e as { code?: string })?.code;
+      if (errCode === 'PROMO_OUT_OF_QUOTA') {
+        setAppliedPromoCode('');
+        setPromoInput('');
+        setPromoFeedback(
+          'Mã giảm giá vừa hết lượt sử dụng và đã được gỡ khỏi đơn. Bạn có thể đặt lại với giá gốc.',
+        );
+        setError('Mã giảm giá vừa hết lượt sử dụng. Hệ thống đã gỡ mã để bạn tiếp tục đặt hàng.');
+      } else if (errCode === 'PROMO_USER_LIMIT_REACHED') {
+        setAppliedPromoCode('');
+        setPromoInput('');
+        setPromoFeedback('Bạn đã sử dụng hết lượt cho phép của mã này.');
+        setError('Bạn đã sử dụng hết lượt cho phép của mã giảm giá này.');
+      } else {
+        setError(userMessage(e));
+      }
     } finally {
       setBusy(false);
     }
