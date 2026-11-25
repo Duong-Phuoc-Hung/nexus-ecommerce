@@ -49,7 +49,7 @@ export class PostgresAdminOrderReader {
   constructor(private readonly prisma: PrismaClient) {}
 
   public async findById(id: string): Promise<Order | null> {
-    const key = id.trim();
+    const key = id.replace(/^[#]/, '').trim();
     const rows = await this.prisma.$queryRaw<OrderRow[]>`
       ${orderWithItems} WHERE o.id = ${key} OR o.order_code = ${key}
       ORDER BY (o.id = ${key}) DESC LIMIT 1
@@ -63,17 +63,20 @@ export class PostgresAdminOrderReader {
     if (criteria.buyerId) conditions.push(Prisma.sql`o.buyer_id = ${criteria.buyerId}`);
     if (criteria.status) conditions.push(Prisma.sql`upper(o.status) = ${criteria.status}`);
     if (criteria.q) {
-      const q = `%${criteria.q.replace(/[\\%_]/g, '\\$&')}%`;
-      conditions.push(Prisma.sql`(
-        o.id ILIKE ${q} OR o.order_code ILIKE ${q} OR o.buyer_id ILIKE ${q}
-        OR o.buyer_name ILIKE ${q} OR o.buyer_email ILIKE ${q} OR o.seller_id ILIKE ${q}
-        OR o.seller_name ILIKE ${q} OR o.tracking_code ILIKE ${q}
-        OR o.shipping_address::text ILIKE ${q}
-        OR EXISTS (
-          SELECT 1 FROM commerce_order_items i WHERE i.order_id = o.id
-          AND (i.product_title ILIKE ${q} OR i.product_id::text ILIKE ${q})
-        )
-      )`);
+      const normalizedQ = criteria.q.replace(/^[#]/, '').trim();
+      if (normalizedQ) {
+        const q = `%${normalizedQ.replace(/[\\%_]/g, '\\$&')}%`;
+        conditions.push(Prisma.sql`(
+          o.id ILIKE ${q} OR o.order_code ILIKE ${q} OR o.buyer_id ILIKE ${q}
+          OR o.buyer_name ILIKE ${q} OR o.buyer_email ILIKE ${q} OR o.seller_id ILIKE ${q}
+          OR o.seller_name ILIKE ${q} OR o.tracking_code ILIKE ${q}
+          OR o.shipping_address::text ILIKE ${q}
+          OR EXISTS (
+            SELECT 1 FROM commerce_order_items i WHERE i.order_id = o.id
+            AND (i.product_title ILIKE ${q} OR i.product_id::text ILIKE ${q})
+          )
+        )`);
+      }
     }
 
     const where = Prisma.join(conditions, ' AND ');

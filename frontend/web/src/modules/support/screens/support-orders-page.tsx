@@ -56,7 +56,7 @@ export function SupportOrdersPage() {
     ordersApi
       .list(
         {
-          q: search.trim() || undefined,
+          q: search.replace(/^[#]/, '').trim() || undefined,
           status: status !== 'ALL' ? status : undefined,
           limit: 50,
         },
