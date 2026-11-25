@@ -48,15 +48,16 @@ export class PostgresSupportCaseRepository implements ISupportCaseRepository {
   }
 
   public async findById(id: string): Promise<SupportCase | null> {
-    const cleanId = id.trim();
+    const rawClean = id.trim();
+    const cleanId = rawClean.replace(/^[#]/, '').trim();
 
     try {
       const row = await this.prisma.supportCase.findFirst({
         where: {
-          id: {
-            equals: cleanId,
-            mode: 'insensitive',
-          },
+          OR: [
+            { id: { equals: cleanId, mode: 'insensitive' } },
+            { id: { equals: rawClean, mode: 'insensitive' } },
+          ],
         },
       });
 
@@ -72,14 +73,17 @@ export class PostgresSupportCaseRepository implements ISupportCaseRepository {
   }
 
   public async findByOrderId(orderId: string): Promise<SupportCase | null> {
-    const cleanId = orderId.trim();
+    const rawClean = orderId.trim();
+    const cleanId = rawClean.replace(/^[#]/, '').trim();
 
     try {
       const row = await this.prisma.supportCase.findFirst({
         where: {
           OR: [
             { orderId: { equals: cleanId, mode: 'insensitive' } },
+            { orderId: { equals: rawClean, mode: 'insensitive' } },
             { orderCode: { equals: cleanId, mode: 'insensitive' } },
+            { orderCode: { equals: rawClean, mode: 'insensitive' } },
           ],
         },
         orderBy: {
@@ -136,10 +140,14 @@ export class PostgresSupportCaseRepository implements ISupportCaseRepository {
     // 4. Lọc theo từ khóa tìm kiếm (query)
     if (criteria.query && criteria.query.trim().length > 0) {
       const q = criteria.query.trim();
+      const unhashed = q.replace(/^[#]/, '').trim();
       where.OR = [
         { id: { contains: q, mode: 'insensitive' } },
+        { id: { contains: unhashed, mode: 'insensitive' } },
         { orderId: { contains: q, mode: 'insensitive' } },
+        { orderId: { contains: unhashed, mode: 'insensitive' } },
         { orderCode: { contains: q, mode: 'insensitive' } },
+        { orderCode: { contains: unhashed, mode: 'insensitive' } },
         { customer: { contains: q, mode: 'insensitive' } },
         { reason: { contains: q, mode: 'insensitive' } },
       ];

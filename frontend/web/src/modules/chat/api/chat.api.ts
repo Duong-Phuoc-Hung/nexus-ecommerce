@@ -321,12 +321,15 @@ async function getInboxThreads(
       order?.seller ||
       (conversation.sellerId ? `Người bán` : 'Người bán Nexus');
     const counterpartLabel = isSupportChannel ? 'Bộ phận Hỗ trợ Nexus' : sellerDisplayName;
+    const buyerId = conversation.buyerId || order?.buyerId;
 
     return {
       id: conversation.id,
       conversationId: conversation.id,
       orderId: conversation.orderId,
       orderCode: order?.orderCode || conversation.orderId,
+      buyerId,
+      customerId: buyerId,
       channelType: conversation.channelType,
       sellerId: conversation.sellerId,
       counterpartLabel,

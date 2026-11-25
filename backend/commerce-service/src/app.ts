@@ -29,6 +29,7 @@ import { createOrderRoutes } from './interfaces/http/routes/OrderRoutes';
 import { createCheckoutRoutes } from './interfaces/http/routes/CheckoutRoutes';
 import { GhnCarrierClient } from './infrastructure/clients/GhnCarrierClient';
 import { PayOsGateway } from './infrastructure/clients/PayOsGateway';
+import { CommerceNotificationClient } from './infrastructure/clients/CommerceNotificationClient';
 import { PostgresPromotionRepository } from './infrastructure/repositories/PostgresPromotionRepository';
 import { PromotionService } from './application/promotion/PromotionService';
 import { AdminDashboardReportService } from './application/admin/AdminDashboardReportService';
@@ -92,28 +93,52 @@ export function createApplication(adminOrderReader?: OrderReader): Application {
 
   const getOrderDetailUseCase = new GetOrderDetailUseCase(orderRepository);
   const searchOrdersUseCase = new SearchOrdersUseCase(orderRepository);
-  const cancelOrderUseCase = new CancelOrderUseCase(orderRepository, getOrderDetailUseCase);
-  const refundOrderUseCase = new RefundOrderUseCase(orderRepository, getOrderDetailUseCase);
-  const rejectRefundUseCase = new RejectRefundUseCase(orderRepository, getOrderDetailUseCase);
+  const catalogClient = new HttpCatalogClient();
+  const notificationClient = new CommerceNotificationClient();
+  const cancelOrderUseCase = new CancelOrderUseCase(
+    orderRepository,
+    getOrderDetailUseCase,
+    notificationClient,
+  );
+  const refundOrderUseCase = new RefundOrderUseCase(
+    orderRepository,
+    getOrderDetailUseCase,
+    notificationClient,
+  );
+  const rejectRefundUseCase = new RejectRefundUseCase(
+    orderRepository,
+    getOrderDetailUseCase,
+    notificationClient,
+  );
   const ghnCarrierClient = new GhnCarrierClient();
   const dispatchOrderUseCase = new DispatchOrderUseCase(
     orderRepository,
     getOrderDetailUseCase,
     ghnCarrierClient,
+    notificationClient,
   );
-  const requestRefundUseCase = new RequestRefundUseCase(orderRepository, getOrderDetailUseCase);
+  const requestRefundUseCase = new RequestRefundUseCase(
+    orderRepository,
+    getOrderDetailUseCase,
+    notificationClient,
+  );
   const payOsGateway = new PayOsGateway();
-  const executeRefundUseCase = new ExecuteRefundUseCase(orderRepository, payOsGateway);
+  const executeRefundUseCase = new ExecuteRefundUseCase(
+    orderRepository,
+    payOsGateway,
+    notificationClient,
+  );
   const getRefundStatusUseCase = new GetRefundStatusUseCase(orderRepository);
-  const catalogClient = new HttpCatalogClient();
   const updateOrderStatusUseCase = new UpdateOrderStatusUseCase(
     orderRepository,
     getOrderDetailUseCase,
     catalogClient,
+    notificationClient,
   );
   const confirmOrderReceiptUseCase = new ConfirmOrderReceiptUseCase(
     orderRepository,
     getOrderDetailUseCase,
+    notificationClient,
   );
 
   const orderController = new OrderController(

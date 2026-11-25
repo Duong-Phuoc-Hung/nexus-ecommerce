@@ -29,8 +29,8 @@ export class ProcessCarrierWebhookUseCase {
   }
 
   public async execute(input: CarrierWebhookInput): Promise<Shipment> {
-    const rawTracking = (input.trackingCode || '').trim();
-    const rawOrderId = (input.orderId || '').trim();
+    const rawTracking = (input.trackingCode || '').replace(/^[#]/, '').trim();
+    const rawOrderId = (input.orderId || '').replace(/^[#]/, '').trim();
 
     let shipment: Shipment | null = null;
     if (rawTracking) {

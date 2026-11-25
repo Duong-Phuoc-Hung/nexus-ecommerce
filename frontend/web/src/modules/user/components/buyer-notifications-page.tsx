@@ -75,16 +75,33 @@ function writeLocalPrefs(userId: string, prefs: NotificationPreferences) {
 
 function mapNotificationRow(raw: unknown, idx: number): BuyerNotification {
   const row = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-  const rawType = String(row.category ?? row.type ?? row.eventType ?? 'ACCOUNT').toUpperCase();
+  const payload =
+    row.data && typeof row.data === 'object' ? (row.data as Record<string, unknown>) : {};
+  const rawType = String(
+    row.category ?? row.type ?? row.eventType ?? row.channel ?? 'ACCOUNT',
+  ).toUpperCase();
   const category: NotificationCategory =
     rawType.includes('AUCTION') || rawType.includes('BID')
       ? 'AUCTION'
-      : rawType.includes('ORDER') || rawType.includes('PAYMENT') || rawType.includes('SHIP')
+      : rawType.includes('ORDER') ||
+          rawType.includes('PAYMENT') ||
+          rawType.includes('SHIP') ||
+          rawType.includes('DISPUTE')
         ? 'ORDER'
         : 'ACCOUNT';
 
-  const orderId = typeof row.orderId === 'string' ? row.orderId : '';
-  const auctionId = typeof row.auctionId === 'string' ? row.auctionId : '';
+  const orderId =
+    typeof row.orderId === 'string'
+      ? row.orderId
+      : typeof payload.orderId === 'string'
+        ? payload.orderId
+        : '';
+  const auctionId =
+    typeof row.auctionId === 'string'
+      ? row.auctionId
+      : typeof payload.auctionId === 'string'
+        ? payload.auctionId
+        : '';
   const href =
     typeof row.href === 'string'
       ? row.href

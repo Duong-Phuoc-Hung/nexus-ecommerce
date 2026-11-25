@@ -54,7 +54,12 @@ export class NotificationController {
     const userId = String(req.query.userId || req.headers['x-user-id'] || '');
     let items = this.inAppNotifications;
     if (userId) {
-      items = items.filter((n) => n.recipientId === userId || n.recipientId === 'ALL');
+      const normalizedUser = userId.trim().toLowerCase();
+      items = items.filter(
+        (n) =>
+          n.recipientId.trim().toLowerCase() === normalizedUser ||
+          n.recipientId.toUpperCase() === 'ALL',
+      );
     }
     items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     const unreadCount = items.filter((n) => !n.read).length;

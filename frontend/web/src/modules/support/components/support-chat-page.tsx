@@ -167,10 +167,17 @@ export function SupportChatPage() {
   }
 
   const filteredThreads = threads.filter((t) => {
+    const q = searchQuery.trim().toLowerCase();
     const matchQuery =
-      t.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.orderCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (t.supportCaseId && t.supportCaseId.toLowerCase().includes(searchQuery.toLowerCase()));
+      !q ||
+      t.customerName.toLowerCase().includes(q) ||
+      t.orderCode.toLowerCase().includes(q) ||
+      (t.orderId && t.orderId.toLowerCase().includes(q)) ||
+      (t.id && t.id.toLowerCase().includes(q)) ||
+      (t.buyerId && t.buyerId.toLowerCase().includes(q)) ||
+      (t.customerId && t.customerId.toLowerCase().includes(q)) ||
+      (t.customerPhone && t.customerPhone.includes(q)) ||
+      (t.supportCaseId && t.supportCaseId.toLowerCase().includes(q));
 
     if (!matchQuery) return false;
     if (filterTab === 'HANDOVER')

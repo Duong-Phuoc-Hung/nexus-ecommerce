@@ -192,3 +192,66 @@ test('gateway serves complete swagger specs for commerce and fulfillment', async
   assert.ok(fulJson.paths['/api/v1/fulfillments/shipments/{id}/status']);
   assert.ok(fulJson.paths['/api/v1/support/dashboard/summary']);
 });
+
+test('gateway accepts large payloads (>100kb image attachment) without 413 payload too large', async (t) => {
+  const upstream = createServer(async (req, res) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(Buffer.from(chunk));
+    res.statusCode = 201;
+    res.setHeader('content-type', 'application/json');
+    res.end(
+      JSON.stringify({
+        success: true,
+        receivedBytes: Buffer.concat(chunks).length,
+      }),
+    );
+  });
+
+  await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+  const upstreamAddress = upstream.address();
+  assert.ok(upstreamAddress && typeof upstreamAddress !== 'string');
+
+  const previousChatServiceUrl = process.env.CHAT_SERVICE_URL;
+  process.env.CHAT_SERVICE_URL = `http://127.0.0.1:${upstreamAddress.port}`;
+  const gateway = createApplication();
+  if (previousChatServiceUrl === undefined) delete process.env.CHAT_SERVICE_URL;
+  else process.env.CHAT_SERVICE_URL = previousChatServiceUrl;
+
+  const gatewayServer = gateway.listen(0, '127.0.0.1');
+  await new Promise<void>((resolve) => gatewayServer.once('listening', resolve));
+  const gatewayAddress = gatewayServer.address();
+  assert.ok(gatewayAddress && typeof gatewayAddress !== 'string');
+
+  t.after(async () => {
+    await Promise.all([
+      new Promise<void>((resolve, reject) =>
+        gatewayServer.close((error) => (error ? reject(error) : resolve())),
+      ),
+      new Promise<void>((resolve, reject) =>
+        upstream.close((error) => (error ? reject(error) : resolve())),
+      ),
+    ]);
+  });
+
+  // Tạo payload base64 giả lập ảnh nặng ~500KB (vượt xa giới hạn mặc định 100kb)
+  const largeImageData = 'A'.repeat(500 * 1024);
+  const response = await fetch(
+    `http://127.0.0.1:${gatewayAddress.port}/api/v1/chat/conversations/conv_test/attachments`,
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        filename: 'large_evidence.jpg',
+        mimeType: 'image/jpeg',
+        dataBase64: largeImageData,
+      }),
+    },
+  );
+
+  assert.equal(response.status, 201);
+  const result = (await response.json()) as any;
+  assert.equal(result.success, true);
+  assert.ok(result.receivedBytes > 500 * 1024);
+});

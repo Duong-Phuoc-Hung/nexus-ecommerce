@@ -249,6 +249,15 @@ export class GeminiDamageAssessor implements IDamageAssessor {
       'cracked',
       'shattered',
       'dập nát',
+      'không đúng',
+      'sai hàng',
+      'sai mẫu',
+      'nhầm',
+      'thiếu',
+      'thiếu hàng',
+      'sai model',
+      'không giống',
+      'khác mẫu',
     ];
 
     const hasKeyword = damageKeywords.some((kw) => lowerText.includes(kw));
@@ -260,16 +269,28 @@ export class GeminiDamageAssessor implements IDamageAssessor {
     const isDamaged = hasKeyword || hasImageNameDamage;
 
     if (isDamaged) {
+      const isWrongItem = [
+        'không đúng',
+        'sai hàng',
+        'sai mẫu',
+        'nhầm',
+        'thiếu',
+        'sai model',
+        'không giống',
+        'khác mẫu',
+      ].some((kw) => lowerText.includes(kw));
+
       return {
         is_damaged: true,
-        damage_type: 'LOGISTICS_DAMAGE_CRACKED_OR_DENTED',
+        damage_type: isWrongItem ? 'WRONG_ITEM_DELIVERED' : 'LOGISTICS_DAMAGE_CRACKED_OR_DENTED',
         severity: 'HIGH',
-        summary:
-          'AI phát hiện dấu hiệu kiện hàng bị nứt vỡ hoặc móp méo biến dạng dựa trên hình ảnh và phản ánh của người mua.',
+        summary: isWrongItem
+          ? 'AI ghi nhận kiện hàng giao không đúng mô tả / sai sản phẩm cam kết dựa trên phản ánh và hình ảnh của người mua.'
+          : 'AI phát hiện dấu hiệu kiện hàng bị nứt vỡ hoặc móp méo biến dạng dựa trên hình ảnh và phản ánh của người mua.',
         confidence: 0.92,
         evidence_found: [
-          'Vết nứt vỡ ngoại quan sản phẩm',
-          'Vỏ hộp móp méo do ngoại lực vận chuyển',
+          isWrongItem ? 'Sản phẩm nhận được không đúng cam kết' : 'Vết nứt vỡ ngoại quan sản phẩm',
+          'Hình ảnh và mô tả đối chứng do người mua cung cấp',
         ],
       };
     }

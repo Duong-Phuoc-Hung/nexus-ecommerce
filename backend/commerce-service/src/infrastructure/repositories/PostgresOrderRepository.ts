@@ -47,12 +47,12 @@ export class PostgresOrderRepository implements IOrderRepository {
   }
 
   public async findById(id: string): Promise<Order | null> {
-    const cleanId = id.trim();
-    const isNumeric = /^\d+$/.test(cleanId);
+    const rawClean = id.trim();
+    const cleanId = rawClean.replace(/^[#]/, '').trim();
 
     const orderRow = await this.prisma.order.findFirst({
       where: {
-        OR: [{ id: cleanId }, { orderCode: cleanId }],
+        OR: [{ id: cleanId }, { id: rawClean }, { orderCode: cleanId }, { orderCode: rawClean }],
       },
       include: {
         items: {
@@ -105,13 +105,17 @@ export class PostgresOrderRepository implements IOrderRepository {
     // 4. Lọc từ khóa tìm kiếm toàn diện
     if (criteria.q && criteria.q.trim().length > 0) {
       const q = criteria.q.trim();
+      const unhashed = q.replace(/^[#]/, '').trim();
       where.OR = [
         { orderCode: { contains: q, mode: 'insensitive' } },
+        { orderCode: { contains: unhashed, mode: 'insensitive' } },
         { id: { contains: q, mode: 'insensitive' } },
+        { id: { contains: unhashed, mode: 'insensitive' } },
         { buyerName: { contains: q, mode: 'insensitive' } },
         { buyerEmail: { contains: q, mode: 'insensitive' } },
         { sellerName: { contains: q, mode: 'insensitive' } },
         { trackingCode: { contains: q, mode: 'insensitive' } },
+        { trackingCode: { contains: unhashed, mode: 'insensitive' } },
         { items: { some: { productTitle: { contains: q, mode: 'insensitive' } } } },
       ];
     }

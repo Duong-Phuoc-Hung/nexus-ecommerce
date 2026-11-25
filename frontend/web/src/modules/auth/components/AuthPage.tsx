@@ -46,7 +46,7 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
   const [success, setSuccess] = useState(false);
   const [busy, setBusy] = useState(false);
   const [shown, setShown] = useState(false);
-  const [remember, setRemember] = useState(false);
+  const [remember, setRemember] = useState(true);
 
   // OTP Verification States
   const [otpStep, setOtpStep] = useState(false);

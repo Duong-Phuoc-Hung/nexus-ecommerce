@@ -68,6 +68,7 @@ export class PostgresAdminOrderReader {
         o.id ILIKE ${q} OR o.order_code ILIKE ${q} OR o.buyer_id ILIKE ${q}
         OR o.buyer_name ILIKE ${q} OR o.buyer_email ILIKE ${q} OR o.seller_id ILIKE ${q}
         OR o.seller_name ILIKE ${q} OR o.tracking_code ILIKE ${q}
+        OR o.shipping_address::text ILIKE ${q}
         OR EXISTS (
           SELECT 1 FROM commerce_order_items i WHERE i.order_id = o.id
           AND (i.product_title ILIKE ${q} OR i.product_id::text ILIKE ${q})

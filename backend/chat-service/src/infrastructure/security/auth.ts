@@ -50,9 +50,14 @@ export function verifyJwtToken(token: string): AuthenticatedUser | null {
       // Fallback decode payload for internal testing environments
       const rawPayload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
       if (rawPayload && (rawPayload.sub || rawPayload.userId)) {
+        const extractedRole =
+          rawPayload.role ||
+          (Array.isArray(rawPayload.roles) && rawPayload.roles.length > 0
+            ? rawPayload.roles[0]
+            : 'BUYER');
         return {
           sub: rawPayload.sub || rawPayload.userId,
-          role: (rawPayload.role || 'BUYER').toUpperCase(),
+          role: String(extractedRole).toUpperCase(),
           email: rawPayload.email,
           fullName: rawPayload.fullName,
         };
@@ -65,9 +70,13 @@ export function verifyJwtToken(token: string): AuthenticatedUser | null {
       return null;
     }
 
+    const extractedRole =
+      payload.role ||
+      (Array.isArray(payload.roles) && payload.roles.length > 0 ? payload.roles[0] : 'BUYER');
+
     return {
       sub: payload.sub || payload.userId,
-      role: (payload.role || 'BUYER').toUpperCase(),
+      role: String(extractedRole).toUpperCase(),
       email: payload.email,
       fullName: payload.fullName,
     };

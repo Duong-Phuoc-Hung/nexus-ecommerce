@@ -49,7 +49,61 @@ export class IssueDisputeVerdictUseCase {
       input.arbitratorId,
     );
 
+    // Gửi thông báo kết quả phán quyết cho Người mua qua notification-service (SRS 3.1.2 & 3.4)
+    await this.notifyParties(caseItem, verdict);
+
     return caseItem.toDisputeDto();
+  }
+
+  private async notifyParties(caseItem: any, verdict: ArbitrationVerdict) {
+    const notificationUrl = (
+      process.env.NOTIFICATION_SERVICE_URL ||
+      (process.env.NODE_ENV === 'production' || process.env.DOCKER_ENV
+        ? 'http://notification-service:4006'
+        : `http://localhost:${process.env.NOTIFICATION_SERVICE_PORT || 4006}`)
+    ).replace(/\/$/, '');
+
+    try {
+      const decisionLabel =
+        verdict.decision === 'REFUND_BUYER'
+          ? 'Chấp thuận hoàn tiền cho Người mua'
+          : verdict.decision === 'REJECT_BUYER'
+            ? 'Bác bỏ yêu cầu khiếu nại (Người bán đúng quy định)'
+            : 'Yêu cầu Người mua hoàn trả hàng về kho trước khi hoàn tiền';
+
+      const title = `Phán quyết tranh chấp đơn hàng #${caseItem.orderCode || caseItem.orderId}`;
+      const body = `Trọng tài Nexus đã ra phán quyết: "${decisionLabel}". ${verdict.refundAmount ? `Số tiền hoàn: ${verdict.refundAmount.toLocaleString('vi-VN')}₫. ` : ''}Ghi chú căn cứ: ${verdict.note || 'Theo biên bản đối soát bằng chứng 2 bên.'}`;
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3000);
+
+      await fetch(`${notificationUrl}/api/v1/notifications/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipientId: caseItem.userId,
+          channel: 'DISPUTE_RESOLUTION',
+          title,
+          body,
+          data: {
+            caseId: caseItem.id,
+            orderId: caseItem.orderId,
+            orderCode: caseItem.orderCode,
+            decision: verdict.decision,
+            refundAmount: verdict.refundAmount,
+            liableParty: verdict.liableParty,
+          },
+        }),
+        signal: controller.signal,
+      }).catch(() => null);
+
+      clearTimeout(timer);
+    } catch (err: any) {
+      console.warn(
+        '[IssueDisputeVerdictUseCase] Lỗi gửi thông báo phán quyết:',
+        err?.message || err,
+      );
+    }
   }
 
   private async notifyCommerceService(

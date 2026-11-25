@@ -3,7 +3,7 @@ import { GetOrderDetailUseCase } from './GetOrderDetailUseCase';
 import { OrderNotFoundException } from '../../domain/exceptions/OrderNotFoundException';
 import { OrderDetailDto } from '../dtos/OrderDetailDto';
 import { OrderStatus } from '../../domain/entities/Order';
-import { ICatalogClient } from '../checkout/ports';
+import { ICatalogClient, INotificationClient } from '../checkout/ports';
 
 export interface UpdateOrderStatusInput {
   orderId: string;
@@ -23,6 +23,7 @@ export class UpdateOrderStatusUseCase {
     private readonly orderRepository: IOrderRepository,
     private readonly getOrderDetailUseCase: GetOrderDetailUseCase,
     private readonly catalogClient?: ICatalogClient,
+    private readonly notificationClient?: INotificationClient,
   ) {}
 
   public async execute(input: UpdateOrderStatusInput): Promise<OrderDetailDto> {
@@ -86,7 +87,76 @@ export class UpdateOrderStatusUseCase {
     order.updateStatus(targetStatus, finalNote);
     await this.orderRepository.update(order);
 
+    // Kích hoạt thông báo tiến trình cho Người mua qua Notification Service (SRS 3.2, 3.4 & 3.6)
+    if (this.notificationClient && order.buyerId) {
+      const statusLabel = this.formatStatusVietnamese(targetStatus);
+      const title = `Cập nhật đơn hàng #${order.id}`;
+      const body = `Đơn hàng của bạn đã chuyển sang trạng thái: "${statusLabel}".${finalNote ? ` Ghi chú: ${finalNote}` : ''}`;
+
+      this.notificationClient
+        .sendInAppNotification({
+          recipientId: order.buyerId,
+          channel: 'IN_APP',
+          title,
+          body,
+          data: {
+            orderId: order.id,
+            orderCode: order.id,
+            status: targetStatus,
+          },
+        })
+        .catch((err: any) =>
+          console.warn(
+            '[UpdateOrderStatusUseCase] Lỗi gửi in-app notification:',
+            err?.message || err,
+          ),
+        );
+
+      if (
+        order.buyerEmail &&
+        typeof this.notificationClient.sendOrderConfirmationEmail === 'function'
+      ) {
+        this.notificationClient
+          .sendOrderConfirmationEmail({
+            email: order.buyerEmail,
+            title: `[Nexus] ${title}`,
+            body: `Xin chào ${order.buyerName || 'Quý khách'},\n\nĐơn hàng #${order.id} của bạn đã được cập nhật trạng thái mới: "${statusLabel}".\n${finalNote ? `Ghi chú: ${finalNote}\n` : ''}\nBạn có thể theo dõi hành trình đơn hàng tại cổng tài khoản Nexus.`,
+          })
+          .catch((err: any) =>
+            console.warn(
+              '[UpdateOrderStatusUseCase] Lỗi gửi email cập nhật tiến trình:',
+              err?.message || err,
+            ),
+          );
+      }
+    }
+
     return this.getOrderDetailUseCase.execute(order.id);
+  }
+
+  private formatStatusVietnamese(status: OrderStatus | string): string {
+    switch (status) {
+      case 'PENDING_PAYMENT':
+        return 'Chờ thanh toán';
+      case 'PENDING':
+        return 'Chờ xử lý';
+      case 'PAID':
+        return 'Đã thanh toán (Chờ giao hàng)';
+      case 'PROCESSING':
+        return 'Đang chuẩn bị hàng';
+      case 'SHIPPED':
+        return 'Đang giao hàng';
+      case 'DELIVERED':
+        return 'Đã giao hàng thành công';
+      case 'CANCELLED':
+        return 'Đã hủy';
+      case 'REFUND_REQUESTED':
+        return 'Yêu cầu hoàn tiền';
+      case 'REFUNDED':
+        return 'Đã hoàn tiền';
+      default:
+        return String(status);
+    }
   }
 
   private mapStatus(raw: string): OrderStatus {

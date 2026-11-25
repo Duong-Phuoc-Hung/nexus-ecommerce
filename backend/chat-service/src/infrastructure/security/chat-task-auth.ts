@@ -60,12 +60,25 @@ export function verifyHandoverParticipant(conversations: IConversationRepository
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const conversation = await conversations.findById(req.params.id as string);
-      const role = (req as AuthenticatedRequest).user?.role;
+      const user = (req as AuthenticatedRequest).user;
+      const role = user?.role;
       const isStaff = role === 'ADMIN' || role === 'SUPPORT_STAFF';
+
       if (
         conversation?.channelType === 'AI_BOT' &&
         (conversation.status === 'WAITING_STAFF' || isStaff)
       ) {
+        // BẢO MẬT CHỐNG GIẢ MẠO CSKH: Nhân viên hỗ trợ hoặc Admin bắt buộc phải có Bearer JWT ký thật
+        if (isStaff) {
+          requireChatTaskAuth(req, res, next);
+          return;
+        }
+
+        // Người mua sở hữu cuộc hội thoại đã được xác thực qua requireAuth được phép tiếp tục nhắn tin
+        if (user && user.sub) {
+          return next();
+        }
+
         requireChatTaskAuth(req, res, next);
       } else {
         next();

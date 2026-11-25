@@ -4,9 +4,7 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import { cases, orders, users, shipments } from '../fixtures/support';
 import type { SupportCase } from '../api/support.api';
-export { cases, orders, users, shipments } from '../fixtures/support';
 export const money = (amount: number) => `${new Intl.NumberFormat('vi-VN').format(amount)} ₫`;
 export const slug = (value: string) => value.toLowerCase().replaceAll(' ', '-');
 
@@ -15,6 +13,8 @@ export function supportStatusClass(status?: string): string {
   const s = status.toUpperCase().trim().replace(/[\s-]/g, '_');
   switch (s) {
     // Orders
+    case 'PENDING_PAYMENT':
+    case 'CHỜ_THANH_TOÁN':
     case 'PENDING':
     case 'CHỜ_XỬ_LÝ':
       return 'status-pending';

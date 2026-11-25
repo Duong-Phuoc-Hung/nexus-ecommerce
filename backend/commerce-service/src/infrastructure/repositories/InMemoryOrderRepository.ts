@@ -17,9 +17,13 @@ export class InMemoryOrderRepository implements IOrderRepository {
   }
 
   public async findById(id: string): Promise<Order | null> {
-    const cleanId = (id || '').trim();
+    const rawClean = (id || '').trim();
+    const cleanId = rawClean.replace(/^[#]/, '').trim();
     if (this.orders.has(cleanId)) {
       return this.orders.get(cleanId) || null;
+    }
+    if (this.orders.has(rawClean)) {
+      return this.orders.get(rawClean) || null;
     }
     for (const order of this.orders.values()) {
       if (order.id.toLowerCase() === cleanId.toLowerCase()) {
@@ -38,7 +42,7 @@ export class InMemoryOrderRepository implements IOrderRepository {
 
     // 1. Lọc theo từ khóa tìm kiếm q (id, buyerName, buyerEmail, sellerName, productName, trackingCode)
     if (criteria.q && criteria.q.trim().length > 0) {
-      const qLower = criteria.q.trim().toLowerCase();
+      const qLower = criteria.q.replace(/^[#]/, '').trim().toLowerCase();
       list = list.filter((order) => {
         const productNames = order.items.map((i) => i.productName || '').join(' ');
         const searchTarget =

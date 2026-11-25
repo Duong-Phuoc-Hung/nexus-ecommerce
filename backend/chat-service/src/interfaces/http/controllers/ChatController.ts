@@ -223,7 +223,7 @@ export class ChatController {
       }
 
       const convs = await this.conversationRepo.findAll(filter);
-      const accessibleConvs = convs.filter((c) => c.canAccess(user.sub, user.role));
+      const accessibleConvs = convs.filter((c) => c.canAccess(user.sub, role));
 
       res.status(200).json({
         success: true,

@@ -58,7 +58,12 @@ type UserTicket = {
 };
 
 export function SupportUsersPage() {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return new URLSearchParams(window.location.search).get('q') || '';
+    }
+    return '';
+  });
   const [role, setRole] = useState('ALL');
   const search = useDebouncedValue(query, 500);
   const [users, setUsers] = useState<SupportUser[]>([]);

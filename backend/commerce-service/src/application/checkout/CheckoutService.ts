@@ -4,6 +4,7 @@ import {
   CheckoutError,
   ICatalogClient,
   ICheckoutRepository,
+  INotificationClient,
   IPaymentGateway,
   IShippingQuote,
   OrderRecord,
@@ -112,6 +113,7 @@ export class CheckoutService {
     private readonly shipping: IShippingQuote,
     private readonly gateway: IPaymentGateway,
     private readonly promotionService?: PromotionService,
+    private readonly notificationClient?: INotificationClient,
   ) {}
 
   public buildShippingOptions(baseFee: number, subtotal?: number): ShippingOption[] {
@@ -163,7 +165,14 @@ export class CheckoutService {
   public async quote(buyerId: string, body: unknown) {
     const lines = parseCartLines(body);
     const address = parseShippingAddress(body);
-    const isAuction = isRecord(body) && (body.isAuction === true || Boolean(body.auctionId));
+    const rawOrderType =
+      isRecord(body) && typeof body.orderType === 'string'
+        ? body.orderType.toUpperCase()
+        : undefined;
+    const isAuction =
+      rawOrderType === 'AUCTION' ||
+      (isRecord(body) &&
+        (body.isAuction === true || body.source === 'AUCTION' || Boolean(body.auctionId)));
     const targetSellerId =
       isRecord(body) && typeof body.sellerId === 'string' && body.sellerId.trim()
         ? body.sellerId.trim()
@@ -336,7 +345,17 @@ export class CheckoutService {
       }
     }
 
-    const isAuction = isRecord(body) && (body.isAuction === true || Boolean(body.auctionId));
+    const rawOrderType =
+      isRecord(body) && typeof body.orderType === 'string'
+        ? body.orderType.toUpperCase()
+        : undefined;
+    const isAuction =
+      rawOrderType === 'AUCTION' ||
+      (isRecord(body) &&
+        (body.isAuction === true || body.source === 'AUCTION' || Boolean(body.auctionId))) ||
+      Boolean(idempotencyKey?.startsWith('auc-'));
+    const orderType: 'AUCTION' | 'STANDARD' = isAuction ? 'AUCTION' : 'STANDARD';
+
     const priced = await this.priceCart(buyerId, lines, address, targetSellerId, isAuction);
 
     let finalShippingFee = priced.shippingFee;
@@ -447,19 +466,12 @@ export class CheckoutService {
       finalTotalAmount = Math.max(0, priced.subtotal - finalDiscountAmount + finalShippingFee);
     }
 
-    const rawOrderType =
-      isRecord(body) && typeof body.orderType === 'string'
-        ? body.orderType.toUpperCase()
-        : undefined;
-    const isAuction =
-      rawOrderType === 'AUCTION' ||
-      (isRecord(body) && (body.source === 'AUCTION' || !!body.auctionId)) ||
-      idempotencyKey?.startsWith('auc-');
-    const orderType: 'AUCTION' | 'STANDARD' = isAuction ? 'AUCTION' : 'STANDARD';
-
     const created = await this.repository.createOrder({
       buyerId,
+      buyerName: address.fullName || 'Khách hàng',
+      buyerEmail: (address as any)?.email || undefined,
       sellerId: priced.sellerId,
+      sellerName: 'Gian hàng đối tác',
       items: priced.items,
       stockByProduct: priced.stockByProduct,
       shippingAddress: address,
@@ -487,6 +499,49 @@ export class CheckoutService {
         'IDEMPOTENCY_KEY_REUSED',
         'Idempotency-Key đã được dùng cho một yêu cầu khác.',
       );
+    }
+
+    // TASK-COMM-NOTIF: Tự động kích hoạt thông báo xác nhận đơn hàng (SRS 3.2 & 3.4)
+    if (this.notificationClient && !created.replay) {
+      const orderCode = created.order.orderCode || created.order.id;
+      const formattedAmount = new Intl.NumberFormat('vi-VN').format(finalTotalAmount);
+      const isCod = paymentMethod === 'COD';
+      const paymentMsg = isCod
+        ? 'Phương thức thanh toán: COD (Thanh toán khi nhận hàng).'
+        : 'Vui lòng hoàn tất thanh toán qua PayOS để đơn hàng được xử lý sớm nhất.';
+
+      this.notificationClient
+        .sendInAppNotification({
+          recipientId: buyerId,
+          channel: 'IN_APP',
+          title: `Xác nhận đặt hàng thành công #${orderCode}`,
+          body: `Đơn hàng #${orderCode} đã được khởi tạo thành công với tổng số tiền ${formattedAmount} ₫. ${paymentMsg}`,
+          data: {
+            orderId: created.order.id,
+            orderCode,
+            status: created.order.status,
+            totalAmount: finalTotalAmount,
+          },
+        })
+        .catch((err: any) =>
+          console.warn('[CheckoutService] Lỗi gửi in-app order confirmation:', err?.message || err),
+        );
+
+      const buyerEmail = (address as any)?.email;
+      if (buyerEmail && typeof this.notificationClient.sendOrderConfirmationEmail === 'function') {
+        this.notificationClient
+          .sendOrderConfirmationEmail({
+            email: buyerEmail,
+            title: `[Nexus] Xác nhận đặt hàng thành công #${orderCode}`,
+            body: `Xin chào ${address.fullName},\n\nĐơn hàng #${orderCode} của bạn đã được đặt thành công trên hệ thống Nexus.\nTổng tiền thanh toán: ${formattedAmount} ₫\nĐịa chỉ nhận hàng: ${address.addressLine}, ${address.ward ? address.ward + ', ' : ''}${address.district ? address.district + ', ' : ''}${address.province}.\n${paymentMsg}\n\nCảm ơn bạn đã tin tưởng mua sắm tại Nexus!`,
+          })
+          .catch((err: any) =>
+            console.warn(
+              '[CheckoutService] Lỗi gửi email order confirmation:',
+              err?.message || err,
+            ),
+          );
+      }
     }
 
     const payment =
@@ -583,25 +638,43 @@ export class CheckoutService {
     const outcome = await this.repository.applyPaymentResult(webhook);
 
     // Tự động kích hoạt trừ tồn kho phía Catalog khi thanh toán PayOS thành công (PAID)
-    if (outcome === 'PAID' && this.catalog.deductStock && this.repository.findOrderByPayosCode) {
+    if (outcome === 'PAID' && this.repository.findOrderByPayosCode) {
       this.repository
         .findOrderByPayosCode(webhook.orderCode)
         .then((order) => {
           if (order) {
-            for (const item of order.items) {
-              this.catalog
-                .deductStock?.(item.productId, item.quantity, order.id)
-                .catch((err: any) => {
-                  console.warn(
-                    `[CheckoutService] Deduct stock failed for product ${item.productId}:`,
-                    err?.message,
-                  );
-                });
+            if (this.catalog.deductStock) {
+              for (const item of order.items) {
+                this.catalog
+                  .deductStock?.(item.productId, item.quantity, order.id)
+                  .catch((err: any) => {
+                    console.warn(
+                      `[CheckoutService] Deduct stock failed for product ${item.productId}:`,
+                      err?.message,
+                    );
+                  });
+              }
+            }
+            if (this.notificationClient) {
+              const orderCode = order.orderCode || order.id;
+              const formattedAmount = new Intl.NumberFormat('vi-VN').format(webhook.amount);
+              this.notificationClient
+                .sendInAppNotification({
+                  recipientId: order.buyerId,
+                  channel: 'IN_APP',
+                  title: `Xác nhận thanh toán thành công #${orderCode}`,
+                  body: `Đơn hàng #${orderCode} đã thanh toán thành công qua PayOS (${formattedAmount} ₫). Đơn hàng đang được chuẩn bị để giao tới bạn.`,
+                  data: { orderId: order.id, orderCode, status: 'PAID' },
+                })
+                .catch(() => {});
             }
           }
         })
         .catch((err: any) => {
-          console.warn(`[CheckoutService] Error finding order for stock deduction:`, err?.message);
+          console.warn(
+            `[CheckoutService] Error finding order for stock deduction / notification:`,
+            err?.message,
+          );
         });
     }
 

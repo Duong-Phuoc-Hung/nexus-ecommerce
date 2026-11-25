@@ -169,3 +169,65 @@ test('HTTP API: PATCH /api/v1/orders/:id/status updates status and syncs order s
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
+
+test('UpdateOrderStatusUseCase: Dispatches in-app notification and email update when order progress is updated', async () => {
+  const orderRepo = new InMemoryOrderRepository();
+  const getOrderDetailUseCase = new GetOrderDetailUseCase(orderRepo);
+
+  const notificationsSent: any[] = [];
+  const emailsSent: any[] = [];
+  const mockNotificationClient = {
+    sendInAppNotification: async (params: any) => {
+      notificationsSent.push(params);
+      return true;
+    },
+    sendOrderConfirmationEmail: async (params: any) => {
+      emailsSent.push(params);
+      return true;
+    },
+  };
+
+  const useCase = new UpdateOrderStatusUseCase(
+    orderRepo,
+    getOrderDetailUseCase,
+    undefined,
+    mockNotificationClient,
+  );
+
+  const order = new Order({
+    id: 'ord_notif_001',
+    buyerId: 'usr_buyer_99',
+    buyerName: 'Trần Thị Khách',
+    buyerEmail: 'khach@nexus.vn',
+    sellerId: 'usr_seller_01',
+    sellerName: 'Nexus Shop',
+    items: [],
+    totalAmount: 500000,
+    status: OrderStatus.PENDING,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  await orderRepo.save(order);
+
+  // Cập nhật trạng thái đơn sang SHIPPED (Đang giao hàng)
+  await useCase.execute({
+    orderId: 'ord_notif_001',
+    status: 'SHIPPED',
+    note: 'Đã bàn giao cho bưu cục GHN',
+  });
+
+  // Kiểm tra in-app notification đã được gửi
+  assert.equal(notificationsSent.length, 1);
+  assert.equal(notificationsSent[0].recipientId, 'usr_buyer_99');
+  assert.equal(notificationsSent[0].channel, 'IN_APP');
+  assert.ok(notificationsSent[0].title.includes('ord_notif_001'));
+  assert.ok(notificationsSent[0].body.includes('Đang giao hàng'));
+  assert.ok(notificationsSent[0].body.includes('Đã bàn giao cho bưu cục GHN'));
+
+  // Kiểm tra email thông báo tiến trình đã được gửi
+  assert.equal(emailsSent.length, 1);
+  assert.equal(emailsSent[0].email, 'khach@nexus.vn');
+  assert.ok(emailsSent[0].title.includes('ord_notif_001'));
+  assert.ok(emailsSent[0].body.includes('Trần Thị Khách'));
+  assert.ok(emailsSent[0].body.includes('Đang giao hàng'));
+});

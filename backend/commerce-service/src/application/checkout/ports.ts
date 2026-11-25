@@ -184,7 +184,10 @@ export interface PaymentRecord {
 
 export interface CreateOrderParams {
   buyerId: string;
+  buyerName?: string;
+  buyerEmail?: string;
   sellerId: string;
+  sellerName?: string;
   items: PricedLine[];
   stockByProduct: Record<string, number>;
   shippingAddress: ShippingAddress;
@@ -205,6 +208,21 @@ export interface CreateOrderParams {
   shippingCarrier?: string;
   shippingServiceName?: string;
   estimatedDeliveryAt?: Date;
+}
+
+export interface INotificationClient {
+  sendInAppNotification(params: {
+    recipientId: string;
+    channel?: string;
+    title: string;
+    body: string;
+    data?: Record<string, unknown>;
+  }): Promise<boolean>;
+  sendOrderConfirmationEmail?(params: {
+    email: string;
+    title: string;
+    body: string;
+  }): Promise<boolean>;
 }
 
 export type ApplyPaymentOutcome =

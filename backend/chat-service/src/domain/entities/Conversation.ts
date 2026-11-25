@@ -95,22 +95,29 @@ export class Conversation {
   public canAccess(userId: string, role?: string): boolean {
     const normalizedRole = (role || '').toUpperCase();
 
-    // 1. Quản trị viên và Support Staff có quyền vào kênh BUYER_SUPPORT để giải quyết khiếu nại
-    if (normalizedRole === 'ADMIN' || normalizedRole === 'SUPPORT_STAFF') {
+    // 1. Quản trị viên và Support Staff có quyền vào kênh BUYER_SUPPORT để giải quyết khiếu nại, hoặc AI_BOT khi đã yêu cầu bàn giao WAITING_STAFF
+    if (normalizedRole === 'ADMIN') {
+      return true;
+    }
+    if (normalizedRole === 'SUPPORT_STAFF') {
       return (
         this._channelType === 'BUYER_SUPPORT' ||
         (this._channelType === 'AI_BOT' && this._status === 'WAITING_STAFF')
       );
     }
 
+    const cleanUser = (userId || '').trim().toLowerCase();
+    const cleanBuyer = (this._buyerId || '').trim().toLowerCase();
+    const cleanSeller = (this._sellerId || '').trim().toLowerCase();
+
     // 2. Buyer sở hữu đơn hàng có quyền vào tất cả các kênh của đơn mình
-    if (userId === this._buyerId) {
+    if (cleanUser && cleanBuyer && cleanUser === cleanBuyer) {
       return true;
     }
 
     // 3. Seller CHỈ ĐƯỢC PHÉP vào kênh BUYER_SELLER của shop mình
-    if (userId === this._sellerId) {
-      // CẤM TUYỆT ĐỐI Seller vào kênh BUYER_SUPPORT hoặc AI_BOT
+    if (cleanUser && cleanSeller && cleanUser === cleanSeller) {
+      // CẤM TUYỆT ĐỐI Seller vào kênh BUYER_SUPPORT hoặc AI_BOT (Bảo mật cách ly Room Isolation)
       return this._channelType === 'BUYER_SELLER';
     }
 

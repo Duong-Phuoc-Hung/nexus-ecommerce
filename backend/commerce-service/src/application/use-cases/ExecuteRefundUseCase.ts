@@ -1,6 +1,6 @@
 import { IOrderRepository } from '../../domain/repositories/IOrderRepository';
 import { OrderNotFoundException } from '../../domain/exceptions/OrderNotFoundException';
-import { IPaymentGateway } from '../checkout/ports';
+import { IPaymentGateway, INotificationClient } from '../checkout/ports';
 
 export interface ExecuteRefundInput {
   orderId: string;
@@ -27,6 +27,7 @@ export class ExecuteRefundUseCase {
   constructor(
     private readonly orderRepository: IOrderRepository,
     private readonly paymentGateway?: IPaymentGateway,
+    private readonly notificationClient?: INotificationClient,
   ) {}
 
   public async execute(input: ExecuteRefundInput): Promise<ExecuteRefundResult> {
@@ -75,6 +76,22 @@ export class ExecuteRefundUseCase {
     });
 
     await this.orderRepository.update(order);
+
+    if (this.notificationClient && order.buyerId) {
+      const title = `Hoàn tiền thành công cho đơn hàng #${order.id}`;
+      const body = `Số tiền ${amount.toLocaleString('vi-VN')}₫ đã được hoàn trả thành công (Mã GD: ${refundTransactionId}).`;
+      this.notificationClient
+        .sendInAppNotification({
+          recipientId: order.buyerId,
+          channel: 'ORDER_STATUS',
+          title,
+          body,
+          data: { orderId: order.id, refundTransactionId, amount, status: 'REFUNDED' },
+        })
+        .catch((err: any) =>
+          console.warn('[ExecuteRefundUseCase] Lỗi gửi notification:', err?.message || err),
+        );
+    }
 
     return {
       orderId: order.id,

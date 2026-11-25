@@ -137,13 +137,14 @@ export class PostgresShipmentRepository implements IShipmentRepository {
 
     // 1. Tìm kiếm từ khóa tổng hợp
     if (criteria.query && criteria.query.trim().length > 0) {
-      const q = criteria.query.trim();
+      const q = criteria.query.replace(/^[#]/, '').trim();
       where.OR = [
         { id: { contains: q, mode: 'insensitive' } },
         { trackingCode: { contains: q, mode: 'insensitive' } },
         { orderId: { contains: q, mode: 'insensitive' } },
         { carrierCode: { contains: q, mode: 'insensitive' } },
         { receiverName: { contains: q, mode: 'insensitive' } },
+        { receiverPhone: { contains: q, mode: 'insensitive' } },
         { city: { contains: q, mode: 'insensitive' } },
         { currentLocation: { contains: q, mode: 'insensitive' } },
         { shippingAddress: { contains: q, mode: 'insensitive' } },
@@ -169,7 +170,15 @@ export class PostgresShipmentRepository implements IShipmentRepository {
     // 4. Lọc theo mã đơn hàng
     if (criteria.orderId && criteria.orderId.trim().length > 0) {
       where.orderId = {
-        contains: criteria.orderId.trim(),
+        contains: criteria.orderId.replace(/^[#]/, '').trim(),
+        mode: 'insensitive',
+      };
+    }
+
+    // 5. Lọc theo mã vận đơn trackingCode
+    if (criteria.trackingCode && criteria.trackingCode.trim().length > 0) {
+      where.trackingCode = {
+        contains: criteria.trackingCode.replace(/^[#]/, '').trim(),
         mode: 'insensitive',
       };
     }
@@ -259,6 +268,8 @@ export class PostgresShipmentRepository implements IShipmentRepository {
         trackingCode: shipment.trackingCode || null,
         status: shipment.status,
         shippingAddress: shipment.shippingAddress,
+        receiverName: shipment.recipientName || null,
+        receiverPhone: shipment.recipientPhone || null,
         city: shipment.city || null,
         currentLocation: shipment.currentLocation || null,
         estimatedDeliveryDate: shipment.estimatedDeliveryDate || null,

@@ -317,11 +317,23 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
       const orderCode = `${prefix}-${nowFormatted}-${seqNum}`;
 
       const initialStatus = params.paymentMethod === 'COD' ? 'PROCESSING' : 'PENDING_PAYMENT';
+      const resolvedBuyerName =
+        params.buyerName ||
+        (params.shippingAddress as any)?.fullName ||
+        (params.shippingAddress as any)?.name ||
+        'Khách hàng';
+      const resolvedBuyerEmail =
+        params.buyerEmail || (params.shippingAddress as any)?.email || null;
+      const resolvedSellerName = params.sellerName || 'Gian hàng đối tác';
+
       const order = await tx.order.create({
         data: {
           orderCode,
           buyerId: params.buyerId,
+          buyerName: resolvedBuyerName,
+          buyerEmail: resolvedBuyerEmail,
           sellerId: params.sellerId,
+          sellerName: resolvedSellerName,
           totalAmount: params.totalAmount,
           shippingFee: params.shippingFee,
           discountAmount: params.discountAmount || 0,

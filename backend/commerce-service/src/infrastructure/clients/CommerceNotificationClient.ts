@@ -1,0 +1,69 @@
+import { INotificationClient } from '../../application/checkout/ports';
+
+/**
+ * Client kết nối tới Notification Service (SRS 3.2 & 3.4).
+ * Hỗ trợ gửi thông báo real-time in-app (SSE) và email xác nhận/tiến trình đơn hàng.
+ * Thực thi an toàn theo cơ chế non-blocking (không chặn luồng checkout/cập nhật đơn).
+ */
+export class CommerceNotificationClient implements INotificationClient {
+  constructor(
+    private readonly baseUrl = process.env.NOTIFICATION_SERVICE_URL ||
+      `http://localhost:${process.env.NOTIFICATION_SERVICE_PORT || 4006}`,
+  ) {}
+
+  public async sendInAppNotification(params: {
+    recipientId: string;
+    channel?: string;
+    title: string;
+    body: string;
+    data?: Record<string, unknown>;
+  }): Promise<boolean> {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/v1/notifications/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipientId: params.recipientId,
+          channel: params.channel || 'IN_APP',
+          title: params.title,
+          body: params.body,
+          data: params.data,
+        }),
+        signal: AbortSignal.timeout(4000),
+      });
+      return res.ok;
+    } catch (err: any) {
+      console.warn(
+        '[CommerceNotificationClient] Gửi in-app notification thất bại:',
+        err?.message || err,
+      );
+      return false;
+    }
+  }
+
+  public async sendOrderConfirmationEmail(params: {
+    email: string;
+    title: string;
+    body: string;
+  }): Promise<boolean> {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/v1/notifications/email/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: params.email,
+          title: params.title,
+          body: params.body,
+        }),
+        signal: AbortSignal.timeout(4000),
+      });
+      return res.ok;
+    } catch (err: any) {
+      console.warn(
+        '[CommerceNotificationClient] Gửi email thông báo đơn hàng thất bại:',
+        err?.message || err,
+      );
+      return false;
+    }
+  }
+}

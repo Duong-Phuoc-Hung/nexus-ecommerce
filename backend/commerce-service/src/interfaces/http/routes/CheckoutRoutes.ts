@@ -5,6 +5,7 @@ import { IShippingQuote } from '../../../application/checkout/ports';
 import { FlatRateShippingQuote } from '../../../infrastructure/clients/FlatRateShippingQuote';
 import { GhnShippingQuoteClient } from '../../../infrastructure/clients/GhnShippingQuoteClient';
 import { HttpCatalogClient } from '../../../infrastructure/clients/HttpCatalogClient';
+import { CommerceNotificationClient } from '../../../infrastructure/clients/CommerceNotificationClient';
 import { PayOsGateway } from '../../../infrastructure/clients/PayOsGateway';
 import { PostgresCheckoutRepository } from '../../../infrastructure/repositories/PostgresCheckoutRepository';
 import { PostgresPromotionRepository } from '../../../infrastructure/repositories/PostgresPromotionRepository';
@@ -66,6 +67,7 @@ export function createCheckoutRoutes(
   const promotionService =
     customPromotionService ||
     new PromotionService(new PostgresPromotionRepository(pool), catalogClient);
+  const notificationClient = new CommerceNotificationClient();
 
   const service = new CheckoutService(
     new PostgresCheckoutRepository(pool),
@@ -73,6 +75,7 @@ export function createCheckoutRoutes(
     customShippingQuote || new GhnShippingQuoteClient(),
     new PayOsGateway(),
     promotionService,
+    notificationClient,
   );
   return createCheckoutRouter(new CheckoutController(service), customAdminController);
 }
