@@ -61,7 +61,7 @@ export class CreateProductUseCase {
       description: input.description.trim(),
       price: input.price,
       stockQuantity: stock,
-      status: ProductStatus.ACTIVE,
+      status: ProductStatus.DRAFT,
       condition: input.condition || 'NEW',
       images: input.images || [],
       attributes: input.attributes || {},

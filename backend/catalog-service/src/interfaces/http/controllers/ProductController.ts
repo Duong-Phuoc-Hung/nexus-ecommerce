@@ -6,7 +6,7 @@ import { SearchProductsUseCase } from '../../../application/use-cases/SearchProd
 import { parseSearchProductsQuery } from '../dtos/SearchProductsQueryDto';
 import { UpdateProductUseCase } from '../../../application/use-cases/UpdateProductUseCase';
 import { CreateProductUseCase } from '../../../application/use-cases/CreateProductUseCase';
-import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
+import { AuthenticatedRequest, verifiedAccessUser } from '../../../infrastructure/security/auth';
 import { DeleteProductUseCase } from '../../../application/use-cases/DeleteProductUseCase';
 import { GetSellerProductsUseCase } from '../../../application/use-cases/GetSellerProductsUseCase';
 import { RecoverProductUseCase } from '../../../application/use-cases/RecoverProductUseCase';
@@ -67,8 +67,8 @@ export class ProductController {
   // GET /api/v1/products - Danh sach san pham (Buyer & Admin)
   public async getAll(req: Request, res: Response): Promise<void> {
     try {
-      const authUser = (req as AuthenticatedRequest).user;
       const adminScope = req.query.scope === 'admin';
+      const authUser = adminScope ? verifiedAccessUser(req) : (req as AuthenticatedRequest).user;
 
       // 1. Kiem tra quyen neu la Admin (?scope=admin)
       if (adminScope) {
@@ -78,7 +78,7 @@ export class ProductController {
             .json({ success: false, code: 'UNAUTHORIZED', error: 'Vui lòng đăng nhập.' });
           return;
         }
-        if (authUser.role !== 'ADMIN') {
+        if (authUser.role !== 'ADMIN' && !authUser.roles?.includes('ADMIN')) {
           res
             .status(403)
             .json({ success: false, code: 'FORBIDDEN', error: 'Chỉ Admin được dùng scope=admin.' });
@@ -224,14 +224,11 @@ export class ProductController {
   public async getById(req: Request, res: Response): Promise<void> {
     try {
       const productId = req.params.id as string;
-      const authUser = (req as AuthenticatedRequest).user;
-      const adminScope = req.query.scope === 'admin';
-
+      const authUser = verifiedAccessUser(req);
       const product = await this.getProductDetailUseCase.execute(productId);
 
-      // Chan khach va Buyer xem san pham khong phai ACTIVE hoac da het ton kho
-      const isPrivileged =
-        (authUser && (authUser.role === 'ADMIN' || authUser.id === product.sellerId)) || adminScope;
+      const isPrivileged = authUser &&
+        (authUser.role === 'ADMIN' || authUser.roles?.includes('ADMIN') || authUser.id === product.sellerId);
       if (
         !isPrivileged &&
         (product.status !== ProductStatus.ACTIVE || product.stockQuantity <= 0)

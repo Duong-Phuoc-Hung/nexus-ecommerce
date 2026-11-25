@@ -19,7 +19,7 @@ export class PostgresReviewRepository implements IReviewRepository {
 
   public async findByProductId(productId: string): Promise<Review[]> {
     const rows = await this.prisma.review.findMany({
-      where: { productId },
+      where: { productId, moderatedHidden: false },
       orderBy: { createdAt: 'desc' },
     });
 

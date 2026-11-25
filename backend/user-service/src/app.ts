@@ -1,5 +1,9 @@
 import type { Pool } from 'pg';
 import { createAccountExtensionsRoutes } from './interfaces/http/routes/AccountExtensionsRoutes';
+import {
+  createAdminRoleRoutes,
+  createAdminUserRoutes,
+} from './interfaces/http/routes/AdminUserRoutes';
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import { InMemoryUserRepository } from './infrastructure/repositories/InMemoryUserRepository';
@@ -193,10 +197,12 @@ export function createApplication(options?: CreateApplicationOptions): Applicati
 
   const sellerApplicationController = new SellerApplicationController(sellerApplicationService);
 
-  app.use('/api/v1/auth', createAuthRoutes(userController));
   if (userRepository instanceof PostgresUserRepository) {
+    app.use('/api/v1/auth', createAdminRoleRoutes(userRepository));
     app.use('/api/v1/users', createAccountExtensionsRoutes(userRepository, passwordHasher));
+    app.use('/api/v1/users', createAdminUserRoutes(userRepository, getUserProfileUseCase));
   }
+  app.use('/api/v1/auth', createAuthRoutes(userController));
   app.use('/api/v1/users', createUserRoutes(userController));
   app.use(
     '/api/v1/seller-applications',
