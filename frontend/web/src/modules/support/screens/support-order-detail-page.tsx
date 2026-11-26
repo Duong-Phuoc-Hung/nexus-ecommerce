@@ -398,7 +398,14 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
                   <h2>Lịch sử trạng thái</h2>
                 </div>
               </div>
-              <ol className="support-timeline">
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                  padding: '16px 20px',
+                }}
+              >
                 {(order.timeline && order.timeline.length > 0
                   ? order.timeline
                   : [
@@ -412,22 +419,114 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
                         note: 'Đơn hàng đã được ghi nhận trên hệ thống và đang trong quá trình chuẩn bị hàng.',
                       },
                     ]
-                ).map((item, index, arr) => (
-                  <li
-                    className={index === arr.length - 1 ? 'current' : 'complete'}
-                    key={`${item.status}-${item.timestamp}-${index}`}
-                  >
-                    <span />
-                    <div>
-                      <strong>{item.title}</strong>
-                      <small>
-                        {new Date(item.timestamp).toLocaleString('vi-VN')}
-                        {item.note ? ` · ${item.note}` : ''}
-                      </small>
+                ).map((item, index, arr) => {
+                  const isLatest = index === arr.length - 1;
+                  return (
+                    <div
+                      key={`${item.status}-${item.timestamp}-${index}`}
+                      style={{
+                        borderRadius: '10px',
+                        border: isLatest ? '1.5px solid #38bdf8' : '1px solid #e2e8f0',
+                        background: isLatest ? '#f0f9ff' : '#ffffff',
+                        padding: '12px 14px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px',
+                        boxShadow: isLatest ? '0 1px 4px rgba(56, 189, 248, 0.15)' : 'none',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '8px',
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: '0.68rem',
+                            fontFamily: 'monospace',
+                            fontWeight: 700,
+                            color: isLatest ? '#0284c7' : '#94a3b8',
+                          }}
+                        >
+                          MỐC #{index + 1}
+                        </span>
+                        {isLatest ? (
+                          <span
+                            style={{
+                              fontSize: '0.65rem',
+                              fontWeight: 700,
+                              padding: '2px 8px',
+                              borderRadius: '9999px',
+                              background: '#0284c7',
+                              color: '#ffffff',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.04em',
+                            }}
+                          >
+                            Mới nhất
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              fontSize: '0.65rem',
+                              fontWeight: 600,
+                              padding: '2px 8px',
+                              borderRadius: '9999px',
+                              background: '#ecfdf5',
+                              color: '#047857',
+                            }}
+                          >
+                            Đã ghi nhận
+                          </span>
+                        )}
+                      </div>
+                      <strong
+                        style={{
+                          fontSize: '0.86rem',
+                          color: isLatest ? '#0c4a6e' : '#1e293b',
+                          fontWeight: 700,
+                          lineHeight: 1.35,
+                        }}
+                      >
+                        {item.title}
+                      </strong>
+                      <div
+                        style={{
+                          fontSize: '0.72rem',
+                          color: '#64748b',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        <span>🕒</span>
+                        <span style={{ fontFamily: 'monospace' }}>
+                          {new Date(item.timestamp).toLocaleString('vi-VN')}
+                        </span>
+                      </div>
+                      {item.note && (
+                        <p
+                          style={{
+                            margin: '4px 0 0 0',
+                            fontSize: '0.74rem',
+                            color: '#475569',
+                            background: isLatest ? 'rgba(255,255,255,0.7)' : '#f8fafc',
+                            padding: '6px 8px',
+                            borderRadius: '6px',
+                            border: '1px solid #f1f5f9',
+                            lineHeight: 1.4,
+                          }}
+                        >
+                          {item.note}
+                        </p>
+                      )}
                     </div>
-                  </li>
-                ))}
-              </ol>
+                  );
+                })}
+              </div>
             </section>
           </div>
           {order.items && order.items.length > 0 && (

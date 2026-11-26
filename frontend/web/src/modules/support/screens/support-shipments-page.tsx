@@ -748,30 +748,181 @@ export function SupportShipmentsPage() {
               </div>
             </div>
 
-            {/* Chi tiết nhật ký hành trình */}
-            <h3 className="support-section-subtitle" style={{ marginTop: '24px' }}>
-              Nhật ký hành trình vận đơn
-            </h3>
-            <ol className="support-timeline">
-              {cleanTimeline.map((item, idx) => (
-                <li
-                  className={`${item.status === 'done' ? 'complete' : item.status} ${item.statusClass || ''}`}
-                  key={item.key || `${item.title}-${item.timestamp ?? idx}`}
-                >
-                  <span />
-                  <div>
-                    <strong>{item.title}</strong>
-                    <small>
-                      {item.timestamp}
-                      {item.location ? ` · ${item.location}` : ''}
-                    </small>
-                    {item.description && (
-                      <p className="support-timeline-desc">{item.description}</p>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ol>
+            {/* Chi tiết nhật ký hành trình dạng thẻ ngang trực quan */}
+            <div style={{ marginTop: '24px' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: '14px',
+                }}
+              >
+                <h3 className="support-section-subtitle" style={{ margin: 0 }}>
+                  Nhật ký hành trình vận đơn (Lưới thẻ mốc thời gian đa cột)
+                </h3>
+                <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 500 }}>
+                  Tổng cộng {cleanTimeline.length} mốc quy trình
+                </span>
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: '12px',
+                }}
+              >
+                {cleanTimeline.map((item, idx) => {
+                  const isDone = item.status === 'done';
+                  const isCurrent = item.status === 'current';
+                  const isFailedOrReturned =
+                    item.statusClass?.includes('failed') ||
+                    item.statusClass?.includes('returned') ||
+                    item.title.includes('thất bại') ||
+                    item.title.includes('hoàn hàng');
+
+                  return (
+                    <div
+                      key={item.key || `${item.title}-${item.timestamp ?? idx}`}
+                      style={{
+                        borderRadius: '12px',
+                        border: isCurrent
+                          ? '1.5px solid #38bdf8'
+                          : isDone
+                            ? '1px solid #cbd5e1'
+                            : '1px dashed #e2e8f0',
+                        background: isCurrent
+                          ? 'linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%)'
+                          : isDone
+                            ? '#ffffff'
+                            : '#f8fafc',
+                        padding: '14px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        boxShadow: isCurrent ? '0 2px 8px -2px rgba(56, 189, 248, 0.25)' : 'none',
+                      }}
+                    >
+                      <div>
+                        {/* Header của thẻ mốc */}
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            marginBottom: '8px',
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: '0.68rem',
+                              fontWeight: 700,
+                              fontFamily: 'monospace',
+                              color: isCurrent ? '#0369a1' : '#94a3b8',
+                            }}
+                          >
+                            MỐC #{idx + 1}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: '0.65rem',
+                              fontWeight: 700,
+                              padding: '2px 7px',
+                              borderRadius: '9999px',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.03em',
+                              background: isFailedOrReturned
+                                ? '#fee2e2'
+                                : isCurrent
+                                  ? '#0284c7'
+                                  : isDone
+                                    ? '#ecfdf5'
+                                    : '#f1f5f9',
+                              color: isFailedOrReturned
+                                ? '#b91c1c'
+                                : isCurrent
+                                  ? '#ffffff'
+                                  : isDone
+                                    ? '#047857'
+                                    : '#64748b',
+                            }}
+                          >
+                            {isFailedOrReturned
+                              ? 'Sự cố'
+                              : isCurrent
+                                ? 'Đang thực hiện'
+                                : isDone
+                                  ? 'Đã xong'
+                                  : 'Chờ đến lượt'}
+                          </span>
+                        </div>
+
+                        {/* Tiêu đề mốc */}
+                        <h4
+                          style={{
+                            fontSize: '0.86rem',
+                            fontWeight: 700,
+                            margin: '0 0 6px 0',
+                            color: isCurrent ? '#0c4a6e' : '#1e293b',
+                            lineHeight: 1.3,
+                          }}
+                        >
+                          {item.title}
+                        </h4>
+
+                        {/* Mô tả */}
+                        {item.description && (
+                          <p
+                            style={{
+                              fontSize: '0.74rem',
+                              color: '#475569',
+                              margin: '0 0 10px 0',
+                              lineHeight: 1.45,
+                            }}
+                          >
+                            {item.description}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Footer: Thời gian & Địa điểm */}
+                      <div
+                        style={{
+                          marginTop: 'auto',
+                          paddingTop: '8px',
+                          borderTop: '1px solid #f1f5f9',
+                          fontSize: '0.7rem',
+                          color: '#64748b',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '3px',
+                        }}
+                      >
+                        {item.timestamp && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span>🕒</span>
+                            <span style={{ fontFamily: 'monospace' }}>{item.timestamp}</span>
+                          </div>
+                        )}
+                        {item.location && (
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              gap: '4px',
+                              color: '#0369a1',
+                            }}
+                          >
+                            <span>📍</span>
+                            <span>{item.location}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
 
             {/* Cụm công cụ mô phỏng 3PL Webhook & Shipper (Carrier Webhook Simulator Sandbox) */}
             <div

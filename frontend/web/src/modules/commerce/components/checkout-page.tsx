@@ -876,8 +876,9 @@ export default function CheckoutPage() {
                     type="button"
                     variant="outline"
                     size="sm"
+                    disabled={busy}
                     onClick={() => setQuoteRevision((v) => v + 1)}
-                    className="mt-2 min-h-9 rounded-lg border-amber-300 bg-white text-xs font-semibold text-amber-950"
+                    className="mt-2 min-h-9 rounded-lg border-amber-300 bg-white text-xs font-semibold text-amber-950 hover:bg-amber-100/50 transition-colors"
                   >
                     Cập nhật báo giá
                   </Button>
