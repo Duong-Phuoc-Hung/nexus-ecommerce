@@ -24,6 +24,7 @@ export interface ProductSearchPage {
  */
 export interface IProductRepository {
   findById(id: string): Promise<Product | null>;
+  findByIdIncludingDeleted?(id: string): Promise<Product | null>;
   findAll(limit?: number, offset?: number): Promise<Product[]>;
   findByCategory(categoryId: string): Promise<Product[]>;
   findBySellerId(sellerId: string, status?: string): Promise<Product[]>;
@@ -33,4 +34,14 @@ export interface IProductRepository {
   update(product: Product): Promise<void>;
   delete(id: string): Promise<void>;
   recover?(id: string, sellerId?: string): Promise<void>;
+  deductStockOnce?(
+    productId: string,
+    quantity: number,
+    orderId?: string,
+  ): Promise<{ remainingStock: number; status: string; idempotentReplay: boolean }>;
+  restoreStockOnce?(
+    productId: string,
+    quantity: number,
+    orderId?: string,
+  ): Promise<{ remainingStock: number; status: string; idempotentReplay: boolean }>;
 }

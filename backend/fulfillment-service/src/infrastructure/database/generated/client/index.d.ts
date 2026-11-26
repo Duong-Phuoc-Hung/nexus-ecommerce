@@ -7910,12 +7910,13 @@ export namespace Prisma {
 
   export type SkuInventoryWhereUniqueInput = Prisma.AtLeast<{
     id?: bigint | number
-    skuCode?: string
+    warehouseId_skuCode?: SkuInventoryWarehouseIdSkuCodeCompoundUniqueInput
     AND?: SkuInventoryWhereInput | SkuInventoryWhereInput[]
     OR?: SkuInventoryWhereInput[]
     NOT?: SkuInventoryWhereInput | SkuInventoryWhereInput[]
     warehouseId?: BigIntFilter<"SkuInventory"> | bigint | number
     productId?: BigIntFilter<"SkuInventory"> | bigint | number
+    skuCode?: StringFilter<"SkuInventory"> | string
     totalQuantity?: IntFilter<"SkuInventory"> | number
     availableQuantity?: IntFilter<"SkuInventory"> | number
     reservedQuantity?: IntFilter<"SkuInventory"> | number
@@ -7924,7 +7925,7 @@ export namespace Prisma {
     updatedAt?: DateTimeFilter<"SkuInventory"> | Date | string
     warehouse?: XOR<WarehouseRelationFilter, WarehouseWhereInput>
     ledgers?: InventoryLedgerListRelationFilter
-  }, "id" | "skuCode">
+  }, "id" | "warehouseId_skuCode">
 
   export type SkuInventoryOrderByWithAggregationInput = {
     id?: SortOrder
@@ -9100,6 +9101,11 @@ export namespace Prisma {
 
   export type InventoryLedgerOrderByRelationAggregateInput = {
     _count?: SortOrder
+  }
+
+  export type SkuInventoryWarehouseIdSkuCodeCompoundUniqueInput = {
+    warehouseId: bigint | number
+    skuCode: string
   }
 
   export type SkuInventoryCountOrderByAggregateInput = {

@@ -31,7 +31,11 @@ export class InMemoryShipmentRepository implements IShipmentRepository {
   }
 
   public async findByTrackingCode(trackingCode: string): Promise<Shipment | null> {
-    const normalized = trackingCode.trim().toUpperCase();
+    const normalized = trackingCode
+      .replace(/^[#]/, '')
+      .replace(/^NEX-TRK-/i, '')
+      .trim()
+      .toUpperCase();
     for (const s of this.shipments.values()) {
       if (s.trackingCode.toUpperCase() === normalized) {
         return s;
@@ -41,7 +45,11 @@ export class InMemoryShipmentRepository implements IShipmentRepository {
   }
 
   public async findByOrderId(orderId: string): Promise<Shipment | null> {
-    const normalized = orderId.trim().toUpperCase();
+    const normalized = orderId
+      .replace(/^[#]/, '')
+      .replace(/^NEX-TRK-/i, '')
+      .trim()
+      .toUpperCase();
     for (const s of this.shipments.values()) {
       if (
         s.orderId.toUpperCase() === normalized ||
@@ -57,10 +65,14 @@ export class InMemoryShipmentRepository implements IShipmentRepository {
     let result = Array.from(this.shipments.values());
 
     if (criteria.query) {
-      const q = criteria.query.toLowerCase().trim();
+      const q = criteria.query
+        .replace(/^[#]/, '')
+        .replace(/^NEX-TRK-/i, '')
+        .toLowerCase()
+        .trim();
       result = result.filter((s) => {
         const fullText =
-          `${s.id} ${s.trackingCode} ${s.orderId} ${s.carrier} ${s.recipientName} ${s.city} ${s.currentLocation} ${s.shippingAddress}`.toLowerCase();
+          `${s.id} ${s.trackingCode} ${s.orderId} ${s.carrier} ${s.recipientName} ${s.recipientPhone || ''} ${s.city} ${s.currentLocation} ${s.shippingAddress}`.toLowerCase();
         return fullText.includes(q);
       });
     }

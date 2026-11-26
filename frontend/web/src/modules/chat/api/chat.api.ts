@@ -1,5 +1,6 @@
 import { requestApi } from '@/lib/axios/api-client';
 import { unwrap } from '@/lib/axios/http';
+import { fetchDeduplicated } from '@/lib/axios/resource-cache';
 import type {
   ChatMessageDto,
   ChatThreadItem,
@@ -267,7 +268,11 @@ export const chatApi = {
   },
 
   async getBuyerThreads(buyerId?: string, signal?: AbortSignal): Promise<ChatThreadItem[]> {
-    return getInboxThreads('BUYER', { buyerId, signal });
+    return fetchDeduplicated(
+      `chat:inbox:BUYER:${buyerId || 'self'}`,
+      () => getInboxThreads('BUYER', { buyerId, signal }),
+      { ttlMs: 3_000 },
+    );
   },
 
   async getSellerThreads(): Promise<ChatThreadItem[]> {
@@ -276,6 +281,14 @@ export const chatApi = {
 
   async getSupportThreads(): Promise<ChatThreadItem[]> {
     return getInboxThreads('SUPPORT_STAFF');
+  },
+
+  async closeConversation(conversationId: string): Promise<ConversationDto> {
+    const response = await requestApi(
+      `/chat/conversations/${encodeURIComponent(conversationId)}/close`,
+      { method: 'POST' },
+    );
+    return unwrap<ConversationDto>(response);
   },
 };
 
@@ -299,6 +312,10 @@ async function getInboxThreads(
     );
   });
 
+  if (conversations.length === 0) {
+    return [];
+  }
+
   const orderPath =
     role === 'BUYER' && options?.buyerId
       ? `/orders?buyerId=${encodeURIComponent(options.buyerId)}&limit=100`
@@ -307,12 +324,45 @@ async function getInboxThreads(
   const orderData = orderResponse ? unwrap<any>(orderResponse) : [];
   const orders: any[] = Array.isArray(orderData) ? orderData : orderData?.items || [];
 
+  let supportCases: any[] = [];
+  if (role === 'SUPPORT_STAFF') {
+    const casesRes = await requestApi('/support/cases?limit=100', {
+      signal: options?.signal,
+    }).catch(() => null);
+    const casesData = casesRes ? unwrap<any>(casesRes) : [];
+    supportCases = Array.isArray(casesData) ? casesData : casesData?.items || [];
+  }
+
   const threads = conversations.map((conversation) => {
     const order = orders.find(
       (item) =>
         String(item.id) === conversation.orderId ||
-        String(item.orderCode || '') === conversation.orderId,
+        String(item.orderCode || '') === conversation.orderId ||
+        String(item.id) === conversation.orderId?.replace(/^#/, ''),
     );
+    const linkedCase = supportCases.find(
+      (c) =>
+        (conversation.supportCaseId && c.id === conversation.supportCaseId) ||
+        c.orderId === conversation.orderId ||
+        c.orderCode === conversation.orderId,
+    );
+    const rawPriority = String(linkedCase?.priority || '').toUpperCase();
+    const reasonText = String(
+      linkedCase?.reason || conversation.lastMessage || order?.status || '',
+    ).toLowerCase();
+    const derivedPriority: 'URGENT' | 'HIGH' | 'MEDIUM' | 'LOW' =
+      rawPriority === 'CAO' ||
+      rawPriority === 'HIGH' ||
+      rawPriority === 'URGENT' ||
+      /(vỡ|nứt|bể|hỏng|hư|sai hàng|sai mẫu|nhầm|thiếu|không đúng|mất|giả|đấu giá|refund_requested)/i.test(
+        reasonText,
+      )
+        ? 'URGENT'
+        : rawPriority === 'THẤP' || rawPriority === 'LOW'
+          ? 'LOW'
+          : conversation.status === 'WAITING_STAFF'
+            ? 'MEDIUM'
+            : 'LOW';
     const firstItem = order?.items?.[0];
     const isSupportChannel =
       conversation.channelType === 'BUYER_SUPPORT' || conversation.channelType === 'AI_BOT';
@@ -321,12 +371,15 @@ async function getInboxThreads(
       order?.seller ||
       (conversation.sellerId ? `Người bán` : 'Người bán Nexus');
     const counterpartLabel = isSupportChannel ? 'Bộ phận Hỗ trợ Nexus' : sellerDisplayName;
+    const buyerId = conversation.buyerId || order?.buyerId;
 
     return {
       id: conversation.id,
       conversationId: conversation.id,
       orderId: conversation.orderId,
       orderCode: order?.orderCode || conversation.orderId,
+      buyerId,
+      customerId: buyerId,
       channelType: conversation.channelType,
       sellerId: conversation.sellerId,
       counterpartLabel,
@@ -336,6 +389,7 @@ async function getInboxThreads(
           : order?.buyerName || order?.shippingAddress?.fullName || 'Người mua',
       customerPhone: order?.shippingAddress?.phone,
       orderStatus: order?.status || '',
+      conversationStatus: conversation.status,
       totalAmount: Number(order?.totalAmount || 0),
       productTitle:
         firstItem?.productTitle ||
@@ -350,11 +404,19 @@ async function getInboxThreads(
       lastSeq: Number(conversation.lastSeq ?? 0),
       myLastReadSeq: Number(conversation.myLastReadSeq ?? 0),
       unreadCount: Math.max(0, Number(conversation.unreadCount ?? 0)),
-      supportCaseId: conversation.supportCaseId,
+      supportCaseId: conversation.supportCaseId || linkedCase?.id,
+      priority: role === 'SUPPORT_STAFF' ? derivedPriority : undefined,
+      disputeReason: linkedCase?.reason || undefined,
     } satisfies ChatThreadItem;
   });
 
+  const priorityRank: Record<string, number> = { URGENT: 1, HIGH: 1, MEDIUM: 2, LOW: 3 };
   return threads.sort((a, b) => {
+    if (role === 'SUPPORT_STAFF') {
+      const pDiff =
+        (priorityRank[a.priority || 'LOW'] || 3) - (priorityRank[b.priority || 'LOW'] || 3);
+      if (pDiff !== 0) return pDiff;
+    }
     const aTime = a.lastMessageTime ? new Date(a.lastMessageTime).getTime() : 0;
     const bTime = b.lastMessageTime ? new Date(b.lastMessageTime).getTime() : 0;
     return bTime - aTime;

@@ -24,6 +24,8 @@ import { PolicyController } from './interfaces/http/controllers/PolicyController
 import { createChatRoutes } from './interfaces/http/routes/ChatRoutes';
 import { createPolicyRoutes } from './interfaces/http/routes/PolicyRoutes';
 import { GeminiDamageAssessor } from './infrastructure/ai/GeminiDamageAssessor';
+import { GeminiLlmProvider } from './infrastructure/ai/GeminiLlmProvider';
+import { getGeminiRuntimeStatus } from './infrastructure/ai/geminiModels';
 import { IDamageAssessor } from './application/ports/IDamageAssessor';
 import { HandoverConversationUseCase } from './application/use-cases/HandoverConversationUseCase';
 import { DamageAssessmentController } from './interfaces/http/controllers/DamageAssessmentController';
@@ -43,6 +45,7 @@ export function createApplication(options: { damageAssessor?: IDamageAssessor } 
         'Multi-party Chat, Order Tracking, Policy FAQ & Dispute Escalation (SRS 2.3, 3.1.2, 3.6)',
       timestamp: new Date().toISOString(),
       port: process.env.PORT || process.env.CHAT_SERVICE_PORT || 4008,
+      ai: getGeminiRuntimeStatus(),
     });
   });
 
@@ -56,8 +59,8 @@ export function createApplication(options: { damageAssessor?: IDamageAssessor } 
   let messageRepo: IChatMessageRepository;
 
   if (useInMemory) {
-    conversationRepo = new InMemoryConversationRepository();
     messageRepo = new InMemoryChatMessageRepository();
+    conversationRepo = new InMemoryConversationRepository(messageRepo);
   } else {
     const pool = new Pool({
       connectionString:
@@ -71,6 +74,10 @@ export function createApplication(options: { damageAssessor?: IDamageAssessor } 
   const policyRepo = new InMemoryPolicyRepository();
   const idempotencyService = new RedisIdempotencyService();
   const orderTrackingTool = new OrderTrackingTool();
+  const llmProvider = new GeminiLlmProvider({
+    orderTrackingTool,
+    policyRepo,
+  });
   const damageAssessor = new GeminiDamageAssessor();
 
   // 2. Use Cases
@@ -82,7 +89,7 @@ export function createApplication(options: { damageAssessor?: IDamageAssessor } 
     messageRepo,
     conversationRepo,
     orderTrackingTool,
-    undefined,
+    llmProvider,
     policyRepo,
     damageAssessor,
     escalateDisputeUseCase,
@@ -98,6 +105,7 @@ export function createApplication(options: { damageAssessor?: IDamageAssessor } 
     messageRepo,
     handoverConversationUseCase,
     disputeArbiterAi,
+    llmProvider,
   );
   const damageController = new DamageAssessmentController(options.damageAssessor ?? damageAssessor);
   const policyController = new PolicyController(queryPolicyFaqUseCase, policyRepo);

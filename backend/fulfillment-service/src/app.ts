@@ -150,6 +150,7 @@ export function createApplication(): Application {
     createShipmentUseCase,
     requestRedeliveryUseCase,
     confirmReturnUseCase,
+    commerceOrderClient,
   );
   const inventoryController = new InventoryController(
     getSkuInventoryUseCase,

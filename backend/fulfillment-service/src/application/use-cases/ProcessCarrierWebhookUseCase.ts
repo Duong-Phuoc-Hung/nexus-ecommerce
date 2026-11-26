@@ -29,8 +29,14 @@ export class ProcessCarrierWebhookUseCase {
   }
 
   public async execute(input: CarrierWebhookInput): Promise<Shipment> {
-    const rawTracking = (input.trackingCode || '').trim();
-    const rawOrderId = (input.orderId || '').trim();
+    const rawTracking = (input.trackingCode || '')
+      .replace(/^[#]/, '')
+      .replace(/^NEX-TRK-/i, '')
+      .trim();
+    const rawOrderId = (input.orderId || '')
+      .replace(/^[#]/, '')
+      .replace(/^NEX-TRK-/i, '')
+      .trim();
 
     let shipment: Shipment | null = null;
     if (rawTracking) {
@@ -81,11 +87,24 @@ export class ProcessCarrierWebhookUseCase {
     }
 
     const mappedStatus = this.mapStatus(input.status);
+
+    // Chống sự kiện webhook cũ/trễ làm lùi trạng thái vận đơn & đơn hàng trong môi trường Production
+    const isProd = process.env.NODE_ENV === 'production';
+    if (isProd && input.timestamp) {
+      const eventTime = new Date(input.timestamp).getTime();
+      if (!Number.isNaN(eventTime) && eventTime < shipment.updatedAt.getTime() - 5000) {
+        return shipment;
+      }
+    }
+    if (isProd && !this.isValidProgression(shipment.status, mappedStatus)) {
+      return shipment;
+    }
+
     const location =
       input.currentLocation ||
       (input.shipperName
-        ? `${shipment.city} · Shipper ${input.shipperName} phụ trách`
-        : shipment.currentLocation);
+        ? `Bưu cục ${shipment.city} · Shipper ${input.shipperName} phụ trách`
+        : undefined);
 
     shipment.updateStatus(mappedStatus, location);
     await this.shipmentRepository.update(shipment);
@@ -97,6 +116,22 @@ export class ProcessCarrierWebhookUseCase {
         mappedStatus,
         `Cập nhật qua 3PL Carrier Webhook (${input.carrier || 'Carrier'})`,
       );
+      if (
+        mappedStatus === ShipmentStatus.DELIVERED &&
+        typeof this.commerceClient.confirmCodPayment === 'function'
+      ) {
+        try {
+          await this.commerceClient.confirmCodPayment(
+            shipment.orderId,
+            '3PL Webhook: Shipper đã giao kiện hàng thành công và thu đủ tiền COD.',
+          );
+        } catch (err: any) {
+          console.warn(
+            '[ProcessCarrierWebhookUseCase] confirmCodPayment warning:',
+            err?.message || err,
+          );
+        }
+      }
     }
 
     return shipment;
@@ -131,5 +166,34 @@ export class ProcessCarrierWebhookUseCase {
       default:
         return ShipmentStatus.IN_TRANSIT;
     }
+  }
+
+  private isValidProgression(current: ShipmentStatus, next: ShipmentStatus): boolean {
+    if (current === ShipmentStatus.DELIVERED || current === ShipmentStatus.RETURNED) {
+      return next === current;
+    }
+    if (next === ShipmentStatus.FAILED) {
+      return (
+        current === ShipmentStatus.PICKED ||
+        current === ShipmentStatus.IN_TRANSIT ||
+        current === ShipmentStatus.OUT_FOR_DELIVERY
+      );
+    }
+    if (next === ShipmentStatus.RETURNED) {
+      return current === ShipmentStatus.FAILED;
+    }
+    const orderRank: Partial<Record<ShipmentStatus, number>> = {
+      [ShipmentStatus.READY_TO_PICK]: 0,
+      [ShipmentStatus.PICKED]: 1,
+      [ShipmentStatus.IN_TRANSIT]: 2,
+      [ShipmentStatus.OUT_FOR_DELIVERY]: 3,
+      [ShipmentStatus.DELIVERED]: 4,
+    };
+    const currRank = orderRank[current];
+    const nextRank = orderRank[next];
+    if (currRank !== undefined && nextRank !== undefined) {
+      return nextRank >= currRank;
+    }
+    return true;
   }
 }

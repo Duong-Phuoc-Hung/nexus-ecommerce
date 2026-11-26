@@ -13,6 +13,8 @@ export function supportStatusClass(status?: string): string {
   const s = status.toUpperCase().trim().replace(/[\s-]/g, '_');
   switch (s) {
     // Orders
+    case 'PENDING_PAYMENT':
+    case 'CHỜ_THANH_TOÁN':
     case 'PENDING':
     case 'CHỜ_XỬ_LÝ':
       return 'status-pending';

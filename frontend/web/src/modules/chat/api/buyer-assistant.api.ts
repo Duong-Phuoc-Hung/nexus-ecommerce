@@ -65,27 +65,56 @@ export interface PolicyFaqResponse {
 }
 
 function formatShipmentStatusVi(status: string): string {
-  const normalized = (status || '').toUpperCase();
+  const normalized = (status || '').toUpperCase().trim();
   switch (normalized) {
     case 'READY_TO_PICK':
     case 'CREATED':
+    case 'CHỜ LẤY HÀNG':
       return 'Chờ bưu tá lấy hàng';
     case 'PICKED':
     case 'PICKED_UP':
+    case 'PICKING':
+    case 'ĐÃ LẤY HÀNG':
       return 'Bưu tá đã lấy kiện hàng';
     case 'IN_TRANSIT':
+    case 'TRANSIT':
+    case 'ĐANG VẬN CHUYỂN':
+      return 'Đang vận chuyển liên tỉnh';
     case 'SHIPPED':
     case 'DELIVERING':
     case 'OUT_FOR_DELIVERY':
+    case 'ĐANG GIAO':
+    case 'ĐANG GIAO HÀNG':
       return 'Đang trên đường giao hàng';
     case 'DELIVERED':
+    case 'SUCCESS':
+    case 'COMPLETED':
+    case 'ĐÃ GIAO':
+    case 'ĐÃ GIAO HÀNG':
       return 'Đã giao hàng thành công';
+    case 'FAILED':
     case 'DELIVERY_FAILED':
+    case 'CANCELLED':
+    case 'GIAO THẤT BẠI':
+    case 'GIAO HÀNG THẤT BẠI':
       return 'Giao hàng chưa thành công (Chờ phát lại)';
     case 'RETURNED':
     case 'RTO':
-      return 'Đang hoàn về kho Người bán';
+    case 'RETURNING':
+    case 'ĐÃ TRẢ HÀNG':
+    case 'ĐÃ HOÀN HÀNG':
+    case 'HOÀN HÀNG':
+      return 'Đã chuyển hoàn về Người bán';
     default:
+      if (normalized.includes('THẤT BẠI') || normalized.includes('FAIL')) {
+        return 'Giao hàng chưa thành công (Chờ phát lại)';
+      }
+      if (normalized.includes('HOÀN') || normalized.includes('TRẢ')) {
+        return 'Đã chuyển hoàn về Người bán';
+      }
+      if (normalized.includes('GIAO')) {
+        return 'Đang trên đường giao hàng';
+      }
       return status || 'Đang cập nhật vận chuyển';
   }
 }
@@ -335,7 +364,12 @@ export const buyerAssistantApi = {
    */
   async getOwnedOrderDetail(orderId: string, buyerId: string): Promise<OrderDetail | null> {
     try {
-      const detail = await commerceApi.getOrder(orderId);
+      const cleanId = orderId
+        .trim()
+        .replace(/^#/, '')
+        .replace(/^NEX-TRK-/i, '')
+        .trim();
+      const detail = await commerceApi.getOrder(cleanId);
       if (detail.buyerId && detail.buyerId !== buyerId) {
         return null;
       }
@@ -356,16 +390,55 @@ export const buyerAssistantApi = {
       'items' in order ? order : await commerceApi.getOrder(order.id).catch(() => null);
     const effectiveOrder = detail || order;
     const normalizedOrderStatus = (effectiveOrder.status || '').toUpperCase();
-    const rawPaymentMethod =
-      'paymentMethod' in effectiveOrder && typeof effectiveOrder.paymentMethod === 'string'
+
+    // 1. Phân giải chính xác Phương thức thanh toán (COD vs PAYOS)
+    let rawPaymentMethod = (
+      ('paymentMethod' in effectiveOrder && typeof effectiveOrder.paymentMethod === 'string'
         ? effectiveOrder.paymentMethod
-        : '';
-    const paymentMethod = rawPaymentMethod.toUpperCase();
+        : '') || ''
+    )
+      .trim()
+      .toUpperCase();
+
+    const timelineNotes = ((effectiveOrder as any).timeline || [])
+      .map((t: any) => `${t.title || ''} ${t.note || ''}`)
+      .join(' ')
+      .toUpperCase();
+
+    const addressMethod = String(
+      (effectiveOrder as any).shippingAddress?.paymentMethod ||
+        (effectiveOrder as any).shippingAddress?.method ||
+        '',
+    )
+      .trim()
+      .toUpperCase();
+
+    if (
+      /COD|TIỀN MẶT|NHẬN HÀNG/i.test(timelineNotes) ||
+      rawPaymentMethod === 'COD' ||
+      rawPaymentMethod.includes('NHẬN HÀNG') ||
+      addressMethod === 'COD' ||
+      addressMethod.includes('NHẬN HÀNG')
+    ) {
+      rawPaymentMethod = 'COD';
+    } else if (
+      /PAYOS|VIETQR/i.test(timelineNotes) ||
+      rawPaymentMethod === 'PAYOS' ||
+      addressMethod === 'PAYOS'
+    ) {
+      rawPaymentMethod = 'PAYOS';
+    }
 
     // Dòng 1: Trạng thái thanh toán thực tế từ Commerce
     let payment: PaymentStatusSnapshot = {
-      status: 'UNKNOWN',
-      label: 'Đang kiểm tra trạng thái thanh toán',
+      status: rawPaymentMethod === 'COD' ? 'COD' : 'UNKNOWN',
+      method: rawPaymentMethod === 'COD' ? 'COD' : 'PAYOS',
+      methodLabel:
+        rawPaymentMethod === 'COD'
+          ? 'Thanh toán khi nhận hàng (COD)'
+          : 'Chuyển khoản PayOS (VietQR)',
+      label:
+        rawPaymentMethod === 'COD' ? 'Thu tiền khi nhận hàng (COD)' : 'Đang kiểm tra thanh toán',
       amount: effectiveOrder.totalAmount ?? effectiveOrder.total,
     };
 
@@ -374,68 +447,87 @@ export const buyerAssistantApi = {
       const paySt = (payRes.paymentStatus || '').toUpperCase();
       const ordSt = (payRes.orderStatus || normalizedOrderStatus).toUpperCase();
 
-      if (paySt === 'PAID' || ordSt === 'PAID' || ordSt === 'SHIPPED' || ordSt === 'DELIVERED') {
+      const resolvedMethod = (
+        (payRes.paymentMethod && payRes.paymentMethod !== 'STRIPE' ? payRes.paymentMethod : '') ||
+        rawPaymentMethod ||
+        (payRes.checkoutUrl ? 'PAYOS' : 'COD')
+      )
+        .trim()
+        .toUpperCase();
+
+      const isCod =
+        resolvedMethod === 'COD' ||
+        resolvedMethod.includes('NHẬN HÀNG') ||
+        resolvedMethod === 'CASH_ON_DELIVERY' ||
+        /COD|TIỀN MẶT|NHẬN HÀNG/i.test(timelineNotes);
+
+      if (isCod) {
+        payment.method = 'COD';
+        payment.methodLabel = 'Thanh toán khi nhận hàng (COD)';
+        if (ordSt === 'CANCELLED') {
+          payment.status = 'CANCELLED';
+          payment.label = 'Đơn đã hủy (Không thu tiền)';
+        } else if (ordSt === 'DELIVERED' && (paySt === 'PAID' || paySt === 'COLLECTED')) {
+          payment.status = 'PAID';
+          payment.label = 'Đã thu tiền khi giao hàng';
+          payment.paidAt = payRes.paidAt || effectiveOrder.updatedAt;
+        } else {
+          payment.status = 'COD';
+          payment.label = 'Thu tiền khi nhận hàng (COD)';
+        }
+      } else {
+        payment.method = 'PAYOS';
+        payment.methodLabel = 'Chuyển khoản PayOS (VietQR)';
+        if (paySt === 'PAID' || ordSt === 'PAID') {
+          payment.status = 'PAID';
+          payment.label = 'Đã thanh toán thành công';
+          payment.paidAt = payRes.paidAt;
+        } else if (ordSt === 'CANCELLED') {
+          payment.status = 'CANCELLED';
+          payment.label = 'Đơn đã hủy';
+        } else if (payRes.expired || ordSt === 'EXPIRED') {
+          payment.status = 'EXPIRED';
+          payment.label = 'Đã quá hạn thanh toán';
+          payment.expiresAt = payRes.expiresAt;
+        } else {
+          payment.status = 'PENDING';
+          payment.label = 'Chờ chuyển khoản VietQR';
+          payment.expiresAt = payRes.expiresAt;
+          payment.canRetryPaymentCheck = true;
+        }
+      }
+    } catch {
+      const isCod =
+        rawPaymentMethod === 'COD' ||
+        rawPaymentMethod.includes('NHẬN HÀNG') ||
+        /COD|TIỀN MẶT|NHẬN HÀNG/i.test(timelineNotes);
+
+      if (isCod) {
+        payment = {
+          status: normalizedOrderStatus === 'DELIVERED' ? 'PAID' : 'COD',
+          method: 'COD',
+          methodLabel: 'Thanh toán khi nhận hàng (COD)',
+          label:
+            normalizedOrderStatus === 'DELIVERED'
+              ? 'Đã thu tiền khi giao hàng'
+              : 'Thu tiền khi nhận hàng (COD)',
+          amount: effectiveOrder.totalAmount ?? effectiveOrder.total,
+        };
+      } else if (['PAID'].includes(normalizedOrderStatus)) {
         payment = {
           status: 'PAID',
-          label: 'Đã thanh toán',
-          paidAt: payRes.paidAt,
-          amount: payRes.amount ?? effectiveOrder.totalAmount,
-        };
-      } else if (ordSt === 'CANCELLED') {
-        payment = {
-          status: 'CANCELLED',
-          label: 'Đơn đã hủy',
-          amount: payRes.amount,
-        };
-      } else if (payRes.expired || ordSt === 'EXPIRED') {
-        payment = {
-          status: 'EXPIRED',
-          label: 'Đã quá hạn thanh toán',
-          expiresAt: payRes.expiresAt,
-          amount: payRes.amount,
-        };
-      } else if (paymentMethod === 'COD' || ordSt === 'PLACED') {
-        payment = {
-          status: 'COD',
-          label: `Thanh toán khi nhận hàng (COD · ${(
-            payRes.amount ??
-            effectiveOrder.totalAmount ??
-            0
-          ).toLocaleString('vi-VN')} ₫)`,
-          amount: payRes.amount ?? effectiveOrder.totalAmount,
+          method: 'PAYOS',
+          methodLabel: 'Chuyển khoản PayOS (VietQR)',
+          label: 'Đã thanh toán thành công',
+          amount: effectiveOrder.totalAmount ?? effectiveOrder.total,
         };
       } else {
         payment = {
           status: 'PENDING',
-          label: 'Giao dịch PayOS chưa hoàn tất',
-          expiresAt: payRes.expiresAt,
-          amount: payRes.amount,
-          canRetryPaymentCheck: true,
-        };
-      }
-    } catch {
-      if (paymentMethod === 'COD' || normalizedOrderStatus === 'PLACED') {
-        payment = {
-          status: 'COD',
-          label: `Thanh toán khi nhận hàng (COD · ${(
-            effectiveOrder.totalAmount ??
-            effectiveOrder.total ??
-            0
-          ).toLocaleString('vi-VN')} ₫)`,
+          method: 'PAYOS',
+          methodLabel: 'Chuyển khoản PayOS (VietQR)',
+          label: 'Chờ chuyển khoản VietQR',
           amount: effectiveOrder.totalAmount ?? effectiveOrder.total,
-        };
-      } else if (['PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED'].includes(normalizedOrderStatus)) {
-        payment = {
-          status: 'PAID',
-          label: 'Đã thanh toán',
-          amount: effectiveOrder.totalAmount ?? effectiveOrder.total,
-        };
-      } else if (normalizedOrderStatus === 'CANCELLED') {
-        payment = { status: 'CANCELLED', label: 'Đơn đã hủy' };
-      } else {
-        payment = {
-          status: 'ERROR',
-          label: 'Chưa xác nhận được trạng thái thanh toán',
           canRetryPaymentCheck: true,
         };
       }
@@ -448,6 +540,7 @@ export const buyerAssistantApi = {
     };
 
     try {
+      const cacheBuster = `_t=${Date.now()}`;
       const raw = await requestApi<{
         success?: boolean;
         data?: {
@@ -461,7 +554,10 @@ export const buyerAssistantApi = {
           updated?: string;
           estimatedDeliveryAt?: string | null;
         } | null;
-      }>(`/fulfillments/shipments/by-order/${encodeURIComponent(effectiveOrder.id)}?readOnly=true`);
+      }>(
+        `/fulfillments/shipments/by-order/${encodeURIComponent(effectiveOrder.id)}?readOnly=true&${cacheBuster}`,
+        { headers: { 'Cache-Control': 'no-cache, no-store' } },
+      );
 
       const shipData = unwrap<{
         carrier?: string;
@@ -476,12 +572,92 @@ export const buyerAssistantApi = {
       } | null>(raw);
 
       if (shipData && (shipData.trackingCode || shipData.status || shipData.statusCode)) {
+        const rawStatus = (shipData.statusCode || shipData.status || '').toUpperCase().trim();
+        let displayLocation = (shipData.currentLocation || '').trim();
+
+        // Chuẩn hóa canonical status code
+        let canonicalStatusCode = 'READY_TO_PICK';
+        if (
+          rawStatus === 'FAILED' ||
+          rawStatus.includes('FAIL') ||
+          rawStatus.includes('THẤT BẠI')
+        ) {
+          canonicalStatusCode = 'FAILED';
+        } else if (
+          rawStatus === 'RETURNED' ||
+          rawStatus.includes('RETURN') ||
+          rawStatus.includes('HOÀN') ||
+          rawStatus.includes('TRẢ')
+        ) {
+          canonicalStatusCode = 'RETURNED';
+        } else if (
+          rawStatus === 'DELIVERED' ||
+          rawStatus.includes('ĐÃ GIAO') ||
+          rawStatus.includes('SUCCESS') ||
+          rawStatus.includes('COMPLETED')
+        ) {
+          canonicalStatusCode = 'DELIVERED';
+        } else if (
+          rawStatus === 'OUT_FOR_DELIVERY' ||
+          rawStatus === 'DELIVERING' ||
+          rawStatus === 'SHIPPED' ||
+          rawStatus.includes('ĐANG GIAO')
+        ) {
+          canonicalStatusCode = 'OUT_FOR_DELIVERY';
+        } else if (
+          rawStatus === 'IN_TRANSIT' ||
+          rawStatus.includes('TRANSIT') ||
+          rawStatus.includes('VẬN CHUYỂN')
+        ) {
+          canonicalStatusCode = 'IN_TRANSIT';
+        } else if (rawStatus === 'PICKED' || rawStatus.includes('LẤY HÀNG')) {
+          canonicalStatusCode = 'PICKED';
+        }
+
+        // Tự động đồng bộ vị trí hiển thị chuẩn xác với từng trạng thái để tránh mâu thuẫn vị trí kho cũ
+        const isConflict =
+          !displayLocation ||
+          (canonicalStatusCode !== 'READY_TO_PICK' &&
+            /đang chờ lấy hàng|chờ lấy hàng/i.test(displayLocation)) ||
+          (canonicalStatusCode === 'DELIVERED' && !/đã giao/i.test(displayLocation)) ||
+          ((canonicalStatusCode === 'OUT_FOR_DELIVERY' || canonicalStatusCode === 'FAILED') &&
+            /kho tổng|chờ lấy hàng|trung chuyển/i.test(displayLocation));
+
+        if (isConflict) {
+          switch (canonicalStatusCode) {
+            case 'READY_TO_PICK':
+              displayLocation = 'Kho tổng Nexus · Đang chuẩn bị đóng gói & chờ bưu tá';
+              break;
+            case 'PICKED':
+              displayLocation = 'Bưu cục đối tác · Bưu tá đã nhận kiện hàng từ Người bán';
+              break;
+            case 'IN_TRANSIT':
+              displayLocation = 'Trung tâm phân loại bưu chính · Đang vận chuyển liên tỉnh';
+              break;
+            case 'OUT_FOR_DELIVERY':
+              displayLocation = 'Bưu cục phát địa phương · Bưu tá đang đi giao hàng';
+              break;
+            case 'DELIVERED':
+              displayLocation = 'Địa chỉ người nhận · Đã phát thành công';
+              break;
+            case 'FAILED':
+              displayLocation = 'Bưu cục phát địa phương · Giao không thành công (Chờ phát lại)';
+              break;
+            case 'RETURNED':
+              displayLocation = 'Trung tâm chuyển hoàn · Đã trả hàng về người bán';
+              break;
+            default:
+              displayLocation = displayLocation || 'Đang cập nhật vị trí';
+              break;
+          }
+        }
+
         shipment = {
           state: 'HAS_SHIPMENT',
-          label: formatShipmentStatusVi(shipData.statusCode || shipData.status || ''),
+          label: formatShipmentStatusVi(canonicalStatusCode),
           carrier: shipData.carrier || shipData.carrierCode || undefined,
           trackingCode: shipData.trackingCode || undefined,
-          currentLocation: shipData.currentLocation || undefined,
+          currentLocation: displayLocation || undefined,
           updatedAt: shipData.updatedAt || shipData.updated || null,
           estimatedDeliveryAt: shipData.estimatedDeliveryAt ?? null,
         };

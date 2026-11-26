@@ -5,6 +5,8 @@ export interface OrderSearchCriteria {
   buyerId?: string;
   sellerId?: string;
   status?: string;
+  fromDate?: string;
+  toDate?: string;
   page?: number;
   limit?: number;
   sortBy?: 'createdAt' | 'totalAmount' | 'status';

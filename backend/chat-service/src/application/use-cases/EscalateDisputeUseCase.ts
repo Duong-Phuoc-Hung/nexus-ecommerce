@@ -2,6 +2,30 @@ import { IConversationRepository } from '../../domain/repositories/IConversation
 import { EscalateDisputeInput, EscalateDisputeResult } from '../dtos/ChatDtos';
 import { RedisIdempotencyService } from '../../infrastructure/redis/RedisIdempotencyService';
 
+function classifyComplaintPriority(
+  reason: string,
+  aiVerdict?: EscalateDisputeInput['aiVerdict'],
+): 'Cao' | 'Trung bình' | 'Thấp' {
+  const severity = String((aiVerdict as any)?.severity || '').toUpperCase();
+  if (severity === 'HIGH' || severity === 'CRITICAL') return 'Cao';
+
+  const text = (reason || '').toLowerCase();
+  if (
+    /(vỡ|nứt|bể|hỏng|hư|móp|sai hàng|sai mẫu|nhầm|thiếu|không đúng|mất hàng|thất lạc|lừa đảo|giả|đấu giá|broken|damaged|wrong|lost|fraud)/i.test(
+      text,
+    )
+  ) {
+    return 'Cao';
+  }
+  if (
+    /(trễ|chậm|hoàn tiền|trả hàng|đổi trả|delay|refund|return)/i.test(text) ||
+    severity === 'MEDIUM'
+  ) {
+    return 'Trung bình';
+  }
+  return 'Thấp';
+}
+
 export class EscalateDisputeUseCase {
   constructor(
     private readonly conversationRepo: IConversationRepository,
@@ -92,7 +116,7 @@ export class EscalateDisputeUseCase {
           userId: input.buyerId,
           reason: input.reason.trim(),
           type: 'Yêu cầu trả hàng / hoàn tiền',
-          priority: input.priority || 'Cao',
+          priority: input.priority || classifyComplaintPriority(input.reason, input.aiVerdict),
           aiVerdict: input.aiVerdict,
           sharedMessages: input.sharedMessages,
           buyerEvidence: {

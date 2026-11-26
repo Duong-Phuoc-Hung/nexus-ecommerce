@@ -43,6 +43,22 @@ export class PostgresProductRepository implements IProductRepository {
     return this.mapRowToProduct(row);
   }
 
+  // 1b. Tìm sản phẩm bao gồm cả sản phẩm đã xóa mềm (phục vụ RecoverProductUseCase - GAP-BRK-04)
+  public async findByIdIncludingDeleted(id: string): Promise<Product | null> {
+    let row = await this.prisma.product.findFirst({
+      where: { id },
+      include: { images: { orderBy: { displayOrder: 'asc' } }, attributes: true },
+    });
+    if (!row) {
+      row = await this.prisma.product.findFirst({
+        where: { slug: id },
+        include: { images: { orderBy: { displayOrder: 'asc' } }, attributes: true },
+      });
+    }
+    if (!row) return null;
+    return this.mapRowToProduct(row);
+  }
+
   // 2. Lấy danh sách sản phẩm đang bán ngoài trang chủ
   public async findAll(limit: number = 20, offset: number = 0): Promise<Product[]> {
     const rows = await this.prisma.product.findMany({
@@ -283,6 +299,132 @@ export class PostgresProductRepository implements IProductRepository {
         deletedAt: null,
         status: 'ACTIVE',
       },
+    });
+  }
+
+  private ledgerTableEnsured = false;
+
+  private async ensureStockLedgerTable(): Promise<void> {
+    if (this.ledgerTableEnsured) return;
+    await this.prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS catalog_stock_ledger (
+        idempotency_key VARCHAR(160) PRIMARY KEY,
+        product_id VARCHAR(36) NOT NULL,
+        order_id VARCHAR(64) NOT NULL,
+        action VARCHAR(16) NOT NULL,
+        quantity INT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    this.ledgerTableEnsured = true;
+  }
+
+  public async deductStockOnce(
+    productId: string,
+    quantity: number,
+    orderId?: string,
+  ): Promise<{ remainingStock: number; status: string; idempotentReplay: boolean }> {
+    const qty = Math.floor(quantity);
+    await this.ensureStockLedgerTable();
+
+    return this.prisma.$transaction(async (tx: any) => {
+      if (orderId) {
+        const key = `DEDUCT::${orderId}::${productId}`;
+        const inserted: Array<{ idempotency_key: string }> = await tx.$queryRawUnsafe(
+          `INSERT INTO catalog_stock_ledger (idempotency_key, product_id, order_id, action, quantity)
+           VALUES ($1, $2, $3, 'DEDUCT', $4)
+           ON CONFLICT (idempotency_key) DO NOTHING
+           RETURNING idempotency_key`,
+          key,
+          productId,
+          orderId,
+          qty,
+        );
+        if (inserted.length === 0) {
+          const current = await tx.product.findFirst({
+            where: { id: productId },
+            select: { stockQuantity: true, status: true },
+          });
+          return {
+            remainingStock: Number(current?.stockQuantity ?? 0),
+            status: String(current?.status || 'ACTIVE'),
+            idempotentReplay: true,
+          };
+        }
+      }
+
+      const updated: Array<{ stock_quantity: number; status: string }> = await tx.$queryRawUnsafe(
+        `UPDATE catalog_products
+         SET stock_quantity = stock_quantity - $1,
+             status = CASE WHEN stock_quantity - $1 <= 0 THEN 'OUT_OF_STOCK' ELSE status END,
+             updated_at = NOW()
+         WHERE id = $2 AND stock_quantity >= $1
+         RETURNING stock_quantity, status`,
+        qty,
+        productId,
+      );
+      if (updated.length === 0) {
+        throw new Error(
+          `Số lượng tồn kho không đủ để trừ ${qty} đơn vị cho sản phẩm ${productId}.`,
+        );
+      }
+      return {
+        remainingStock: Number(updated[0].stock_quantity),
+        status: String(updated[0].status),
+        idempotentReplay: false,
+      };
+    });
+  }
+
+  public async restoreStockOnce(
+    productId: string,
+    quantity: number,
+    orderId?: string,
+  ): Promise<{ remainingStock: number; status: string; idempotentReplay: boolean }> {
+    const qty = Math.floor(quantity);
+    await this.ensureStockLedgerTable();
+
+    return this.prisma.$transaction(async (tx: any) => {
+      if (orderId) {
+        const key = `RESTORE::${orderId}::${productId}`;
+        const inserted: Array<{ idempotency_key: string }> = await tx.$queryRawUnsafe(
+          `INSERT INTO catalog_stock_ledger (idempotency_key, product_id, order_id, action, quantity)
+           VALUES ($1, $2, $3, 'RESTORE', $4)
+           ON CONFLICT (idempotency_key) DO NOTHING
+           RETURNING idempotency_key`,
+          key,
+          productId,
+          orderId,
+          qty,
+        );
+        if (inserted.length === 0) {
+          const current = await tx.product.findFirst({
+            where: { id: productId },
+            select: { stockQuantity: true, status: true },
+          });
+          return {
+            remainingStock: Number(current?.stockQuantity ?? 0),
+            status: String(current?.status || 'ACTIVE'),
+            idempotentReplay: true,
+          };
+        }
+      }
+
+      const updated: Array<{ stock_quantity: number; status: string }> = await tx.$queryRawUnsafe(
+        `UPDATE catalog_products
+         SET stock_quantity = stock_quantity + $1,
+             status = CASE WHEN status = 'OUT_OF_STOCK' AND stock_quantity + $1 > 0 THEN 'ACTIVE' ELSE status END,
+             updated_at = NOW()
+         WHERE id = $2
+         RETURNING stock_quantity, status`,
+        qty,
+        productId,
+      );
+      return {
+        remainingStock: Number(updated[0]?.stock_quantity ?? 0),
+        status: String(updated[0]?.status || 'ACTIVE'),
+        idempotentReplay: false,
+      };
     });
   }
 

@@ -53,7 +53,20 @@ export class GetOrderDetailUseCase {
         unitPrice: i.unitPrice,
         totalPrice: i.totalPrice,
       })),
-      timeline: order.timeline.map((t) => ({
+      timeline: (order.timeline && order.timeline.length > 0
+        ? order.timeline
+        : [
+            {
+              status: order.status || 'CREATED',
+              title:
+                order.status === 'PROCESSING'
+                  ? 'Đơn hàng được tạo thành công · Đang xử lý'
+                  : 'Đơn hàng được tạo thành công',
+              timestamp: order.createdAt,
+              note: 'Khởi tạo đơn hàng trên sàn thương mại điện tử Nexus',
+            },
+          ]
+      ).map((t) => ({
         status: t.status,
         title: t.title,
         timestamp: t.timestamp.toISOString(),

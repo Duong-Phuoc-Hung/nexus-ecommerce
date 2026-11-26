@@ -1,7 +1,18 @@
+import {
+  reputationLedgerStore,
+  classifyReputationTier,
+  MIN_BID_REPUTATION_SCORE,
+} from '../../../infrastructure/state/ReputationLedgerStore';
+import { authTokenStore } from '../../../infrastructure/security/AuthTokenStore';
 import { Request, Response, Router } from 'express';
 import { PostgresUserRepository } from '../../../infrastructure/repositories/PostgresUserRepository';
 import { BcryptPasswordHasher } from '../../../infrastructure/security/BcryptPasswordHasher';
-import { requireAuth, requirePermission } from '../../../infrastructure/security/authorization';
+import {
+  requireAuth,
+  requirePermission,
+  verifiedAdmin,
+} from '../../../infrastructure/security/authorization';
+import { restrictionFeature, trustTier } from '../../../application/dtos/AdminUserDto';
 
 class ApiError extends Error {
   constructor(
@@ -33,13 +44,6 @@ function route(handler: (req: Request, res: Response) => Promise<void>) {
       }
     }
   };
-}
-
-function trust(score: number) {
-  if (score >= 90) return { trustTier: 'HIGH', trustTierLabel: 'Tin cậy cao' };
-  if (score >= 70) return { trustTier: 'STANDARD', trustTierLabel: 'Tiêu chuẩn' };
-  if (score >= 50) return { trustTier: 'WATCH', trustTierLabel: 'Cần theo dõi' };
-  return { trustTier: 'RESTRICTED', trustTierLabel: 'Bị giới hạn' };
 }
 
 function positiveInteger(input: unknown, fallback: number, max: number): number {
@@ -150,6 +154,7 @@ export function createAccountExtensionsRoutes(
           'Thông tin xác thực đã thay đổi. Vui lòng thử lại.',
         );
       }
+      await authTokenStore.revokeUserTokens(user.id);
       res.json({ success: true, message: 'Đã cập nhật mật khẩu thành công.' });
     }),
   );
@@ -173,16 +178,40 @@ export function createAccountExtensionsRoutes(
           expiresAt?: Date | string | null;
         }>
       ).map((r) => ({
-        feature: r.restriction === 'BAN_BIDDING' ? 'AUCTION_BID' : r.restriction,
+        feature: restrictionFeature(r.restriction),
         reason: r.reason,
         expiresAt: r.expiresAt,
       }));
+      await reputationLedgerStore.syncUserFromDb(user.id, user.reputationScore);
+      const score = user.reputationScore;
+      const tier = classifyReputationTier(score);
+      const restricted = activeRestrictions.some((r) =>
+        ['AUCTION_BID', 'BIDDING_LOCK'].includes(r.feature),
+      );
+      const canBid =
+        user.role === 'BUYER' &&
+        user.status === 'ACTIVE' &&
+        !restricted &&
+        score >= MIN_BID_REPUTATION_SCORE;
       res.json({
         success: true,
         data: {
           userId: user.id,
-          reputationScore: user.reputationScore,
-          ...trust(user.reputationScore),
+          reputationScore: score,
+          score,
+          canBid,
+          isBidRestricted: restricted,
+          accountStatus: user.status,
+          pointsToBid: Math.max(0, MIN_BID_REPUTATION_SCORE - score),
+          tier: tier.code,
+          tierLabel: tier.label,
+          nextTierScore: tier.nextTierScore,
+          missions: reputationLedgerStore.buildMissions(user.id, score),
+          history: reputationLedgerStore
+            .getLedger(user.id)
+            .map(({ internalNote, ...entry }) => entry),
+          appeals: reputationLedgerStore.listAppeals(user.id),
+          ...trustTier(user.reputationScore),
           stats: {
             completedTransactions: null,
             failedTransactions: null,
@@ -190,12 +219,8 @@ export function createAccountExtensionsRoutes(
             averageRatingReceived: summary.averageRating,
             totalRatingsReceived: summary.totalReviews,
           },
-          biddingEligible:
-            user.role === 'BUYER' &&
-            user.status === 'ACTIVE' &&
-            user.reputationScore >= 50 &&
-            !activeRestrictions.some((r: { feature: string }) => r.feature === 'AUCTION_BID'),
-          minScoreRequiredToBid: 50,
+          biddingEligible: canBid,
+          minScoreRequiredToBid: MIN_BID_REPUTATION_SCORE,
           activeRestrictions,
           recentHistory: (
             (events || []) as Array<{
@@ -228,7 +253,7 @@ export function createAccountExtensionsRoutes(
           status: user.status,
           joinedAt: user.createdAt,
           reputationScore: user.reputationScore,
-          ...trust(user.reputationScore),
+          ...trustTier(user.reputationScore),
           ...ratings,
           completedOrders: null,
           successRate: null,
@@ -238,16 +263,144 @@ export function createAccountExtensionsRoutes(
   );
 
   router.get(
+    '/:sellerId/reviews/eligibility',
+    requireAuth,
+    route(async (req, res) => {
+      const sellerId = String(req.params.sellerId || '').trim();
+      const orderId = typeof req.query.orderId === 'string' ? req.query.orderId.trim() : '';
+      if (!orderId) {
+        throw new ApiError(400, 'INVALID_ORDER_ID', 'Cần orderId để kiểm tra quyền đánh giá.');
+      }
+
+      const auth = actor(req);
+      if (auth.sub === sellerId) {
+        res.json({
+          success: true,
+          data: {
+            eligible: false,
+            reasonCode: 'SELF_REVIEW',
+            reason: 'Không thể tự đánh giá gian hàng của chính mình.',
+            existingReview: null,
+          },
+        });
+        return;
+      }
+
+      const buyer = await repository.findById(auth.sub);
+      if (!buyer || buyer.role !== 'BUYER' || buyer.status !== 'ACTIVE') {
+        res.json({
+          success: true,
+          data: {
+            eligible: false,
+            reasonCode: 'NOT_BUYER',
+            reason: 'Chỉ tài khoản Người mua đang hoạt động mới có quyền đánh giá.',
+            existingReview: null,
+          },
+        });
+        return;
+      }
+
+      const path = '/api/v1/orders/' + encodeURIComponent(orderId);
+      const order = (await commerce(path, req)) as {
+        id?: string;
+        buyerId?: string;
+        sellerId?: string;
+        status?: string;
+      };
+      const canonicalOrderId = String(order.id || orderId).trim();
+
+      const existing = await repository.findSellerReviewByOrderAndBuyer(canonicalOrderId, buyer.id);
+      if (existing) {
+        res.json({
+          success: true,
+          data: {
+            eligible: false,
+            reasonCode: 'ALREADY_REVIEWED',
+            reason: 'Bạn đã đánh giá người bán cho đơn hàng này.',
+            canonicalOrderId,
+            existingReview: existing,
+          },
+        });
+        return;
+      }
+
+      if (order.buyerId !== buyer.id || order.sellerId !== sellerId) {
+        res.json({
+          success: true,
+          data: {
+            eligible: false,
+            reasonCode: 'NOT_OWNER',
+            reason: 'Đơn hàng không khớp với giao dịch của bạn và gian hàng này.',
+            canonicalOrderId,
+            existingReview: null,
+          },
+        });
+        return;
+      }
+
+      if (!['DELIVERED', 'COMPLETED'].includes(String(order.status ?? '').toUpperCase())) {
+        res.json({
+          success: true,
+          data: {
+            eligible: false,
+            reasonCode: 'ORDER_NOT_DELIVERED',
+            reason: 'Đơn hàng cần ở trạng thái đã giao hoặc hoàn tất mới được đánh giá.',
+            canonicalOrderId,
+            existingReview: null,
+          },
+        });
+        return;
+      }
+
+      const cases = await commerce(path + '/cases', req);
+      if (!Array.isArray(cases)) throw commerceUnavailable();
+      const openCase = cases.find(
+        (entry) =>
+          typeof entry?.status === 'string' &&
+          !['RESOLVED', 'REJECTED', 'CLOSED'].includes(entry.status.toUpperCase()),
+      );
+      if (openCase) {
+        res.json({
+          success: true,
+          data: {
+            eligible: false,
+            reasonCode: 'HAS_OPEN_DISPUTE',
+            reason: 'Đánh giá tạm khóa trong thời gian xử lý khiếu nại.',
+            openCaseId: openCase.id ?? openCase.caseId ?? null,
+            canonicalOrderId,
+            existingReview: null,
+          },
+        });
+        return;
+      }
+
+      res.json({
+        success: true,
+        data: {
+          eligible: true,
+          reasonCode: 'ELIGIBLE',
+          reason: 'Đơn hàng đủ điều kiện đánh giá.',
+          canonicalOrderId,
+          existingReview: null,
+        },
+      });
+    }),
+  );
+
+  router.get(
     '/:sellerId/reviews',
     route(async (req, res) => {
-      const user = await seller(String(req.params.sellerId));
+      const admin = verifiedAdmin(req);
+      const userId = String(req.params.sellerId);
+      const user = admin ? await repository.findById(userId) : await seller(userId);
+      if (!user) throw new ApiError(404, 'USER_NOT_FOUND', 'Không tìm thấy tài khoản.');
       const page = positiveInteger(req.query.page, 1, 100000);
-      const limit = positiveInteger(req.query.limit, 10, 100);
+      const limit = positiveInteger(req.query.limit, admin ? 20 : 10, 100);
       const rating =
         req.query.rating === undefined ? undefined : positiveInteger(req.query.rating, 1, 5);
       res.json({
         success: true,
-        data: await repository.sellerReviews(user.id, page, limit, rating),
+        data: await repository.sellerReviews(user.id, page, limit, rating, admin),
       });
     }),
   );

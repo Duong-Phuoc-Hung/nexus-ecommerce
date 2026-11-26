@@ -18,7 +18,11 @@ export class LogoutUseCase {
       throw new InvalidTokenException();
     }
 
-    this.tokenStore.revoke(normalized);
+    await this.tokenStore.revoke(
+      normalized,
+      payload.sub,
+      payload.exp ? payload.exp * 1000 : undefined,
+    );
 
     return {
       success: true,

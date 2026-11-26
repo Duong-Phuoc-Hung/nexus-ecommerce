@@ -31,6 +31,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import type { DamageAssessmentVerdict } from '@/modules/chat/api/buyer-assistant.api';
+import { getChatSocket } from '@/modules/chat/utils/chat-socket';
 import { useBuyerAssistant } from '@/modules/chat/context/buyer-assistant-provider';
 import { commerceApi } from '@/modules/commerce/api/commerce.api';
 import {
@@ -200,6 +201,7 @@ export function BuyerOrderConversationPanel({
   const [pendingAttachments, setPendingAttachments] = useState<ConversationAttachment[]>([]);
   const [uploadingAttachment, setUploadingAttachment] = useState<boolean>(false);
   const [sendingMessage, setSendingMessage] = useState<boolean>(false);
+  const [reopeningConversation, setReopeningConversation] = useState<boolean>(false);
   const [simulateNextSendFailure, setSimulateNextSendFailure] = useState<boolean>(false);
 
   // Handoff & Escalate
@@ -455,7 +457,15 @@ export function BuyerOrderConversationPanel({
     [canOpenCase, collapseAssistant, order.items, recipientPhone],
   );
 
-  // Polling có kiểm soát (`after=cursor`) khi khung hội thoại đang mở
+  // Đồng bộ tin nhắn thời gian thực qua Socket.IO (không spam polling HTTP)
+  const latestSeqRef = useRef(0);
+  useEffect(() => {
+    latestSeqRef.current = messages.reduce(
+      (max, m) => (m.seq > max && m.deliveryStatus !== 'failed' ? m.seq : max),
+      0,
+    );
+  }, [messages]);
+
   useEffect(() => {
     if (
       !isWorkspaceOpen ||
@@ -468,37 +478,96 @@ export function BuyerOrderConversationPanel({
 
     const activeConvId = conversation.id;
     const seqAtStart = openRequestSeqRef.current;
+    const socket = getChatSocket();
 
-    const timer = window.setInterval(async () => {
+    const onSocketMessage = async (payload?: {
+      conversationId?: string;
+      actorId?: string;
+      lastSeq?: number;
+      message?: Record<string, unknown>;
+      reply?: Record<string, unknown> | null;
+    }) => {
+      if (payload?.conversationId && payload.conversationId !== activeConvId) return;
+      if (seqAtStart !== openRequestSeqRef.current) return;
+
+      const pushed = [payload?.message, payload?.reply].filter(Boolean) as Array<
+        Record<string, unknown>
+      >;
+      if (pushed.length > 0) {
+        const mapped: OrderMessage[] = pushed.map((raw) => {
+          const rawRole = String(raw.senderRole ?? raw.authorRole ?? 'BUYER').toUpperCase();
+          const authorRole: OrderMessage['authorRole'] =
+            rawRole === 'SELLER' || rawRole === 'SUPPORT_STAFF' || rawRole === 'AI'
+              ? rawRole
+              : rawRole === 'AI_BOT' || rawRole === 'SYSTEM'
+                ? 'AI'
+                : 'BUYER';
+          return {
+            conversationId: String(raw.conversationId ?? activeConvId),
+            seq: Number(raw.seq ?? 0),
+            authorId: String(raw.senderId ?? raw.authorId ?? ''),
+            authorName: typeof raw.senderName === 'string' ? raw.senderName : undefined,
+            authorRole,
+            clientMessageId: String(
+              raw.clientMessageId ?? raw.id ?? `sock_${raw.seq ?? Date.now()}`,
+            ),
+            body: String(raw.content ?? raw.body ?? ''),
+            attachments: Array.isArray(raw.attachments)
+              ? (raw.attachments as OrderMessage['attachments'])
+              : [],
+            createdAt: String(raw.createdAt ?? new Date().toISOString()),
+            deliveryStatus: 'sent',
+          };
+        });
+
+        setMessages((prev) => {
+          const existingKeys = new Set(prev.map((m) => `${m.seq}-${m.clientMessageId}`));
+          const existingClientIds = new Set(prev.map((m) => m.clientMessageId).filter(Boolean));
+          const merged = [...prev];
+          for (const incoming of mapped) {
+            if (
+              !existingKeys.has(`${incoming.seq}-${incoming.clientMessageId}`) &&
+              !existingClientIds.has(incoming.clientMessageId)
+            ) {
+              merged.push(incoming);
+            }
+          }
+          return merged.sort((a, b) => a.seq - b.seq);
+        });
+
+        const latestSeq = Math.max(Number(payload?.lastSeq ?? 0), ...mapped.map((m) => m.seq));
+        if (latestSeq > 0) {
+          setConversation((prev) =>
+            prev && prev.id === activeConvId
+              ? { ...prev, lastSeq: Math.max(prev.lastSeq, latestSeq) }
+              : prev,
+          );
+        }
+
+        // Chỉ gọi markAsRead nếu tin nhắn mới đến từ đối phương (tránh tự tạo vòng lặp chat:read)
+        const hasCounterpartMsg = mapped.some((m) => m.authorRole !== 'BUYER');
+        if (
+          hasCounterpartMsg &&
+          latestSeq > 0 &&
+          typeof document !== 'undefined' &&
+          document.visibilityState === 'visible'
+        ) {
+          try {
+            await orderConversationsApi.markAsRead(activeConvId, latestSeq);
+          } catch {
+            // Bỏ qua lỗi mạng tạm thời
+          }
+        }
+        return;
+      }
+
+      // Fallback duy nhất nếu event cũ không kèm payload.message
       try {
-        const highestSeq = messages.reduce(
-          (max, m) => (m.seq > max && m.deliveryStatus !== 'failed' ? m.seq : max),
-          0,
-        );
+        const highestSeq = latestSeqRef.current;
         const polled = await orderConversationsApi.listMessages(activeConvId, {
           after: highestSeq,
         });
         if (seqAtStart !== openRequestSeqRef.current) return;
-        if (polled.conversation) {
-          setConversation(polled.conversation);
-        } else if (polled.meta) {
-          setConversation((prev) =>
-            prev && prev.id === activeConvId
-              ? {
-                  ...prev,
-                  lastSeq: Math.max(prev.lastSeq, polled.meta?.lastSeq || 0),
-                  buyerLastReadSeq: Math.max(
-                    prev.buyerLastReadSeq,
-                    polled.meta?.buyerLastReadSeq || 0,
-                  ),
-                  counterpartLastReadSeq: Math.max(
-                    prev.counterpartLastReadSeq,
-                    polled.meta?.counterpartLastReadSeq || 0,
-                  ),
-                }
-              : prev,
-          );
-        }
         if (polled.items.length > 0) {
           setMessages((prev) => {
             const existingKeys = new Set(prev.map((m) => `${m.seq}-${m.clientMessageId}`));
@@ -510,19 +579,46 @@ export function BuyerOrderConversationPanel({
             }
             return merged.sort((a, b) => a.seq - b.seq);
           });
-          const latestSeq = polled.items[polled.items.length - 1]?.seq || highestSeq;
-          if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-            await orderConversationsApi.markAsRead(activeConvId, latestSeq);
-            window.dispatchEvent(new CustomEvent('nexus:chat-sync'));
-          }
         }
       } catch {
-        // Bỏ qua lỗi mạng tạm thời trong lúc polling nền
+        // Bỏ qua lỗi mạng tạm thời
       }
-    }, 4500);
+    };
 
-    return () => window.clearInterval(timer);
-  }, [activeChannel, conversation, isWorkspaceOpen, messages, roomError]);
+    const onSocketRead = (payload?: {
+      conversationId?: string;
+      lastSeq?: number;
+      buyerLastReadSeq?: number;
+      counterpartLastReadSeq?: number;
+    }) => {
+      if (payload?.conversationId && payload.conversationId !== activeConvId) return;
+      if (seqAtStart !== openRequestSeqRef.current) return;
+      setConversation((prev) =>
+        prev && prev.id === activeConvId
+          ? {
+              ...prev,
+              lastSeq: Math.max(prev.lastSeq, Number(payload?.lastSeq || 0)),
+              buyerLastReadSeq: Math.max(
+                prev.buyerLastReadSeq,
+                Number(payload?.buyerLastReadSeq || 0),
+              ),
+              counterpartLastReadSeq: Math.max(
+                prev.counterpartLastReadSeq,
+                Number(payload?.counterpartLastReadSeq || 0),
+              ),
+            }
+          : prev,
+      );
+    };
+
+    socket.on('chat:message', onSocketMessage);
+    socket.on('chat:read', onSocketRead);
+
+    return () => {
+      socket.off('chat:message', onSocketMessage);
+      socket.off('chat:read', onSocketRead);
+    };
+  }, [activeChannel, conversation?.channel, conversation?.id, isWorkspaceOpen, roomError]);
 
   // Đồng bộ từ các nút trong trang Chi tiết đơn (`buyer-order-detail-page.tsx`)
   useEffect(() => {
@@ -1155,15 +1251,15 @@ export function BuyerOrderConversationPanel({
         aria-label="Trao đổi theo đơn hàng và Hỗ trợ"
         className="mt-5 scroll-mt-24 rounded-2xl border border-line bg-white p-4 sm:p-5 shadow-xs"
       >
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-start gap-3.5">
-            <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand-dark border border-brand/20">
-              <MessageSquare className="size-5" />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand-dark border border-brand/20">
+              <MessageSquare className="size-4.5" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="font-bold text-stone-900 text-sm sm:text-base">
-                  Trao đổi về đơn hàng #{order.id}
+                  Trao đổi &amp; Hỗ trợ
                 </h2>
                 {latestLinkedCase && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800">
@@ -1172,11 +1268,8 @@ export function BuyerOrderConversationPanel({
                   </span>
                 )}
               </div>
-              <p className="mt-1 text-xs text-muted leading-relaxed">
-                Nhắn trực tiếp cho{' '}
-                <strong className="text-stone-800">{selectedSeller.sellerName}</strong>, kết nối{' '}
-                <strong className="text-stone-800">Bộ phận Hỗ trợ</strong> hoặc mở Trợ lý Nexus để
-                tra nhanh vận đơn và chính sách.
+              <p className="mt-0.5 text-xs text-muted truncate">
+                {selectedSeller.sellerName} · Bộ phận Hỗ trợ Nexus
               </p>
             </div>
           </div>
@@ -1225,27 +1318,17 @@ export function BuyerOrderConversationPanel({
               Liên hệ hỗ trợ
             </Button>
 
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-xl border-amber-300 bg-amber-50/70 text-amber-950 hover:bg-amber-100/80 text-xs font-semibold h-9 px-3"
-              onClick={() => openAssistantWithOrder(order)}
-            >
-              <Sparkles className="mr-1.5 size-3.5 text-amber-700" />
-              Hỏi Trợ lý Nexus
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!canOpenCase}
-              aria-describedby={!canOpenCase ? 'order-case-availability' : undefined}
-              className="rounded-xl border-red-200 bg-red-50/60 text-red-800 hover:bg-red-100/70 text-xs font-semibold h-9 px-3 disabled:border-line disabled:bg-stone-100 disabled:text-stone-500 disabled:opacity-100"
-              onClick={() => handleOpenCaseModal('DAMAGED_ITEM')}
-            >
-              <ShieldAlert className="mr-1.5 size-3.5" />
-              Báo hàng vỡ / Khiếu nại
-            </Button>
+            {canOpenCase && (
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-xl border-red-200 bg-red-50/60 text-red-800 hover:bg-red-100/70 text-xs font-semibold h-9 px-3.5"
+                onClick={() => handleOpenCaseModal('DAMAGED_ITEM')}
+              >
+                <ShieldAlert className="mr-1.5 size-3.5" />
+                Báo hàng vỡ / Khiếu nại
+              </Button>
+            )}
 
             {isWorkspaceOpen && (
               <Button
@@ -1261,13 +1344,9 @@ export function BuyerOrderConversationPanel({
           </div>
         </div>
 
-        {!canOpenCase && (
-          <p id="order-case-availability" className="mt-2 text-xs text-stone-600">
-            {hasActiveCase
-              ? 'Đơn hàng đang có hồ sơ khiếu nại đang được giải quyết. Bạn có thể theo dõi tiến trình ở đầu trang hoặc nhắn Bộ phận Hỗ trợ.'
-              : ['CANCELLED', 'REFUNDED', 'REFUND_REQUESTED', 'EXPIRED'].includes(order.status)
-                ? 'Đơn này không mở thêm khiếu nại. Bạn có thể nhắn Bộ phận Hỗ trợ.'
-                : 'Bạn có thể khiếu nại sau khi đơn được giao. Trong lúc chờ, bạn vẫn có thể nhắn người bán hoặc Bộ phận Hỗ trợ.'}
+        {hasActiveCase && (
+          <p className="mt-2.5 text-xs text-amber-800">
+            Đơn hàng đang có hồ sơ khiếu nại chờ xử lý. Bạn có thể trao đổi thêm với Bộ phận Hỗ trợ.
           </p>
         )}
 
@@ -1764,12 +1843,43 @@ export function BuyerOrderConversationPanel({
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-8 rounded-xl bg-white text-xs font-semibold"
-                    disabled={!canOpenCase}
-                    aria-describedby={!canOpenCase ? 'order-case-availability' : undefined}
-                    onClick={() => handleOpenCaseModal('OTHER')}
+                    className="h-8 rounded-xl bg-white text-xs font-semibold hover:bg-stone-50"
+                    disabled={reopeningConversation}
+                    onClick={async () => {
+                      if (!conversation?.id || reopeningConversation) return;
+                      setReopeningConversation(true);
+                      setComposerError('');
+                      try {
+                        const reopened = await orderConversationsApi.reopenConversation(
+                          conversation.id,
+                          activeChannel,
+                          conversation.recipientLabel,
+                        );
+                        setConversation(reopened);
+                        const listResult = await orderConversationsApi.listMessages(reopened.id, {
+                          limit: 40,
+                        });
+                        setMessages(listResult.items);
+                        setTimeout(() => {
+                          scrollMessageListToBottom();
+                        }, 80);
+                      } catch (err) {
+                        setComposerError(
+                          err instanceof Error ? err.message : 'Chưa thể mở lại hội thoại lúc này.',
+                        );
+                      } finally {
+                        setReopeningConversation(false);
+                      }
+                    }}
                   >
-                    Tạo yêu cầu mới
+                    {reopeningConversation ? (
+                      <>
+                        <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                        Đang mở lại...
+                      </>
+                    ) : (
+                      'Tạo yêu cầu mới'
+                    )}
                   </Button>
                 </div>
               ) : (

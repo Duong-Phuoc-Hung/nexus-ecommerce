@@ -1,4 +1,5 @@
 import { ShipmentStatus } from '../../domain/entities/Shipment';
+import { buildServiceAuthHeader } from '../security/internal-service-auth';
 
 /**
  * Ánh xạ trạng thái vận chuyển (Fulfillment / 3PL Carrier) sang trạng thái đơn hàng (Commerce Order Status).
@@ -32,6 +33,7 @@ export interface ICommerceOrderClient {
     shipmentStatus: ShipmentStatus | string,
     note?: string,
   ): Promise<boolean>;
+  confirmCodPayment?(orderId: string, note?: string): Promise<boolean>;
 }
 
 /**
@@ -65,13 +67,24 @@ export class CommerceOrderClient implements ICommerceOrderClient {
       note: note || `Đồng bộ tự động từ Vận chuyển (Fulfillment status: ${shipmentStatus})`,
     });
 
+    let s2sHeaders: Record<string, string> = {};
+    try {
+      s2sHeaders = buildServiceAuthHeader({
+        issuer: 'fulfillment-service',
+        audience: 'commerce-service',
+        scope: 'order:status:sync',
+        resource: cleanOrderId,
+      });
+    } catch (err: any) {
+      console.warn('[CommerceOrderClient] Không thể tạo S2S header:', err?.message || err);
+    }
+
     try {
       const response = await fetch(targetUrl, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': 'usr_system_fulfillment',
-          'x-user-role': 'ADMIN',
+          ...s2sHeaders,
         },
         body: bodyPayload,
         signal: AbortSignal.timeout(4000),
@@ -87,8 +100,7 @@ export class CommerceOrderClient implements ICommerceOrderClient {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-user-id': 'usr_system_fulfillment',
-            'x-user-role': 'ADMIN',
+            ...s2sHeaders,
           },
           body: bodyPayload,
           signal: AbortSignal.timeout(4000),
@@ -103,6 +115,48 @@ export class CommerceOrderClient implements ICommerceOrderClient {
     } catch (err: any) {
       console.warn(
         `[CommerceOrderClient] Không thể kết nối tới Commerce Service (${targetUrl}):`,
+        err?.message || err,
+      );
+      return false;
+    }
+  }
+
+  public async confirmCodPayment(orderId: string, note?: string): Promise<boolean> {
+    const cleanOrderId = (orderId || '').trim();
+    if (!cleanOrderId) return false;
+
+    const targetUrl = `${this.commerceUrl}/api/v1/orders/${encodeURIComponent(cleanOrderId)}/confirm-cod`;
+    const bodyPayload = JSON.stringify({
+      note: note || 'Xác nhận đã thu tiền COD từ đối tác vận chuyển',
+    });
+
+    let s2sHeaders: Record<string, string> = {};
+    try {
+      s2sHeaders = buildServiceAuthHeader({
+        issuer: 'fulfillment-service',
+        audience: 'commerce-service',
+        scope: 'order:status:sync',
+        resource: cleanOrderId,
+      });
+    } catch (err: any) {
+      console.warn('[CommerceOrderClient] Không thể tạo S2S header:', err?.message || err);
+    }
+
+    try {
+      const response = await fetch(targetUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...s2sHeaders,
+        },
+        body: bodyPayload,
+        signal: AbortSignal.timeout(4000),
+      });
+
+      return response.ok;
+    } catch (err: any) {
+      console.warn(
+        `[CommerceOrderClient] Lỗi xác nhận thanh toán COD cho đơn ${cleanOrderId}:`,
         err?.message || err,
       );
       return false;

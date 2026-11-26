@@ -3,6 +3,7 @@ import { GetOrderDetailUseCase } from './GetOrderDetailUseCase';
 import { OrderNotFoundException } from '../../domain/exceptions/OrderNotFoundException';
 import { OrderDetailDto } from '../dtos/OrderDetailDto';
 import { IShippingOrderClient } from '../ports/IShippingOrderClient';
+import { INotificationClient } from '../checkout/ports';
 
 export interface DispatchOrderInput {
   orderId: string;
@@ -17,6 +18,7 @@ export class DispatchOrderUseCase {
     private readonly orderRepository: IOrderRepository,
     private readonly getOrderDetailUseCase: GetOrderDetailUseCase,
     private readonly shippingOrderClient?: IShippingOrderClient,
+    private readonly notificationClient?: INotificationClient,
   ) {}
 
   public async execute(input: DispatchOrderInput): Promise<OrderDetailDto> {
@@ -39,15 +41,31 @@ export class DispatchOrderUseCase {
     let trackingCode = input.trackingCode;
     let awbBarcodeUrl: string | undefined;
 
+    const addr: any = order.shippingAddress || {};
+    const realRecipientName =
+      (typeof addr.fullName === 'string' && addr.fullName.trim()) ||
+      order.buyerName ||
+      'Khách hàng';
+    const realRecipientPhone =
+      (typeof addr.phone === 'string' && addr.phone.trim()) || '0901234567';
+    const realCity =
+      (typeof addr.province === 'string' && addr.province.trim()) ||
+      (typeof addr.city === 'string' && addr.city.trim()) ||
+      'TP. Hồ Chí Minh';
+    const realShippingAddress =
+      [addr.line1, addr.street, addr.addressLine, addr.ward, addr.district, realCity]
+        .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+        .join(', ') || 'Địa chỉ nhận hàng Nexus';
+
     // Tự động tạo vận đơn sang 3PL (GHN Sandbox) nếu carrier là GHN và chưa có sẵn tracking code thủ công
     if (!trackingCode && this.shippingOrderClient && carrier === 'GHN') {
       try {
         const outbound = await this.shippingOrderClient.createShippingOrder({
           orderId: order.id,
           orderCode: order.id,
-          recipientName: order.buyerName || 'Khách hàng',
-          recipientPhone: order.buyerEmail || '0901234567',
-          shippingAddress: 'Địa chỉ nhận hàng Nexus',
+          recipientName: realRecipientName,
+          recipientPhone: realRecipientPhone,
+          shippingAddress: realShippingAddress,
           items: order.items.map((it) => ({
             name: it.productName || 'Sản phẩm Nexus',
             quantity: it.quantity,
@@ -65,14 +83,69 @@ export class DispatchOrderUseCase {
 
     await this.orderRepository.update(order);
 
-    // Tự động đồng bộ tạo vận đơn sang fulfillment-service phục vụ kiểm thử Sandbox (SRS 3.6)
-    await this.syncToFulfillmentService(order, carrier, order.trackingCode || trackingCode || '');
+    // Tự động đồng bộ tạo vận đơn sang fulfillment-service dùng đúng thông tin đơn từ DB
+    await this.syncToFulfillmentService(
+      {
+        id: order.id,
+        recipientName: realRecipientName,
+        recipientPhone: realRecipientPhone,
+        shippingAddress: realShippingAddress,
+        city: realCity,
+      },
+      carrier,
+      order.trackingCode || trackingCode || '',
+    );
+
+    // Gửi thông báo in-app và email cho Người mua khi đơn hàng được gửi đi (SRS 3.2 & 3.4)
+    if (this.notificationClient && order.buyerId) {
+      const finalTracking = order.trackingCode || trackingCode || 'Đang cập nhật';
+      const title = `Đơn hàng #${order.id} đã được gửi đi`;
+      const body = `Kiện hàng của bạn đã được bàn giao cho đơn vị vận chuyển ${carrier}. Mã vận đơn: ${finalTracking}.`;
+
+      this.notificationClient
+        .sendInAppNotification({
+          recipientId: order.buyerId,
+          channel: 'ORDER_STATUS',
+          title,
+          body,
+          data: {
+            orderId: order.id,
+            trackingCode: finalTracking,
+            carrier,
+            status: 'SHIPPED',
+          },
+        })
+        .catch((err: any) =>
+          console.warn('[DispatchOrderUseCase] Lỗi gửi in-app notification:', err?.message || err),
+        );
+
+      if (
+        order.buyerEmail &&
+        typeof this.notificationClient.sendOrderConfirmationEmail === 'function'
+      ) {
+        this.notificationClient
+          .sendOrderConfirmationEmail({
+            email: order.buyerEmail,
+            title: `[Nexus] ${title}`,
+            body: `Xin chào ${order.buyerName || 'Quý khách'},\n\nĐơn hàng #${order.id} của bạn đã được bàn giao cho đối tác vận chuyển ${carrier}.\nMã vận đơn: ${finalTracking}.\nBạn có thể theo dõi hành trình kiện hàng trên Nexus bất cứ lúc nào.`,
+          })
+          .catch((err: any) =>
+            console.warn('[DispatchOrderUseCase] Lỗi gửi email bàn giao đơn:', err?.message || err),
+          );
+      }
+    }
 
     return this.getOrderDetailUseCase.execute(input.orderId);
   }
 
   private async syncToFulfillmentService(
-    order: { id: string; buyerName?: string; buyerEmail?: string },
+    order: {
+      id: string;
+      recipientName: string;
+      recipientPhone: string;
+      shippingAddress: string;
+      city: string;
+    },
     carrier: string,
     trackingCode: string,
   ): Promise<void> {
@@ -86,10 +159,10 @@ export class DispatchOrderUseCase {
         orderId: order.id,
         carrier,
         trackingCode,
-        shippingAddress: 'Địa chỉ nhận hàng Nexus (Sandbox)',
-        recipientName: order.buyerName || 'Khách hàng',
-        recipientPhone: order.buyerEmail || '0901234567',
-        city: 'TP. Hồ Chí Minh',
+        shippingAddress: order.shippingAddress,
+        recipientName: order.recipientName,
+        recipientPhone: order.recipientPhone,
+        city: order.city,
         status: 'READY_TO_PICK',
       };
 

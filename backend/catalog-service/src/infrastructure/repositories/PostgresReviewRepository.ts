@@ -19,7 +19,7 @@ export class PostgresReviewRepository implements IReviewRepository {
 
   public async findByProductId(productId: string): Promise<Review[]> {
     const rows = await this.prisma.review.findMany({
-      where: { productId },
+      where: { productId, moderatedHidden: false },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -29,6 +29,7 @@ export class PostgresReviewRepository implements IReviewRepository {
           id: String(r.id),
           productId: String(r.productId),
           userId: String(r.userId),
+          orderId: r.orderId,
           userName: r.userName || 'Người mua ẩn danh',
           rating: Number(r.rating),
           comment: r.comment || '',
@@ -44,6 +45,7 @@ export class PostgresReviewRepository implements IReviewRepository {
         id: review.id,
         productId: review.productId,
         userId: review.userId,
+        orderId: review.orderId,
         userName: review.userName,
         rating: review.rating,
         comment: review.comment,
@@ -54,8 +56,16 @@ export class PostgresReviewRepository implements IReviewRepository {
   }
 
   public async findByUserAndProduct(userId: string, productId: string): Promise<Review | null> {
+    return this.findByUserProductAndOrder(userId, productId);
+  }
+
+  public async findByUserProductAndOrder(
+    userId: string,
+    productId: string,
+    orderId?: string,
+  ): Promise<Review | null> {
     const row = await this.prisma.review.findFirst({
-      where: { userId, productId },
+      where: { userId, productId, orderId },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -64,6 +74,7 @@ export class PostgresReviewRepository implements IReviewRepository {
       id: String(row.id),
       productId: String(row.productId),
       userId: String(row.userId),
+      orderId: row.orderId,
       userName: row.userName || 'Người mua ẩn danh',
       rating: Number(row.rating),
       comment: row.comment || '',

@@ -16,6 +16,11 @@ export interface ConversationProps {
   lastSeq?: number;
   buyerLastReadSeq?: number;
   counterpartLastReadSeq?: number;
+  myLastReadSeq?: number;
+  unreadCount?: number;
+  lastMessage?: string | null;
+  lastMessageRole?: MessageSenderRole | null;
+  lastMessageAt?: Date | null;
 }
 
 /**
@@ -35,6 +40,11 @@ export class Conversation {
   private _lastSeq: number;
   private _buyerLastReadSeq: number;
   private _counterpartLastReadSeq: number;
+  private _myLastReadSeq: number;
+  private _unreadCount: number;
+  private _lastMessage: string | null;
+  private _lastMessageRole: MessageSenderRole | null;
+  private _lastMessageAt: Date | null;
 
   constructor(props: ConversationProps) {
     this._id = props.id;
@@ -49,6 +59,11 @@ export class Conversation {
     this._lastSeq = props.lastSeq || 0;
     this._buyerLastReadSeq = props.buyerLastReadSeq || 0;
     this._counterpartLastReadSeq = props.counterpartLastReadSeq || 0;
+    this._myLastReadSeq = props.myLastReadSeq || 0;
+    this._unreadCount = props.unreadCount || 0;
+    this._lastMessage = props.lastMessage ?? null;
+    this._lastMessageRole = props.lastMessageRole ?? null;
+    this._lastMessageAt = props.lastMessageAt ?? null;
   }
 
   public get id(): string {
@@ -95,22 +110,29 @@ export class Conversation {
   public canAccess(userId: string, role?: string): boolean {
     const normalizedRole = (role || '').toUpperCase();
 
-    // 1. Quản trị viên và Support Staff có quyền vào kênh BUYER_SUPPORT để giải quyết khiếu nại
-    if (normalizedRole === 'ADMIN' || normalizedRole === 'SUPPORT_STAFF') {
+    // 1. Quản trị viên và Support Staff có quyền vào kênh BUYER_SUPPORT để giải quyết khiếu nại, hoặc AI_BOT khi đã yêu cầu bàn giao WAITING_STAFF
+    if (normalizedRole === 'ADMIN') {
+      return true;
+    }
+    if (normalizedRole === 'SUPPORT_STAFF') {
       return (
         this._channelType === 'BUYER_SUPPORT' ||
         (this._channelType === 'AI_BOT' && this._status === 'WAITING_STAFF')
       );
     }
 
+    const cleanUser = (userId || '').trim().toLowerCase();
+    const cleanBuyer = (this._buyerId || '').trim().toLowerCase();
+    const cleanSeller = (this._sellerId || '').trim().toLowerCase();
+
     // 2. Buyer sở hữu đơn hàng có quyền vào tất cả các kênh của đơn mình
-    if (userId === this._buyerId) {
+    if (cleanUser && cleanBuyer && cleanUser === cleanBuyer) {
       return true;
     }
 
     // 3. Seller CHỈ ĐƯỢC PHÉP vào kênh BUYER_SELLER của shop mình
-    if (userId === this._sellerId) {
-      // CẤM TUYỆT ĐỐI Seller vào kênh BUYER_SUPPORT hoặc AI_BOT
+    if (cleanUser && cleanSeller && cleanUser === cleanSeller) {
+      // CẤM TUYỆT ĐỐI Seller vào kênh BUYER_SUPPORT hoặc AI_BOT (Bảo mật cách ly Room Isolation)
       return this._channelType === 'BUYER_SELLER';
     }
 
@@ -151,12 +173,22 @@ export class Conversation {
     return this._counterpartLastReadSeq;
   }
 
+  public get myLastReadSeq(): number {
+    return this._myLastReadSeq;
+  }
+
+  public get unreadCount(): number {
+    return this._unreadCount;
+  }
+
   public markRead(userId: string, role: string, lastReadSeq: number): void {
     const normalizedRole = (role || '').toUpperCase();
+    const safeSeq = Math.max(0, Math.floor(lastReadSeq));
+    this._myLastReadSeq = Math.max(this._myLastReadSeq, safeSeq);
     if (userId === this._buyerId || normalizedRole === 'BUYER') {
-      this._buyerLastReadSeq = Math.max(this._buyerLastReadSeq, lastReadSeq);
+      this._buyerLastReadSeq = Math.max(this._buyerLastReadSeq, safeSeq);
     } else {
-      this._counterpartLastReadSeq = Math.max(this._counterpartLastReadSeq, lastReadSeq);
+      this._counterpartLastReadSeq = Math.max(this._counterpartLastReadSeq, safeSeq);
     }
     this._updatedAt = new Date();
   }
@@ -189,6 +221,11 @@ export class Conversation {
       lastSeq: this._lastSeq,
       buyerLastReadSeq: this._buyerLastReadSeq,
       counterpartLastReadSeq: this._counterpartLastReadSeq,
+      myLastReadSeq: this._myLastReadSeq,
+      unreadCount: this._unreadCount,
+      lastMessage: this._lastMessage,
+      lastMessageRole: this._lastMessageRole,
+      lastMessageAt: this._lastMessageAt,
       createdAt: this._createdAt,
       updatedAt: this._updatedAt,
     };

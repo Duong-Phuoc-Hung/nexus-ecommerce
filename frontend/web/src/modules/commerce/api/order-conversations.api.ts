@@ -1244,59 +1244,52 @@ export function createOrderConversationsApi(request: RequestApi) {
           })
           .filter((x): x is OrderConversationCaseSummary => Boolean(x));
 
-      let allUnavailable = true;
-      let lastError: string | undefined;
+      // D1 · P0: Gửi đủ các mã đơn ứng viên (order.id & order.internalId) trong 1 request để không bỏ sót hồ sơ
+      // và phân biệt rạch ròi giữa rỗng thật (200 []), bị chặn quyền (403) và lỗi hệ thống (5xx).
+      const targetId = candidates[0];
+      if (!targetId) {
+        return { cases: [], unavailable: false };
+      }
+      const altIds = candidates.slice(1).join(',');
+      const query = altIds ? `?altIds=${encodeURIComponent(altIds)}` : '';
+      try {
+        const raw = await request<{
+          success?: boolean;
+          data?: BackendOrderCaseDto[] | BackendOrderCaseDto | null;
+          cases?: BackendOrderCaseDto[];
+        }>(`/support/cases/by-order/${encodeURIComponent(targetId)}${query}`, { signal });
 
-      for (const targetId of candidates) {
-        const endpoints = [
-          `/support/cases/by-order/${encodeURIComponent(targetId)}`,
-          `/support/orders/${encodeURIComponent(targetId)}/cases`,
-          `/orders/${encodeURIComponent(targetId)}/cases`,
-        ];
-        for (const endpoint of endpoints) {
-          try {
-            const raw = await request<{
-              success?: boolean;
-              data?: BackendOrderCaseDto[] | BackendOrderCaseDto | null;
-            }>(endpoint, { signal });
-
-            const unwrapped = unwrap<BackendOrderCaseDto[] | BackendOrderCaseDto | null>(raw);
-            const list = Array.isArray(unwrapped)
-              ? unwrapped
-              : unwrapped && typeof unwrapped === 'object'
-                ? [unwrapped]
-                : [];
-            allUnavailable = false;
-            if (list.length > 0) {
-              return { cases: mapCases(list, targetId), unavailable: false };
-            }
-            break;
-          } catch (err) {
-            if (signal?.aborted) throw err;
-            if (err instanceof ApiError && err.status === 404) {
-              continue;
-            }
-            if (
-              err instanceof ApiError &&
-              err.status === 400 &&
-              endpoint.includes('/support/orders/')
-            ) {
-              continue;
-            }
-            allUnavailable = false;
-            lastError = userMessage(err);
-            break;
-          }
+        const rawRecord = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+        const unwrapped = unwrap<BackendOrderCaseDto[] | BackendOrderCaseDto | null>(raw);
+        const list = Array.isArray(rawRecord.cases)
+          ? (rawRecord.cases as BackendOrderCaseDto[])
+          : Array.isArray(unwrapped)
+            ? unwrapped
+            : unwrapped && typeof unwrapped === 'object'
+              ? [unwrapped]
+              : [];
+        return { cases: mapCases(list, targetId), unavailable: false };
+      } catch (err) {
+        if (signal?.aborted) throw err;
+        if (err instanceof ApiError && err.status === 403) {
+          return {
+            cases: [],
+            unavailable: false,
+            errorMessage: 'Bạn không có quyền xem hồ sơ khiếu nại của đơn hàng này.',
+          };
         }
+        return { cases: [], unavailable: true, errorMessage: userMessage(err) };
       }
+    },
 
-      if (allUnavailable) {
-        return { cases: [], unavailable: true };
-      }
-      if (lastError) {
-        return { cases: [], unavailable: false, errorMessage: lastError };
-      }
-      return { cases: [], unavailable: false };
+    async submitReturnShipment(
+      caseId: string,
+      payload: { carrier: string; trackingCode: string; note?: string },
+    ): Promise<void> {
+      await request(`/support/cases/${encodeURIComponent(caseId)}/return-shipment`, {
+        method: 'POST',
+        body: payload,
+      });
     },
 
     /**
@@ -1357,6 +1350,29 @@ export function createOrderConversationsApi(request: RequestApi) {
       bundle.conversation.updatedAt = now;
       writeLocalStore(store);
       return { conversation: { ...bundle.conversation }, messages: [...bundle.messages] };
+    },
+
+    async reopenConversation(
+      conversationId: string,
+      channel: ConversationChannel,
+      recipientLabel: string,
+    ): Promise<OrderConversation> {
+      const store = readLocalStore();
+      const simBundle = Object.values(store).find((b) => b.conversation.id === conversationId);
+      if (simBundle) {
+        simBundle.conversation.state = 'OPEN';
+        simBundle.conversation.closedAt = null;
+        simBundle.conversation.updatedAt = new Date().toISOString();
+        writeLocalStore(store);
+        return { ...simBundle.conversation };
+      }
+
+      const raw = await request<{ success: boolean; data: BackendConversationDto }>(
+        `/chat/sessions/${encodeURIComponent(conversationId)}/reopen`,
+        { method: 'POST' },
+      );
+      const dto = unwrap<BackendConversationDto>(raw);
+      return mapConversationDto(dto, channel, recipientLabel);
     },
   };
 }

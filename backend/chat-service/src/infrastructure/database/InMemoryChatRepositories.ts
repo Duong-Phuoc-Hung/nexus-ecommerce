@@ -8,6 +8,52 @@ import { getSeedPolicies } from '../seeds/policySeeds';
 
 export class InMemoryConversationRepository implements IConversationRepository {
   private readonly items = new Map<string, Conversation>();
+  private readonly readCursors = new Map<string, number>();
+
+  constructor(private readonly messageRepo?: IChatMessageRepository) {}
+
+  private cursorKey(conversationId: string, userId: string): string {
+    return `${conversationId}::${userId}`;
+  }
+
+  public async findAccessible(userId: string, role: string): Promise<Conversation[]> {
+    const accessible = Array.from(this.items.values()).filter((conversation) =>
+      conversation.canAccess(userId, role),
+    );
+    const enriched = await Promise.all(
+      accessible.map(async (conv) => {
+        const msgs = this.messageRepo
+          ? await this.messageRepo.findByConversationId(conv.id, 1000)
+          : [];
+        const summary = await this.getReadSummary(conv.id, userId, conv.buyerId);
+        const latest = msgs.at(-1);
+        return new Conversation({
+          id: conv.id,
+          orderId: conv.orderId,
+          channelType: conv.channelType,
+          buyerId: conv.buyerId,
+          sellerId: conv.sellerId,
+          supportCaseId: conv.supportCaseId,
+          status: conv.status,
+          createdAt: conv.createdAt,
+          updatedAt: conv.updatedAt,
+          lastSeq: summary.lastSeq,
+          buyerLastReadSeq: summary.buyerLastReadSeq,
+          counterpartLastReadSeq: summary.counterpartLastReadSeq,
+          myLastReadSeq: summary.myLastReadSeq,
+          unreadCount: summary.unreadCount,
+          lastMessage: latest?.content ?? null,
+          lastMessageRole: latest?.senderRole ?? null,
+          lastMessageAt: latest?.createdAt ?? null,
+        });
+      }),
+    );
+    return enriched.sort((a, b) => {
+      const aTime = (a.toDto().lastMessageAt || a.updatedAt).getTime();
+      const bTime = (b.toDto().lastMessageAt || b.updatedAt).getTime();
+      return bTime - aTime;
+    });
+  }
 
   public async findById(id: string): Promise<Conversation | null> {
     return this.items.get(id) || null;
@@ -85,8 +131,71 @@ export class InMemoryConversationRepository implements IConversationRepository {
     this.items.set(conversation.id, conversation);
   }
 
+  public async markUserRead(
+    conversationId: string,
+    userId: string,
+    lastReadSeq: number,
+  ): Promise<number> {
+    const key = this.cursorKey(conversationId, userId);
+    const prev = this.readCursors.get(key) ?? 0;
+    const next = Math.max(prev, Math.max(0, Math.floor(lastReadSeq)));
+    this.readCursors.set(key, next);
+    return next;
+  }
+
+  public async getUnreadCount(conversationId: string, userId: string): Promise<number> {
+    const cursor = this.readCursors.get(this.cursorKey(conversationId, userId)) ?? 0;
+    if (!this.messageRepo) return 0;
+    const msgs = await this.messageRepo.findByConversationId(conversationId, 1000);
+    return msgs.filter(
+      (m) =>
+        m.senderId !== userId &&
+        m.senderRole !== 'SYSTEM' &&
+        typeof m.seq === 'number' &&
+        m.seq > cursor,
+    ).length;
+  }
+
+  public async getReadSummary(
+    conversationId: string,
+    userId: string,
+    buyerId: string,
+  ): Promise<{
+    lastSeq: number;
+    myLastReadSeq: number;
+    buyerLastReadSeq: number;
+    counterpartLastReadSeq: number;
+    unreadCount: number;
+  }> {
+    const conv = this.items.get(conversationId);
+    const msgs = this.messageRepo
+      ? await this.messageRepo.findByConversationId(conversationId, 1000)
+      : [];
+    const maxMsgSeq = msgs.reduce((max, m) => Math.max(max, m.seq ?? 0), 0);
+    const lastSeq = Math.max(conv?.lastSeq ?? 0, maxMsgSeq);
+    const myLastReadSeq = this.readCursors.get(this.cursorKey(conversationId, userId)) ?? 0;
+    const buyerLastReadSeq =
+      this.readCursors.get(this.cursorKey(conversationId, buyerId)) ?? conv?.buyerLastReadSeq ?? 0;
+    let counterpartLastReadSeq = conv?.counterpartLastReadSeq ?? 0;
+    const prefix = `${conversationId}::`;
+    for (const [k, v] of this.readCursors.entries()) {
+      if (k.startsWith(prefix) && k !== this.cursorKey(conversationId, buyerId)) {
+        counterpartLastReadSeq = Math.max(counterpartLastReadSeq, v);
+      }
+    }
+    const unreadCount = await this.getUnreadCount(conversationId, userId);
+    return {
+      lastSeq,
+      myLastReadSeq,
+      buyerLastReadSeq,
+      counterpartLastReadSeq,
+      unreadCount,
+    };
+  }
+
   public clear(): void {
     this.items.clear();
+    this.readCursors.clear();
   }
 }
 
@@ -116,7 +225,7 @@ export class InMemoryChatMessageRepository implements IChatMessageRepository {
       list = list.filter((m) => (m.seq !== undefined ? m.seq > afterSeq : true));
     }
     list.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-    return list.slice(0, limit);
+    return after || typeof afterSeq === 'number' ? list.slice(0, limit) : list.slice(-limit);
   }
 
   public async findByClientMessageId(

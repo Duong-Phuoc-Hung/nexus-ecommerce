@@ -1,9 +1,13 @@
-import { IAuctionRepository } from '../../domain/repositories/IAuctionRepository';
+import {
+  IAuctionRepository,
+  AuctionSettlementRecord,
+} from '../../domain/repositories/IAuctionRepository';
 import { Auction, AuctionStatus, BidRecord } from '../../domain/entities/Auction';
 
 export class InMemoryAuctionRepository implements IAuctionRepository {
   private readonly auctions: Map<string, Auction> = new Map();
   private readonly bids: Map<string, BidRecord[]> = new Map();
+  private readonly settlements: Map<string, AuctionSettlementRecord> = new Map();
 
   constructor() {
     const sampleAuction = new Auction({
@@ -65,5 +69,19 @@ export class InMemoryAuctionRepository implements IAuctionRepository {
 
   public async findBidsByAuctionId(auctionId: string): Promise<BidRecord[]> {
     return this.bids.get(auctionId) || [];
+  }
+
+  public async saveSettlement(settlement: AuctionSettlementRecord): Promise<void> {
+    const previous = this.settlements.get(settlement.auctionId);
+    this.settlements.set(settlement.auctionId, {
+      ...settlement,
+      paymentDeadline: previous?.paymentDeadline ?? settlement.paymentDeadline,
+    });
+  }
+
+  public async findSettlementByAuctionId(
+    auctionId: string,
+  ): Promise<AuctionSettlementRecord | null> {
+    return this.settlements.get(auctionId) || null;
   }
 }

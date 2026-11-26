@@ -47,6 +47,8 @@ export interface ChatThreadItem {
   conversationId: string;
   orderId: string;
   orderCode: string;
+  buyerId?: string;
+  customerId?: string;
   channelType: ChannelType;
   sellerId?: string;
   counterpartLabel?: string;
@@ -54,6 +56,7 @@ export interface ChatThreadItem {
   customerAvatar?: string;
   customerPhone?: string;
   orderStatus: string;
+  conversationStatus?: string;
   totalAmount: number;
   productTitle: string;
   productImage?: string | null;

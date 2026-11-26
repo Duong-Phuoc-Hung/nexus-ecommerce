@@ -6,7 +6,7 @@ import { SearchProductsUseCase } from '../../../application/use-cases/SearchProd
 import { parseSearchProductsQuery } from '../dtos/SearchProductsQueryDto';
 import { UpdateProductUseCase } from '../../../application/use-cases/UpdateProductUseCase';
 import { CreateProductUseCase } from '../../../application/use-cases/CreateProductUseCase';
-import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
+import { AuthenticatedRequest, verifiedAccessUser } from '../../../infrastructure/security/auth';
 import { DeleteProductUseCase } from '../../../application/use-cases/DeleteProductUseCase';
 import { GetSellerProductsUseCase } from '../../../application/use-cases/GetSellerProductsUseCase';
 import { RecoverProductUseCase } from '../../../application/use-cases/RecoverProductUseCase';
@@ -67,8 +67,8 @@ export class ProductController {
   // GET /api/v1/products - Danh sach san pham (Buyer & Admin)
   public async getAll(req: Request, res: Response): Promise<void> {
     try {
-      const authUser = (req as AuthenticatedRequest).user;
       const adminScope = req.query.scope === 'admin';
+      const authUser = adminScope ? verifiedAccessUser(req) : (req as AuthenticatedRequest).user;
 
       // 1. Kiem tra quyen neu la Admin (?scope=admin)
       if (adminScope) {
@@ -78,7 +78,7 @@ export class ProductController {
             .json({ success: false, code: 'UNAUTHORIZED', error: 'Vui lòng đăng nhập.' });
           return;
         }
-        if (authUser.role !== 'ADMIN') {
+        if (authUser.role !== 'ADMIN' && !authUser.roles?.includes('ADMIN')) {
           res
             .status(403)
             .json({ success: false, code: 'FORBIDDEN', error: 'Chỉ Admin được dùng scope=admin.' });
@@ -224,14 +224,24 @@ export class ProductController {
   public async getById(req: Request, res: Response): Promise<void> {
     try {
       const productId = req.params.id as string;
-      const authUser = (req as AuthenticatedRequest).user;
+      const authUser = verifiedAccessUser(req);
       const adminScope = req.query.scope === 'admin';
+      if (adminScope && authUser?.role !== 'ADMIN') {
+        res.status(authUser ? 403 : 401).json({
+          success: false,
+          code: 'FORBIDDEN',
+          error: 'Admin access required.',
+        });
+        return;
+      }
 
       const product = await this.getProductDetailUseCase.execute(productId);
 
-      // Chan khach va Buyer xem san pham khong phai ACTIVE hoac da het ton kho
       const isPrivileged =
-        (authUser && (authUser.role === 'ADMIN' || authUser.id === product.sellerId)) || adminScope;
+        authUser &&
+        (authUser.role === 'ADMIN' ||
+          authUser.roles?.includes('ADMIN') ||
+          authUser.id === product.sellerId);
       if (
         !isPrivileged &&
         (product.status !== ProductStatus.ACTIVE || product.stockQuantity <= 0)
@@ -568,6 +578,35 @@ export class ProductController {
     }
   };
 
+  public restoreStock = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const productId = String(req.params.id);
+      if (!this.deductProductStockUseCase) {
+        res
+          .status(500)
+          .json({ success: false, error: 'DeductProductStockUseCase is not configured' });
+        return;
+      }
+      const { quantity, orderId, reason } = req.body || {};
+      const result = await this.deductProductStockUseCase.restore({
+        productId,
+        quantity: Number(quantity),
+        orderId,
+        reason,
+      });
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      if (error instanceof ProductNotFoundException) {
+        res.status(404).json({ success: false, error: error.message });
+        return;
+      }
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Lỗi khi hoàn tồn kho sản phẩm.',
+      });
+    }
+  };
+
   public createReview = async (req: Request, res: Response): Promise<void> => {
     try {
       const authUser = (req as AuthenticatedRequest).user;
@@ -586,11 +625,12 @@ export class ProductController {
       }
 
       const productId = String(req.params.id);
-      const { rating, comment } = req.body;
+      const { rating, comment, orderId } = req.body;
 
       const review = await this.createProductReviewUseCase.execute({
         productId,
         userId: authUser.id,
+        orderId: typeof orderId === 'string' && orderId.trim() ? orderId.trim() : null,
         userName: authUser.fullName || 'Người mua',
         rating: Number(rating),
         comment,
@@ -602,6 +642,7 @@ export class ProductController {
           id: review.id,
           productId: review.productId,
           userId: review.userId,
+          orderId: review.orderId,
           userName: review.userName,
           rating: review.rating,
           comment: review.comment,
@@ -611,6 +652,14 @@ export class ProductController {
     } catch (error: any) {
       if (error instanceof ProductNotFoundException) {
         res.status(404).json({ success: false, error: error.message });
+        return;
+      }
+      if (String(error?.message || '').startsWith('DUPLICATE_REVIEW:') || error?.code === '23505') {
+        res.status(409).json({
+          success: false,
+          code: 'DUPLICATE_REVIEW',
+          error: 'Bạn đã đánh giá sản phẩm này cho đơn hàng này.',
+        });
         return;
       }
       res.status(400).json({ success: false, error: error.message || 'Lỗi khi gửi đánh giá.' });
@@ -639,6 +688,7 @@ export class ProductController {
             id: r.id,
             productId: r.productId,
             userId: r.userId,
+            orderId: r.orderId,
             userName: r.userName,
             rating: r.rating,
             comment: r.comment,

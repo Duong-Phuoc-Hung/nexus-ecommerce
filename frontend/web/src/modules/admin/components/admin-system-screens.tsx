@@ -260,7 +260,12 @@ export function AdminProfile() {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      setPwNotice('Đã cập nhật mật khẩu.');
+      setPwNotice('Đã cập nhật mật khẩu. Vui lòng đăng nhập lại với mật khẩu mới.');
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem('nexus.accessToken');
+        window.localStorage.removeItem('nexus.user');
+        window.location.assign('/login?next=%2Fadmin%2Fprofile');
+      }
     } catch (e) {
       setPwError(userMessage(e));
     } finally {
@@ -422,7 +427,7 @@ const CONFIG_GROUPS: Array<{ title: string; fields: ConfigField[] }> = [
       {
         key: 'auctionMaxActivePerSeller',
         label: 'Giới hạn phiên đang mở / Seller',
-        defaultValue: 10,
+        defaultValue: 5,
         min: 1,
         max: 500,
       },
@@ -460,21 +465,21 @@ const CONFIG_GROUPS: Array<{ title: string; fields: ConfigField[] }> = [
       {
         key: 'minReputationBid',
         label: 'Điểm tối thiểu để đặt giá',
-        defaultValue: 50,
+        defaultValue: 40,
         min: 0,
         max: 100,
       },
       {
         key: 'minReputationAuction',
         label: 'Điểm tối thiểu để mở phiên',
-        defaultValue: 70,
+        defaultValue: 50,
         min: 0,
         max: 100,
       },
       {
         key: 'nonPaymentPenalty',
         label: 'Mức phạt không thanh toán (điểm)',
-        defaultValue: 15,
+        defaultValue: 10,
         min: 1,
         max: 100,
       },
@@ -511,6 +516,9 @@ function defaultConfigValues(): Record<string, number> {
 export function AdminSettings() {
   const [baseline, setBaseline] = useState<Record<string, number>>(defaultConfigValues);
   const [draft, setDraft] = useState<Record<string, number>>(defaultConfigValues);
+  const [configState, setConfigState] = useState<'loading' | 'live' | 'error'>('loading');
+  const [loadError, setLoadError] = useState('');
+  const [reloadTick, setReloadTick] = useState(0);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -518,8 +526,12 @@ export function AdminSettings() {
   const [notice, setNotice] = useState('');
 
   useEffect(() => {
+    let alive = true;
+    setConfigState('loading');
+    setLoadError('');
     requestApi('/system/config')
       .then((raw) => {
+        if (!alive) return;
         const data = row(unwrap(raw));
         const merged = { ...defaultConfigValues() };
         for (const f of ALL_CONFIG_FIELDS) {
@@ -528,13 +540,21 @@ export function AdminSettings() {
         }
         setBaseline(merged);
         setDraft(merged);
+        setConfigState('live');
       })
-      .catch(() => {
-        // Giữ thông số mặc định SRS khi BE chưa mở GET /system/config
+      .catch((err) => {
+        if (!alive) return;
+        // Admin P1: Phân biệt rõ giá trị tham khảo SRS và khóa lưu đè khi chưa đọc được cấu hình thực
+        setConfigState('error');
+        setLoadError(userMessage(err));
       });
-  }, []);
+    return () => {
+      alive = false;
+    };
+  }, [reloadTick]);
 
   const changedFields = ALL_CONFIG_FIELDS.filter((f) => draft[f.key] !== baseline[f.key]);
+  const canSaveConfig = configState === 'live' && changedFields.length > 0;
 
   async function confirmSave() {
     if (busy || !changedFields.length) return;
@@ -572,14 +592,23 @@ export function AdminSettings() {
           <h1 className="mt-2">Cấu hình hệ thống</h1>
         </div>
         <div className="flex gap-2">
-          {changedFields.length > 0 && (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={configState === 'loading'}
+            onClick={() => setReloadTick((n) => n + 1)}
+          >
+            <RefreshCw size={15} className={configState === 'loading' ? 'animate-spin' : ''} />
+            Tải lại
+          </Button>
+          {changedFields.length > 0 && configState === 'live' && (
             <Button type="button" variant="outline" onClick={() => setDraft(baseline)}>
               Khôi phục
             </Button>
           )}
           <Button
             type="button"
-            disabled={!changedFields.length}
+            disabled={!canSaveConfig}
             onClick={() => {
               setError('');
               setConfirmOpen(true);
@@ -589,6 +618,29 @@ export function AdminSettings() {
           </Button>
         </div>
       </header>
+
+      {configState === 'error' && (
+        <section
+          role="alert"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-xs text-amber-950"
+        >
+          <div>
+            <p className="font-bold">
+              Chưa đọc được cấu hình đang hiệu lực — đang hiển thị giá trị mặc định.
+            </p>
+            <p className="mt-1">Nút Lưu đã tạm khóa để tránh ghi đè ngoài ý muốn ({loadError}).</p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setReloadTick((n) => n + 1)}
+            className="bg-white"
+          >
+            Tải lại cấu hình
+          </Button>
+        </section>
+      )}
 
       {notice && (
         <p

@@ -262,9 +262,13 @@ exports.Prisma.PromotionScalarFieldEnum = {
   usageLimit: 'usageLimit',
   usedCount: 'usedCount',
   perUserLimit: 'perUserLimit',
+  scope: 'scope',
+  categoryIds: 'categoryIds',
   startsAt: 'startsAt',
   endsAt: 'endsAt',
   status: 'status',
+  createdBy: 'createdBy',
+  updatedBy: 'updatedBy',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };

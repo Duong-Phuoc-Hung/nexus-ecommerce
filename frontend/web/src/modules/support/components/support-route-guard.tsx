@@ -50,8 +50,8 @@ export function SupportRouteGuard({ children }: { children: React.ReactNode }) {
         <h2>Tài khoản chưa có quyền Hỗ trợ viên</h2>
         <p className="support-guard-desc">
           Tài khoản hiện tại <strong>{user?.email}</strong> (vai trò: <code>{user?.role}</code>)
-          không có quyền truy cập vào Cổng vận hành & Vận đơn. Vui lòng đăng nhập với tài khoản Nhân
-          viên hỗ trợ (SUPPORT_STAFF).
+          không có quyền truy cập vào Cổng vận hành &amp; Vận đơn. Vui lòng đăng nhập với tài khoản
+          Nhân viên hỗ trợ (SUPPORT_STAFF).
         </p>
         <div className="support-guard-actions">
           <button type="button" className="support-guard-btn primary" onClick={handleSwitchAccount}>

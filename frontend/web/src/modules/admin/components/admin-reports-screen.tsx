@@ -59,6 +59,9 @@ export function AdminReportsScreen() {
   });
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dataSource, setDataSource] = useState<'official' | 'fallback_sample'>('official');
+  const [sampledOrdersCount, setSampledOrdersCount] = useState(0);
+  const [loadedAt, setLoadedAt] = useState<string>('');
 
   const applyPreset = (key: PresetKey) => {
     setPreset(key);
@@ -104,6 +107,9 @@ export function AdminReportsScreen() {
             }))
           : [],
       );
+      setDataSource('official');
+      setSampledOrdersCount(0);
+      setLoadedAt(new Date().toLocaleTimeString('vi-VN'));
       setLoading(false);
       return;
     } catch {
@@ -184,6 +190,9 @@ export function AdminReportsScreen() {
       }
     }
 
+    setDataSource('fallback_sample');
+    setSampledOrdersCount(totalOrders);
+    setLoadedAt(new Date().toLocaleTimeString('vi-VN'));
     setSummary({
       netRevenue,
       totalOrders,
@@ -201,8 +210,13 @@ export function AdminReportsScreen() {
   }, [load]);
 
   function exportCsv() {
+    const scopeLine =
+      dataSource === 'fallback_sample'
+        ? `# Nguồn tạm: 100 đơn gần nhất (${sampledOrdersCount} đơn khớp kỳ ${fromDate}..${toDate} lúc ${loadedAt}) — không phải tổng toàn hệ thống`
+        : `# Báo cáo tổng hợp từ server (${fromDate}..${toDate} lúc ${loadedAt})`;
     const headers = ['Kỳ báo cáo', 'Số đơn', 'Đơn hủy/hoàn', 'Doanh thu (VND)', 'Phiên hoàn tất'];
     const csvRows = [
+      scopeLine,
       headers.join(','),
       ...rows.map((r) =>
         [
@@ -214,7 +228,7 @@ export function AdminReportsScreen() {
         ].join(','),
       ),
       [
-        'Tổng cộng',
+        dataSource === 'fallback_sample' ? 'Tổng mẫu (<=100 đơn)' : 'Tổng cộng',
         summary.totalOrders,
         summary.cancelledOrRefundedOrders,
         Math.round(summary.netRevenue),
@@ -252,6 +266,20 @@ export function AdminReportsScreen() {
           </Button>
         </div>
       </header>
+
+      {dataSource === 'fallback_sample' && !loading && (
+        <section
+          role="status"
+          className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950"
+        >
+          <strong>Phạm vi dữ liệu thay thế:</strong> Chưa có endpoint tổng hợp{' '}
+          <code>/orders/admin/reports</code>. Số liệu bên dưới và file CSV chỉ tính từ{' '}
+          <strong>100 đơn hàng gần nhất</strong> (khớp {sampledOrdersCount} đơn trong kỳ {fromDate}{' '}
+          – {toDate}
+          {loadedAt ? `, cập nhật ${loadedAt}` : ''}),{' '}
+          <strong>không phải tổng toàn hệ thống</strong>.
+        </section>
+      )}
 
       {/* Filters */}
       <section className="flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 print:hidden">

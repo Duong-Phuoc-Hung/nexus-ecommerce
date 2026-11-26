@@ -47,16 +47,23 @@ export class PostgresOrderRepository implements IOrderRepository {
   }
 
   public async findById(id: string): Promise<Order | null> {
-    const cleanId = id.trim();
-    const isNumeric = /^\d+$/.test(cleanId);
+    const rawClean = id.trim();
+    const cleanId = rawClean
+      .replace(/^[#]/, '')
+      .replace(/^NEX-TRK-/i, '')
+      .trim();
 
     const orderRow = await this.prisma.order.findFirst({
       where: {
-        OR: [{ id: cleanId }, { orderCode: cleanId }],
+        OR: [{ id: cleanId }, { id: rawClean }, { orderCode: cleanId }, { orderCode: rawClean }],
       },
       include: {
         items: {
           orderBy: { id: 'asc' },
+        },
+        payments: {
+          orderBy: { id: 'desc' },
+          take: 1,
         },
       },
     });
@@ -76,6 +83,10 @@ export class PostgresOrderRepository implements IOrderRepository {
       include: {
         items: {
           orderBy: { id: 'asc' },
+        },
+        payments: {
+          orderBy: { id: 'desc' },
+          take: 1,
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -97,21 +108,55 @@ export class PostgresOrderRepository implements IOrderRepository {
       where.sellerId = criteria.sellerId.trim();
     }
 
-    // 3. Lọc theo Status
+    // 3. Lọc theo Status (hỗ trợ cả 1 trạng thái hoặc danh sách phân cách dấu phẩy cho nhóm tab)
     if (criteria.status && criteria.status.trim().length > 0) {
-      where.status = { equals: criteria.status.trim(), mode: 'insensitive' };
+      const statuses = criteria.status
+        .split(',')
+        .map((s) => s.trim().toUpperCase())
+        .filter(Boolean);
+      if (statuses.length === 1) {
+        where.status = { equals: statuses[0], mode: 'insensitive' };
+      } else if (statuses.length > 1) {
+        where.status = { in: statuses };
+      }
+    }
+
+    // 3b. Lọc theo khoảng ngày tạo đơn (server-side trước khi phân trang — SRS B-F319-02)
+    if (criteria.fromDate || criteria.toDate) {
+      const createdAtRange: { gte?: Date; lte?: Date } = {};
+      if (criteria.fromDate) {
+        const start = new Date(
+          criteria.fromDate.includes('T')
+            ? criteria.fromDate
+            : `${criteria.fromDate}T00:00:00.000Z`,
+        );
+        if (!Number.isNaN(start.getTime())) createdAtRange.gte = start;
+      }
+      if (criteria.toDate) {
+        const end = new Date(
+          criteria.toDate.includes('T') ? criteria.toDate : `${criteria.toDate}T23:59:59.999Z`,
+        );
+        if (!Number.isNaN(end.getTime())) createdAtRange.lte = end;
+      }
+      if (createdAtRange.gte || createdAtRange.lte) {
+        where.createdAt = createdAtRange;
+      }
     }
 
     // 4. Lọc từ khóa tìm kiếm toàn diện
     if (criteria.q && criteria.q.trim().length > 0) {
       const q = criteria.q.trim();
+      const unhashed = q.replace(/^[#]/, '').trim();
       where.OR = [
         { orderCode: { contains: q, mode: 'insensitive' } },
+        { orderCode: { contains: unhashed, mode: 'insensitive' } },
         { id: { contains: q, mode: 'insensitive' } },
+        { id: { contains: unhashed, mode: 'insensitive' } },
         { buyerName: { contains: q, mode: 'insensitive' } },
         { buyerEmail: { contains: q, mode: 'insensitive' } },
         { sellerName: { contains: q, mode: 'insensitive' } },
         { trackingCode: { contains: q, mode: 'insensitive' } },
+        { trackingCode: { contains: unhashed, mode: 'insensitive' } },
         { items: { some: { productTitle: { contains: q, mode: 'insensitive' } } } },
       ];
     }
@@ -261,29 +306,57 @@ export class PostgresOrderRepository implements IOrderRepository {
         },
       });
 
-      // 3. Hoàn trả voucher nguyên tử trong cùng transaction (chỉ khi đơn chưa từng bị CANCELLED)
+      // 2b. Lưu bền vững metadata hoàn tiền nếu bảng có cột V10
       if (
-        order.status === 'CANCELLED' &&
-        currentStatus !== 'CANCELLED' &&
-        tx.promotionUsage &&
-        tx.promotion
+        (order.refundTransactionId !== undefined ||
+          order.refundAmount !== undefined ||
+          order.refundStatus !== undefined) &&
+        typeof tx.$executeRaw === 'function'
       ) {
-        const promoUsages = await tx.promotionUsage.findMany({
-          where: { orderId: targetOrderId },
-        });
+        try {
+          await tx.$executeRaw`
+            UPDATE commerce_orders
+            SET
+              refund_transaction_id = COALESCE(${order.refundTransactionId ?? null}, refund_transaction_id),
+              refund_amount = COALESCE(${order.refundAmount ?? null}, refund_amount),
+              refund_status = COALESCE(${order.refundStatus ?? null}, refund_status)
+            WHERE id = ${targetOrderId}::uuid OR order_code = ${cleanId}
+          `;
+        } catch {
+          // Bỏ qua nếu migration V10 chưa chạy trên môi trường test
+        }
+      }
 
-        if (Array.isArray(promoUsages) && promoUsages.length > 0) {
-          for (const usage of promoUsages) {
-            // Xóa bản ghi lượt dùng trước trong cùng transaction
-            const deleted = await tx.promotionUsage.delete({
-              where: { id: usage.id },
-            });
-            // Chỉ giảm bộ đếm khi đã thu hồi đúng bản ghi sử dụng thành công
-            if (deleted) {
-              await tx.promotion.update({
-                where: { id: usage.promotionId },
-                data: { usedCount: { decrement: 1 } },
+      // 3. Hoàn trả voucher, nhả giữ kho & hủy payment PENDING nguyên tử trong cùng transaction khi hủy đơn
+      if (order.status === 'CANCELLED' && currentStatus !== 'CANCELLED') {
+        if (tx.stockReservation) {
+          await tx.stockReservation.updateMany({
+            where: { orderId: targetOrderId, status: 'ACTIVE' },
+            data: { status: 'RELEASED' },
+          });
+        }
+        if (tx.payment) {
+          await tx.payment.updateMany({
+            where: { orderId: targetOrderId, status: 'PENDING' },
+            data: { status: 'CANCELLED', updatedAt: order.updatedAt },
+          });
+        }
+        if (tx.promotionUsage && tx.promotion) {
+          const promoUsages = await tx.promotionUsage.findMany({
+            where: { orderId: targetOrderId },
+          });
+
+          if (Array.isArray(promoUsages) && promoUsages.length > 0) {
+            for (const usage of promoUsages) {
+              const deleted = await tx.promotionUsage.delete({
+                where: { id: usage.id },
               });
+              if (deleted) {
+                await tx.promotion.update({
+                  where: { id: usage.promotionId },
+                  data: { usedCount: { decrement: 1 } },
+                });
+              }
             }
           }
         }
@@ -304,7 +377,7 @@ export class PostgresOrderRepository implements IOrderRepository {
     const rawTimeline = orderRow.timeline;
     let timeline: OrderTimelineItem[] = [];
 
-    if (Array.isArray(rawTimeline)) {
+    if (Array.isArray(rawTimeline) && rawTimeline.length > 0) {
       timeline = rawTimeline.map((t: any) => ({
         status: String(t.status || 'STATUS_UPDATE'),
         title: String(t.title || 'Cập nhật đơn hàng'),
@@ -314,9 +387,13 @@ export class PostgresOrderRepository implements IOrderRepository {
     } else {
       timeline = [
         {
-          status: 'CREATED',
-          title: 'Đơn hàng được tạo thành công',
+          status: String(orderRow.status || 'CREATED'),
+          title:
+            orderRow.status === 'PROCESSING'
+              ? 'Đơn hàng được tạo thành công · Đang xử lý'
+              : 'Đơn hàng được tạo thành công',
           timestamp: new Date(orderRow.createdAt),
+          note: 'Khởi tạo đơn hàng trên sàn thương mại điện tử Nexus',
         },
       ];
     }
@@ -344,6 +421,67 @@ export class PostgresOrderRepository implements IOrderRepository {
 
     const buyerEmail = orderRow.buyerEmail || shippingAddress.email || '';
 
+    // Đọc metadata hoàn tiền từ cột DB (nếu có) hoặc suy diễn an toàn từ timeline
+    let refundTransactionId: string | undefined =
+      orderRow.refundTransactionId || orderRow.refund_transaction_id || undefined;
+    let refundAmount: number | undefined =
+      orderRow.refundAmount !== undefined && orderRow.refundAmount !== null
+        ? Number(orderRow.refundAmount)
+        : orderRow.refund_amount !== undefined && orderRow.refund_amount !== null
+          ? Number(orderRow.refund_amount)
+          : undefined;
+    let refundStatus: 'PENDING' | 'SUCCESS' | 'FAILED' | undefined = (orderRow.refundStatus ||
+      orderRow.refund_status) as 'PENDING' | 'SUCCESS' | 'FAILED' | undefined;
+
+    if (!refundStatus || !refundTransactionId) {
+      for (let i = timeline.length - 1; i >= 0; i--) {
+        const ev = timeline[i];
+        if (!refundStatus) {
+          if (ev.status === 'REFUNDED') refundStatus = 'SUCCESS';
+          else if (ev.status === 'REFUND_PENDING') refundStatus = 'PENDING';
+          else if (ev.status === 'REFUND_FAILED') refundStatus = 'FAILED';
+        }
+        if (!refundTransactionId && ev.note) {
+          const m = ev.note.match(/(?:Refund Txn\)|Mã tham chiếu hoàn tiền):\s*([a-zA-Z0-9_\-:]+)/);
+          if (m && m[1] && m[1] !== 'N/A') {
+            refundTransactionId = m[1];
+          }
+        }
+        if (refundStatus && refundTransactionId) break;
+      }
+    }
+
+    const latestPayment = Array.isArray(orderRow.payments) ? orderRow.payments[0] : undefined;
+    const rawOrderMethod = (
+      orderRow.paymentMethod ||
+      latestPayment?.paymentMethod ||
+      shippingAddress.paymentMethod ||
+      ''
+    )
+      .trim()
+      .toUpperCase();
+    const hasCodInTimeline = timeline.some((t) =>
+      /COD|TIỀN MẶT|NHẬN HÀNG/i.test(`${t.note || ''} ${t.title || ''}`),
+    );
+    const hasPayOsInTimeline = timeline.some((t) =>
+      /PAYOS|VIETQR/i.test(`${t.note || ''} ${t.title || ''}`),
+    );
+
+    let resolvedPaymentMethod = latestPayment ? 'PAYOS' : 'COD';
+    if (rawOrderMethod === 'COD' || hasCodInTimeline) {
+      resolvedPaymentMethod = 'COD';
+    } else if (rawOrderMethod === 'PAYOS' || hasPayOsInTimeline) {
+      resolvedPaymentMethod = 'PAYOS';
+    } else if (rawOrderMethod && rawOrderMethod !== 'STRIPE') {
+      resolvedPaymentMethod = rawOrderMethod;
+    }
+
+    const resolvedPaymentTxnId: string | undefined =
+      orderRow.paymentTransactionId ||
+      latestPayment?.transactionId ||
+      latestPayment?.transactionReference ||
+      undefined;
+
     return new Order({
       id: orderRow.orderCode || String(orderRow.id),
       buyerId: orderRow.buyerId,
@@ -367,6 +505,8 @@ export class PostgresOrderRepository implements IOrderRepository {
           ? new Date(orderRow.estimatedDeliveryAt || orderRow.estimated_delivery_at)
           : null,
       shippingAddress,
+      paymentMethod: resolvedPaymentMethod,
+      paymentTransactionId: resolvedPaymentTxnId,
       totalAmount: Number(orderRow.totalAmount),
       status: (orderRow.status as OrderStatus) || OrderStatus.PENDING,
       trackingCode: orderRow.trackingCode || undefined,
@@ -381,6 +521,9 @@ export class PostgresOrderRepository implements IOrderRepository {
         orderRow.escrowReleasedAt || orderRow.escrow_released_at
           ? new Date(orderRow.escrowReleasedAt || orderRow.escrow_released_at)
           : null,
+      refundTransactionId,
+      refundAmount,
+      refundStatus,
       timeline,
       createdAt: new Date(orderRow.createdAt),
       updatedAt: new Date(orderRow.updatedAt),

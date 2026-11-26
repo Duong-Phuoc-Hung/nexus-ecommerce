@@ -37,14 +37,18 @@ const PERMISSION_CATALOG: Array<{ group: string; codes: string[] }> = [
   {
     group: 'Tài khoản & Hồ sơ',
     codes: [
+      'AUTH.LOGIN',
+      'AUTH.LOGOUT',
       'PROFILE.VIEW',
       'PROFILE.UPDATE',
       'PROFILE.CHANGE_PASSWORD',
+      'PROFILE.RESET_PASSWORD',
       'USER.VIEW',
       'USER.LIST',
       'USER.CREATE',
       'USER.UPDATE',
       'USER.DELETE',
+      'USER.CHANGE_PASSWORD',
     ],
   },
   {
@@ -56,18 +60,26 @@ const PERMISSION_CATALOG: Array<{ group: string; codes: string[] }> = [
     codes: [
       'PRODUCT.VIEW',
       'PRODUCT.LIST',
+      'PRODUCT.SEARCH',
       'PRODUCT.CREATE',
       'PRODUCT.UPDATE',
       'PRODUCT.DELETE',
       'CATEGORY.VIEW',
+      'CATEGORY.LIST',
       'CATEGORY.CREATE',
       'CATEGORY.UPDATE',
       'CATEGORY.DELETE',
     ],
   },
   {
-    group: 'Đơn hàng & Vận chuyển',
+    group: 'Giỏ hàng, Đơn hàng & Vận chuyển',
     codes: [
+      'CART.CREATE',
+      'CART.UPDATE',
+      'CART.REMOVE_ITEM',
+      'CART.VIEW',
+      'CHECKOUT.START',
+      'ORDER.CREATE',
       'ORDER.VIEW',
       'ORDER.LIST',
       'ORDER.CANCEL',
@@ -84,6 +96,7 @@ const PERMISSION_CATALOG: Array<{ group: string; codes: string[] }> = [
     codes: [
       'AUCTION.VIEW',
       'AUCTION.LIST',
+      'AUCTION.VIEW_BID_HISTORY',
       'AUCTION.BID',
       'AUCTION.CREATE',
       'AUCTION.UPDATE',
@@ -96,10 +109,14 @@ const PERMISSION_CATALOG: Array<{ group: string; codes: string[] }> = [
     codes: [
       'REPUTATION.VIEW',
       'REPUTATION.RATE',
+      'USER.REPUTATION.VIEW',
       'USER.REPUTATION.ADJUST',
+      'REPUTATION.PENALTY.VIEW',
       'REPUTATION.PENALTY.APPLY',
       'NOTIFICATION.VIEW',
+      'NOTIFICATION.MANAGE_PREFERENCE',
       'EVENT_LOG.VIEW',
+      'EVENT_LOG.VIEW_DETAIL',
       'AUDIT_LOG.VIEW',
       'SYSTEM.CONFIG.VIEW',
       'SYSTEM.CONFIG.UPDATE',
@@ -133,13 +150,20 @@ export function AdminRolesScreen() {
     try {
       const list = await rolesApi.getRoles();
       const mapped: RoleRecord[] = list.map((item) => {
-        const code = String(item.role || '').toUpperCase();
+        const raw = item as {
+          role?: string;
+          code?: string;
+          name?: string;
+          description?: string;
+          permissions?: string[];
+        };
+        const code = String(raw.code || raw.role || '').toUpperCase();
         const meta = ROLE_META[code];
         return {
           code,
-          name: meta?.name || code,
-          description: meta?.description || `Vai trò ${code}`,
-          permissions: Array.isArray(item.permissions) ? item.permissions : [],
+          name: meta?.name || raw.name || code,
+          description: raw.description || meta?.description || `Vai trò ${code}`,
+          permissions: Array.isArray(raw.permissions) ? raw.permissions : [],
           system: SYSTEM_ROLES.has(code),
         };
       });

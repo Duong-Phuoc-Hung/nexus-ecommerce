@@ -17,9 +17,13 @@ export class InMemoryOrderRepository implements IOrderRepository {
   }
 
   public async findById(id: string): Promise<Order | null> {
-    const cleanId = (id || '').trim();
+    const rawClean = (id || '').trim();
+    const cleanId = rawClean.replace(/^[#]/, '').trim();
     if (this.orders.has(cleanId)) {
       return this.orders.get(cleanId) || null;
+    }
+    if (this.orders.has(rawClean)) {
+      return this.orders.get(rawClean) || null;
     }
     for (const order of this.orders.values()) {
       if (order.id.toLowerCase() === cleanId.toLowerCase()) {
@@ -38,7 +42,7 @@ export class InMemoryOrderRepository implements IOrderRepository {
 
     // 1. Lọc theo từ khóa tìm kiếm q (id, buyerName, buyerEmail, sellerName, productName, trackingCode)
     if (criteria.q && criteria.q.trim().length > 0) {
-      const qLower = criteria.q.trim().toLowerCase();
+      const qLower = criteria.q.replace(/^[#]/, '').trim().toLowerCase();
       list = list.filter((order) => {
         const productNames = order.items.map((i) => i.productName || '').join(' ');
         const searchTarget =
@@ -57,10 +61,35 @@ export class InMemoryOrderRepository implements IOrderRepository {
       list = list.filter((o) => o.sellerId === criteria.sellerId);
     }
 
-    // 4. Lọc theo Status
+    // 4. Lọc theo Status (hỗ trợ cả 1 trạng thái hoặc nhóm trạng thái phân cách dấu phẩy)
     if (criteria.status && criteria.status.trim().length > 0) {
-      const statusUpper = criteria.status.trim().toUpperCase();
-      list = list.filter((o) => o.status.toUpperCase() === statusUpper);
+      const statuses = new Set(
+        criteria.status
+          .split(',')
+          .map((s) => s.trim().toUpperCase())
+          .filter(Boolean),
+      );
+      if (statuses.size > 0) {
+        list = list.filter((o) => statuses.has(o.status.toUpperCase()));
+      }
+    }
+
+    // 4b. Lọc theo khoảng ngày tạo đơn (server-side trước khi phân trang)
+    if (criteria.fromDate) {
+      const start = new Date(
+        criteria.fromDate.includes('T') ? criteria.fromDate : `${criteria.fromDate}T00:00:00.000Z`,
+      );
+      if (!Number.isNaN(start.getTime())) {
+        list = list.filter((o) => o.createdAt.getTime() >= start.getTime());
+      }
+    }
+    if (criteria.toDate) {
+      const end = new Date(
+        criteria.toDate.includes('T') ? criteria.toDate : `${criteria.toDate}T23:59:59.999Z`,
+      );
+      if (!Number.isNaN(end.getTime())) {
+        list = list.filter((o) => o.createdAt.getTime() <= end.getTime());
+      }
     }
 
     // 5. Sắp xếp (Sorting)

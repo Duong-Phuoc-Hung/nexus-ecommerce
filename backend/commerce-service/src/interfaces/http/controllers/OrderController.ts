@@ -1,4 +1,7 @@
 import { Request, Response } from 'express';
+import { buildServiceAuthHeader } from '../../../infrastructure/security/internal-service-auth';
+import type { Pool } from 'pg';
+import { getCommerceDbPool } from '../../../infrastructure/database/pgPool';
 import { GetOrderDetailUseCase } from '../../../application/use-cases/GetOrderDetailUseCase';
 import { SearchOrdersUseCase } from '../../../application/use-cases/SearchOrdersUseCase';
 import { CancelOrderUseCase } from '../../../application/use-cases/CancelOrderUseCase';
@@ -10,6 +13,7 @@ import { ExecuteRefundUseCase } from '../../../application/use-cases/ExecuteRefu
 import { GetRefundStatusUseCase } from '../../../application/use-cases/GetRefundStatusUseCase';
 import { UpdateOrderStatusUseCase } from '../../../application/use-cases/UpdateOrderStatusUseCase';
 import { ConfirmOrderReceiptUseCase } from '../../../application/use-cases/ConfirmOrderReceiptUseCase';
+import { InvoiceService } from '../../../application/services/InvoiceService';
 import { OrderNotFoundException } from '../../../domain/exceptions/OrderNotFoundException';
 import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
 
@@ -30,7 +34,72 @@ export class OrderController {
       search: SearchOrdersUseCase;
       detail: GetOrderDetailUseCase;
     },
+    private readonly dbPool?: Pool,
+    private readonly invoiceService?: InvoiceService,
   ) {}
+
+  private async enrichAuctionMeta<T extends Record<string, any>>(items: T[]): Promise<T[]> {
+    if (!items.length) return items;
+    const byId = new Map<
+      string,
+      {
+        internalId: string;
+        orderCode: string | null;
+        orderSource: string;
+        auctionId: string | null;
+        auctionWinningBid: number | null;
+      }
+    >();
+    if (this.dbPool && process.env.USE_IN_MEMORY_DB !== 'true') {
+      try {
+        const ids = items
+          .flatMap((o) => [
+            String(o.internalId || ''),
+            String(o.id || ''),
+            String(o.orderCode || ''),
+          ])
+          .filter(Boolean);
+        if (ids.length > 0) {
+          const res = await this.dbPool.query(
+            `SELECT id, order_code, order_source, auction_id, auction_winning_bid
+             FROM commerce_orders
+             WHERE id = ANY($1::varchar[]) OR order_code = ANY($1::varchar[])`,
+            [ids],
+          );
+          for (const r of res.rows) {
+            const meta = {
+              internalId: String(r.id),
+              orderCode: r.order_code ? String(r.order_code) : null,
+              orderSource: String(r.order_source || 'DIRECT').toUpperCase(),
+              auctionId: r.auction_id ? String(r.auction_id) : null,
+              auctionWinningBid:
+                r.auction_winning_bid != null ? Number(r.auction_winning_bid) : null,
+            };
+            byId.set(String(r.id), meta);
+            if (r.order_code) byId.set(String(r.order_code), meta);
+          }
+        }
+      } catch {
+        // Non-blocking enrichment
+      }
+    }
+    return items.map((item) => {
+      const code = String(item.orderCode || item.id || '');
+      const found =
+        byId.get(String(item.internalId || '')) ||
+        byId.get(String(item.id || '')) ||
+        byId.get(code);
+      const inferredSource = code.toUpperCase().startsWith('ORD-AUC-') ? 'AUCTION' : 'DIRECT';
+      return {
+        ...item,
+        internalId: found?.internalId || item.internalId || item.id,
+        orderCode: found?.orderCode || item.orderCode || item.id,
+        orderSource: found?.orderSource || inferredSource,
+        auctionId: found?.auctionId ?? null,
+        auctionWinningBid: found?.auctionWinningBid ?? null,
+      };
+    });
+  }
 
   public async listOrders(req: Request, res: Response): Promise<void> {
     try {
@@ -109,6 +178,9 @@ export class OrderController {
       }
 
       const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+      const fromDate =
+        typeof req.query.fromDate === 'string' ? req.query.fromDate.trim() : undefined;
+      const toDate = typeof req.query.toDate === 'string' ? req.query.toDate.trim() : undefined;
       const page = req.query.page ? Number(req.query.page) : undefined;
       const limit = req.query.limit ? Number(req.query.limit) : undefined;
       const sortBy = typeof req.query.sortBy === 'string' ? (req.query.sortBy as any) : undefined;
@@ -123,15 +195,19 @@ export class OrderController {
         buyerId,
         sellerId,
         status,
+        fromDate,
+        toDate,
         page,
         limit,
         sortBy,
         sortOrder,
       });
 
+      const enrichedItems = await this.enrichAuctionMeta(result.items as any[]);
+
       res.status(200).json({
         success: true,
-        data: result.items,
+        data: enrichedItems,
         pagination: result.pagination,
         total: result.pagination.total,
         page: result.pagination.page,
@@ -181,9 +257,11 @@ export class OrderController {
         return;
       }
 
+      const [enrichedOrder] = await this.enrichAuctionMeta([order as any]);
+
       res.status(200).json({
         success: true,
-        data: order,
+        data: enrichedOrder,
       });
     } catch (error) {
       if (error instanceof OrderNotFoundException) {
@@ -428,13 +506,42 @@ export class OrderController {
       const orderId = req.params.id as string;
       const { refundAmount, reason } = req.body || {};
       const user = (req as AuthenticatedRequest).user;
+      const rawIdemp = req.headers['idempotency-key'];
+      const idempotencyKey = Array.isArray(rawIdemp) ? rawIdemp[0] : rawIdemp;
 
       const result = await this.executeRefundUseCase.execute({
         orderId,
         refundAmount: typeof refundAmount === 'number' ? refundAmount : undefined,
         reason,
         operatorId: user?.sub,
+        idempotencyKey: typeof idempotencyKey === 'string' ? idempotencyKey : undefined,
       });
+
+      if (result.status === 'PENDING') {
+        res.status(202).json({
+          success: false,
+          pending: true,
+          code: result.errorCode || 'REFUND_PENDING',
+          message: result.message,
+          data: result,
+        });
+        return;
+      }
+
+      if (result.status === 'FAILED') {
+        const statusCode =
+          result.errorCode === 'REFUND_PROVIDER_NOT_CONFIGURED' ||
+          result.errorCode === 'REFUND_GATEWAY_NOT_CONFIGURED'
+            ? 503
+            : 502;
+        res.status(statusCode).json({
+          success: false,
+          code: result.errorCode || 'REFUND_FAILED',
+          error: result.message,
+          data: result,
+        });
+        return;
+      }
 
       res.status(200).json({
         success: true,
@@ -465,6 +572,19 @@ export class OrderController {
       }
 
       const orderId = req.params.id as string;
+      const user = (req as AuthenticatedRequest).user;
+      const role = (user?.role || '').toUpperCase();
+      if (role !== 'ADMIN' && role !== 'SUPPORT_STAFF') {
+        const order = await this.getOrderDetailUseCase.execute(orderId);
+        if (order.buyerId !== user?.sub && order.sellerId !== user?.sub) {
+          res.status(403).json({
+            success: false,
+            error: 'Bạn không có quyền xem trạng thái hoàn tiền của đơn hàng này.',
+          });
+          return;
+        }
+      }
+
       const result = await this.getRefundStatusUseCase.execute(orderId);
 
       res.status(200).json({
@@ -512,6 +632,39 @@ export class OrderController {
         operatorRole: user?.role,
       });
 
+      // Tự động xác nhận thanh toán COD khi đơn hàng chuyển sang DELIVERED (Đã giao hàng / Thu tiền khi giao)
+      if (String(status).toUpperCase() === 'DELIVERED' && process.env.USE_IN_MEMORY_DB !== 'true') {
+        try {
+          const pool = this.dbPool || getCommerceDbPool();
+          const targetId = (result as any).internalId || result.id;
+          const orderCode = (result as any).orderCode || result.id;
+          const updatePayRes = await pool.query(
+            `UPDATE commerce_payments
+             SET status = 'PAID', paid_at = COALESCE(paid_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP
+             WHERE (order_id = $1::varchar OR order_id = $2::varchar) AND status != 'PAID'`,
+            [targetId, orderCode],
+          );
+          if (updatePayRes.rowCount === 0) {
+            const checkPay = await pool.query(
+              `SELECT id FROM commerce_payments WHERE order_id = $1::varchar OR order_id = $2::varchar LIMIT 1`,
+              [targetId, orderCode],
+            );
+            if (checkPay.rowCount === 0) {
+              await pool.query(
+                `INSERT INTO commerce_payments (order_id, payment_method, idempotency_key, amount, currency, status, paid_at, created_at, updated_at)
+                 VALUES ($1, 'COD', $2, $3, 'VND', 'PAID', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+                [targetId, `cod_pay_${Date.now()}_${targetId.slice(-6)}`, result.totalAmount || 0],
+              );
+            }
+          }
+        } catch (payErr: any) {
+          console.warn(
+            '[OrderController] Auto COD payment confirmation error:',
+            payErr?.message || payErr,
+          );
+        }
+      }
+
       res.status(200).json({
         success: true,
         message: 'Cập nhật trạng thái đơn hàng thành công.',
@@ -525,6 +678,93 @@ export class OrderController {
       res.status(400).json({
         success: false,
         error: error.message || 'Không thể cập nhật trạng thái đơn hàng.',
+      });
+    }
+  }
+
+  /**
+   * POST /api/v1/orders/:id/confirm-cod
+   * Xác nhận đã thu tiền COD cho đơn hàng (từ Support Staff hoặc Webhook vận chuyển)
+   */
+  public async confirmCodPayment(req: Request, res: Response): Promise<void> {
+    try {
+      const orderId = String(req.params.id || '').trim();
+      const { note } = req.body || {};
+
+      const existingOrder = await this.getOrderDetailUseCase.execute(orderId);
+      if (!existingOrder) {
+        res.status(404).json({ success: false, error: `Không tìm thấy đơn hàng "${orderId}".` });
+        return;
+      }
+
+      const targetId = (existingOrder as any).internalId || existingOrder.id;
+      const orderCode = (existingOrder as any).orderCode || existingOrder.id;
+
+      if (process.env.USE_IN_MEMORY_DB !== 'true') {
+        const pool = this.dbPool || getCommerceDbPool();
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+
+          // Cập nhật payment record sang PAID
+          const updatePayRes = await client.query(
+            `UPDATE commerce_payments
+             SET status = 'PAID', paid_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+             WHERE order_id = $1::varchar OR order_id = $2::varchar`,
+            [targetId, orderCode],
+          );
+
+          // Nếu chưa có payment record nào (đơn COD tạo qua luồng cũ), tự động chèn record
+          if (updatePayRes.rowCount === 0) {
+            await client.query(
+              `INSERT INTO commerce_payments (order_id, payment_method, idempotency_key, amount, currency, status, paid_at, created_at, updated_at)
+               VALUES ($1, 'COD', $2, $3, 'VND', 'PAID', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+              [
+                targetId,
+                `cod_pay_${Date.now()}_${targetId.slice(-6)}`,
+                existingOrder.totalAmount || 0,
+              ],
+            );
+          }
+
+          // Cập nhật timeline trong commerce_orders
+          const timelineEntry = {
+            status: 'PAID',
+            title: 'Xác nhận thu tiền COD thành công',
+            note:
+              note ||
+              'Tiền thu hộ COD đã được đối tác giao nhận thu và xác nhận đối soát thành công.',
+            timestamp: new Date().toISOString(),
+          };
+
+          await client.query(
+            `UPDATE commerce_orders
+             SET timeline = COALESCE(timeline, '[]'::jsonb) || $1::jsonb,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $2::varchar OR order_code = $3::varchar`,
+            [JSON.stringify([timelineEntry]), targetId, orderCode],
+          );
+
+          await client.query('COMMIT');
+        } catch (dbErr) {
+          await client.query('ROLLBACK');
+          throw dbErr;
+        } finally {
+          client.release();
+        }
+      }
+
+      const updated = await this.getOrderDetailUseCase.execute(orderId);
+
+      res.status(200).json({
+        success: true,
+        message: 'Đã xác nhận thu tiền COD thành công cho đơn hàng.',
+        data: updated,
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Không thể xác nhận thanh toán COD.',
       });
     }
   }
@@ -549,6 +789,18 @@ export class OrderController {
         orderId,
         buyerId: authenticatedUser.sub,
       });
+
+      // Tự động xuất hóa đơn điện tử & đẩy thông báo idempotent khi đơn hoàn tất (T19 / SRS B-F325)
+      if (this.invoiceService && process.env.USE_IN_MEMORY_DB !== 'true') {
+        void this.invoiceService
+          .getOrIssueInvoice(orderId, {
+            userId: authenticatedUser.sub,
+            role: authenticatedUser.role || 'BUYER',
+          })
+          .catch((err) => {
+            console.warn('[commerce-service] Non-blocking invoice issue warning:', err?.message);
+          });
+      }
 
       res.status(200).json({
         success: true,
@@ -608,9 +860,18 @@ export class OrderController {
         {
           headers: {
             'Content-Type': 'application/json',
-            Authorization: req.headers.authorization || '',
-            'x-user-id': authenticatedUser?.sub || '',
-            'x-user-role': authenticatedUser?.role || '',
+            ...(req.headers.authorization
+              ? { Authorization: String(req.headers.authorization) }
+              : {}),
+            ...buildServiceAuthHeader({
+              issuer: 'commerce-service',
+              audience: 'fulfillment-service',
+              scope: 'fulfillment:case:read',
+              resource: orderId,
+              actor: authenticatedUser
+                ? { sub: authenticatedUser.sub, role: authenticatedUser.role }
+                : undefined,
+            }),
           },
         },
       );
@@ -635,6 +896,115 @@ export class OrderController {
       res.status(502).json({
         success: false,
         error: 'Không thể kết nối đến dịch vụ khiếu nại (Fulfillment Service).',
+      });
+    }
+  }
+
+  /**
+   * GET /api/v1/orders/admin/reports
+   * Tổng hợp báo cáo doanh thu, đơn hàng, tỷ lệ hủy/hoàn cho Admin Dashboard & Reports
+   */
+  public async getAdminReports(req: Request, res: Response): Promise<void> {
+    try {
+      const user = (req as AuthenticatedRequest).user;
+      if (!user || user.role !== 'ADMIN') {
+        res.status(403).json({
+          success: false,
+          error: 'Chỉ Quản trị viên (ADMIN) mới có quyền xem báo cáo tổng hợp toàn sàn.',
+        });
+        return;
+      }
+
+      const fromDate = typeof req.query.from === 'string' ? req.query.from.trim() : undefined;
+      const toDate = typeof req.query.to === 'string' ? req.query.to.trim() : undefined;
+      const granularity =
+        req.query.granularity === 'month' || req.query.granularity === 'week'
+          ? req.query.granularity
+          : 'day';
+
+      const searchUseCase = this.adminReads?.search ?? this.searchOrdersUseCase;
+      if (!searchUseCase) {
+        res.status(500).json({ success: false, error: 'SearchOrdersUseCase not configured.' });
+        return;
+      }
+
+      const result = await searchUseCase.execute({
+        fromDate,
+        toDate,
+        page: 1,
+        limit: 100,
+      });
+
+      const byPeriod = new Map<
+        string,
+        {
+          period: string;
+          orders: number;
+          cancelledOrRefunded: number;
+          revenue: number;
+          completedAuctions: number;
+        }
+      >();
+      let totalOrders = 0;
+      let completedOrders = 0;
+      let cancelledOrRefundedOrders = 0;
+      let netRevenue = 0;
+
+      const bucketKey = (isoStr: string) => {
+        const d = new Date(isoStr);
+        if (Number.isNaN(d.getTime())) return isoStr.slice(0, 10);
+        const yyyy = d.getUTCFullYear();
+        const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const dd = String(d.getUTCDate()).padStart(2, '0');
+        if (granularity === 'month') return `${yyyy}-${mm}`;
+        return `${yyyy}-${mm}-${dd}`;
+      };
+
+      for (const o of result.items) {
+        const key = bucketKey(o.createdAt);
+        const cur = byPeriod.get(key) ?? {
+          period: key,
+          orders: 0,
+          cancelledOrRefunded: 0,
+          revenue: 0,
+          completedAuctions: 0,
+        };
+        cur.orders += 1;
+        totalOrders += 1;
+        const st = String(o.status || '').toUpperCase();
+        if (st === 'CANCELLED' || st === 'REFUNDED') {
+          cur.cancelledOrRefunded += 1;
+          cancelledOrRefundedOrders += 1;
+        } else {
+          cur.revenue += Number(o.totalAmount || 0);
+          netRevenue += Number(o.totalAmount || 0);
+          if (['PAID', 'DELIVERED', 'COMPLETED'].includes(st)) {
+            completedOrders += 1;
+          }
+        }
+        byPeriod.set(key, cur);
+      }
+
+      const rows = Array.from(byPeriod.values()).sort((a, b) => b.period.localeCompare(a.period));
+
+      res.status(200).json({
+        success: true,
+        data: {
+          summary: {
+            netRevenue,
+            totalOrders,
+            completedOrders,
+            cancelledOrRefundedOrders,
+            cancelRefundRate: totalOrders > 0 ? (cancelledOrRefundedOrders / totalOrders) * 100 : 0,
+            completedAuctions: 0,
+          },
+          rows,
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Không thể tổng hợp báo cáo vận hành.',
       });
     }
   }

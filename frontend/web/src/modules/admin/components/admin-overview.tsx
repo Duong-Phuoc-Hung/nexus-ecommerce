@@ -52,8 +52,7 @@ export function AdminOverview({ productsPath = '/admin/products' }: { productsPa
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [summaryRes, ordersRes, sellersRes, auctionsRes, casesRes] = await Promise.allSettled([
-      requestApi('/orders/admin/dashboard-summary'),
+    const [ordersRes, sellersRes, auctionsRes, casesRes] = await Promise.allSettled([
       requestApi('/orders?page=1&limit=50'),
       requestApi('/admin/seller-applications'),
       auctionApi.list(),
@@ -69,24 +68,6 @@ export function AdminOverview({ productsPath = '/admin/products' }: { productsPa
       todayRevenue: null,
     };
 
-    if (summaryRes.status === 'fulfilled') {
-      const s = unwrap<Record<string, unknown>>(summaryRes.value);
-      const orders = (s?.orders ?? {}) as Record<string, unknown>;
-      const auctions = (s?.auctions ?? {}) as Record<string, unknown>;
-      if (typeof orders.pendingProcessing === 'number')
-        next.pendingOrders = orders.pendingProcessing;
-      if (typeof orders.todayRevenue === 'number') next.todayRevenue = orders.todayRevenue;
-      if (typeof s?.sellerApplicationsPending === 'number') {
-        next.pendingSellerApps = s.sellerApplicationsPending;
-      }
-      if (typeof auctions.scheduled === 'number' || typeof auctions.extended === 'number') {
-        next.activeOrUpcomingAuctions =
-          Number(auctions.scheduled ?? 0) + Number(auctions.extended ?? 0);
-        next.extendedAuctions = Number(auctions.extended ?? 0);
-      }
-      if (typeof s?.openDisputes === 'number') next.openDisputes = s.openDisputes;
-    }
-
     if (ordersRes.status === 'fulfilled') {
       const raw = unwrap<unknown>(ordersRes.value);
       const list = Array.isArray(raw)
@@ -96,7 +77,7 @@ export function AdminOverview({ productsPath = '/admin/products' }: { productsPa
           : [];
       if (next.pendingOrders === null) {
         next.pendingOrders = list.filter((o) =>
-          ['PENDING', 'PENDING_PAYMENT', 'PAID', 'CONFIRMED', 'PROCESSING'].includes(
+          ['PENDING', 'PENDING_PAYMENT', 'PAID', 'PROCESSING'].includes(
             String(o.orderStatus ?? o.status ?? '').toUpperCase(),
           ),
         ).length;

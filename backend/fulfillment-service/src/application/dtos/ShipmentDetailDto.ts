@@ -68,7 +68,7 @@ export function mapShipmentStatusToVietnamese(status: ShipmentStatus | string): 
       return 'Đã tạo vận đơn';
     case ShipmentStatus.PICKED:
     case 'PICKED':
-      return 'Đang lấy hàng';
+      return 'Đã lấy hàng';
     case ShipmentStatus.IN_TRANSIT:
     case 'IN_TRANSIT':
       return 'Đang giao';
@@ -90,12 +90,17 @@ export function mapShipmentStatusToVietnamese(status: ShipmentStatus | string): 
 }
 
 export function formatVietnameseDateTime(date: Date): string {
-  const d = date.getDate().toString().padStart(2, '0');
-  const m = (date.getMonth() + 1).toString().padStart(2, '0');
-  const y = date.getFullYear();
-  const hours = date.getHours().toString().padStart(2, '0');
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-  return `${d}/${m}/${y} · ${hours}:${minutes}`;
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+  return `${map.day}/${map.month}/${map.year} · ${map.hour}:${map.minute}`;
 }
 
 export function buildShipmentTimeline(shipment: Shipment): ShipmentTimelineStep[] {

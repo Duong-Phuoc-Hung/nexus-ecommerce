@@ -5,12 +5,12 @@ import jwt from 'jsonwebtoken';
 const JWT_TTL_SECONDS = 60 * 60 * 8;
 
 function getJwtSecret(): string {
-  const secret = process.env.JWT_SECRET;
+  const secret = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET;
   if (secret) return secret;
   if (process.env.NODE_ENV === 'production') {
     throw new Error('JWT_SECRET must be configured in production.');
   }
-  return 'nexus-dev-secret';
+  return 'nexus_super_secret_jwt_access_key_min_32_chars_local_dev';
 }
 
 export interface JwtPayload {
@@ -19,6 +19,7 @@ export interface JwtPayload {
   role: string;
   permissions?: string[];
   iat: number;
+  iatMs?: number;
   exp: number;
 }
 
@@ -58,14 +59,16 @@ export function verifyPassword(password: string, passwordHash: string): boolean 
   return false;
 }
 
-export function createJwtToken(payload: Omit<JwtPayload, 'iat' | 'exp'>): string {
+export function createJwtToken(payload: Omit<JwtPayload, 'iat' | 'exp' | 'iatMs'>): string {
   const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
 
-  const now = Math.floor(Date.now() / 1000);
+  const nowMs = Date.now();
+  const now = Math.floor(nowMs / 1000);
   const body = Buffer.from(
     JSON.stringify({
       ...payload,
       iat: now,
+      iatMs: nowMs,
       exp: now + JWT_TTL_SECONDS,
     }),
   ).toString('base64url');
@@ -79,62 +82,46 @@ export function createJwtToken(payload: Omit<JwtPayload, 'iat' | 'exp'>): string
   return `${signingInput}.${signature}`;
 }
 
-export function verifyJwtToken(token: string): JwtPayload | null {
+export function verifyJwtToken(token: string, _strict = true): JwtPayload | null {
   if (!token || typeof token !== 'string') {
     return null;
   }
 
-  const secrets = [
-    process.env.JWT_ACCESS_SECRET,
-    process.env.JWT_SECRET,
-    'nexus_super_secret_jwt_access_key_min_32_chars_local_dev',
-    'nexus-dev-secret',
-  ].filter(Boolean) as string[];
-
-  for (const secret of secrets) {
-    try {
-      const decoded = jwt.verify(token, secret) as any;
-      if (decoded && (decoded.sub || decoded.userId)) {
-        const role =
-          decoded.role ||
-          (Array.isArray(decoded.roles) && decoded.roles.length > 0 ? decoded.roles[0] : 'BUYER');
-        return {
-          sub: String(decoded.sub || decoded.userId),
-          email: decoded.email || '',
-          role,
-          permissions: decoded.privileges || decoded.permissions,
-          iat: Number(decoded.iat) || Math.floor(Date.now() / 1000),
-          exp: Number(decoded.exp) || Math.floor(Date.now() / 1000) + 900,
-        };
-      }
-    } catch {
-      // Tiếp tục thử secret tiếp theo
-    }
+  let secret: string;
+  try {
+    secret = getJwtSecret();
+  } catch {
+    return null;
   }
 
   try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-
-    const [header, payloadPart, signature] = parts;
-    const expectedSignature = crypto
-      .createHmac('sha256', getJwtSecret())
-      .update(`${header}.${payloadPart}`)
-      .digest('base64url');
-
-    if (!crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(signature))) {
+    const decoded = jwt.verify(token, secret, { algorithms: ['HS256'] }) as jwt.JwtPayload;
+    const subject = decoded.sub || decoded.userId;
+    if (
+      decoded.type === 'refresh' ||
+      (_strict && typeof decoded.sub !== 'string') ||
+      typeof subject !== 'string' ||
+      !subject.trim() ||
+      !Number.isFinite(decoded.exp) ||
+      decoded.exp! <= Date.now() / 1000
+    ) {
       return null;
     }
-
-    const payload = JSON.parse(
-      Buffer.from(payloadPart, 'base64url').toString('utf8'),
-    ) as JwtPayload;
-
-    if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) {
-      return null;
-    }
-
-    return payload;
+    const role =
+      decoded.role ||
+      (Array.isArray(decoded.roles) && decoded.roles.length > 0 ? decoded.roles[0] : 'BUYER');
+    return {
+      sub: subject,
+      email: decoded.email || '',
+      role,
+      permissions: decoded.privileges || decoded.permissions,
+      iat: Number(decoded.iat) || Math.floor(Date.now() / 1000),
+      iatMs:
+        typeof decoded.iatMs === 'number' && Number.isFinite(decoded.iatMs)
+          ? decoded.iatMs
+          : undefined,
+      exp: decoded.exp!,
+    };
   } catch {
     return null;
   }

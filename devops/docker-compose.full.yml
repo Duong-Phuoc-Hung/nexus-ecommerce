@@ -188,6 +188,10 @@ services:
       DATABASE_URL: postgresql://nexus_commerce:nexus_password@postgres-commerce:5432/nexus_commerce_db
       REDIS_URL: redis://redis:6379
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      CATALOG_SERVICE_URL: http://catalog-service:4002
+      FULFILLMENT_SERVICE_URL: http://fulfillment-service:4005
+      NOTIFICATION_SERVICE_URL: http://notification-service:4006
+      INTERNAL_SERVICE_JWT_SECRET: ${INTERNAL_SERVICE_JWT_SECRET:-nexus_internal_service_secret_min_32_chars_dev}
     ports:
       - '4003:4003'
     depends_on:
@@ -210,6 +214,9 @@ services:
       DATABASE_URL: postgresql://nexus_auction:nexus_password@postgres-auction:5432/nexus_auction_db
       REDIS_URL: redis://redis:6379
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      USER_SERVICE_URL: http://user-service:4001
+      COMMERCE_SERVICE_URL: http://commerce-service:4003
+      INTERNAL_SERVICE_JWT_SECRET: ${INTERNAL_SERVICE_JWT_SECRET:-nexus_internal_service_secret_min_32_chars_dev}
     ports:
       - '4004:4004'
     depends_on:
@@ -231,8 +238,11 @@ services:
       PORT: 4005
       DATABASE_URL: postgresql://nexus_fulfillment:nexus_password@postgres-fulfillment:5432/nexus_fulfillment_db
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
-    ports:
-      - '4005:4005'
+      COMMERCE_SERVICE_URL: http://commerce-service:4003
+      NOTIFICATION_SERVICE_URL: http://notification-service:4006
+      INTERNAL_SERVICE_JWT_SECRET: ${INTERNAL_SERVICE_JWT_SECRET:-nexus_internal_service_secret_min_32_chars_dev}
+    expose:
+      - '4005'
     depends_on:
       postgres-fulfillment:
         condition: service_healthy
@@ -250,11 +260,31 @@ services:
       PORT: 4006
       DATABASE_URL: postgresql://nexus_notification:nexus_password@postgres-notification:5432/nexus_notification_db
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      EMAIL_DELIVERY_SECRET: ${EMAIL_DELIVERY_SECRET:-nexus_email_delivery_secret_min_32_chars_dev}
+      INTERNAL_SERVICE_JWT_SECRET: ${INTERNAL_SERVICE_JWT_SECRET:-nexus_internal_service_secret_min_32_chars_dev}
     ports:
       - '4006:4006'
     depends_on:
       postgres-notification:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  chat-service:
+    build:
+      context: ..
+      dockerfile: backend/chat-service/Dockerfile
+    image: nexus/chat-service:latest
+    container_name: nexus-chat-service
+    environment:
+      NODE_ENV: development
+      PORT: 4007
+      COMMERCE_SERVICE_URL: http://commerce-service:4003
+      FULFILLMENT_SERVICE_URL: http://fulfillment-service:4005
+      INTERNAL_SERVICE_JWT_SECRET: ${INTERNAL_SERVICE_JWT_SECRET:-nexus_internal_service_secret_min_32_chars_dev}
+    expose:
+      - '4007'
+    depends_on:
       rabbitmq:
         condition: service_healthy
 
@@ -273,6 +303,7 @@ services:
       AUCTION_SERVICE_URL: http://auction-service:4004
       FULFILLMENT_SERVICE_URL: http://fulfillment-service:4005
       NOTIFICATION_SERVICE_URL: http://notification-service:4006
+      CHAT_SERVICE_URL: http://chat-service:4007
     ports:
       - '4000:4000'
     depends_on:
@@ -282,6 +313,7 @@ services:
       - auction-service
       - fulfillment-service
       - notification-service
+      - chat-service
 
   nginx:
     image: nginx:alpine

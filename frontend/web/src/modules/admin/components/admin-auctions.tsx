@@ -18,6 +18,7 @@ import {
   type AuctionStatus,
 } from '@/modules/auction/api/auction.api';
 import { AuctionBadge, auctionDate, auctionMoney } from '@/modules/auction/components/auction-ui';
+import { getAuctionSocket } from '@/modules/auction/utils/auction-socket';
 
 type QuickFilter = 'none' | 'starting_soon' | 'extended' | 'pending_settlement';
 
@@ -88,7 +89,37 @@ export function AdminAuctions() {
   useEffect(() => {
     void load(false);
     const off = auctionApi.subscribe(() => void load(true));
-    return off;
+    const socket = getAuctionSocket();
+    socket.emit('join_auctions_feed');
+    let timer: number | null = null;
+    const schedule = () => {
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        timer = null;
+        void load(true);
+      }, 250);
+    };
+    socket.on('auctions:changed', schedule);
+    socket.on('auction:bid_placed', schedule);
+    socket.on('auction:buy_now', schedule);
+    socket.on('auction:created', schedule);
+    socket.on('auction:updated', schedule);
+    socket.on('auction:cancelled', schedule);
+    socket.on('auction:started', schedule);
+    socket.on('auction:ended', schedule);
+    return () => {
+      if (timer) window.clearTimeout(timer);
+      off();
+      socket.emit('leave_auctions_feed');
+      socket.off('auctions:changed', schedule);
+      socket.off('auction:bid_placed', schedule);
+      socket.off('auction:buy_now', schedule);
+      socket.off('auction:created', schedule);
+      socket.off('auction:updated', schedule);
+      socket.off('auction:cancelled', schedule);
+      socket.off('auction:started', schedule);
+      socket.off('auction:ended', schedule);
+    };
   }, [load]);
 
   const counts = useMemo(() => {
@@ -516,14 +547,8 @@ export function AdminAuctions() {
         <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 px-4 py-3.5 text-xs text-stone-600 sm:px-5 sm:text-sm">
           <div>
             <span className="font-medium text-stone-900 tabular-nums">
-              Hiển thị {visible.length} phiên trong tập hiện tải · Trang {currentPage}/{pages}
+              Hiển thị {visible.length} phiên trong tập hiện tại · Trang {currentPage}/{pages}
             </span>
-            {appConfig.auctionSource === 'api' && (
-              <p className="mt-0.5 text-xs text-stone-500">
-                Tổng toàn hệ thống và phân trang server-side sẽ tự kích hoạt khi Backend bổ sung
-                query filter/total cho <code>/admin/auctions</code>.
-              </p>
-            )}
           </div>
           <div className="flex gap-2">
             <Button

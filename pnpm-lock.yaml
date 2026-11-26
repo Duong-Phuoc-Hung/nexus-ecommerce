@@ -375,6 +375,9 @@ importers:
       pg:
         specifier: ^8.23.1
         version: 8.23.1
+      socket.io:
+        specifier: ^4.8.4
+        version: 4.8.4
     devDependencies:
       '@types/cors':
         specifier: ^2.8.19
@@ -492,6 +495,9 @@ importers:
       nodemailer:
         specifier: ^10.2.1
         version: 10.2.1
+      pg:
+        specifier: ^8.23.1
+        version: 8.23.1
     devDependencies:
       '@types/cors':
         specifier: ^2.8.19
@@ -505,6 +511,9 @@ importers:
       '@types/nodemailer':
         specifier: ^8.0.2
         version: 8.0.2
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
       tsx:
         specifier: ^4.23.15
         version: 4.23.15

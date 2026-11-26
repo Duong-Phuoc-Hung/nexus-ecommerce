@@ -6,68 +6,66 @@ export interface AuthenticatedUser {
   role: string;
   email?: string;
   fullName?: string;
+  exp?: number;
 }
 
 export interface AuthenticatedRequest extends Request {
   user?: AuthenticatedUser;
 }
 
-function getJwtSecret(): string {
-  const secret = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET;
-  if (secret) return secret;
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('JWT_ACCESS_SECRET or JWT_SECRET must be configured in production.');
-  }
-  return 'nexus_super_secret_jwt_access_key_min_32_chars_local_dev';
+export function getCandidateJwtSecrets(): string[] {
+  const envSecrets = [process.env.JWT_ACCESS_SECRET, process.env.JWT_SECRET].filter(
+    (secret): secret is string => Boolean(secret),
+  );
+  if (envSecrets.length) return [envSecrets[0]];
+  if (process.env.NODE_ENV === 'production') throw new Error('Missing JWT access secret');
+  return ['nexus_super_secret_jwt_access_key_min_32_chars_local_dev'];
+}
+
+export function verifyHs256Signature(
+  headerB64: string,
+  payloadB64: string,
+  signatureB64: string,
+): boolean {
+  const actual = Buffer.from(signatureB64, 'base64url');
+  return getCandidateJwtSecrets().some((secret) => {
+    const expected = crypto
+      .createHmac('sha256', secret)
+      .update(`${headerB64}.${payloadB64}`)
+      .digest();
+    return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+  });
 }
 
 export function verifyJwtToken(token: string): AuthenticatedUser | null {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
-
-    const candidateSecrets = [
-      process.env.JWT_ACCESS_SECRET,
-      process.env.JWT_SECRET,
-      'nexus_super_secret_jwt_access_key_min_32_chars_local_dev',
-      'nexus-dev-secret',
-      'your_super_secret_jwt_access_key_min_32_characters_here',
-    ].filter(Boolean) as string[];
-
     const [headerB64, payloadB64, signatureB64] = parts;
-    const data = `${headerB64}.${payloadB64}`;
-
-    let isSignatureValid = false;
-    for (const sec of candidateSecrets) {
-      const expectedSig = crypto.createHmac('sha256', sec).update(data).digest('base64url');
-      if (crypto.timingSafeEqual(Buffer.from(signatureB64), Buffer.from(expectedSig))) {
-        isSignatureValid = true;
-        break;
-      }
-    }
-
-    if (!isSignatureValid) {
-      // Fallback decode payload for internal testing environments
-      const rawPayload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
-      if (rawPayload && (rawPayload.sub || rawPayload.userId)) {
-        return {
-          sub: rawPayload.sub || rawPayload.userId,
-          role: (rawPayload.role || 'BUYER').toUpperCase(),
-          email: rawPayload.email,
-          fullName: rawPayload.fullName,
-        };
-      }
-      return null;
-    }
-
+    const header = JSON.parse(Buffer.from(headerB64, 'base64url').toString('utf8'));
+    if (header.alg !== 'HS256') return null;
+    if (!verifyHs256Signature(headerB64, payloadB64, signatureB64)) return null;
     const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
-    if (payload.exp && Date.now() >= payload.exp * 1000) {
+    const now = Date.now() / 1000;
+    if (
+      !Number.isFinite(payload.exp) ||
+      payload.exp <= now ||
+      (payload.nbf !== undefined && (!Number.isFinite(payload.nbf) || payload.nbf > now))
+    )
       return null;
-    }
+    const sub = payload.sub || payload.userId;
+    if (typeof sub !== 'string' || !sub.trim()) return null;
+    const rawRoles = (Array.isArray(payload.roles) ? payload.roles : [payload.role])
+      .filter((role: unknown): role is string => typeof role === 'string')
+      .map((r: string) => r.toUpperCase());
+    const role =
+      ['ADMIN', 'SUPPORT_STAFF', 'SELLER', 'BUYER'].find((item) => rawRoles.includes(item)) ||
+      (rawRoles[0] ? String(rawRoles[0]).toUpperCase() : 'BUYER');
 
     return {
-      sub: payload.sub || payload.userId,
-      role: (payload.role || 'BUYER').toUpperCase(),
+      sub,
+      role,
+      exp: payload.exp,
       email: payload.email,
       fullName: payload.fullName,
     };
@@ -89,19 +87,6 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
       (req as AuthenticatedRequest).user = payload;
       return next();
     }
-  }
-
-  // Hỗ trợ Gateway Headers khi chuyển tiếp nội bộ
-  const headerUserId = req.headers['x-user-id'] as string;
-  const headerRole = req.headers['x-user-role'] as string;
-
-  if (headerUserId && headerRole) {
-    (req as AuthenticatedRequest).user = {
-      sub: headerUserId,
-      role: headerRole.toUpperCase(),
-      email: req.headers['x-user-email'] as string,
-    };
-    return next();
   }
 
   res.status(401).json({

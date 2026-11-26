@@ -175,10 +175,16 @@ export function AdminInventoryScreen() {
       setLedgerRows(
         (list as Array<Record<string, unknown>>).map((item, idx) => ({
           id: String(item.id ?? `ldg-${idx}`),
-          adjustmentType: String(item.adjustmentType ?? 'ADJUST'),
-          delta: Number(item.delta ?? 0),
-          beforeOnHand: Number(item.beforeOnHand ?? 0),
-          afterOnHand: Number(item.afterOnHand ?? 0),
+          adjustmentType: String(item.adjustmentType ?? item.transactionType ?? 'ADJUST'),
+          delta: Number(item.delta ?? item.quantityChange ?? 0),
+          beforeOnHand:
+            item.beforeOnHand !== undefined && item.beforeOnHand !== null
+              ? Number(item.beforeOnHand)
+              : -1,
+          afterOnHand:
+            item.afterOnHand !== undefined && item.afterOnHand !== null
+              ? Number(item.afterOnHand)
+              : -1,
           referenceType: typeof item.referenceType === 'string' ? item.referenceType : undefined,
           referenceId: typeof item.referenceId === 'string' ? item.referenceId : null,
           reason: typeof item.reason === 'string' ? item.reason : undefined,
@@ -377,8 +383,10 @@ export function AdminInventoryScreen() {
                 {rows.map((r) => (
                   <tr key={`${r.sku}-${r.warehouseId}`} className="hover:bg-slate-50/60">
                     <td className="px-5 py-4">
-                      <p className="font-semibold text-slate-950">{r.productName}</p>
-                      <p className="mt-0.5 font-mono text-xs text-slate-500">{r.sku}</p>
+                      <p className="font-semibold text-slate-950">{r.productName || r.sku}</p>
+                      {r.productName && r.productName !== r.sku && (
+                        <p className="mt-0.5 font-mono text-xs text-slate-500">{r.sku}</p>
+                      )}
                     </td>
                     <td className="px-5 py-4 text-slate-700">{r.warehouseName}</td>
                     <td className="px-5 py-4 text-right font-medium tabular-nums">{r.onHand}</td>
@@ -598,9 +606,13 @@ export function AdminInventoryScreen() {
                     )}
                   </div>
                   <div className="text-right text-xs text-slate-500 tabular-nums">
-                    <p className="font-medium text-slate-800">
-                      {entry.beforeOnHand} → {entry.afterOnHand}
-                    </p>
+                    {entry.beforeOnHand >= 0 && entry.afterOnHand >= 0 ? (
+                      <p className="font-medium text-slate-800">
+                        {entry.beforeOnHand} → {entry.afterOnHand}
+                      </p>
+                    ) : entry.operatorId ? (
+                      <p className="font-mono text-[11px] text-slate-600">{entry.operatorId}</p>
+                    ) : null}
                     {entry.createdAt && <p>{new Date(entry.createdAt).toLocaleString('vi-VN')}</p>}
                   </div>
                 </li>

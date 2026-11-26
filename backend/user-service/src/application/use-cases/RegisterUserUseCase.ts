@@ -46,7 +46,7 @@ export class RegisterUserUseCase {
       passwordHash: hashPassword(password),
       role: UserRole.BUYER,
       status: UserStatus.ACTIVE,
-      reputationScore: 100,
+      reputationScore: 50,
       createdAt: now,
       updatedAt: now,
     });

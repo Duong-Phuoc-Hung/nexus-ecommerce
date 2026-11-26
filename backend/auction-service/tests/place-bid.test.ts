@@ -162,6 +162,39 @@ describe('PlaceBidUseCase', () => {
     );
   });
 
+  it('khi mức giá đặt đạt hoặc vượt buyNowPrice, phiên tự động kết thúc (ENDED) ngay lập tức', async () => {
+    const repo = new InMemoryAuctionRepository();
+    const useCase = new PlaceBidUseCase(repo);
+
+    const sample = new Auction({
+      id: 'auc_test_buynow_trigger',
+      productId: '10',
+      sellerId: 'seller_01',
+      startingPrice: 1000000,
+      currentHighestBid: 1000000,
+      bidIncrement: 50000,
+      buyNowPrice: 2000000,
+      status: AuctionStatus.ACTIVE,
+      startTime: new Date(Date.now() - 3600 * 1000),
+      endTime: new Date(Date.now() + 3600 * 1000),
+    });
+    await repo.create(sample);
+
+    const result = await useCase.execute({
+      auctionId: 'auc_test_buynow_trigger',
+      bidderId: 'buyer_vip',
+      bidAmount: 2500000, // Vượt qua buyNowPrice 2.000.000
+    });
+
+    assert.strictEqual(result.status, AuctionStatus.ENDED);
+    assert.strictEqual(result.bidderId, 'buyer_vip');
+    assert.strictEqual(result.currentHighestBid, 2500000);
+
+    const updated = await repo.findById('auc_test_buynow_trigger');
+    assert.strictEqual(updated?.status, AuctionStatus.ENDED);
+    assert.strictEqual(updated?.highestBidderId, 'buyer_vip');
+  });
+
   it('TASK-AUC-03: từ chối khi người đặt giá có điểm uy tín dưới 50 (MIN_REPUTATION_TO_BID)', async () => {
     const repo = new InMemoryAuctionRepository();
     const fakeClient = {

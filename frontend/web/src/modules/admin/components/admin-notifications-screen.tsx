@@ -145,9 +145,9 @@ export function AdminNotificationsScreen() {
           <p className="admin-kicker">KÊNH THÔNG BÁO &amp; EMAIL</p>
           <h1 className="mt-2">Thông báo &amp; Gửi Email</h1>
         </div>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
           <Mail size={14} />
-          Gmail SMTP sẵn sàng
+          Notification Service · Kênh Email
         </span>
       </header>
 

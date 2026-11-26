@@ -12,11 +12,13 @@ import {
   Plus,
   ShieldCheck,
   ShoppingCart,
+  Star,
   Zap,
 } from 'lucide-react';
 import { catalogApi } from '../api/catalog.api';
 import { formatPrice, type CatalogProduct } from '../api/catalog.factory';
-import { ApiError, userMessage } from '../../../lib/axios/http';
+import { requestApi } from '@/lib/axios/api-client';
+import { ApiError, unwrap, userMessage } from '../../../lib/axios/http';
 import { StoreHeader } from '@/components/layout/store-header';
 import { SellerReputationTrigger } from '@/modules/user/components/seller-reputation-drawer';
 import { useSession } from '@/modules/auth/hooks/use-session';
@@ -32,9 +34,19 @@ const conditions: Record<string, string> = {
   REFURBISHED: 'Tân trang',
 };
 
+type ProductReviewItem = {
+  id: string;
+  reviewerName: string;
+  rating: number;
+  comment: string;
+  createdAt?: string;
+};
+
 export function ProductDetail({ productId }: { productId: string }) {
   const router = useRouter();
   const [product, setProduct] = useState<CatalogProduct | null>(null);
+  const [reviews, setReviews] = useState<ProductReviewItem[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
   const [error, setError] = useState('');
   const [missing, setMissing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -85,6 +97,45 @@ export function ProductDetail({ productId }: { productId: string }) {
     window.addEventListener(FAVORITES_EVENT, sync);
     return () => window.removeEventListener(FAVORITES_EVENT, sync);
   }, [productId]);
+
+  useEffect(() => {
+    if (!product?.id) {
+      setReviews([]);
+      return;
+    }
+    const controller = new AbortController();
+    setReviewsLoading(true);
+    requestApi(`/products/${encodeURIComponent(product.id)}/reviews`, {
+      signal: controller.signal,
+    })
+      .then((raw) => {
+        if (controller.signal.aborted) return;
+        const data = unwrap<unknown>(raw);
+        const list = Array.isArray(data)
+          ? data
+          : Array.isArray((data as Record<string, unknown>)?.items)
+            ? ((data as Record<string, unknown>).items as unknown[])
+            : [];
+        setReviews(
+          (list as Array<Record<string, unknown>>).map((r, idx) => ({
+            id: String(r.id ?? `rev-${idx}`),
+            reviewerName: String(
+              r.reviewerName ?? r.buyerName ?? r.userName ?? 'Người mua đã xác thực',
+            ),
+            rating: Math.max(1, Math.min(5, Number(r.rating ?? 5))),
+            comment: String(r.comment ?? r.content ?? ''),
+            createdAt: typeof r.createdAt === 'string' ? r.createdAt : undefined,
+          })),
+        );
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setReviews([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setReviewsLoading(false);
+      });
+    return () => controller.abort();
+  }, [product?.id]);
 
   useEffect(() => {
     if (!product) {
@@ -485,6 +536,71 @@ export function ProductDetail({ productId }: { productId: string }) {
                 <p className="mt-4 whitespace-pre-wrap break-words text-sm leading-7 text-muted">
                   {product.description || 'Người bán chưa cung cấp mô tả chi tiết.'}
                 </p>
+              </section>
+
+              <section className="mt-6 rounded-3xl border border-line bg-white p-6 sm:p-8 shadow-xs">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h2 className="text-xl font-bold text-stone-900">
+                    Đánh giá từ người mua ({reviews.length})
+                  </h2>
+                  {reviews.length > 0 && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-800">
+                      <Star className="size-4 fill-amber-400 text-amber-400" aria-hidden="true" />
+                      {(
+                        reviews.reduce((sum, item) => sum + item.rating, 0) / reviews.length
+                      ).toFixed(1)}{' '}
+                      / 5.0
+                    </span>
+                  )}
+                </div>
+
+                {reviewsLoading ? (
+                  <p className="mt-4 text-sm text-muted" role="status">
+                    Đang tải đánh giá…
+                  </p>
+                ) : reviews.length === 0 ? (
+                  <p className="mt-4 text-sm text-muted">Chưa có đánh giá nào cho sản phẩm này.</p>
+                ) : (
+                  <ul className="mt-5 divide-y divide-line">
+                    {reviews.map((rev) => (
+                      <li key={rev.id} className="py-4 first:pt-0 last:pb-0">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-sm font-semibold text-stone-900">
+                              {rev.reviewerName}
+                            </span>
+                            <span
+                              className="inline-flex items-center gap-0.5 text-amber-400"
+                              aria-label={`${rev.rating} trên 5 sao`}
+                            >
+                              {Array.from({ length: 5 }).map((_, i) => (
+                                <Star
+                                  key={i}
+                                  className={`size-3.5 ${
+                                    i < rev.rating
+                                      ? 'fill-amber-400 text-amber-400'
+                                      : 'text-stone-200'
+                                  }`}
+                                  aria-hidden="true"
+                                />
+                              ))}
+                            </span>
+                          </div>
+                          {rev.createdAt && Number.isFinite(Date.parse(rev.createdAt)) && (
+                            <span className="text-xs text-muted tabular-nums">
+                              {new Date(rev.createdAt).toLocaleDateString('vi-VN')}
+                            </span>
+                          )}
+                        </div>
+                        {rev.comment && (
+                          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-stone-700">
+                            {rev.comment}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </section>
             </>
           )

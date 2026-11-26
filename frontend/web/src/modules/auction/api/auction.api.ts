@@ -28,14 +28,19 @@ export type AuctionModel3D = {
 
 export type AuctionSettlementSummary = {
   outcome?: 'WON' | 'LOST' | 'NO_BIDS' | 'CANCELLED' | 'PENDING';
+  closedReason?: 'TIME_EXPIRED' | 'BUY_NOW' | 'ADMIN_CANCELLED' | null;
   winnerId?: string | null;
   winnerAlias?: string | null;
+  winnerName?: string | null;
   finalPrice?: number | null;
+  winningBidAmount?: number | null;
   settledAt?: number | null;
   paymentDueAt?: number | null;
   orderId?: string | null;
+  orderCode?: string | null;
   orderStatus?: string | null;
   paymentStatus?: string | null;
+  paymentUrl?: string | null;
   lastSyncedAt?: number | null;
   canCheckout?: boolean;
 };
@@ -84,6 +89,10 @@ export type Auction = {
   maxExtensions?: number;
   extensionsUsed?: number;
   paymentWindowHours?: number;
+  demoMode?: boolean;
+  demoMultiplier?: number;
+  createdByAdminId?: string;
+  auditRef?: string;
   settlement?: AuctionSettlementSummary | null;
   auditTrail?: AuctionAuditEntry[];
 };
@@ -96,6 +105,8 @@ export type AuctionInput = {
   increment: number;
   buyNowPrice?: number | null;
   visibility?: AuctionVisibility;
+  demoMode?: boolean;
+  demoMultiplier?: number;
   startAt: number;
   endAt: number;
 };
@@ -186,6 +197,7 @@ export function nextPrice(a: Auction) {
 
 export function lifecycle(a: Auction, now = Date.now()): AuctionStatus {
   if (a.status === 'CANCELLED') return 'CANCELLED';
+  if (a.status === 'ENDED') return 'ENDED';
   if (now >= a.endAt) return 'ENDED';
   if (now >= a.startAt) return a.status === 'EXTENDED' ? 'EXTENDED' : 'ACTIVE';
   return 'SCHEDULED';
@@ -214,10 +226,18 @@ export function validateAuction(input: AuctionInput, now = Date.now()) {
       );
     }
   }
-  if (!Number.isFinite(input.startAt) || input.startAt <= now)
-    throw new AuctionError('Giờ bắt đầu phải ở tương lai.', 'VALIDATION');
+  if (!Number.isFinite(input.startAt))
+    throw new AuctionError('Giờ bắt đầu không đúng định dạng hợp lệ.', 'VALIDATION');
+  if (input.startAt <= now)
+    throw new AuctionError('Giờ bắt đầu không được nằm trong quá khứ.', 'VALIDATION');
+  if (!Number.isFinite(input.endAt))
+    throw new AuctionError('Giờ kết thúc không đúng định dạng hợp lệ.', 'VALIDATION');
+  if (input.endAt <= now)
+    throw new AuctionError('Giờ kết thúc phải nằm ở tương lai.', 'VALIDATION');
+  if (input.endAt <= input.startAt)
+    throw new AuctionError('Giờ kết thúc phải sau giờ bắt đầu.', 'VALIDATION');
   const duration = input.endAt - input.startAt;
-  if (!Number.isFinite(duration) || duration < 3600000 || duration > 168 * 3600000)
+  if (duration < 3600000 || duration > 168 * 3600000)
     throw new AuctionError('Thời lượng phiên phải từ 1 giờ đến 7 ngày.', 'VALIDATION');
 }
 
@@ -400,15 +420,27 @@ async function mapServerAuction(value: unknown): Promise<Auction> {
   const now = Date.now();
   const currentHighestBid = optionalNumber(source.currentHighestBid ?? source.highestBidAmount);
   const statusValue = String(source.status ?? 'ACTIVE').toUpperCase();
-  const status: AuctionStatus = (
+  const rawStatus: AuctionStatus = (
     ['ACTIVE', 'EXTENDED', 'SCHEDULED', 'ENDED', 'CANCELLED'] as const
   ).includes(statusValue as AuctionStatus)
     ? (statusValue as AuctionStatus)
-    : statusValue === 'UPCOMING'
-      ? 'SCHEDULED'
-      : 'ACTIVE';
+    : statusValue === 'SETTLED' || statusValue === 'CLOSED' || statusValue === 'COMPLETED'
+      ? 'ENDED'
+      : statusValue === 'UPCOMING'
+        ? 'SCHEDULED'
+        : 'ACTIVE';
 
-  const endAt = timestamp(source.effectiveEndsAt ?? source.endTime ?? source.endAt, now);
+  const actualEndAt = source.actualEndTime ? timestamp(source.actualEndTime, now) : null;
+  const rawEndAt = timestamp(source.effectiveEndsAt ?? source.endTime ?? source.endAt, now);
+  const endAt =
+    (rawStatus === 'ENDED' || rawStatus === 'CANCELLED') && actualEndAt
+      ? Math.min(rawEndAt, actualEndAt)
+      : rawEndAt;
+  const startAt = timestamp(
+    source.startsAt ?? source.startTime ?? source.startAt,
+    rawStatus === 'SCHEDULED' ? endAt : now,
+  );
+  const status: AuctionStatus = lifecycle({ status: rawStatus, startAt, endAt } as Auction, now);
   const originalEndAt = timestamp(source.originalEndTime ?? source.originalEndAt, endAt);
   const bidCountValue = source.bidCount ?? source.totalBids;
   const rawBids = Array.isArray(source.bids) ? source.bids : [];
@@ -454,25 +486,44 @@ async function mapServerAuction(value: unknown): Promise<Auction> {
     source.model3d && typeof source.model3d === 'object' ? row(source.model3d) : null;
   const rawSettlement =
     source.settlement && typeof source.settlement === 'object' ? row(source.settlement) : null;
-  const actualEndAt = source.actualEndTime ? timestamp(source.actualEndTime, endAt) : null;
+  const fallbackWinnerAlias = highestBidderId
+    ? `Buyer ••••${highestBidderId.slice(-4).toUpperCase()}`
+    : null;
 
   const derivedSettlement: AuctionSettlementSummary | null = rawSettlement
     ? {
         outcome: (rawSettlement.outcome as AuctionSettlementSummary['outcome']) ?? 'PENDING',
+        closedReason:
+          typeof rawSettlement.closedReason === 'string'
+            ? (rawSettlement.closedReason as AuctionSettlementSummary['closedReason'])
+            : null,
         winnerId:
           typeof rawSettlement.winnerId === 'string' ? rawSettlement.winnerId : highestBidderId,
         winnerAlias:
-          typeof rawSettlement.winnerAlias === 'string' ? rawSettlement.winnerAlias : null,
-        finalPrice: optionalNumber(rawSettlement.finalPrice) ?? effectiveCurrentBid,
+          typeof rawSettlement.winnerAlias === 'string' && rawSettlement.winnerAlias.trim()
+            ? rawSettlement.winnerAlias.trim()
+            : fallbackWinnerAlias,
+        winnerName:
+          typeof rawSettlement.winnerName === 'string' && rawSettlement.winnerName.trim()
+            ? rawSettlement.winnerName.trim()
+            : null,
+        finalPrice:
+          optionalNumber(rawSettlement.winningBidAmount ?? rawSettlement.finalPrice) ??
+          effectiveCurrentBid,
+        winningBidAmount:
+          optionalNumber(rawSettlement.winningBidAmount ?? rawSettlement.finalPrice) ??
+          effectiveCurrentBid,
         settledAt: rawSettlement.settledAt ? timestamp(rawSettlement.settledAt, now) : actualEndAt,
         paymentDueAt: rawSettlement.paymentDueAt
           ? timestamp(rawSettlement.paymentDueAt, now)
           : null,
         orderId: typeof rawSettlement.orderId === 'string' ? rawSettlement.orderId : null,
+        orderCode: typeof rawSettlement.orderCode === 'string' ? rawSettlement.orderCode : null,
         orderStatus:
           typeof rawSettlement.orderStatus === 'string' ? rawSettlement.orderStatus : null,
         paymentStatus:
           typeof rawSettlement.paymentStatus === 'string' ? rawSettlement.paymentStatus : null,
+        paymentUrl: typeof rawSettlement.paymentUrl === 'string' ? rawSettlement.paymentUrl : null,
         lastSyncedAt: rawSettlement.lastSyncedAt
           ? timestamp(rawSettlement.lastSyncedAt, now)
           : null,
@@ -482,7 +533,10 @@ async function mapServerAuction(value: unknown): Promise<Auction> {
       ? {
           outcome: highestBidderId ? 'WON' : 'NO_BIDS',
           winnerId: highestBidderId,
+          winnerAlias: fallbackWinnerAlias,
+          winnerName: null,
           finalPrice: highestBidderId ? effectiveCurrentBid : null,
+          winningBidAmount: highestBidderId ? effectiveCurrentBid : null,
           settledAt: actualEndAt ?? endAt,
           canCheckout: Boolean(highestBidderId),
         }
@@ -563,10 +617,7 @@ async function mapServerAuction(value: unknown): Promise<Auction> {
     increment,
     buyNowPrice: optionalNumber(source.buyNowPrice),
     nextMinBid: computedNextMinBid,
-    startAt: timestamp(
-      source.startsAt ?? source.startTime ?? source.startAt,
-      status === 'SCHEDULED' ? endAt : now,
-    ),
+    startAt,
     endAt,
     originalEndAt,
     status,
@@ -584,21 +635,35 @@ async function mapServerAuction(value: unknown): Promise<Auction> {
       typeof source.internalCancelNote === 'string' ? source.internalCancelNote : undefined,
     extensionWindowSeconds:
       optionalNumber(
-        rawRules.extensionWindowSeconds ??
+        rawRules.antiSnipingWindowSeconds ??
+          rawRules.extensionWindowSeconds ??
           source.extensionWindowSeconds ??
           source.antiSnipingExtensionSeconds,
       ) ?? 120,
     extensionDurationSeconds:
       optionalNumber(
-        rawRules.extensionDurationSeconds ??
-          source.extensionDurationSeconds ??
-          source.antiSnipingExtensionSeconds ??
-          source.antiSnipingSeconds,
-      ) ?? 120,
-    maxExtensions: optionalNumber(rawRules.maxExtensions ?? source.maxExtensions) ?? undefined,
-    extensionsUsed: optionalNumber(source.extensionsUsed) ?? 0,
+        rawRules.antiSnipingExtendSeconds ??
+          rawRules.extensionDurationSeconds ??
+          source.extensionDurationSeconds,
+      ) ?? 300,
+    maxExtensions: optionalNumber(rawRules.maxExtensions ?? source.maxExtensions) ?? 3,
+    extensionsUsed: optionalNumber(source.extensionCount ?? source.extensionsUsed) ?? 0,
     paymentWindowHours:
-      optionalNumber(rawRules.paymentWindowHours ?? source.paymentWindowHours) ?? 24,
+      optionalNumber(
+        rawRules.paymentDeadlineHours ?? rawRules.paymentWindowHours ?? source.paymentWindowHours,
+      ) ?? 24,
+    demoMode:
+      typeof source.demoMode === 'boolean'
+        ? source.demoMode
+        : typeof rawRules.demoMode === 'boolean'
+          ? Boolean(rawRules.demoMode)
+          : startingPrice > 0 && startingPrice < 1000,
+    demoMultiplier:
+      optionalNumber(source.demoMultiplier ?? rawRules.demoMultiplier) ??
+      (startingPrice > 0 && startingPrice < 1000 ? 1_000_000 : 1),
+    createdByAdminId:
+      typeof source.createdByAdminId === 'string' ? source.createdByAdminId : undefined,
+    auditRef: typeof source.auditRef === 'string' ? source.auditRef : undefined,
     settlement: derivedSettlement,
     auditTrail,
   };
@@ -696,7 +761,7 @@ export const auctionApi = {
           'FORBIDDEN',
         );
       }
-      await requestApi(`/auctions/${encodeURIComponent(id)}/bids`, {
+      const bidRaw = await requestApi(`/auctions/${encodeURIComponent(id)}/bids`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -708,8 +773,34 @@ export const auctionApi = {
         }),
       });
       notifyAuctionChanged();
-      const { auction } = await readServerAuction(id);
-      return auction;
+      try {
+        const { auction } = await readServerAuction(id);
+        return auction;
+      } catch {
+        // G01: POST đã thành công nhưng lần đọc sau lỗi -> trả bản ghi biên nhận để không báo thất bại giả
+        const receipt = row(unwrap<unknown>(bidRaw));
+        const fallback = await mapServerAuction({
+          id,
+          currentHighestBid: receipt.currentHighestBid ?? amount,
+          highestBidAmount: receipt.highestBidAmount ?? amount,
+          nextMinBid: receipt.nextMinBid,
+          status: receipt.status ?? 'ACTIVE',
+          endTime: receipt.endTime,
+          version: receipt.version ?? version + 1,
+          bidCount: receipt.bidCount ?? 1,
+          bids: [
+            {
+              id: String(receipt.bidId ?? key),
+              bidder: actor.id,
+              displayAlias: 'Bạn',
+              isMine: true,
+              amount,
+              time: Date.now(),
+            },
+          ],
+        });
+        return fallback;
+      }
     }
     return mutation(async () => {
       const rows = await read(),
@@ -737,13 +828,16 @@ export const auctionApi = {
   async checkout(
     id: string,
     shippingAddress: AuctionCheckoutAddress,
+    idempotencyKey?: string,
   ): Promise<AuctionCheckoutResult> {
     if (!isApiAuctionSource()) {
       throw new AuctionError('Chốt đơn đấu giá chỉ hỗ trợ khi kết nối API thực.', 'UNSUPPORTED');
     }
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
     const raw = await requestApi(`/auctions/${encodeURIComponent(id)}/checkout`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ shippingAddress }),
     });
     const result = unwrap<AuctionCheckoutResult>(raw);
@@ -783,6 +877,8 @@ export const auctionApi = {
           bidStep: input.increment,
           buyNowPrice: input.buyNowPrice ?? undefined,
           visibility: input.visibility ?? 'PUBLIC',
+          demoMode: input.demoMode,
+          demoMultiplier: input.demoMultiplier,
           startTime: new Date(input.startAt).toISOString(),
           endTime: new Date(input.endAt).toISOString(),
         }),
@@ -841,7 +937,13 @@ export const auctionApi = {
       return item;
     });
   },
-  async cancel(id: string, reason: string, version: number, actor?: Actor) {
+  async cancel(
+    id: string,
+    reason: string,
+    version: number,
+    actor?: Actor,
+    options?: { publicReason?: string; internalNote?: string },
+  ) {
     assertAuctionAdmin(actor, 'AUCTION.ADMIN_CANCEL');
     if (!reason.trim() || reason.length > 500)
       throw new AuctionError('Nhập lý do hủy phiên (1–500 ký tự).', 'VALIDATION');
@@ -849,7 +951,11 @@ export const auctionApi = {
       await requestApi(`/auctions/${encodeURIComponent(id)}/cancel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: reason.trim() }),
+        body: JSON.stringify({
+          reason: reason.trim(),
+          publicReason: options?.publicReason?.trim() || undefined,
+          internalNote: options?.internalNote?.trim() || undefined,
+        }),
       });
       notifyAuctionChanged();
       return;
@@ -872,13 +978,16 @@ export const auctionApi = {
   subscribe(listener: () => void) {
     if (typeof window === 'undefined') return () => undefined;
     window.addEventListener(EVENT, listener);
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === null || event.key === KEY) listener();
+    };
     if (!isApiAuctionSource()) {
-      window.addEventListener('storage', listener);
+      window.addEventListener('storage', onStorage);
     }
     return () => {
       window.removeEventListener(EVENT, listener);
       if (!isApiAuctionSource()) {
-        window.removeEventListener('storage', listener);
+        window.removeEventListener('storage', onStorage);
       }
     };
   },

@@ -5,6 +5,7 @@ import { InMemoryProductRepository } from './infrastructure/repositories/InMemor
 import { GetProductDetailUseCase } from './application/use-cases/GetProductDetailUseCase';
 import { ProductController } from './interfaces/http/controllers/ProductController';
 import { createProductRoutes } from './interfaces/http/routes/ProductRoutes';
+import { createAdminCatalogRoutes } from './interfaces/http/routes/AdminCatalogRoutes';
 import { HttpSellerDirectory } from './infrastructure/clients/HttpSellerDirectory';
 import { SearchProductsUseCase } from './application/use-cases/SearchProductsUseCase';
 import { CreateProductUseCase } from './application/use-cases/CreateProductUseCase';
@@ -30,6 +31,9 @@ import { PostgresReviewRepository } from './infrastructure/repositories/Postgres
 import { InMemoryReviewRepository } from './infrastructure/repositories/InMemoryReviewRepository';
 import { CreateProductReviewUseCase } from './application/use-cases/CreateProductReviewUseCase';
 import { GetProductReviewsUseCase } from './application/use-cases/GetProductReviewsUseCase';
+import { ModerationService } from './application/use-cases/ModerationService';
+import { PostgresModerationRepository } from './infrastructure/repositories/PostgresModerationRepository';
+import { createModerationRoutes } from './interfaces/http/routes/ModerationRoutes';
 
 export function createApplication(): Application {
   const app = express();
@@ -48,6 +52,8 @@ export function createApplication(): Application {
   });
 
   const isTest = process.env.NODE_ENV === 'test' || process.env.USE_IN_MEMORY === 'true';
+
+  app.use('/api/v1', createAdminCatalogRoutes());
 
   // DANH MỤC (CATEGORY):
   const categoryRepository = isTest
@@ -100,6 +106,10 @@ export function createApplication(): Application {
     getProductReviewsUseCase,
   );
 
+  app.use(
+    '/api/v1/products',
+    createModerationRoutes(new ModerationService(new PostgresModerationRepository())),
+  );
   app.use('/api/v1/products', createProductRoutes(productController));
 
   // YÊU THÍCH (FAVORITES / WISHLIST):

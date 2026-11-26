@@ -30,6 +30,32 @@ export function getShipmentStatusLabel(statusCode: string, fallback?: string): s
   return match ? match.label : fallback || statusCode;
 }
 
+function defaultLocationForStatus(
+  statusCode: string,
+  city?: string,
+  shippingAddress?: string,
+): string {
+  const area = (city || 'TP. Hồ Chí Minh').trim();
+  switch (statusCode) {
+    case 'READY_TO_PICK':
+      return `Kho tổng Nexus · Đang chuẩn bị đóng gói & chờ bưu tá`;
+    case 'PICKED':
+      return `Bưu cục ${area} · Bưu tá đã lấy hàng từ Người bán`;
+    case 'IN_TRANSIT':
+      return `Trung tâm phân loại bưu chính ${area} · Đang vận chuyển`;
+    case 'OUT_FOR_DELIVERY':
+      return `Bưu cục phát ${area} · Bưu tá đang đi phát hàng`;
+    case 'DELIVERED':
+      return `${shippingAddress || area} · Đã giao hàng thành công`;
+    case 'FAILED':
+      return `Bưu cục phát ${area} · Giao hàng không thành công (Chờ phát lại)`;
+    case 'RETURNED':
+      return `Trung tâm chuyển hoàn ${area} · Đã trả hàng về người bán`;
+    default:
+      return `${area} · Đang cập nhật`;
+  }
+}
+
 function formatSafeDate(val?: string): string {
   if (!val) return '';
   try {
@@ -80,6 +106,13 @@ export function SupportShipmentsPage() {
   const [returnCondition, setReturnCondition] = useState<'INTACT' | 'DAMAGED' | 'LOST'>('INTACT');
   const [returnedAt, setReturnedAt] = useState('');
 
+  // Đồng bộ dropdown trạng thái luôn khớp với vận đơn đang chọn
+  useEffect(() => {
+    if (selected) {
+      setNextStatus(selected.statusCode || selected.status);
+    }
+  }, [selected]);
+
   // Tự động nhận từ khóa tìm kiếm khi điều hướng từ trang Chi tiết đơn hàng (?q=GHN_...)
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -92,9 +125,31 @@ export function SupportShipmentsPage() {
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
+    const qStr = search.trim();
     supportShipmentsApi
-      .list({ q: search.trim(), limit: 50 }, controller.signal)
-      .then((page) => setShipments(page.items))
+      .list({ q: qStr, limit: 50 }, controller.signal)
+      .then(async (page) => {
+        if (
+          page.items.length === 0 &&
+          qStr &&
+          (qStr.toUpperCase().startsWith('ORD') || qStr.length > 5)
+        ) {
+          try {
+            const single = await supportShipmentsApi.getByOrderId(qStr, controller.signal);
+            if (single) {
+              setShipments([single]);
+              setSelected(single);
+              setNextStatus(single.statusCode || single.status);
+              return;
+            }
+          } catch {}
+        }
+        setShipments(page.items);
+        if (page.items.length > 0 && qStr) {
+          setSelected(page.items[0]);
+          setNextStatus(page.items[0].statusCode || page.items[0].status);
+        }
+      })
       .catch((err) => !controller.signal.aborted && setError(userMessage(err)))
       .finally(() => !controller.signal.aborted && setLoading(false));
     return () => controller.abort();
@@ -115,6 +170,11 @@ export function SupportShipmentsPage() {
     if (!selected) return;
     setActing(true);
     setNotice('');
+    const nextLocation = defaultLocationForStatus(
+      nextStatus,
+      selected.city,
+      selected.shippingAddress,
+    );
     try {
       // 1. Thử gọi API Webhook 3PL Carrier mới của Backend: POST /api/v1/fulfillment/carriers/webhook
       try {
@@ -123,22 +183,37 @@ export function SupportShipmentsPage() {
           tracking_code: selected.trackingCode || selected.code,
           order_id: selected.orderId || selected.order,
           status: nextStatus,
-          current_location: selected.currentLocation,
+          current_location: nextLocation,
           timestamp: new Date().toISOString(),
         });
       } catch {
         // 2. Fallback sang PATCH /api/v1/support/shipments/:id/status
         await supportShipmentsApi.updateStatus(selected.id, {
           status: nextStatus,
-          location: selected.currentLocation,
+          location: nextLocation,
           note: 'Cập nhật từ Support Staff.',
         });
       }
 
+      if (nextStatus === 'DELIVERED') {
+        try {
+          await supportShipmentsApi.confirmCodPayment(selected.id, {
+            note: 'Cập nhật giao hàng thành công (DELIVERED) - Tự động ghi nhận thu tiền COD.',
+          });
+        } catch {
+          // Bỏ qua nếu đơn hàng không phải COD hoặc đã thanh toán trước
+        }
+      }
+
       const updated = await supportShipmentsApi.getById(selected.id);
       setSelected(updated);
+      setNextStatus(updated.statusCode || nextStatus);
       setShipments((items) => items.map((item) => (item.id === updated.id ? updated : item)));
-      setNotice('Đã cập nhật trạng thái vận đơn qua Backend Carrier API thành công.');
+      setNotice(
+        nextStatus === 'DELIVERED'
+          ? '✓ Đã cập nhật giao hàng và tự động xác nhận thu tiền COD thành công!'
+          : 'Đã cập nhật trạng thái vận đơn qua Backend Carrier API thành công.',
+      );
     } catch (err) {
       setNotice(userMessage(err));
     } finally {
@@ -283,6 +358,27 @@ export function SupportShipmentsPage() {
     }
   }
 
+  // Handler xác nhận đã thu tiền COD
+  async function handleConfirmCodPayment() {
+    if (!selected) return;
+    const targetOrderId = selected.orderId || selected.order || selected.code;
+    setActing(true);
+    setNotice('');
+    try {
+      await supportShipmentsApi.confirmCodPayment(selected.id, {
+        note: `Support Staff xác nhận đã thu tiền COD cho đơn hàng #${targetOrderId}`,
+      });
+      setNotice(`✓ Đã xác nhận thu tiền COD thành công cho đơn hàng #${targetOrderId}.`);
+      const updated = await supportShipmentsApi.getById(selected.id);
+      setSelected(updated);
+      setShipments((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+    } catch (err) {
+      setNotice(userMessage(err));
+    } finally {
+      setActing(false);
+    }
+  }
+
   // Xây dựng Stepper động tuân thủ State Machine một chiều theo SRS 3.6.2 & 2.8
   const stepperSteps = useMemo(() => {
     if (!selected) return [];
@@ -392,7 +488,7 @@ export function SupportShipmentsPage() {
     })();
 
     const createdTime = formatSafeDate(selected.createdAt) || selected.updated;
-    const updatedTime = selected.updated || formatSafeDate(selected.updatedAt);
+    const updatedTime = formatSafeDate(selected.updatedAt) || selected.updated;
     const location = selected.currentLocation || selected.city || 'Trung tâm xử lý';
     const recipient = selected.recipient || selected.recipientName || 'người nhận';
 
@@ -623,7 +719,7 @@ export function SupportShipmentsPage() {
               </div>
               <div>
                 <small>Thời gian cập nhật</small>
-                <strong>{selected.updated}</strong>
+                <strong>{formatSafeDate(selected.updatedAt) || selected.updated}</strong>
               </div>
             </div>
 
@@ -762,8 +858,8 @@ export function SupportShipmentsPage() {
               >
                 💡 <strong>Nguyên tắc vận hành:</strong> Trong môi trường Production thực tế, tiến
                 trình vận chuyển được cập nhật <strong>tự động 100% qua Webhook</strong> từ đối tác
-                giao nhận (GHN / GHTK API). Cụm công cụ này dành cho môi trường phát triển & kiểm
-                thử đồ án nhằm mô phỏng các sự kiện Shipper bưu cục cập nhật hành trình.
+                giao nhận (GHN / GHTK API). Cụm công cụ này dành cho môi trường phát triển &amp;
+                kiểm thử đồ án nhằm mô phỏng các sự kiện Shipper bưu cục cập nhật hành trình.
               </p>
 
               <div className="support-action-buttons">
@@ -792,6 +888,28 @@ export function SupportShipmentsPage() {
                   onClick={handleOpenOverride}
                 >
                   Điều chỉnh khu vực
+                </button>
+                <button
+                  type="button"
+                  disabled={acting}
+                  onClick={handleConfirmCodPayment}
+                  title="Xác nhận đối tác giao nhận/shipper đã thu đủ tiền COD từ khách hàng"
+                  style={{
+                    backgroundColor: '#059669',
+                    color: '#ffffff',
+                    border: '1.5px solid #047857',
+                    borderRadius: '8px',
+                    padding: '8px 16px',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    cursor: acting ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 2px 5px rgba(5, 150, 105, 0.35)',
+                  }}
+                >
+                  💵 Xác nhận đã thanh toán COD
                 </button>
                 {selected.statusCode === 'FAILED' && (
                   <>

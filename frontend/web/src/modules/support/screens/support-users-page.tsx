@@ -58,7 +58,12 @@ type UserTicket = {
 };
 
 export function SupportUsersPage() {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return new URLSearchParams(window.location.search).get('q') || '';
+    }
+    return '';
+  });
   const [role, setRole] = useState('ALL');
   const search = useDebouncedValue(query, 500);
   const [users, setUsers] = useState<SupportUser[]>([]);
@@ -81,21 +86,39 @@ export function SupportUsersPage() {
   const [isLocking, setIsLocking] = useState(false);
   const [lockError, setLockError] = useState<string | null>(null);
 
-  // Modal Chế tài xử phạt & Điều chỉnh uy tín (Task 3)
+  // Hồ sơ uy tín & Lịch sử vi phạm (SRS 2.7 - REPUTATION.PENALTY.VIEW)
+  const [reputationInfo, setReputationInfo] = useState<{
+    tierLabel: string;
+    canBid: boolean;
+    items: Array<{
+      id: string;
+      delta: number;
+      scoreAfter: number;
+      reason: string;
+      source?: string;
+      createdAt: string;
+    }>;
+  } | null>(null);
+
+  // Modal Kiến nghị xử phạt gửi Admin (Support Staff không tự trừ điểm/áp phạt theo SRS 2.7)
   const [penaltyOpen, setPenaltyOpen] = useState(false);
-  const [penaltyTab, setPenaltyTab] = useState<'REPUTATION' | 'RESTRICTION'>('REPUTATION');
-  const [reputationPoints, setReputationPoints] = useState<number>(-10);
-  const [reputationReason, setReputationReason] = useState('Vi phạm quy chuẩn giao dịch sàn Nexus');
-  const [restrictionType, setRestrictionType] = useState('BIDDING_LOCK');
-  const [restrictionDuration, setRestrictionDuration] = useState<number>(7);
-  const [restrictionReason, setRestrictionReason] = useState(
-    'Hạn chế tính năng do vi phạm chính sách giao dịch',
+  const [suggestedPoints, setSuggestedPoints] = useState<number>(-10);
+  const [reputationReason, setReputationReason] = useState(
+    'Vi phạm quy chuẩn giao dịch sàn Nexus — Đề xuất Admin xem xét trừ điểm uy tín',
   );
   const [isSubmittingPenalty, setIsSubmittingPenalty] = useState(false);
   const [penaltyError, setPenaltyError] = useState<string | null>(null);
 
-  // Trạng thái xử lý khiếu nại
+  // Trạng thái xử lý khiếu nại & Tạo phiếu khiếu nại mới
   const [resolvingTicketId, setResolvingTicketId] = useState<string | null>(null);
+  const [createTicketOpen, setCreateTicketOpen] = useState(false);
+  const [newTicketType, setNewTicketType] = useState('Khiếu nại đơn hàng / Trả hàng');
+  const [newTicketOrderId, setNewTicketOrderId] = useState('');
+  const [newTicketPriority, setNewTicketPriority] = useState<'Cao' | 'Trung bình' | 'Thấp'>(
+    'Trung bình',
+  );
+  const [newTicketReason, setNewTicketReason] = useState('');
+  const [creatingTicket, setCreatingTicket] = useState(false);
 
   function showToast(msg: string) {
     setToastMessage(msg);
@@ -132,8 +155,24 @@ export function SupportUsersPage() {
       const u = await userApi.getById(id);
       setSelectedUser(u);
       try {
+        const rep = await userApi.getReputationHistory(u.id);
+        setReputationInfo({
+          tierLabel: rep.tierLabel,
+          canBid: rep.canBid,
+          items: Array.isArray(rep.items) ? rep.items : [],
+        });
+      } catch {
+        setReputationInfo(null);
+      }
+      try {
         // Nạp danh sách yêu cầu khiếu nại thực tế từ Support Cases API
-        const cases = await supportApi.listCases({ userId: u.id });
+        let cases = await supportApi.listCases({ userId: u.id, limit: 50 });
+        if ((!cases || cases.length === 0) && (u.fullName || u.email)) {
+          cases = await supportApi.listCases({
+            q: (u.fullName || u.email || '').trim(),
+            limit: 50,
+          });
+        }
         if (cases && cases.length > 0) {
           setUserTickets(
             cases.map((c) => ({
@@ -215,64 +254,45 @@ export function SupportUsersPage() {
 
   function openPenaltyModal() {
     if (!selectedUser) return;
-    setPenaltyTab('REPUTATION');
-    setReputationPoints(-10);
-    setReputationReason('Vi phạm quy chuẩn giao dịch sàn Nexus');
-    setRestrictionType('BIDDING_LOCK');
-    setRestrictionDuration(7);
-    setRestrictionReason('Hạn chế tính năng do vi phạm chính sách giao dịch');
+    setSuggestedPoints(-10);
+    setReputationReason(
+      'Vi phạm quy chuẩn giao dịch sàn Nexus — Đề xuất Admin xem xét xử phạt/trừ điểm uy tín',
+    );
     setPenaltyError(null);
     setPenaltyOpen(true);
   }
 
-  async function handleAdjustReputation(e: React.FormEvent) {
+  async function handleEscalatePenaltyToAdmin(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedUser || isSubmittingPenalty) return;
+    if (!selectedUser || isSubmittingPenalty || !reputationReason.trim()) return;
     setIsSubmittingPenalty(true);
     setPenaltyError(null);
     try {
-      const result = await userApi.adjustReputation(selectedUser.id, {
-        points: Number(reputationPoints),
-        reason: reputationReason.trim(),
+      const created = await supportApi.createCase({
+        userId: selectedUser.id,
+        customer: selectedUser.fullName || selectedUser.email || 'Người dùng Nexus',
+        type: 'Kiến nghị xử phạt / Điều chỉnh uy tín (Chuyển Admin)',
+        reason: `[Đề xuất: ${suggestedPoints > 0 ? `+${suggestedPoints}` : suggestedPoints} điểm] ${reputationReason.trim()}`,
+        priority: 'Cao',
       });
-      setSelectedUser((prev) =>
-        prev ? { ...prev, reputationScore: result.newReputationScore } : null,
-      );
-      setUsers((prev) =>
-        prev.map((u) =>
-          u.id === selectedUser.id ? { ...u, reputationScore: result.newReputationScore } : u,
-        ),
-      );
+      setUserTickets((prev) => [
+        {
+          id: created.id,
+          type: created.type || 'Kiến nghị xử phạt / Điều chỉnh uy tín (Chuyển Admin)',
+          orderId: created.order || created.orderId || 'NX-ORD-GENERAL',
+          reason: created.reason || reputationReason.trim(),
+          priority: 'Cao',
+          status: 'Đang chờ xử lý',
+          createdAt: created.age || 'Vừa lập biên bản',
+        },
+        ...prev,
+      ]);
       showToast(
-        `✓ Đã điều chỉnh điểm uy tín (${result.adjustedPoints > 0 ? '+' : ''}${result.adjustedPoints} điểm). Điểm mới: ${result.newReputationScore}/100`,
+        `✓ Đã lập biên bản kiến nghị xử phạt (${created.id}) chuyển lên Admin xem xét theo SRS 2.7.`,
       );
       setPenaltyOpen(false);
     } catch (err: any) {
-      const msg = userMessage(err) || 'Không thể điều chỉnh điểm uy tín.';
-      setPenaltyError(msg);
-      showToast(`❌ Lỗi: ${msg}`);
-    } finally {
-      setIsSubmittingPenalty(false);
-    }
-  }
-
-  async function handleRestrictFeatures(e: React.FormEvent) {
-    e.preventDefault();
-    if (!selectedUser || isSubmittingPenalty) return;
-    setIsSubmittingPenalty(true);
-    setPenaltyError(null);
-    try {
-      const result = await userApi.restrictFeatures(selectedUser.id, {
-        restriction: restrictionType,
-        durationDays: Number(restrictionDuration),
-        reason: restrictionReason.trim(),
-      });
-      showToast(
-        `✓ Đã áp dụng hạn chế [${result.restriction}] trong ${result.durationDays} ngày cho người dùng.`,
-      );
-      setPenaltyOpen(false);
-    } catch (err: any) {
-      const msg = userMessage(err) || 'Không thể áp dụng hạn chế tính năng.';
+      const msg = userMessage(err) || 'Không thể gửi kiến nghị xử phạt lên Admin.';
       setPenaltyError(msg);
       showToast(`❌ Lỗi: ${msg}`);
     } finally {
@@ -309,6 +329,42 @@ export function SupportUsersPage() {
       showToast(`❌ Lỗi: ${msg}`);
     } finally {
       setResolvingTicketId(null);
+    }
+  }
+
+  async function handleCreateUserTicket(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedUser || creatingTicket || !newTicketReason.trim()) return;
+    setCreatingTicket(true);
+    try {
+      const created = await supportApi.createCase({
+        userId: selectedUser.id,
+        customer: selectedUser.fullName || selectedUser.email || 'Khách hàng Nexus',
+        orderId: newTicketOrderId.trim() || undefined,
+        type: newTicketType,
+        reason: newTicketReason.trim(),
+        priority: newTicketPriority,
+      });
+      setUserTickets((prev) => [
+        {
+          id: created.id,
+          type: created.type || newTicketType,
+          orderId: created.order || created.orderId || newTicketOrderId.trim() || 'NX-ORD-GENERAL',
+          reason: created.reason || newTicketReason.trim(),
+          priority: created.priority || newTicketPriority,
+          status: 'Đang chờ xử lý',
+          createdAt: created.age || 'Vừa tạo',
+        },
+        ...prev,
+      ]);
+      setCreateTicketOpen(false);
+      setNewTicketOrderId('');
+      setNewTicketReason('');
+      showToast(`✓ Đã tạo phiếu khiếu nại "${created.id}" cho người dùng.`);
+    } catch (err: any) {
+      showToast(`❌ Lỗi tạo phiếu: ${userMessage(err)}`);
+    } finally {
+      setCreatingTicket(false);
     }
   }
 
@@ -551,7 +607,7 @@ export function SupportUsersPage() {
                 }}
                 onClick={openPenaltyModal}
               >
-                ⚖️ Chế tài / Xử phạt
+                📋 Kiến nghị xử phạt (Chuyển Admin)
               </button>
 
               <Link
@@ -575,6 +631,103 @@ export function SupportUsersPage() {
               </Link>
             </div>
 
+            {/* Khu vực Sổ điểm uy tín & Lịch sử vi phạm (SRS 2.7 - REPUTATION.PENALTY.VIEW) */}
+            <div style={{ marginTop: '24px' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '10px',
+                  flexWrap: 'wrap',
+                  gap: '8px',
+                }}
+              >
+                <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b' }}>
+                  Sổ điểm uy tín & Lịch sử vi phạm ({reputationInfo?.items.length ?? 0})
+                </h3>
+                <div
+                  style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '0.7rem' }}
+                >
+                  {reputationInfo?.tierLabel && (
+                    <span
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: '99px',
+                        background: '#eff6ff',
+                        color: '#1d4ed8',
+                        fontWeight: 600,
+                      }}
+                    >
+                      Hạng: {reputationInfo.tierLabel}
+                    </span>
+                  )}
+                  <span
+                    style={{
+                      padding: '2px 8px',
+                      borderRadius: '99px',
+                      background:
+                        (selectedUser.reputationScore ?? 100) >= 50 ? '#dcfce7' : '#fee2e2',
+                      color: (selectedUser.reputationScore ?? 100) >= 50 ? '#15803d' : '#b91c1c',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {(selectedUser.reputationScore ?? 100) >= 50
+                      ? 'Đủ điều kiện đấu giá (≥ 50)'
+                      : 'Bị chặn đấu giá (< 50)'}
+                  </span>
+                </div>
+              </div>
+              <div className="support-table-wrap">
+                <table className="support-table">
+                  <thead>
+                    <tr>
+                      <th>Biến động</th>
+                      <th>Điểm sau</th>
+                      <th>Lý do / Sự kiện</th>
+                      <th>Nguồn</th>
+                      <th>Thời gian</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {!reputationInfo || reputationInfo.items.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={5}
+                          style={{
+                            textAlign: 'center',
+                            padding: '16px',
+                            color: '#64748b',
+                            fontSize: '0.76rem',
+                          }}
+                        >
+                          Chưa có lịch sử vi phạm hoặc biến động điểm uy tín nào.
+                        </td>
+                      </tr>
+                    ) : (
+                      reputationInfo.items.slice(0, 10).map((entry) => (
+                        <tr key={entry.id}>
+                          <td>
+                            <strong style={{ color: entry.delta < 0 ? '#dc2626' : '#16a34a' }}>
+                              {entry.delta > 0 ? `+${entry.delta}` : entry.delta}
+                            </strong>
+                          </td>
+                          <td>{entry.scoreAfter} / 100</td>
+                          <td>{entry.reason}</td>
+                          <td>{entry.source || 'SYSTEM'}</td>
+                          <td>
+                            {entry.createdAt
+                              ? new Date(entry.createdAt).toLocaleString('vi-VN')
+                              : '—'}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             {/* Khu vực Xử lý yêu cầu hỗ trợ / Khiếu nại (Support Ticket & Dispute Resolution - BUG-02 Fix) */}
             <div style={{ marginTop: '24px' }}>
               <div
@@ -588,9 +741,27 @@ export function SupportUsersPage() {
                 <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b' }}>
                   Yêu cầu hỗ trợ & Tranh chấp đang mở ({userTickets.length})
                 </h3>
-                <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
-                  Quản lý khiếu nại theo chuẩn SRS 2.3 & 3.1.2
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                    Quản lý khiếu nại theo chuẩn SRS 2.3 & 3.1.2
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCreateTicketOpen(true)}
+                    style={{
+                      padding: '5px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid #bfdbfe',
+                      background: '#eff6ff',
+                      color: '#1d4ed8',
+                      fontSize: '0.72rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    + Tạo phiếu khiếu nại
+                  </button>
+                </div>
               </div>
 
               <div className="support-table-wrap">
@@ -608,119 +779,135 @@ export function SupportUsersPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {userTickets.map((ticket) => (
-                      <tr key={ticket.id}>
-                        <td>
-                          <strong>{ticket.id}</strong>
-                        </td>
-                        <td>{ticket.type}</td>
-                        <td>
-                          <Link
-                            className="support-inline-link"
-                            href={`/support/orders/${ticket.orderId}`}
-                          >
-                            {ticket.orderId}
-                          </Link>
-                        </td>
-                        <td style={{ maxWidth: '200px' }}>{ticket.reason}</td>
-                        <td>
-                          <span className={`support-priority ${slug(ticket.priority)}`}>
-                            {ticket.priority}
-                          </span>
-                        </td>
-                        <td>
-                          <span
-                            style={{
-                              padding: '3px 8px',
-                              borderRadius: '99px',
-                              fontSize: '0.65rem',
-                              fontWeight: 600,
-                              background:
-                                ticket.status === 'Đã phê duyệt'
-                                  ? '#dcfce7'
-                                  : ticket.status === 'Đã từ chối'
-                                    ? '#fee2e2'
-                                    : '#fef3c7',
-                              color:
-                                ticket.status === 'Đã phê duyệt'
-                                  ? '#15803d'
-                                  : ticket.status === 'Đã từ chối'
-                                    ? '#b91c1c'
-                                    : '#b45309',
-                            }}
-                          >
-                            {ticket.status}
-                          </span>
-                        </td>
-                        <td>{ticket.createdAt}</td>
-                        <td>
-                          <div style={{ display: 'flex', gap: '6px' }}>
-                            {ticket.status === 'Đang chờ xử lý' ? (
-                              <>
-                                <button
-                                  type="button"
-                                  disabled={resolvingTicketId === ticket.id}
-                                  onClick={() => handleTicketAction(ticket.id, 'approve')}
-                                  style={{
-                                    border: '1px solid #86efac',
-                                    background: '#f0fdf4',
-                                    color: '#166534',
-                                    fontSize: '0.65rem',
-                                    fontWeight: 600,
-                                    padding: '4px 8px',
-                                    borderRadius: '5px',
-                                    cursor:
-                                      resolvingTicketId === ticket.id ? 'not-allowed' : 'pointer',
-                                    opacity: resolvingTicketId === ticket.id ? 0.6 : 1,
-                                  }}
-                                >
-                                  {resolvingTicketId === ticket.id ? 'Đang duyệt...' : 'Duyệt'}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={resolvingTicketId === ticket.id}
-                                  onClick={() => handleTicketAction(ticket.id, 'reject')}
-                                  style={{
-                                    border: '1px solid #fca5a5',
-                                    background: '#fef2f2',
-                                    color: '#991b1b',
-                                    fontSize: '0.65rem',
-                                    fontWeight: 600,
-                                    padding: '4px 8px',
-                                    borderRadius: '5px',
-                                    cursor:
-                                      resolvingTicketId === ticket.id ? 'not-allowed' : 'pointer',
-                                    opacity: resolvingTicketId === ticket.id ? 0.6 : 1,
-                                  }}
-                                >
-                                  {resolvingTicketId === ticket.id ? 'Đang xử lý...' : 'Từ chối'}
-                                </button>
-                              </>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setReplyTargetTicket(ticket.id);
-                                  setReplyOpen(true);
-                                }}
-                                style={{
-                                  border: '1px solid #cbd5e1',
-                                  background: '#ffffff',
-                                  color: '#475569',
-                                  fontSize: '0.65rem',
-                                  fontWeight: 600,
-                                  padding: '4px 8px',
-                                  borderRadius: '5px',
-                                  cursor: 'pointer',
-                                }}
-                              >
-                                Phản hồi
-                              </button>
-                            )}
-                          </div>
+                    {userTickets.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={8}
+                          style={{
+                            textAlign: 'center',
+                            padding: '20px',
+                            color: '#64748b',
+                            fontSize: '0.78rem',
+                          }}
+                        >
+                          Chưa có yêu cầu hỗ trợ hoặc khiếu nại nào cho người dùng này.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      userTickets.map((ticket) => (
+                        <tr key={ticket.id}>
+                          <td>
+                            <strong>{ticket.id}</strong>
+                          </td>
+                          <td>{ticket.type}</td>
+                          <td>
+                            <Link
+                              className="support-inline-link"
+                              href={`/support/orders/${ticket.orderId}`}
+                            >
+                              {ticket.orderId}
+                            </Link>
+                          </td>
+                          <td style={{ maxWidth: '200px' }}>{ticket.reason}</td>
+                          <td>
+                            <span className={`support-priority ${slug(ticket.priority)}`}>
+                              {ticket.priority}
+                            </span>
+                          </td>
+                          <td>
+                            <span
+                              style={{
+                                padding: '3px 8px',
+                                borderRadius: '99px',
+                                fontSize: '0.65rem',
+                                fontWeight: 600,
+                                background:
+                                  ticket.status === 'Đã phê duyệt'
+                                    ? '#dcfce7'
+                                    : ticket.status === 'Đã từ chối'
+                                      ? '#fee2e2'
+                                      : '#fef3c7',
+                                color:
+                                  ticket.status === 'Đã phê duyệt'
+                                    ? '#15803d'
+                                    : ticket.status === 'Đã từ chối'
+                                      ? '#b91c1c'
+                                      : '#b45309',
+                              }}
+                            >
+                              {ticket.status}
+                            </span>
+                          </td>
+                          <td>{ticket.createdAt}</td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              {ticket.status === 'Đang chờ xử lý' ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={resolvingTicketId === ticket.id}
+                                    onClick={() => handleTicketAction(ticket.id, 'approve')}
+                                    style={{
+                                      border: '1px solid #86efac',
+                                      background: '#f0fdf4',
+                                      color: '#166534',
+                                      fontSize: '0.65rem',
+                                      fontWeight: 600,
+                                      padding: '4px 8px',
+                                      borderRadius: '5px',
+                                      cursor:
+                                        resolvingTicketId === ticket.id ? 'not-allowed' : 'pointer',
+                                      opacity: resolvingTicketId === ticket.id ? 0.6 : 1,
+                                    }}
+                                  >
+                                    {resolvingTicketId === ticket.id ? 'Đang duyệt...' : 'Duyệt'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={resolvingTicketId === ticket.id}
+                                    onClick={() => handleTicketAction(ticket.id, 'reject')}
+                                    style={{
+                                      border: '1px solid #fca5a5',
+                                      background: '#fef2f2',
+                                      color: '#991b1b',
+                                      fontSize: '0.65rem',
+                                      fontWeight: 600,
+                                      padding: '4px 8px',
+                                      borderRadius: '5px',
+                                      cursor:
+                                        resolvingTicketId === ticket.id ? 'not-allowed' : 'pointer',
+                                      opacity: resolvingTicketId === ticket.id ? 0.6 : 1,
+                                    }}
+                                  >
+                                    {resolvingTicketId === ticket.id ? 'Đang xử lý...' : 'Từ chối'}
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setReplyTargetTicket(ticket.id);
+                                    setReplyOpen(true);
+                                  }}
+                                  style={{
+                                    border: '1px solid #cbd5e1',
+                                    background: '#ffffff',
+                                    color: '#475569',
+                                    fontSize: '0.65rem',
+                                    fontWeight: 600,
+                                    padding: '4px 8px',
+                                    borderRadius: '5px',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  Phản hồi
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -728,6 +915,90 @@ export function SupportUsersPage() {
           </div>
         </section>
       )}
+
+      {/* Modal Dialog Tạo phiếu khiếu nại / hỗ trợ cho người dùng */}
+      <Dialog open={createTicketOpen} onOpenChange={setCreateTicketOpen}>
+        <DialogContent className="p-6 max-w-md w-full">
+          <DialogTitle className="text-lg font-bold text-slate-800">
+            Tạo phiếu hỗ trợ / khiếu nại
+          </DialogTitle>
+          <DialogDescription className="text-xs text-slate-500 mt-1">
+            Ghi nhận khiếu nại mới cho tài khoản{' '}
+            <strong>{selectedUser?.fullName || selectedUser?.email}</strong>:
+          </DialogDescription>
+          <form onSubmit={handleCreateUserTicket} className="mt-4 space-y-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Loại khiếu nại
+              </label>
+              <input
+                type="text"
+                value={newTicketType}
+                onChange={(e) => setNewTicketType(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900"
+                required
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Mã đơn liên quan (nếu có)
+                </label>
+                <input
+                  type="text"
+                  value={newTicketOrderId}
+                  onChange={(e) => setNewTicketOrderId(e.target.value)}
+                  placeholder="VD: ORD-20261126-..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Mức độ ưu tiên
+                </label>
+                <select
+                  value={newTicketPriority}
+                  onChange={(e) => setNewTicketPriority(e.target.value as any)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white"
+                >
+                  <option value="Cao">Cao</option>
+                  <option value="Trung bình">Trung bình</option>
+                  <option value="Thấp">Thấp</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Nội dung khiếu nại
+              </label>
+              <textarea
+                value={newTicketReason}
+                onChange={(e) => setNewTicketReason(e.target.value)}
+                rows={3}
+                placeholder="Mô tả chi tiết vấn đề khách hàng gặp phải..."
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 resize-none"
+                required
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setCreateTicketOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
+              >
+                Hủy
+              </button>
+              <button
+                type="submit"
+                disabled={creatingTicket}
+                className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-60"
+              >
+                {creatingTicket ? 'Đang tạo...' : 'Xác nhận tạo phiếu'}
+              </button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal Dialog Phản hồi người dùng (BUG-02 Fix) */}
       <Dialog open={replyOpen} onOpenChange={setReplyOpen}>
@@ -866,21 +1137,24 @@ export function SupportUsersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Dialog Chế tài vi phạm & Điều chỉnh Uy tín (Task 3) */}
+      {/* Modal Dialog Lập biên bản kiến nghị xử phạt gửi Admin (SRS 2.7) */}
       <Dialog
         open={penaltyOpen}
         onOpenChange={(open) => !isSubmittingPenalty && setPenaltyOpen(open)}
       >
         <DialogContent className="p-6 bg-white rounded-2xl shadow-2xl max-w-lg w-full">
           <DialogTitle className="text-lg font-bold text-slate-800">
-            Chế tài vi phạm & Quản lý Uy tín người dùng
+            Lập kiến nghị xử phạt gửi Admin
           </DialogTitle>
           <DialogDescription className="text-xs text-slate-500 mt-1">
-            Áp dụng chế tài đối với tài khoản{' '}
+            Theo phân quyền <strong>SRS 2.7</strong>, Nhân viên hỗ trợ chỉ xem lịch sử vi phạm và
+            lập biên bản chuyển lên <strong>Admin</strong> quyết định điều chỉnh điểm (
+            <code>USER.REPUTATION.ADJUST</code>) hoặc áp phạt (<code>REPUTATION.PENALTY.APPLY</code>
+            ) đối với{' '}
             <strong className="text-slate-700">
               {selectedUser?.fullName || selectedUser?.email}
-            </strong>{' '}
-            (ID: {selectedUser?.id}) theo quy chuẩn SRS 2.7 & 3.1.2.
+            </strong>
+            .
           </DialogDescription>
 
           {penaltyError && (
@@ -889,156 +1163,54 @@ export function SupportUsersPage() {
             </div>
           )}
 
-          {/* Tab chọn hình thức chế tài */}
-          <div className="flex border-b border-slate-200 mt-4 mb-4">
-            <button
-              type="button"
-              className={`pb-2 px-3 text-xs font-semibold border-b-2 transition ${
-                penaltyTab === 'REPUTATION'
-                  ? 'border-orange-600 text-orange-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
-              onClick={() => setPenaltyTab('REPUTATION')}
-            >
-              1. Điều chỉnh Điểm uy tín
-            </button>
-            <button
-              type="button"
-              className={`pb-2 px-3 text-xs font-semibold border-b-2 transition ${
-                penaltyTab === 'RESTRICTION'
-                  ? 'border-red-600 text-red-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
-              onClick={() => setPenaltyTab('RESTRICTION')}
-            >
-              2. Khóa tính năng vi phạm
-            </button>
-          </div>
-
-          {penaltyTab === 'REPUTATION' ? (
-            <form onSubmit={handleAdjustReputation} className="space-y-4">
-              <div className="bg-orange-50 border border-orange-200 p-3 rounded-lg text-xs text-orange-900">
-                Điểm uy tín hiện tại: <strong>{selectedUser?.reputationScore ?? 100} / 100</strong>.
-                Điểm dưới 50 sẽ tự động bị khóa quyền tạo phiên đấu giá.
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Số điểm điều chỉnh (Điểm âm để trừ phạt, điểm dương để thưởng):
-                </label>
-                <input
-                  type="number"
-                  value={reputationPoints}
-                  onChange={(e) => setReputationPoints(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 outline-none focus:border-sky-400"
-                  required
-                />
-                <p className="text-[11px] text-slate-500 mt-1">
-                  Ví dụ: -5 điểm (hủy đơn khi hết hàng), -10 điểm (giao hàng sai mô tả).
-                </p>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Lý do điều chỉnh (bắt buộc):
-                </label>
-                <textarea
-                  value={reputationReason}
-                  onChange={(e) => setReputationReason(e.target.value)}
-                  rows={2}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 outline-none focus:border-sky-400 resize-none"
-                  placeholder="Nhập chi tiết căn cứ và lý do vi phạm..."
-                  required
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  disabled={isSubmittingPenalty}
-                  onClick={() => setPenaltyOpen(false)}
-                  className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
-                >
-                  Hủy bỏ
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmittingPenalty || !reputationReason.trim()}
-                  className="px-4 py-2 bg-orange-600 text-white rounded-lg text-xs font-semibold hover:bg-orange-700 disabled:opacity-50 transition"
-                >
-                  {isSubmittingPenalty ? 'Đang lưu…' : 'Xác nhận điều chỉnh điểm'}
-                </button>
-              </div>
-            </form>
-          ) : (
-            <form onSubmit={handleRestrictFeatures} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Loại tính năng cần hạn chế / khóa:
-                </label>
-                <Select value={restrictionType} onValueChange={setRestrictionType}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Chọn loại hạn chế" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="BIDDING_LOCK">
-                      BIDDING_LOCK — Chặn tham gia đấu giá (Chống bom hàng)
-                    </SelectItem>
-                    <SelectItem value="LISTING_LOCK">
-                      LISTING_LOCK — Chặn đăng bán sản phẩm mới (Phạt người bán)
-                    </SelectItem>
-                    <SelectItem value="PAYMENT_RESTRICTION">
-                      PAYMENT_RESTRICTION — Chặn COD (Buộc thanh toán online)
-                    </SelectItem>
-                    <SelectItem value="FULL_RESTRICTION">
-                      FULL_RESTRICTION — Hạn chế toàn bộ giao dịch
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Thời hạn hạn chế (Số ngày):
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  max={365}
-                  value={restrictionDuration}
-                  onChange={(e) => setRestrictionDuration(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 outline-none focus:border-sky-400"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Lý do áp dụng chế tài:
-                </label>
-                <textarea
-                  value={restrictionReason}
-                  onChange={(e) => setRestrictionReason(e.target.value)}
-                  rows={2}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 outline-none focus:border-sky-400 resize-none"
-                  placeholder="Nhập căn cứ xử lý..."
-                  required
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  disabled={isSubmittingPenalty}
-                  onClick={() => setPenaltyOpen(false)}
-                  className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
-                >
-                  Hủy bỏ
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmittingPenalty || !restrictionReason.trim()}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 disabled:opacity-50 transition"
-                >
-                  {isSubmittingPenalty ? 'Đang lưu…' : 'Xác nhận áp dụng chế tài'}
-                </button>
-              </div>
-            </form>
-          )}
+          <form onSubmit={handleEscalatePenaltyToAdmin} className="mt-4 space-y-4">
+            <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg text-xs text-amber-900">
+              Điểm uy tín hiện tại: <strong>{selectedUser?.reputationScore ?? 100} / 100</strong>.
+              Ngưỡng tham gia đấu giá: Buyer ≥ 40, Seller ≥ 50.
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Mức điểm đề xuất Admin xem xét:
+              </label>
+              <input
+                type="number"
+                value={suggestedPoints}
+                onChange={(e) => setSuggestedPoints(Number(e.target.value))}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 outline-none focus:border-sky-400"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Căn cứ vi phạm & Nội dung biên bản gửi Admin (bắt buộc):
+              </label>
+              <textarea
+                value={reputationReason}
+                onChange={(e) => setReputationReason(e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 outline-none focus:border-sky-400 resize-none"
+                placeholder="Mô tả chi tiết bằng chứng vi phạm để Admin phê duyệt..."
+                required
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isSubmittingPenalty}
+                onClick={() => setPenaltyOpen(false)}
+                className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmittingPenalty || !reputationReason.trim()}
+                className="px-4 py-2 bg-orange-600 text-white rounded-lg text-xs font-semibold hover:bg-orange-700 disabled:opacity-50 transition"
+              >
+                {isSubmittingPenalty ? 'Đang gửi…' : 'Gửi kiến nghị lên Admin'}
+              </button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
 

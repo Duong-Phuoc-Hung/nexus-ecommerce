@@ -9,6 +9,7 @@ import { ProcessCarrierWebhookUseCase } from '../../../application/use-cases/Pro
 import { CreateShipmentUseCase } from '../../../application/use-cases/CreateShipmentUseCase';
 import { RequestRedeliveryUseCase } from '../../../application/use-cases/RequestRedeliveryUseCase';
 import { ConfirmReturnUseCase } from '../../../application/use-cases/ConfirmReturnUseCase';
+import { ICommerceOrderClient } from '../../../infrastructure/clients/CommerceOrderClient';
 import { ShipmentNotFoundException } from '../../../domain/exceptions/ShipmentNotFoundException';
 import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
 import { PrismaClientWrapper } from '../../../infrastructure/database/PrismaClient';
@@ -24,6 +25,7 @@ export class ShipmentController {
     private readonly createShipmentUseCase?: CreateShipmentUseCase,
     private readonly requestRedeliveryUseCase?: RequestRedeliveryUseCase,
     private readonly confirmReturnUseCase?: ConfirmReturnUseCase,
+    private readonly commerceOrderClient?: ICommerceOrderClient,
   ) {}
 
   public async listShipments(req: Request, res: Response): Promise<void> {
@@ -46,6 +48,40 @@ export class ShipmentController {
         limit,
       });
 
+      // Tự động cấp phát / hiển thị vận đơn Sandbox nếu tra cứu theo mã đơn hàng mà chưa từng lưu trong phân hệ
+      if (
+        result.total === 0 &&
+        this.createShipmentUseCase &&
+        ((query && (query.trim().toUpperCase().startsWith('ORD') || query.trim().length >= 8)) ||
+          (orderId && orderId.trim().toUpperCase().startsWith('ORD')))
+      ) {
+        const lookupOrderCode = (orderId || query)!.replace(/^[#]/, '').trim();
+        try {
+          const autoShipment = await this.createShipmentUseCase.execute({
+            orderId: lookupOrderCode,
+            carrier: carrier || 'GHN',
+            shippingAddress: 'Địa chỉ nhận hàng (Theo đơn ' + lookupOrderCode + ')',
+            status: 'READY_TO_PICK',
+          });
+          if (autoShipment) {
+            res.status(200).json({
+              success: true,
+              data: [autoShipment],
+              pagination: {
+                total: 1,
+                page: 1,
+                limit,
+                totalPages: 1,
+              },
+            });
+            return;
+          }
+        } catch (autoErr) {
+          console.warn('[ShipmentController.listShipments] Auto-provision warning:', autoErr);
+        }
+      }
+
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       res.status(200).json({
         success: true,
         data: result.items,
@@ -65,10 +101,88 @@ export class ShipmentController {
     }
   }
 
+  private async verifyBuyerOrderAccess(
+    req: Request,
+    orderId: string,
+  ): Promise<{ allowed: boolean; status: number; error?: string }> {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user || user.role !== 'BUYER') {
+      return { allowed: true, status: 200 };
+    }
+    const cleanOrderId = String(orderId || '').trim();
+    if (!cleanOrderId) {
+      return { allowed: false, status: 403, error: 'Bạn không có quyền truy cập vận đơn này.' };
+    }
+    const commerceBase = (
+      process.env.COMMERCE_SERVICE_URL ||
+      `http://127.0.0.1:${process.env.COMMERCE_SERVICE_PORT || 4003}`
+    ).replace(/\/$/, '');
+    try {
+      const response = await fetch(
+        `${commerceBase}/api/v1/orders/${encodeURIComponent(cleanOrderId)}`,
+        {
+          headers: {
+            Authorization: String(req.headers.authorization || ''),
+          },
+          signal: AbortSignal.timeout(3000),
+        },
+      );
+      if (response.status === 403) {
+        return {
+          allowed: false,
+          status: 403,
+          error: 'Bạn không có quyền truy cập vận đơn của đơn hàng khác.',
+        };
+      }
+      if (response.status === 404) {
+        if (process.env.USE_IN_MEMORY_DB === 'true') {
+          return { allowed: true, status: 200 };
+        }
+        return {
+          allowed: false,
+          status: 403,
+          error: 'Không xác minh được quyền sở hữu đơn hàng của vận đơn này.',
+        };
+      }
+      if (response.ok) {
+        const body = (await response.json().catch(() => ({}))) as {
+          data?: { buyerId?: string };
+        };
+        if (body.data?.buyerId && body.data.buyerId !== user.sub) {
+          return {
+            allowed: false,
+            status: 403,
+            error: 'Bạn không có quyền truy cập vận đơn của đơn hàng khác.',
+          };
+        }
+        return { allowed: true, status: 200 };
+      }
+    } catch {
+      if (process.env.USE_IN_MEMORY_DB === 'true') {
+        return { allowed: true, status: 200 };
+      }
+    }
+    return {
+      allowed: false,
+      status: 403,
+      error: 'Không xác minh được quyền sở hữu vận đơn.',
+    };
+  }
+
   public async getById(req: Request, res: Response): Promise<void> {
     try {
       const shipmentId = (req.params.id || 'shp_01hqz222trk') as string;
       const shipment = await this.getShipmentDetailUseCase.execute(shipmentId);
+      const targetOrderId = String((shipment as any)?.orderId || (shipment as any)?.order || '');
+      const access = await this.verifyBuyerOrderAccess(req, targetOrderId);
+      if (!access.allowed) {
+        res.status(access.status).json({
+          success: false,
+          error: access.error || 'Bạn không có quyền truy cập vận đơn này.',
+        });
+        return;
+      }
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       res.status(200).json({
         success: true,
         data: shipment,
@@ -226,13 +340,29 @@ export class ShipmentController {
 
   public async getByOrderId(req: Request, res: Response): Promise<void> {
     try {
-      const orderId = String(req.params.orderId || '').trim();
+      const orderId = String(req.params.orderId || '')
+        .replace(/^[#]/, '')
+        .replace(/^NEX-TRK-/i, '')
+        .replace(/[\\/]+$/g, '')
+        .trim();
+      const access = await this.verifyBuyerOrderAccess(req, orderId);
+      if (!access.allowed) {
+        res.status(access.status).json({
+          success: false,
+          error: access.error || 'Bạn không có quyền truy cập vận đơn của đơn hàng khác.',
+        });
+        return;
+      }
       let shipment: any;
       try {
         shipment = await this.getShipmentDetailUseCase.execute(orderId);
       } catch (err) {
-        if (err instanceof ShipmentNotFoundException && this.createShipmentUseCase) {
-          // Tự động cấp phát vận đơn Sandbox cho đơn hàng trong hệ thống nếu chưa từng tạo
+        if (
+          err instanceof ShipmentNotFoundException &&
+          this.createShipmentUseCase &&
+          (orderId.startsWith('NX-ORD-AUTO') || process.env.NODE_ENV !== 'production')
+        ) {
+          // Tự động cấp phát vận đơn Sandbox cho đơn hàng trong môi trường phát triển nếu chưa từng tạo
           shipment = await this.createShipmentUseCase.execute({
             orderId,
             carrier: 'GHN',
@@ -243,6 +373,7 @@ export class ShipmentController {
           throw err;
         }
       }
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       res.status(200).json({
         success: true,
         data: shipment,
@@ -478,6 +609,51 @@ export class ShipmentController {
       res.status(400).json({
         success: false,
         error: error.message || 'Không thể xác nhận hoàn trả đơn hàng.',
+      });
+    }
+  }
+
+  /**
+   * POST /api/v1/fulfillments/shipments/:id/confirm-cod
+   * Xác nhận đã thu tiền COD cho đơn hàng liên kết với vận đơn
+   */
+  public async confirmCodPayment(req: Request, res: Response): Promise<void> {
+    try {
+      const shipmentId = req.params.id as string;
+      const { note } = req.body || {};
+
+      const shipment = await this.getShipmentDetailUseCase.execute(shipmentId);
+      if (!shipment) {
+        res.status(404).json({ success: false, error: `Không tìm thấy vận đơn "${shipmentId}".` });
+        return;
+      }
+
+      const targetOrderId =
+        (shipment as any).orderId || (shipment as any).order || (shipment as any).id;
+      if (this.commerceOrderClient && targetOrderId) {
+        await this.commerceOrderClient.confirmCodPayment?.(
+          targetOrderId,
+          note || 'Xác nhận thu tiền COD từ Support Simulator',
+        );
+      }
+
+      res.status(200).json({
+        success: true,
+        message: `Đã xác nhận thu tiền COD cho đơn hàng ${targetOrderId} thành công.`,
+        data: {
+          shipmentId: shipment.id,
+          orderId: targetOrderId,
+          codPaid: true,
+        },
+      });
+    } catch (error: any) {
+      if (error instanceof ShipmentNotFoundException) {
+        res.status(404).json({ success: false, error: error.message });
+        return;
+      }
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Không thể xác nhận thanh toán COD.',
       });
     }
   }

@@ -318,6 +318,14 @@ export class InMemoryUserRepository implements IUserRepository {
     this.users.set(user.id, user);
   }
 
+  public async updateReputationScore(userId: string, score: number): Promise<void> {
+    const resolvedId = this.legacyAliases.get(userId) ?? userId;
+    const user = this.users.get(resolvedId);
+    if (user) {
+      user.setReputationScore(score);
+    }
+  }
+
   public async delete(id: string): Promise<void> {
     const resolvedId = this.legacyAliases.get(id) ?? id;
     this.users.delete(resolvedId);

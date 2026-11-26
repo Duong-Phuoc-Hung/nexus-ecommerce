@@ -39,6 +39,7 @@ export interface CatalogProduct {
 export interface ICatalogClient {
   findProduct(productId: string): Promise<CatalogProduct | null>;
   deductStock?(productId: string, quantity: number, orderId: string): Promise<boolean>;
+  restoreStock?(productId: string, quantity: number, orderId: string): Promise<boolean>;
 }
 
 export interface IShippingQuote {
@@ -82,6 +83,7 @@ export interface RefundRequest {
   orderCode?: number | string;
   amount: number;
   reason?: string;
+  idempotencyKey?: string;
 }
 
 export interface RefundResponse {
@@ -89,6 +91,19 @@ export interface RefundResponse {
   status: 'PENDING' | 'SUCCESS' | 'FAILED';
   amount: number;
   completedAt: Date;
+  providerConfirmed?: boolean;
+  needsReconciliation?: boolean;
+  demoMode?: boolean;
+  errorCode?: string;
+  errorMessage?: string;
+}
+
+export interface RefundReconciliationResult {
+  status: 'PENDING' | 'SUCCESS' | 'FAILED' | 'UNKNOWN';
+  providerConfirmed: boolean;
+  refundTransactionId?: string;
+  completedAt?: Date;
+  errorMessage?: string;
 }
 
 export interface IPaymentGateway {
@@ -97,6 +112,7 @@ export interface IPaymentGateway {
   verifyWebhook(body: unknown): PaymentWebhook | null;
   getPaymentStatus?(orderCode: number): Promise<{ status: string; amountPaid: number } | null>;
   executeRefund?(request: RefundRequest): Promise<RefundResponse>;
+  getRefundStatus?(refundTransactionId: string): Promise<RefundReconciliationResult>;
 }
 
 export interface PricedLine {
@@ -184,7 +200,10 @@ export interface PaymentRecord {
 
 export interface CreateOrderParams {
   buyerId: string;
+  buyerName?: string;
+  buyerEmail?: string;
   sellerId: string;
+  sellerName?: string;
   items: PricedLine[];
   stockByProduct: Record<string, number>;
   shippingAddress: ShippingAddress;
@@ -194,6 +213,7 @@ export interface CreateOrderParams {
   shippingFee: number;
   totalAmount: number;
   paymentMethod?: 'PAYOS' | 'COD';
+  orderType?: 'AUCTION' | 'STANDARD';
   idempotencyKey?: string;
   requestHash: string;
   orderExpiresAt: Date;
@@ -204,6 +224,21 @@ export interface CreateOrderParams {
   shippingCarrier?: string;
   shippingServiceName?: string;
   estimatedDeliveryAt?: Date;
+}
+
+export interface INotificationClient {
+  sendInAppNotification(params: {
+    recipientId: string;
+    channel?: string;
+    title: string;
+    body: string;
+    data?: Record<string, unknown>;
+  }): Promise<boolean>;
+  sendOrderConfirmationEmail?(params: {
+    email: string;
+    title: string;
+    body: string;
+  }): Promise<boolean>;
 }
 
 export type ApplyPaymentOutcome =

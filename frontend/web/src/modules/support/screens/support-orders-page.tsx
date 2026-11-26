@@ -16,6 +16,8 @@ import {
 
 export function getOrderStatusLabel(status: string): string {
   switch (status) {
+    case 'PENDING_PAYMENT':
+      return 'Chờ thanh toán';
     case 'PENDING':
       return 'Chờ xử lý';
     case 'PAID':
@@ -54,7 +56,7 @@ export function SupportOrdersPage() {
     ordersApi
       .list(
         {
-          q: search.trim() || undefined,
+          q: search.replace(/^[#]/, '').trim() || undefined,
           status: status !== 'ALL' ? status : undefined,
           limit: 50,
         },
@@ -102,6 +104,7 @@ export function SupportOrdersPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">Tất cả trạng thái</SelectItem>
+                  <SelectItem value="PENDING_PAYMENT">Chờ thanh toán</SelectItem>
                   <SelectItem value="PENDING">Chờ xử lý</SelectItem>
                   <SelectItem value="PAID">Đã thanh toán (Chờ giao)</SelectItem>
                   <SelectItem value="PROCESSING">Đang xử lý</SelectItem>

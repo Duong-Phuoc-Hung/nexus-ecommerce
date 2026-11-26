@@ -1,5 +1,10 @@
 import type { Pool } from 'pg';
 import { createAccountExtensionsRoutes } from './interfaces/http/routes/AccountExtensionsRoutes';
+import {
+  createAdminRoleRoutes,
+  createAdminUserRoutes,
+} from './interfaces/http/routes/AdminUserRoutes';
+import { createAdminSystemRoutes } from './interfaces/http/routes/AdminSystemRoutes';
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import { InMemoryUserRepository } from './infrastructure/repositories/InMemoryUserRepository';
@@ -41,7 +46,8 @@ import {
   createBuyerSellerApplicationRoutes,
 } from './interfaces/http/routes/SellerApplicationRoutes';
 import { authTokenStore } from './infrastructure/security/AuthTokenStore';
-import { getRolePermissions } from './infrastructure/security/authorization';
+import { reputationLedgerStore } from './infrastructure/state/ReputationLedgerStore';
+import { attachPermissionPool, getRolePermissions } from './infrastructure/security/authorization';
 import { passwordResetTokenStore } from './infrastructure/security/PasswordResetTokenStore';
 import { BcryptPasswordHasher } from './infrastructure/security/BcryptPasswordHasher';
 import { JwtTokenService } from './infrastructure/security/JwtTokenService';
@@ -106,6 +112,7 @@ export function createApplication(options?: CreateApplicationOptions): Applicati
   const requestPasswordResetUseCase = new RequestPasswordResetUseCase(
     userRepository,
     passwordResetTokenStore,
+    notificationClient,
   );
   const resetPasswordUseCase = new ResetPasswordUseCase(
     userRepository,
@@ -189,15 +196,34 @@ export function createApplication(options?: CreateApplicationOptions): Applicati
     sendRegistrationOtpUseCase,
     adjustUserReputationUseCase,
     restrictUserFeaturesUseCase,
+    userRepository,
+    tokenService,
   );
 
   const sellerApplicationController = new SellerApplicationController(sellerApplicationService);
 
-  app.use('/api/v1/auth', createAuthRoutes(userController));
+  if (userRepository instanceof PostgresUserRepository) {
+    const pool = userRepository.getPool();
+    authTokenStore.attachPool(pool);
+    passwordResetTokenStore.attachPool(pool);
+    attachPermissionPool(pool);
+    reputationLedgerStore.attachPool(pool);
+    app.use('/api/v1/auth', createAdminRoleRoutes(userRepository));
+    app.use('/api/v1/users', createAdminUserRoutes(userRepository, getUserProfileUseCase));
+  } else {
+    authTokenStore.attachPool(undefined);
+    passwordResetTokenStore.attachPool(undefined);
+    attachPermissionPool(undefined);
+    reputationLedgerStore.attachPool(undefined);
+  }
   const accountExtensionsRouter = createAccountExtensionsRoutes(userRepository, passwordHasher);
   app.use('/api/v1/users', accountExtensionsRouter);
   app.use('/api/v1', accountExtensionsRouter);
+  app.use('/api/v1/auth', createAuthRoutes(userController));
   app.use('/api/v1/users', createUserRoutes(userController));
+  if (userRepository instanceof PostgresUserRepository) {
+    app.use('/api/v1', createAdminSystemRoutes(userRepository.getPool(), passwordHasher));
+  }
   app.use(
     '/api/v1/seller-applications',
     createBuyerSellerApplicationRoutes(sellerApplicationController),

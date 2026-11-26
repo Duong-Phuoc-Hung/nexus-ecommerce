@@ -66,6 +66,48 @@ export class SubmitSellerEvidenceUseCase {
     caseItem.submitSellerEvidence(evidence);
     await this.supportCaseRepository.save(caseItem);
 
+    // Gửi thông báo cho Người mua biết Người bán đã nộp bằng chứng đối chất (SRS 3.1.2)
+    await this.notifyBuyerOfSellerEvidence(caseItem);
+
     return caseItem.toDisputeDto();
+  }
+
+  private async notifyBuyerOfSellerEvidence(caseItem: any) {
+    const notificationUrl = (
+      process.env.NOTIFICATION_SERVICE_URL ||
+      (process.env.NODE_ENV === 'production' || process.env.DOCKER_ENV
+        ? 'http://notification-service:4006'
+        : `http://localhost:${process.env.NOTIFICATION_SERVICE_PORT || 4006}`)
+    ).replace(/\/$/, '');
+
+    try {
+      const title = `Người bán đã phản hồi khiếu nại đơn #${caseItem.orderCode || caseItem.orderId}`;
+      const body = `Gian hàng đã nộp tài liệu đối chứng (hình ảnh/video đóng gói). Trọng tài Nexus đang tiến hành đối soát.`;
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3000);
+
+      await fetch(`${notificationUrl}/api/v1/notifications/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipientId: caseItem.userId,
+          channel: 'DISPUTE_RESOLUTION',
+          title,
+          body,
+          data: {
+            caseId: caseItem.id,
+            orderId: caseItem.orderId,
+            orderCode: caseItem.orderCode,
+            status: 'IN_PROGRESS',
+          },
+        }),
+        signal: controller.signal,
+      }).catch(() => null);
+
+      clearTimeout(timer);
+    } catch (err: any) {
+      console.warn('[SubmitSellerEvidenceUseCase] Gửi thông báo thất bại:', err?.message || err);
+    }
   }
 }

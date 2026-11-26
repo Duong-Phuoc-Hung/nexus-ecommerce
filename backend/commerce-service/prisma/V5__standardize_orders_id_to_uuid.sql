@@ -9,6 +9,8 @@ ALTER TABLE IF EXISTS commerce_payments DROP CONSTRAINT IF EXISTS fk_payment_ord
 ALTER TABLE IF EXISTS commerce_invoices DROP CONSTRAINT IF EXISTS fk_invoice_order;
 ALTER TABLE IF EXISTS commerce_checkout_idempotency DROP CONSTRAINT IF EXISTS commerce_checkout_idempotency_order_id_fkey;
 ALTER TABLE IF EXISTS commerce_stock_reservations DROP CONSTRAINT IF EXISTS commerce_stock_reservations_order_id_fkey;
+ALTER TABLE IF EXISTS commerce_checkout_idempotency DROP CONSTRAINT IF EXISTS fk_checkout_idempotency_order;
+ALTER TABLE IF EXISTS commerce_stock_reservations DROP CONSTRAINT IF EXISTS fk_stock_reservations_order;
 
 -- 2. Convert commerce_orders.id to VARCHAR(36)
 ALTER TABLE commerce_orders ALTER COLUMN id TYPE VARCHAR(36) USING id::text;
@@ -36,45 +38,67 @@ BEGIN
   END IF;
 END $$;
 
+-- 3.5. Chuẩn hóa ID mẫu của các đơn hàng seed sang UUIDv7 RFC 9562 (TRƯỚC khi gắn lại FK)
+DO $$
+DECLARE
+  rec RECORD;
+BEGIN
+  FOR rec IN
+    SELECT * FROM (VALUES
+      ('NX-ORD-8021', '019310c2-5501-7000-8000-000000008021'),
+      ('NX-ORD-8017', '019310c2-5501-7000-8000-000000008017'),
+      ('NX-ORD-8009', '019310c2-5501-7000-8000-000000008009'),
+      ('NX-ORD-7998', '019310c2-5501-7000-8000-000000007998'),
+      ('ord_01hqz555abc', '019310c2-5501-7000-8000-00000000555a'),
+      ('NX-ORD-555A', '019310c2-5501-7000-8000-00000000555a')
+    ) AS m(code, new_id)
+  LOOP
+    UPDATE commerce_order_items SET order_id = rec.new_id
+    WHERE order_id IN (SELECT id FROM commerce_orders WHERE order_code = rec.code AND id <> rec.new_id);
+
+    UPDATE commerce_payments SET order_id = rec.new_id
+    WHERE order_id IN (SELECT id FROM commerce_orders WHERE order_code = rec.code AND id <> rec.new_id);
+
+    UPDATE commerce_invoices SET order_id = rec.new_id
+    WHERE order_id IN (SELECT id FROM commerce_orders WHERE order_code = rec.code AND id <> rec.new_id);
+
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'commerce_checkout_idempotency') THEN
+      UPDATE commerce_checkout_idempotency SET order_id = rec.new_id
+      WHERE order_id IN (SELECT id FROM commerce_orders WHERE order_code = rec.code AND id <> rec.new_id);
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'commerce_stock_reservations') THEN
+      UPDATE commerce_stock_reservations SET order_id = rec.new_id
+      WHERE order_id IN (SELECT id FROM commerce_orders WHERE order_code = rec.code AND id <> rec.new_id);
+    END IF;
+
+    UPDATE commerce_orders SET id = rec.new_id WHERE order_code = rec.code AND id <> rec.new_id;
+  END LOOP;
+END $$;
+
 -- 4. Re-establish foreign key constraints
+ALTER TABLE commerce_order_items DROP CONSTRAINT IF EXISTS fk_order_item_order;
 ALTER TABLE commerce_order_items 
   ADD CONSTRAINT fk_order_item_order FOREIGN KEY (order_id) REFERENCES commerce_orders(id) ON DELETE CASCADE;
 
+ALTER TABLE commerce_payments DROP CONSTRAINT IF EXISTS fk_payment_order;
 ALTER TABLE commerce_payments 
   ADD CONSTRAINT fk_payment_order FOREIGN KEY (order_id) REFERENCES commerce_orders(id) ON DELETE RESTRICT;
 
+ALTER TABLE commerce_invoices DROP CONSTRAINT IF EXISTS fk_invoice_order;
 ALTER TABLE commerce_invoices 
   ADD CONSTRAINT fk_invoice_order FOREIGN KEY (order_id) REFERENCES commerce_orders(id) ON DELETE RESTRICT;
 
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'commerce_checkout_idempotency') THEN
+    ALTER TABLE commerce_checkout_idempotency DROP CONSTRAINT IF EXISTS fk_checkout_idempotency_order;
     ALTER TABLE commerce_checkout_idempotency 
       ADD CONSTRAINT fk_checkout_idempotency_order FOREIGN KEY (order_id) REFERENCES commerce_orders(id) ON DELETE CASCADE;
   END IF;
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'commerce_stock_reservations') THEN
+    ALTER TABLE commerce_stock_reservations DROP CONSTRAINT IF EXISTS fk_stock_reservations_order;
     ALTER TABLE commerce_stock_reservations 
       ADD CONSTRAINT fk_stock_reservations_order FOREIGN KEY (order_id) REFERENCES commerce_orders(id) ON DELETE CASCADE;
   END IF;
 END $$;
-
--- 5. Chuẩn hóa ID mẫu của các đơn hàng seed sang UUIDv7 RFC 9562
-UPDATE commerce_orders 
-SET id = '019310c2-5501-7000-8000-000000008021' 
-WHERE order_code = 'NX-ORD-8021';
-
-UPDATE commerce_orders 
-SET id = '019310c2-5501-7000-8000-000000008017' 
-WHERE order_code = 'NX-ORD-8017';
-
-UPDATE commerce_orders 
-SET id = '019310c2-5501-7000-8000-000000008009' 
-WHERE order_code = 'NX-ORD-8009';
-
-UPDATE commerce_orders 
-SET id = '019310c2-5501-7000-8000-000000007998' 
-WHERE order_code = 'NX-ORD-7998';
-
-UPDATE commerce_orders 
-SET id = '019310c2-5501-7000-8000-00000000555a' 
-WHERE order_code = 'ord_01hqz555abc' OR order_code = 'NX-ORD-555A';

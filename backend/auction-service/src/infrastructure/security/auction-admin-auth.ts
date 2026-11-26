@@ -6,6 +6,7 @@ export interface AuthenticatedUser {
   email: string;
   role: string;
   fullName?: string;
+  permissions?: string[];
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -13,24 +14,12 @@ export interface AuthenticatedRequest extends Request {
 }
 
 function getJwtSecrets(): string[] {
-  const isProd = process.env.NODE_ENV === 'production';
-  const envSecrets = [process.env.JWT_ACCESS_SECRET, process.env.JWT_SECRET].filter(
-    Boolean,
-  ) as string[];
-
-  if (isProd) {
-    if (envSecrets.length === 0) {
-      throw new Error('JWT_ACCESS_SECRET or JWT_SECRET must be configured in production.');
-    }
-    // Trong production: Tuyệt đối từ chối các khóa dev hard-code
-    return envSecrets;
-  }
-
-  return [
-    ...envSecrets,
-    'nexus_super_secret_jwt_access_key_min_32_chars_local_dev',
-    'nexus-dev-secret',
-  ].filter(Boolean) as string[];
+  const configured = [process.env.JWT_ACCESS_SECRET, process.env.JWT_SECRET].filter(
+    (secret): secret is string => Boolean(secret),
+  );
+  if (configured.length) return [configured[0]];
+  if (process.env.NODE_ENV === 'production') return [];
+  return ['nexus_super_secret_jwt_access_key_min_32_chars_local_dev'];
 }
 
 // Xác thực chữ ký và tính hợp lệ của JWT token
@@ -40,6 +29,7 @@ export function verifyJwtToken(token: string): AuthenticatedUser | null {
     if (parts.length !== 3) return null;
 
     const [header, payloadPart, signature] = parts;
+    if (JSON.parse(Buffer.from(header, 'base64url').toString()).alg !== 'HS256') return null;
     const secrets = getJwtSecrets();
 
     let isValid = false;
@@ -73,6 +63,11 @@ export function verifyJwtToken(token: string): AuthenticatedUser | null {
       id: String(userId),
       email: payload.email || '',
       role: String(role).toUpperCase(),
+      permissions: Array.isArray(payload.privileges)
+        ? payload.privileges
+        : Array.isArray(payload.permissions)
+          ? payload.permissions
+          : [],
       fullName: payload.fullName || payload.name || 'Nexus User',
     };
   } catch {
@@ -107,6 +102,15 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 }
 
 // Phân quyền dừng khẩn cấp / hủy phiên: ADMIN, SUPPORT_STAFF hoặc SELLER (chủ phiên)
+export function requireSettlementPermission(req: Request, res: Response, next: NextFunction): void {
+  const user = (req as AuthenticatedRequest).user;
+  if (user?.role === 'ADMIN' && user.permissions?.includes('AUCTION.SETTLE')) {
+    next();
+    return;
+  }
+  res.status(403).json({ success: false, error: 'Thiếu quyền chốt phiên đấu giá.' });
+}
+
 export function requireAuctionCancel(req: Request, res: Response, next: NextFunction): void {
   const user = (req as AuthenticatedRequest).user;
   if (!user) {

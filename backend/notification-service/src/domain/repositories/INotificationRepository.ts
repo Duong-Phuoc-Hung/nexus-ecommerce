@@ -1,6 +1,7 @@
 import { Notification } from '../entities/Notification';
 
 export interface INotificationRepository {
+  findAll(): Promise<Notification[]>;
   findById(id: string): Promise<Notification | null>;
   findByRecipientId(recipientId: string): Promise<Notification[]>;
   save(notification: Notification): Promise<void>;

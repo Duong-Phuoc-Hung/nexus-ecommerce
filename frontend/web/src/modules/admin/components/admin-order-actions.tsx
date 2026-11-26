@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { Ban, CheckCircle2, RefreshCw, RotateCcw, ShieldAlert, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -14,12 +15,13 @@ import {
 } from '@/components/ui/select';
 import { requestApi } from '@/lib/axios/api-client';
 import { unwrap, userMessage } from '@/lib/axios/http';
+import { AuctionOrderSourceBanner } from '@/modules/commerce/components/auction-order-badge';
 
 type Row = Record<string, unknown>;
 
 const ORDER_STATUS_TRANSITIONS: Record<string, Array<{ value: string; label: string }>> = {
   PENDING: [
-    { value: 'CONFIRMED', label: 'Xác nhận đơn' },
+    { value: 'PAID', label: 'Đã thanh toán' },
     { value: 'PROCESSING', label: 'Đang chuẩn bị hàng' },
   ],
   PENDING_PAYMENT: [{ value: 'PAID', label: 'Đã thanh toán' }],
@@ -27,13 +29,10 @@ const ORDER_STATUS_TRANSITIONS: Record<string, Array<{ value: string; label: str
     { value: 'PROCESSING', label: 'Đang xử lý' },
     { value: 'SHIPPED', label: 'Đang giao hàng' },
   ],
-  CONFIRMED: [
-    { value: 'PROCESSING', label: 'Đang xử lý' },
-    { value: 'SHIPPED', label: 'Đang giao hàng' },
-  ],
   PROCESSING: [{ value: 'SHIPPED', label: 'Đang giao hàng' }],
   SHIPPED: [{ value: 'DELIVERED', label: 'Đã giao thành công' }],
   DELIVERED: [{ value: 'COMPLETED', label: 'Hoàn tất đơn hàng' }],
+  RETURN_PENDING: [{ value: 'DELIVERED', label: 'Khôi phục đã giao (từ chối trả hàng)' }],
 };
 
 export function AdminOrderActions({ data, onSaved }: { data: Row; onSaved: () => void }) {
@@ -42,7 +41,12 @@ export function AdminOrderActions({ data, onSaved }: { data: Row; onSaved: () =>
   const totalAmount = Number(data.totalAmount ?? data.total ?? 0);
 
   const [refundInfo, setRefundInfo] = useState<Row | null>(null);
+  const [linkedCases, setLinkedCases] = useState<Row[]>([]);
+  const [casesLoadError, setCasesLoadError] = useState('');
   const [loadingRefund, setLoadingRefund] = useState(false);
+
+  const buyerId = String(data.buyerId ?? '');
+  const sellerId = String(data.sellerId ?? '');
 
   const [mode, setMode] = useState<'none' | 'status' | 'cancel' | 'refund' | 'reject-refund'>(
     'none',
@@ -59,15 +63,32 @@ export function AdminOrderActions({ data, onSaved }: { data: Row; onSaved: () =>
   const loadRefundStatus = useCallback(async () => {
     if (!orderId) return;
     setLoadingRefund(true);
-    try {
-      const raw = await requestApi(`/orders/${encodeURIComponent(orderId)}/refund/status`);
-      const parsed = unwrap<Row>(raw);
+    setCasesLoadError('');
+    const [refundRes, casesRes] = await Promise.allSettled([
+      requestApi(`/orders/${encodeURIComponent(orderId)}/refund/status`),
+      requestApi(`/support/cases/by-order/${encodeURIComponent(orderId)}`),
+    ]);
+
+    if (refundRes.status === 'fulfilled') {
+      const parsed = unwrap<Row>(refundRes.value);
       setRefundInfo(parsed && typeof parsed === 'object' ? parsed : null);
-    } catch {
+    } else {
       setRefundInfo(null);
-    } finally {
-      setLoadingRefund(false);
     }
+
+    if (casesRes.status === 'fulfilled') {
+      const parsed = unwrap<unknown>(casesRes.value);
+      const list = Array.isArray(parsed)
+        ? parsed
+        : parsed && typeof parsed === 'object'
+          ? [parsed]
+          : [];
+      setLinkedCases(list.filter((x): x is Row => Boolean(x && typeof x === 'object')));
+    } else {
+      setLinkedCases([]);
+      setCasesLoadError(userMessage(casesRes.reason));
+    }
+    setLoadingRefund(false);
   }, [orderId]);
 
   useEffect(() => {
@@ -97,7 +118,7 @@ export function AdminOrderActions({ data, onSaved }: { data: Row; onSaved: () =>
       if (mode === 'status') {
         await requestApi(`/orders/${encodeURIComponent(orderId)}/status`, {
           method: 'PATCH',
-          body: { status: nextStatus, reason: reason.trim() || undefined },
+          body: { status: nextStatus, note: reason.trim() || undefined },
         });
         setNotice(`Đã chuyển trạng thái đơn sang ${nextStatus}.`);
       } else if (mode === 'cancel') {
@@ -110,20 +131,26 @@ export function AdminOrderActions({ data, onSaved }: { data: Row; onSaved: () =>
         const parsedAmount = Number(refundAmount);
         const body = {
           reason: reason.trim(),
-          ...(Number.isFinite(parsedAmount) && parsedAmount > 0 ? { amount: parsedAmount } : {}),
+          ...(Number.isFinite(parsedAmount) && parsedAmount > 0
+            ? { refundAmount: parsedAmount }
+            : {}),
         };
-        try {
-          await requestApi(`/orders/${encodeURIComponent(orderId)}/refund/execute`, {
-            method: 'POST',
-            body,
-          });
-        } catch {
-          await requestApi(`/orders/${encodeURIComponent(orderId)}/refund`, {
-            method: 'POST',
-            body,
-          });
+        const res = await requestApi(`/orders/${encodeURIComponent(orderId)}/refund/execute`, {
+          method: 'POST',
+          headers: { 'Idempotency-Key': `admin-refund:${orderId}` },
+          body,
+        });
+        const env = (res && typeof res === 'object' ? res : {}) as Record<string, unknown>;
+        if (env.pending === true) {
+          setNotice(
+            String(
+              env.message ??
+                'Yêu cầu hoàn tiền đang ở trạng thái PENDING và sẽ được đối soát tự động với cổng thanh toán.',
+            ),
+          );
+        } else {
+          setNotice('Đã thực thi hoàn tiền thành công.');
         }
-        setNotice('Đã ghi nhận yêu cầu thực thi hoàn tiền.');
       } else if (mode === 'reject-refund') {
         await requestApi(`/orders/${encodeURIComponent(orderId)}/reject-refund`, {
           method: 'POST',
@@ -164,6 +191,17 @@ export function AdminOrderActions({ data, onSaved }: { data: Row; onSaved: () =>
         </Button>
       </div>
 
+      <AuctionOrderSourceBanner
+        order={{
+          id: orderId,
+          orderCode: String(data.orderCode ?? orderId),
+          orderSource: typeof data.orderSource === 'string' ? data.orderSource : undefined,
+          auctionId: typeof data.auctionId === 'string' ? data.auctionId : null,
+          auctionWinningBid: data.auctionWinningBid != null ? Number(data.auctionWinningBid) : null,
+        }}
+        adminMode
+      />
+
       {refundInfo && (
         <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs sm:grid-cols-3">
           <div>
@@ -190,6 +228,67 @@ export function AdminOrderActions({ data, onSaved }: { data: Row; onSaved: () =>
           </div>
         </div>
       )}
+
+      {/* Admin P1: Đối soát liên kết Đơn hàng ↔ Hồ sơ khiếu nại (caseId) ↔ Uy tín Buyer/Seller */}
+      <div className="space-y-2.5 rounded-xl border border-slate-200 bg-slate-50/70 p-4 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="font-semibold text-slate-800">
+            Hồ sơ khiếu nại &amp; liên kết uy tín ({linkedCases.length})
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {buyerId && (
+              <Link
+                href={`/admin/reputation/${encodeURIComponent(buyerId)}`}
+                className="font-semibold text-emerald-800 underline underline-offset-4 hover:text-emerald-950"
+              >
+                Uy tín Buyer
+              </Link>
+            )}
+            {sellerId && (
+              <Link
+                href={`/admin/reputation/${encodeURIComponent(sellerId)}`}
+                className="font-semibold text-emerald-800 underline underline-offset-4 hover:text-emerald-950"
+              >
+                Uy tín Seller
+              </Link>
+            )}
+          </div>
+        </div>
+        {casesLoadError ? (
+          <p className="text-red-700">Chưa tải được hồ sơ khiếu nại: {casesLoadError}</p>
+        ) : linkedCases.length === 0 ? (
+          <p className="text-slate-500">Đơn hàng này chưa có hồ sơ khiếu nại.</p>
+        ) : (
+          <ul className="divide-y divide-slate-200">
+            {linkedCases.map((c, idx) => {
+              const verdict = (c.verdict ?? {}) as Row;
+              return (
+                <li
+                  key={String(c.caseId ?? c.id ?? idx)}
+                  className="flex flex-wrap items-center justify-between gap-2 py-2"
+                >
+                  <div>
+                    <span className="font-mono font-bold text-slate-900">
+                      {String(c.caseId ?? c.id ?? '—')}
+                    </span>
+                    <span className="ml-2 rounded-full bg-white px-2 py-0.5 font-semibold text-slate-700 border border-slate-200">
+                      {String(verdict.decision ?? c.status ?? 'OPEN')}
+                    </span>
+                    {typeof verdict.note === 'string' && verdict.note && (
+                      <p className="mt-0.5 text-slate-600">{verdict.note}</p>
+                    )}
+                  </div>
+                  {typeof verdict.refundAmount === 'number' && (
+                    <span className="font-semibold tabular-nums text-emerald-800">
+                      Duyệt hoàn {new Intl.NumberFormat('vi-VN').format(verdict.refundAmount)} ₫
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
 
       {notice && (
         <p

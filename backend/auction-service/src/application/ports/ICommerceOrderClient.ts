@@ -9,6 +9,9 @@ export interface ShippingAddressInput {
 }
 
 export interface CreateAuctionOrderInput {
+  auctionId?: string;
+  sellerId?: string;
+  productTitle?: string;
   buyerToken?: string;
   buyerId: string;
   productId: string;
@@ -20,6 +23,7 @@ export interface AuctionOrderCheckoutResult {
   orderId: string;
   orderCode?: string | number;
   totalAmount: number;
+  status?: string;
   payment: {
     paymentLinkId?: string;
     checkoutUrl: string;
@@ -29,4 +33,5 @@ export interface AuctionOrderCheckoutResult {
 
 export interface ICommerceOrderClient {
   createOrder(input: CreateAuctionOrderInput): Promise<AuctionOrderCheckoutResult>;
+  getOrder?(orderId: string, buyerToken?: string): Promise<AuctionOrderCheckoutResult | null>;
 }

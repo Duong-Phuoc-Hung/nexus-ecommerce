@@ -77,7 +77,10 @@ export function createShipmentsApi(request: RequestApi, prefix = '/support') {
     },
     async getById(id: string, signal?: AbortSignal): Promise<Shipment> {
       return unwrap<Shipment>(
-        await request(`${prefix}/shipments/${encodeURIComponent(id)}`, { signal }),
+        await request(`${prefix}/shipments/${encodeURIComponent(id)}?_t=${Date.now()}`, {
+          signal,
+          headers: { 'Cache-Control': 'no-cache' },
+        }),
       );
     },
     async updateStatus(
@@ -111,9 +114,13 @@ export function createShipmentsApi(request: RequestApi, prefix = '/support') {
     },
     async getByOrderId(orderId: string, signal?: AbortSignal): Promise<Shipment> {
       return unwrap<Shipment>(
-        await request(`/fulfillments/shipments/by-order/${encodeURIComponent(orderId)}`, {
-          signal,
-        }),
+        await request(
+          `/fulfillments/shipments/by-order/${encodeURIComponent(orderId)}?_t=${Date.now()}`,
+          {
+            signal,
+            headers: { 'Cache-Control': 'no-cache' },
+          },
+        ),
       );
     },
     async triggerCarrierWebhook(input: {
@@ -169,6 +176,19 @@ export function createShipmentsApi(request: RequestApi, prefix = '/support') {
           body: input,
         }),
       );
+    },
+    async confirmCodPayment(
+      id: string,
+      input?: { note?: string },
+    ): Promise<{ success: boolean; message: string; data?: any }> {
+      const raw = await request<{ success: boolean; message: string; data?: any }>(
+        `${prefix}/shipments/${encodeURIComponent(id)}/confirm-cod`,
+        {
+          method: 'POST',
+          body: input || {},
+        },
+      );
+      return unwrap(raw);
     },
   };
 }

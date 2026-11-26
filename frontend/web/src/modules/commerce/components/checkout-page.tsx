@@ -408,7 +408,22 @@ export default function CheckoutPage() {
       window.location.assign(checkoutUrl);
       return;
     } catch (e) {
-      setError(userMessage(e));
+      const errCode = (e as { code?: string })?.code;
+      if (errCode === 'PROMO_OUT_OF_QUOTA') {
+        setAppliedPromoCode('');
+        setPromoInput('');
+        setPromoFeedback(
+          'Mã giảm giá vừa hết lượt sử dụng và đã được gỡ khỏi đơn. Bạn có thể đặt lại với giá gốc.',
+        );
+        setError('Mã giảm giá vừa hết lượt sử dụng. Hệ thống đã gỡ mã để bạn tiếp tục đặt hàng.');
+      } else if (errCode === 'PROMO_USER_LIMIT_REACHED') {
+        setAppliedPromoCode('');
+        setPromoInput('');
+        setPromoFeedback('Bạn đã sử dụng hết lượt cho phép của mã này.');
+        setError('Bạn đã sử dụng hết lượt cho phép của mã giảm giá này.');
+      } else {
+        setError(userMessage(e));
+      }
     } finally {
       setBusy(false);
     }
@@ -861,8 +876,9 @@ export default function CheckoutPage() {
                     type="button"
                     variant="outline"
                     size="sm"
+                    disabled={busy}
                     onClick={() => setQuoteRevision((v) => v + 1)}
-                    className="mt-2 min-h-9 rounded-lg border-amber-300 bg-white text-xs font-semibold text-amber-950"
+                    className="mt-2 min-h-9 rounded-lg border-amber-300 bg-white text-xs font-semibold text-amber-950 hover:bg-amber-100/50 transition-colors"
                   >
                     Cập nhật báo giá
                   </Button>

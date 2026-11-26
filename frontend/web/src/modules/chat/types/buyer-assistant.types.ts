@@ -46,6 +46,8 @@ export interface BuyerPageContextState {
 export interface PaymentStatusSnapshot {
   status: 'PAID' | 'PENDING' | 'COD' | 'EXPIRED' | 'CANCELLED' | 'UNKNOWN' | 'ERROR';
   label: string;
+  method?: 'PAYOS' | 'COD' | string;
+  methodLabel?: string;
   paidAt?: string | null;
   expiresAt?: string | null;
   amount?: number | null;
@@ -70,6 +72,7 @@ export interface OrderDualStatusCardData {
   shipment: ShipmentStatusSnapshot;
   canCancel?: boolean;
   canComplain?: boolean;
+  focusSection?: 'PAYMENT' | 'SHIPMENT' | 'ALL';
 }
 
 export interface OrderChoiceItem {

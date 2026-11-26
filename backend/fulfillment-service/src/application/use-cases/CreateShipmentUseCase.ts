@@ -25,20 +25,39 @@ export class CreateShipmentUseCase {
   constructor(private readonly shipmentRepository: IShipmentRepository) {}
 
   public async execute(input: CreateShipmentInput): Promise<ShipmentDetailDto> {
-    const rawOrderId = (input.orderId || '').trim();
+    const rawOrderId = (input.orderId || '')
+      .replace(/^[#]+/, '')
+      .replace(/^NEX-TRK-/i, '')
+      .replace(/[\\/]+$/g, '')
+      .trim();
     if (!rawOrderId) {
       throw new Error('orderId là bắt buộc để khởi tạo vận đơn.');
     }
 
-    // 1. Kiểm tra vận đơn đã tồn tại cho đơn hàng này chưa (Đảm bảo Idempotency)
-    const existing = await this.shipmentRepository.findByOrderId(rawOrderId);
+    const carrier = this.mapCarrier(input.carrier);
+    const trackingCode =
+      (input.trackingCode || '')
+        .replace(/^[#]+/, '')
+        .replace(/[\\/]+$/g, '')
+        .trim() ||
+      `${carrier}${
+        rawOrderId
+          .replace(/[^a-zA-Z0-9]/g, '')
+          .slice(-8)
+          .toUpperCase() || Math.floor(10000000 + Math.random() * 90000000)
+      }`;
+
+    // 1. Kiểm tra vận đơn đã tồn tại theo orderId hoặc trackingCode chưa (Đảm bảo Idempotency, chống tạo trùng)
+    const existing =
+      (await this.shipmentRepository.findByOrderId(rawOrderId)) ||
+      (await this.shipmentRepository.findByTrackingCode(trackingCode));
     if (existing) {
       if (input.trackingCode || input.carrier || input.status) {
         const nextCarrier = input.carrier ? this.mapCarrier(input.carrier) : undefined;
         const nextStatus = input.status ? this.mapStatus(input.status) : undefined;
         existing.manualOverride({
           carrier: nextCarrier,
-          trackingCode: input.trackingCode || undefined,
+          trackingCode: input.trackingCode ? trackingCode : undefined,
           shippingAddress: input.shippingAddress || undefined,
           city: input.city || undefined,
           status: nextStatus,
@@ -48,16 +67,7 @@ export class CreateShipmentUseCase {
       return mapShipmentToDto(existing);
     }
 
-    // 2. Tự động sinh mã vận đơn trackingCode & id chuẩn nếu chưa có
-    const carrier = this.mapCarrier(input.carrier);
-    const trackingCode =
-      (input.trackingCode || '').trim() ||
-      `${carrier}${
-        rawOrderId
-          .replace(/[^a-zA-Z0-9]/g, '')
-          .slice(-8)
-          .toUpperCase() || Math.floor(10000000 + Math.random() * 90000000)
-      }`;
+    // 2. Tạo mới id nếu chưa có
     const id = (input.id || '').trim() || crypto.randomUUID();
     const status = this.mapStatus(input.status);
 

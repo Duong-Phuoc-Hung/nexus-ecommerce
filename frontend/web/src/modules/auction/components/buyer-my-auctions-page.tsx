@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { StoreHeader } from '@/components/layout/store-header';
 import { Button } from '@/components/ui/button';
+import { requestApi } from '@/lib/axios/api-client';
+import { unwrap } from '@/lib/axios/http';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import {
   auctionApi,
@@ -26,7 +28,14 @@ import { AuctionBadge, auctionDateWithTz, auctionMoney } from './auction-ui';
 type GroupKey = 'participating' | 'payment' | 'ended';
 
 type PersonalState =
-  'LEADING' | 'OUTBID' | 'PAYMENT_DUE' | 'WON_PAID' | 'WON_PENDING_ORDER' | 'LOST' | 'CANCELLED';
+  | 'LEADING'
+  | 'OUTBID'
+  | 'PAYMENT_DUE'
+  | 'WON_PAID'
+  | 'WON_PENDING_ORDER'
+  | 'PAYMENT_TIMEOUT'
+  | 'LOST'
+  | 'CANCELLED';
 
 type MyAuctionRow = {
   auction: Auction;
@@ -50,16 +59,20 @@ const PERSONAL_BADGE: Record<PersonalState, { label: string; className: string }
     className: 'border-amber-300 bg-amber-50 text-amber-950',
   },
   PAYMENT_DUE: {
-    label: 'Cần thanh toán',
+    label: 'Đã tạo đơn · Chờ thanh toán',
     className: 'border-red-200 bg-red-50 text-red-800',
   },
   WON_PENDING_ORDER: {
-    label: 'Thắng phiên · Đang tạo đơn',
-    className: 'border-amber-200 bg-amber-50 text-amber-900',
+    label: 'Thắng phiên · Chờ tạo đơn',
+    className: 'border-amber-200 bg-amber-50 text-amber-950',
   },
   WON_PAID: {
-    label: 'Đã thắng',
+    label: 'Đã thanh toán thành công',
     className: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+  },
+  PAYMENT_TIMEOUT: {
+    label: 'Quá hạn thanh toán (24h)',
+    className: 'border-red-200 bg-red-50 text-red-800',
   },
   LOST: {
     label: 'Chưa thắng',
@@ -90,8 +103,11 @@ function classifyMyAuction(auction: Auction, userId: string): MyAuctionRow | nul
     return null;
   }
 
-  const myLatestBid = myBids.reduce((max, bid) => Math.max(max, bid.amount), 0);
-  const leadingOrFinalPrice = auction.settlement?.finalPrice ?? currentPrice(auction);
+  const leadingOrFinalPrice =
+    auction.settlement?.winningBidAmount ?? auction.settlement?.finalPrice ?? currentPrice(auction);
+  const myBidsMax = myBids.reduce((max, bid) => Math.max(max, bid.amount), 0);
+  // Mục 2: Người thắng bắt buộc lấy giá thắng làm mức đặt của mình, không bao giờ để "Chưa ghi nhận"
+  const myLatestBid = isWinner ? Math.max(myBidsMax, leadingOrFinalPrice) : myBidsMax;
   const topBid = auction.bids[0];
   const isLeading = !!topBid && (topBid.isMine || topBid.bidder === userId);
 
@@ -126,36 +142,52 @@ function classifyMyAuction(auction: Auction, userId: string): MyAuctionRow | nul
   if (auction.status === 'ENDED' && isWinner) {
     const paymentStatus = (auction.settlement?.paymentStatus || '').toUpperCase();
     const isPaid = paymentStatus === 'PAID' || paymentStatus === 'COMPLETED';
+    const isTimeout = paymentStatus === 'TIMEOUT' || paymentStatus === 'TIMEOUT_PENALIZED';
     const orderId = auction.settlement?.orderId;
+    const orderCode = auction.settlement?.orderCode || orderId;
 
-    if (!isPaid) {
+    if (isPaid) {
       return {
         auction,
-        group: 'payment',
-        personalState: orderId ? 'PAYMENT_DUE' : 'WON_PENDING_ORDER',
+        group: 'ended',
+        personalState: 'WON_PAID',
         myLatestBid,
         leadingOrFinalPrice,
-        nextDeadlineLabel: auction.settlement?.paymentDueAt ? 'Hạn thanh toán' : 'Kết thúc phiên',
-        nextDeadlineAt: auction.settlement?.paymentDueAt ?? auction.endAt,
-        actionLabel: orderId ? 'Thanh toán' : 'Mở phiên kiểm tra đơn',
+        nextDeadlineLabel: 'Đã chốt lúc',
+        nextDeadlineAt: auction.settlement?.settledAt ?? auction.endAt,
+        actionLabel: orderId ? 'Xem đơn mua' : 'Xem kết quả',
         actionHref: orderId
           ? `/account/orders/${encodeURIComponent(orderId)}`
           : `/auctions/${encodeURIComponent(auction.id)}`,
       };
     }
 
+    if (isTimeout) {
+      return {
+        auction,
+        group: 'ended',
+        personalState: 'PAYMENT_TIMEOUT',
+        myLatestBid,
+        leadingOrFinalPrice,
+        nextDeadlineLabel: 'Hết hạn lúc',
+        nextDeadlineAt: auction.settlement?.paymentDueAt ?? auction.endAt,
+        actionLabel: 'Xem chi tiết',
+        actionHref: `/auctions/${encodeURIComponent(auction.id)}`,
+      };
+    }
+
     return {
       auction,
-      group: 'ended',
-      personalState: 'WON_PAID',
+      group: 'payment',
+      personalState: orderId ? 'PAYMENT_DUE' : 'WON_PENDING_ORDER',
       myLatestBid,
       leadingOrFinalPrice,
-      nextDeadlineLabel: 'Đã chốt lúc',
-      nextDeadlineAt: auction.settlement?.settledAt ?? auction.endAt,
-      actionLabel: orderId ? 'Xem đơn hàng' : 'Xem kết quả',
+      nextDeadlineLabel: auction.settlement?.paymentDueAt ? 'Hạn thanh toán' : 'Kết thúc phiên',
+      nextDeadlineAt: auction.settlement?.paymentDueAt ?? auction.endAt,
+      actionLabel: orderId ? `Thanh toán đơn #${orderCode}` : 'Tạo đơn thanh toán',
       actionHref: orderId
         ? `/account/orders/${encodeURIComponent(orderId)}`
-        : `/auctions/${encodeURIComponent(auction.id)}`,
+        : `/auctions/${encodeURIComponent(auction.id)}#winner-checkout`,
     };
   }
 
@@ -192,22 +224,129 @@ export function BuyerMyAuctionsPage() {
       else setLoading(true);
 
       try {
-        const list = await auctionApi.list();
-        // When live list items omit per-bid participant lists, hydrate detail in parallel for active/ended items.
-        const hydrated = await Promise.all(
-          list.map(async (item) => {
-            if (item.bids.length > 0 || item.bidHistoryAvailable === false) return item;
-            try {
-              const { auction } = await auctionApi.detail(item.id);
-              return auction;
-            } catch {
-              return item;
-            }
-          }),
-        );
-        setRows(hydrated);
-        setHasIncompleteHistory(hydrated.some((item) => item.bidHistoryAvailable === false));
-        setError('');
+        // Ưu tiên gọi 1 request GET /api/v1/auctions/my theo tài khoản đang đăng nhập (B3)
+        let loadedFromMyEndpoint = false;
+        try {
+          const myRaw = await requestApi('/auctions/my');
+          const myData = unwrap<{ items?: Array<Record<string, unknown>> }>(myRaw);
+          if (myData && Array.isArray(myData.items)) {
+            const mapped: Auction[] = myData.items.map((item) => {
+              const rawStatus = String(item.status ?? 'ACTIVE').toUpperCase();
+              const normalizedStatus = (
+                rawStatus === 'SETTLED' || rawStatus === 'CLOSED' || rawStatus === 'COMPLETED'
+                  ? 'ENDED'
+                  : rawStatus
+              ) as Auction['status'];
+              const isWinnerItem =
+                Boolean(item.isWinner) ||
+                item.personalStatus === 'WON_AWAITING_PAYMENT' ||
+                item.personalStatus === 'PAID' ||
+                item.personalStatus === 'PAYMENT_TIMEOUT';
+              const winAmount = Number(
+                item.winningBidAmount ?? item.highestBidAmount ?? item.currentHighestBid ?? 0,
+              );
+              const myBidAmount = isWinnerItem
+                ? Math.max(Number(item.myLastBid ?? 0), winAmount)
+                : Number(item.myLastBid ?? 0);
+
+              return {
+                id: String(item.id),
+                productId: String(item.productId ?? ''),
+                title: String(item.title ?? `Phiên #${item.id}`),
+                image:
+                  typeof item.imageUrl === 'string' && item.imageUrl.trim()
+                    ? item.imageUrl.trim()
+                    : '/images/nexus-product-placeholder.svg',
+                seller:
+                  typeof item.sellerName === 'string' && item.sellerName.trim()
+                    ? item.sellerName.trim()
+                    : 'Người bán Nexus',
+                sellerId: String(item.sellerId ?? ''),
+                condition: '',
+                description: '',
+                startingPrice: Number(item.startingPrice ?? 0),
+                increment: 1,
+                nextMinBid: Number(item.nextMinBid ?? item.startingPrice ?? 0),
+                currentHighestBid: winAmount,
+                bidCount: Number(item.bidCount ?? 0),
+                bidHistoryAvailable: true,
+                startAt: new Date(String(item.startTime ?? Date.now())).getTime(),
+                endAt: new Date(String(item.actualEndTime ?? item.endTime ?? Date.now())).getTime(),
+                status: normalizedStatus,
+                version: 1,
+                demoMode: Boolean(item.demoMode),
+                demoMultiplier: Number(item.demoMultiplier ?? 1),
+                cancelReason: typeof item.cancelReason === 'string' ? item.cancelReason : undefined,
+                bids: [
+                  {
+                    id: `my-${item.id}`,
+                    bidder: user.id,
+                    displayAlias: 'Bạn',
+                    isMine: true,
+                    amount: myBidAmount,
+                    time: Date.now(),
+                  },
+                  ...(!item.isLeading && !isWinnerItem
+                    ? [
+                        {
+                          id: `lead-${item.id}`,
+                          bidder: 'other',
+                          displayAlias: 'Người dẫn đầu',
+                          isMine: false,
+                          amount: winAmount,
+                          time: Date.now() + 1,
+                        },
+                      ]
+                    : []),
+                ].sort((a, b) => b.amount - a.amount),
+                settlement: {
+                  outcome: isWinnerItem
+                    ? 'WON'
+                    : item.personalStatus === 'CANCELLED'
+                      ? 'CANCELLED'
+                      : 'LOST',
+                  winnerId: isWinnerItem || item.isLeading ? user.id : null,
+                  winnerAlias: typeof item.winnerAlias === 'string' ? item.winnerAlias : null,
+                  finalPrice: winAmount,
+                  winningBidAmount: winAmount,
+                  settledAt: item.settledAt ? new Date(String(item.settledAt)).getTime() : null,
+                  paymentDueAt: item.paymentDueAt
+                    ? new Date(String(item.paymentDueAt)).getTime()
+                    : null,
+                  orderId: typeof item.orderId === 'string' ? item.orderId : null,
+                  orderCode: typeof item.orderCode === 'string' ? item.orderCode : null,
+                  paymentUrl: typeof item.paymentUrl === 'string' ? item.paymentUrl : null,
+                  paymentStatus: typeof item.paymentStatus === 'string' ? item.paymentStatus : null,
+                  canCheckout: Boolean(item.canCheckout),
+                },
+              };
+            });
+            setRows(mapped);
+            setHasIncompleteHistory(false);
+            setError('');
+            loadedFromMyEndpoint = true;
+          }
+        } catch {
+          // Fallback về danh sách phiên chuẩn nếu đang chạy chế độ mock
+        }
+
+        if (!loadedFromMyEndpoint) {
+          const list = await auctionApi.list();
+          const hydrated = await Promise.all(
+            list.map(async (item) => {
+              if (item.bids.length > 0 || item.bidHistoryAvailable === false) return item;
+              try {
+                const { auction } = await auctionApi.detail(item.id);
+                return auction;
+              } catch {
+                return item;
+              }
+            }),
+          );
+          setRows(hydrated);
+          setHasIncompleteHistory(hydrated.some((item) => item.bidHistoryAvailable === false));
+          setError('');
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Chưa tải được danh sách phiên của bạn.');
       } finally {
@@ -467,7 +606,9 @@ export function BuyerMyAuctionsPage() {
                 {activeItems.map((item) => {
                   const badge = PERSONAL_BADGE[item.personalState];
                   const isUrgentAction =
-                    item.personalState === 'OUTBID' || item.personalState === 'PAYMENT_DUE';
+                    item.personalState === 'OUTBID' ||
+                    item.personalState === 'PAYMENT_DUE' ||
+                    item.personalState === 'WON_PENDING_ORDER';
 
                   return (
                     <li
@@ -480,6 +621,15 @@ export function BuyerMyAuctionsPage() {
                             src={item.auction.image}
                             alt={item.auction.title}
                             loading="lazy"
+                            onError={(event) => {
+                              if (
+                                !event.currentTarget.src.endsWith(
+                                  '/images/nexus-product-placeholder.svg',
+                                )
+                              ) {
+                                event.currentTarget.src = '/images/nexus-product-placeholder.svg';
+                              }
+                            }}
                             className="size-20 shrink-0 rounded-xl border border-stone-100 bg-stone-50 object-cover sm:size-24"
                           />
                           <div className="min-w-0 flex-1">

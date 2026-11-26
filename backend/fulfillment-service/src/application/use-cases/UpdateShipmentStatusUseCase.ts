@@ -25,7 +25,10 @@ export class UpdateShipmentStatusUseCase {
   }
 
   public async execute(req: UpdateShipmentStatusRequest): Promise<ShipmentDetailDto> {
-    const trimmed = (req.shipmentId || '').trim();
+    const trimmed = (req.shipmentId || '')
+      .replace(/^[#]/, '')
+      .replace(/^NEX-TRK-/i, '')
+      .trim();
     let shipment = await this.shipmentRepository.findById(trimmed);
     if (!shipment) {
       shipment = await this.shipmentRepository.findByTrackingCode(trimmed);
@@ -78,6 +81,22 @@ export class UpdateShipmentStatusUseCase {
     // Tự động đồng bộ trạng thái đơn hàng sang Commerce Service (SRS 3.4 & 3.6)
     if (shipment.orderId) {
       await this.commerceClient.syncStatus(shipment.orderId, targetStatus, req.note);
+      if (
+        targetStatus === ShipmentStatus.DELIVERED &&
+        typeof this.commerceClient.confirmCodPayment === 'function'
+      ) {
+        try {
+          await this.commerceClient.confirmCodPayment(
+            shipment.orderId,
+            req.note || 'Support Staff xác nhận giao hàng thành công & đã thu tiền COD.',
+          );
+        } catch (err: any) {
+          console.warn(
+            '[UpdateShipmentStatusUseCase] confirmCodPayment warning:',
+            err?.message || err,
+          );
+        }
+      }
     }
 
     return mapShipmentToDto(shipment);

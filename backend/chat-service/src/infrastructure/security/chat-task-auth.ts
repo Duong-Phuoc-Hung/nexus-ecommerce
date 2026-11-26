@@ -1,6 +1,5 @@
-import crypto from 'node:crypto';
 import { NextFunction, Request, Response } from 'express';
-import { AuthenticatedRequest, AuthenticatedUser } from './auth';
+import { AuthenticatedRequest, AuthenticatedUser, verifyHs256Signature } from './auth';
 import { IConversationRepository } from '../../domain/repositories/IConversationRepository';
 
 // BE-01/BE-04 use verified JWTs without changing the authentication of existing routes.
@@ -14,17 +13,9 @@ export function requireChatTaskAuth(req: Request, res: Response, next: NextFunct
     if (JSON.parse(Buffer.from(header, 'base64url').toString()).alg !== 'HS256')
       throw new Error('Invalid algorithm');
 
-    const secret =
-      process.env.JWT_ACCESS_SECRET ||
-      process.env.JWT_SECRET ||
-      (process.env.NODE_ENV !== 'production'
-        ? 'nexus_super_secret_jwt_access_key_min_32_chars_local_dev'
-        : undefined);
-    if (!secret) throw new Error('Missing secret');
-    const expected = crypto.createHmac('sha256', secret).update(`${header}.${payload}`).digest();
-    const actual = Buffer.from(signature, 'base64url');
-    if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected))
+    if (!verifyHs256Signature(header, payload, signature)) {
       throw new Error('Invalid signature');
+    }
     const user = JSON.parse(Buffer.from(payload, 'base64url').toString()) as AuthenticatedUser & {
       roles?: unknown;
       exp?: number;
@@ -60,12 +51,25 @@ export function verifyHandoverParticipant(conversations: IConversationRepository
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const conversation = await conversations.findById(req.params.id as string);
-      const role = (req as AuthenticatedRequest).user?.role;
+      const user = (req as AuthenticatedRequest).user;
+      const role = user?.role;
       const isStaff = role === 'ADMIN' || role === 'SUPPORT_STAFF';
+
       if (
         conversation?.channelType === 'AI_BOT' &&
         (conversation.status === 'WAITING_STAFF' || isStaff)
       ) {
+        // BẢO MẬT CHỐNG GIẢ MẠO CSKH: Nhân viên hỗ trợ hoặc Admin bắt buộc phải có Bearer JWT ký thật
+        if (isStaff) {
+          requireChatTaskAuth(req, res, next);
+          return;
+        }
+
+        // Người mua sở hữu cuộc hội thoại đã được xác thực qua requireAuth được phép tiếp tục nhắn tin
+        if (user && user.sub) {
+          return next();
+        }
+
         requireChatTaskAuth(req, res, next);
       } else {
         next();

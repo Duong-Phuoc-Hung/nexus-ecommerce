@@ -227,9 +227,18 @@ export function BuyerAssistantWidget() {
     }
   }, [user]);
 
+  type OrderInspectionIntent = 'PAYMENT' | 'SHIPMENT' | 'GENERAL' | 'ITEMS';
+
   // Kiểm tra trạng thái kép Thanh toán + Vận chuyển cho 1 đơn cụ thể thuộc Buyer
   const inspectAndShowOrderCard = useCallback(
-    async (orderId: string, introText?: string) => {
+    async (
+      orderId: string,
+      options?: {
+        intent?: OrderInspectionIntent;
+        introText?: string;
+        rawQuery?: string;
+      },
+    ) => {
       if (!user || user.role !== 'BUYER') {
         appendAssistantMessage({
           text: 'Vui lòng đăng nhập tài khoản Buyer để kiểm tra đơn hàng của bạn.',
@@ -252,18 +261,173 @@ export function BuyerAssistantWidget() {
       }
 
       selectOrder(ownedOrder, activeOrder?.id !== ownedOrder.id);
-      const card: OrderDualStatusCardData =
+      const rawCard: OrderDualStatusCardData =
         await buyerAssistantApi.inspectOrderDualStatus(ownedOrder);
 
-      let summaryText = introText || `Trạng thái đơn #${card.orderId}:`;
-      if (card.payment.status === 'PAID' && card.shipment.state === 'PREPARING') {
-        summaryText = 'Đơn đã thanh toán. Shop đang chuẩn bị hàng.';
-      } else if (card.payment.status === 'PAID' && card.shipment.state === 'NO_SHIPMENT_INFO') {
-        summaryText = 'Đơn đã thanh toán. Chưa có thông tin vận chuyển.';
-      } else if (card.payment.status === 'PENDING') {
-        summaryText = 'Giao dịch PayOS của đơn này chưa hoàn tất.';
-      } else if (card.shipment.state === 'INTERRUPTED') {
-        summaryText = 'Đã kiểm tra phần thanh toán, nhưng dịch vụ vận chuyển tạm thời gián đoạn.';
+      // Phân tích ý định câu hỏi (Intent) nếu chưa được chỉ định
+      let detectedIntent: OrderInspectionIntent = options?.intent || 'GENERAL';
+      if (!options?.intent && options?.rawQuery) {
+        const lq = options.rawQuery.toLowerCase();
+        if (
+          lq.includes('thanh toán') ||
+          lq.includes('trừ tiền') ||
+          lq.includes('tiền') ||
+          lq.includes('payos') ||
+          lq.includes('vietqr') ||
+          lq.includes('chuyển khoản') ||
+          lq.includes('đã trả') ||
+          lq.includes('escrow')
+        ) {
+          detectedIntent = 'PAYMENT';
+        } else if (
+          lq.includes('tới đâu') ||
+          lq.includes('ở đâu') ||
+          lq.includes('đang ở đâu') ||
+          lq.includes('vận chuyển') ||
+          lq.includes('vận đơn') ||
+          lq.includes('bưu tá') ||
+          lq.includes('giao') ||
+          lq.includes('bao giờ') ||
+          lq.includes('khi nào') ||
+          lq.includes('ghn') ||
+          lq.includes('ghtk') ||
+          lq.includes('lộ trình') ||
+          lq.includes('lấy hàng')
+        ) {
+          detectedIntent = 'SHIPMENT';
+        } else if (
+          lq.includes('món') ||
+          lq.includes('sản phẩm') ||
+          lq.includes('mua gì') ||
+          lq.includes('hàng gì') ||
+          lq.includes('gồm những gì')
+        ) {
+          detectedIntent = 'ITEMS';
+        }
+      }
+
+      const card: OrderDualStatusCardData = {
+        ...rawCard,
+        focusSection:
+          detectedIntent === 'PAYMENT'
+            ? 'PAYMENT'
+            : detectedIntent === 'SHIPMENT'
+              ? 'SHIPMENT'
+              : 'ALL',
+      };
+
+      // Xây dựng câu trả lời chính xác, thông minh và phù hợp 100% với loại câu hỏi
+      let summaryText = options?.introText || '';
+      if (!summaryText) {
+        if (detectedIntent === 'PAYMENT') {
+          const isCod = card.payment.method === 'COD' || card.payment.status === 'COD';
+          const paidTime = card.payment.paidAt
+            ? ` lúc ${formatVietnamTime(card.payment.paidAt)}`
+            : '';
+          if (card.payment.status === 'PAID') {
+            if (isCod) {
+              summaryText =
+                `💵 Xác nhận thanh toán đơn #${card.orderId}:\n\n` +
+                `• Phương thức: Thanh toán khi nhận hàng (COD)\n` +
+                `• Trạng thái: ĐÃ THU TIỀN KHI GIAO HÀNG\n` +
+                `• Số tiền: ${money(card.totalAmount)}${paidTime}\n` +
+                `• Ghi nhận: Bưu tá đã bàn giao kiện hàng và thu đủ tiền mặt từ người mua.`;
+            } else {
+              summaryText =
+                `💳 Xác nhận thanh toán đơn #${card.orderId}:\n\n` +
+                `• Phương thức: Chuyển khoản VietQR qua Cổng PayOS\n` +
+                `• Trạng thái: ĐÃ THANH TOÁN THÀNH CÔNG\n` +
+                `• Số tiền: ${money(card.totalAmount)}${paidTime}\n` +
+                `• Cổng giao dịch: PayOS (VietQR)\n` +
+                `• Cơ chế bảo vệ: Khoản tiền được Nexus Escrow bảo chứng an toàn 100%, chỉ giải ngân cho Người bán sau khi bạn nhận hàng nguyên vẹn và xác nhận hài lòng.`;
+            }
+          } else if (card.payment.status === 'PENDING') {
+            const expTime = card.payment.expiresAt
+              ? ` (Hết hạn lúc: ${formatVietnamTime(card.payment.expiresAt)})`
+              : '';
+            summaryText =
+              `💳 Tình trạng thanh toán đơn #${card.orderId}:\n\n` +
+              `• Phương thức: Chuyển khoản VietQR qua Cổng PayOS\n` +
+              `• Trạng thái: CHƯA HOÀN TẤT THANH TOÁN${expTime}\n` +
+              `• Số tiền cần thanh toán: ${money(card.totalAmount)}\n` +
+              `• Giao dịch PayOS chưa được ghi nhận thành công. Bạn vui lòng quét lại mã VietQR hoặc bấm "Kiểm tra lại" bên dưới nếu đã chuyển tiền.`;
+          } else if (card.payment.status === 'COD') {
+            summaryText =
+              `💵 Hình thức thanh toán đơn #${card.orderId}:\n\n` +
+              `• Phương thức: Thanh toán khi nhận hàng (COD)\n` +
+              `• Trạng thái: CHỜ GIAO HÀNG & THU TIỀN TẬN NƠI\n` +
+              `• Số tiền thu hộ: ${money(card.totalAmount)}\n` +
+              `• Quyền lợi kiểm hàng: Bạn được quyền đồng kiểm tra hàng trước khi thanh toán tiền mặt cho nhân viên bưu tá.`;
+          } else if (card.payment.status === 'CANCELLED') {
+            summaryText =
+              `🚫 Trạng thái thanh toán đơn #${card.orderId}:\n\n` +
+              `• Đơn hàng đã bị hủy. Nếu bạn đã chuyển khoản trước đó qua PayOS, hệ thống sẽ tự động hoàn tiền về tài khoản nguồn trong vòng 24-48 giờ làm việc.`;
+          } else {
+            summaryText = `💳 Trạng thái thanh toán đơn #${card.orderId}: ${card.payment.label}.`;
+          }
+        } else if (detectedIntent === 'SHIPMENT') {
+          const carrierInfo = [
+            card.shipment.carrier,
+            card.shipment.trackingCode ? `Mã vận đơn: ${card.shipment.trackingCode}` : '',
+          ]
+            .filter(Boolean)
+            .join(' · ');
+          const loc = card.shipment.currentLocation
+            ? `\n• Vị trí hiện tại: ${card.shipment.currentLocation}`
+            : '';
+          const est = card.shipment.estimatedDeliveryAt
+            ? `\n• Dự kiến giao hàng: ${formatVietnamTime(card.shipment.estimatedDeliveryAt)}`
+            : '';
+          const upd = card.shipment.updatedAt
+            ? `\n• Cập nhật lần cuối: ${formatVietnamTime(card.shipment.updatedAt)}`
+            : '';
+
+          if (card.shipment.state === 'HAS_SHIPMENT') {
+            summaryText =
+              `🚚 Tiến trình vận chuyển đơn #${card.orderId}:\n\n` +
+              `• Trạng thái bưu tá: ${card.shipment.label.toUpperCase()}\n` +
+              (carrierInfo ? `• Đơn vị vận chuyển: ${carrierInfo}\n` : '') +
+              `${loc}${est}${upd}\n\n` +
+              `Đơn vị vận chuyển đang xử lý tiếp nhận để phát kiện hàng đến địa chỉ của bạn.`;
+          } else if (card.shipment.state === 'PREPARING') {
+            summaryText =
+              `📦 Tiến trình đơn hàng #${card.orderId}:\n\n` +
+              `• Trạng thái: Shop đang chuẩn bị hàng\n` +
+              `• Đơn hàng đã được thanh toán thành công. Người bán đang đóng gói sản phẩm trước khi bàn giao cho bưu tá lấy hàng.`;
+          } else if (card.shipment.state === 'NO_SHIPMENT_INFO') {
+            summaryText =
+              `📦 Tiến trình đơn hàng #${card.orderId}:\n\n` +
+              `• Trạng thái: Đang tiếp nhận xử lý tại kho\n` +
+              `• Kiện hàng chưa phát sinh mã vận đơn. Người bán đang chuẩn bị đóng gói sản phẩm.`;
+          } else if (card.shipment.state === 'INTERRUPTED') {
+            summaryText =
+              `⚠️ Vận chuyển đơn #${card.orderId}:\n\n` +
+              `• Dịch vụ đối tác bưu chính tạm thời gián đoạn cập nhật. Bạn có thể bấm "Xem đơn" để tra cứu thêm hoặc liên hệ nhân viên hỗ trợ.`;
+          } else {
+            summaryText = `🚚 Tiến trình vận chuyển đơn #${card.orderId}: ${card.shipment.label}.`;
+          }
+        } else if (detectedIntent === 'ITEMS') {
+          const items = ownedOrder.items || [];
+          const itemsList = items
+            .map(
+              (it, idx) =>
+                `  ${idx + 1}. ${it.productName} (Số lượng: ${it.quantity}) - ${money(it.unitPrice)}`,
+            )
+            .join('\n');
+          summaryText =
+            `🛍️ Chi tiết sản phẩm đơn #${card.orderId}:\n\n` +
+            `${itemsList || '  Chưa có danh sách món hàng.'}\n\n` +
+            `• Tổng thanh toán: ${money(card.totalAmount)}\n` +
+            `• Trạng thái: ${card.payment.label} · ${card.shipment.label}`;
+        } else {
+          // GENERAL: Trạng thái tổng quan cân bằng cả hai
+          summaryText =
+            `📋 Tổng quan trạng thái đơn #${card.orderId}:\n\n` +
+            `• Tổng giá trị: ${money(card.totalAmount)}\n` +
+            `• Thanh toán: ${card.payment.label}\n` +
+            `• Vận chuyển: ${card.shipment.label}` +
+            (card.shipment.currentLocation ? ` (${card.shipment.currentLocation})` : '');
+        }
       }
 
       const actions: AssistantActionLink[] = [
@@ -669,15 +833,25 @@ export function BuyerAssistantWidget() {
         }
 
         // 3. Kiểm tra thanh toán ("Trừ tiền rồi sao còn chờ?", "Kiểm tra thanh toán")
+        const explicitOrdInQuery =
+          text.match(/(?:NEX-TRK-)?((?:NX-)?ORD-(?:AUC-)?[a-zA-Z0-9-]+)/i)?.[1] ||
+          text.match(/#([a-zA-Z0-9_-]+)/)?.[1]?.replace(/^NEX-TRK-/i, '');
+
         if (
           q.includes('trừ tiền') ||
           q.includes('kiểm tra thanh toán') ||
           q.includes('còn chờ') ||
-          q.includes('payos')
+          q.includes('payos') ||
+          (q.includes('thanh toán') &&
+            (q.includes('chưa') ||
+              q.includes('được chưa') ||
+              q.includes('thế nào') ||
+              q.includes('sao') ||
+              q.includes('xác nhận')))
         ) {
-          const targetOrderId = activeOrder?.id || checkoutContext?.orderId;
+          const targetOrderId = explicitOrdInQuery || activeOrder?.id || checkoutContext?.orderId;
           if (targetOrderId && user) {
-            await inspectAndShowOrderCard(targetOrderId);
+            await inspectAndShowOrderCard(targetOrderId, { intent: 'PAYMENT', rawQuery: text });
             return;
           }
           await handleOpenOrderPicker();
@@ -785,12 +959,18 @@ export function BuyerAssistantWidget() {
           return;
         }
 
-        // 7. Hỏi mã đơn hoặc tên món trong đơn ("Đơn tai nghe tới đâu rồi?", "Đơn của tôi", "#17")
-        const explicitOrderMatch = text.match(/#?([a-zA-Z0-9_-]{1,36})/);
+        // 7. Hỏi mã đơn hoặc tên món trong đơn ("Đơn tai nghe tới đâu rồi?", "Đơn của tôi", "#17", "NEX-TRK-ORD-...")
+        const explicitOrdMatch = text.match(
+          /(?:NEX-TRK-)?((?:NX-)?ORD-(?:AUC-)?[a-zA-Z0-9-]+)/i,
+        )?.[1];
+        const hashMatch = text.match(/#([a-zA-Z0-9_-]+)/)?.[1]?.replace(/^NEX-TRK-/i, '');
         const asksTracking =
+          Boolean(explicitOrdMatch || hashMatch) ||
           q.includes('tới đâu') ||
           q.includes('đơn của tôi') ||
           q.includes('giao chưa') ||
+          q.includes('vận đơn') ||
+          q.includes('tra cứu') ||
           q.includes('đơn ') ||
           q.startsWith('đơn');
 
@@ -800,24 +980,64 @@ export function BuyerAssistantWidget() {
         }
 
         if (asksTracking) {
+          let detectedIntent: OrderInspectionIntent = 'GENERAL';
+          if (
+            q.includes('thanh toán') ||
+            q.includes('trừ tiền') ||
+            q.includes('tiền') ||
+            q.includes('payos') ||
+            q.includes('vietqr') ||
+            q.includes('đã trả')
+          ) {
+            detectedIntent = 'PAYMENT';
+          } else if (
+            q.includes('tới đâu') ||
+            q.includes('ở đâu') ||
+            q.includes('đang ở đâu') ||
+            q.includes('vận chuyển') ||
+            q.includes('vận đơn') ||
+            q.includes('bưu tá') ||
+            q.includes('giao') ||
+            q.includes('bao giờ') ||
+            q.includes('khi nào') ||
+            q.includes('lộ trình') ||
+            q.includes('ghn') ||
+            q.includes('ghtk')
+          ) {
+            detectedIntent = 'SHIPMENT';
+          } else if (
+            q.includes('món') ||
+            q.includes('sản phẩm') ||
+            q.includes('mua gì') ||
+            q.includes('hàng gì') ||
+            q.includes('gồm những gì')
+          ) {
+            detectedIntent = 'ITEMS';
+          }
+
           if (
             activeOrder &&
             (q.includes('đơn này') ||
               q.includes('đơn tới đâu') ||
               q.includes(`#${activeOrder.id.toLowerCase()}`))
           ) {
-            await inspectAndShowOrderCard(activeOrder.id);
+            await inspectAndShowOrderCard(activeOrder.id, {
+              intent: detectedIntent,
+              rawQuery: text,
+            });
             return;
           }
 
           if (!user) return;
           const myOrders = await loadMyOrders();
 
-          // Nếu có mã rõ ràng dạng #... hoặc toàn số
-          const idCandidate =
-            text.match(/#([a-zA-Z0-9_-]+)/)?.[1] || text.match(/\b(\d{1,12})\b/)?.[1];
+          // Nếu có mã rõ ràng dạng (NEX-TRK-)ORD-..., #... hoặc toàn số
+          const idCandidate = explicitOrdMatch || hashMatch || text.match(/\b(\d{1,12})\b/)?.[1];
           if (idCandidate) {
-            await inspectAndShowOrderCard(idCandidate);
+            await inspectAndShowOrderCard(idCandidate, {
+              intent: detectedIntent,
+              rawQuery: text,
+            });
             return;
           }
 
@@ -850,7 +1070,10 @@ export function BuyerAssistantWidget() {
               : [];
 
           if (matches.length === 1) {
-            await inspectAndShowOrderCard(matches[0].id);
+            await inspectAndShowOrderCard(matches[0].id, {
+              intent: detectedIntent,
+              rawQuery: text,
+            });
             return;
           }
           if (matches.length > 1) {
@@ -1379,25 +1602,57 @@ export function BuyerAssistantWidget() {
                           </div>
                         )}
 
-                        {/* Thẻ tách riêng Thanh toán & Vận chuyển */}
+                        {/* Thẻ tách riêng Thanh toán & Vận chuyển với hiệu ứng Focus theo loại câu hỏi */}
                         {msg.orderCard && (
-                          <div className="mt-2.5 rounded-xl border border-line bg-stone-50/80 p-3 space-y-2 text-xs">
-                            <div className="flex items-center justify-between border-b border-line pb-1.5">
-                              <strong className="font-mono text-stone-900">
+                          <div className="mt-2.5 rounded-xl border border-line bg-stone-50/80 p-3 space-y-2.5 text-xs">
+                            <div className="flex items-center justify-between border-b border-line pb-2 gap-2">
+                              <strong className="font-mono text-stone-900 text-xs truncate">
                                 Đơn {msg.orderCard.orderNumberLabel}
                               </strong>
-                              <span className="font-bold text-brand-dark">
+                              <span className="font-bold text-brand-dark shrink-0 whitespace-nowrap text-xs">
                                 {money(msg.orderCard.totalAmount)}
                               </span>
                             </div>
 
                             {/* Dòng 1: Thanh toán */}
-                            <div className="flex items-start gap-2">
-                              <CreditCard className="size-3.5 shrink-0 mt-0.5 text-stone-500" />
-                              <div className="min-w-0">
-                                <span className="text-[11px] text-muted block">Thanh toán</span>
+                            <div
+                              className={`flex items-start gap-2 rounded-lg p-2 transition-colors ${
+                                msg.orderCard.focusSection === 'PAYMENT'
+                                  ? 'border border-emerald-200 bg-emerald-50/90 shadow-2xs'
+                                  : 'bg-white/60'
+                              }`}
+                            >
+                              <CreditCard
+                                className={`size-3.5 shrink-0 mt-0.5 ${
+                                  msg.orderCard.focusSection === 'PAYMENT'
+                                    ? 'text-emerald-700'
+                                    : 'text-stone-500'
+                                }`}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-1 flex-wrap">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[11px] text-muted block font-medium">
+                                      Thanh toán
+                                    </span>
+                                    {msg.orderCard.payment.method === 'COD' ? (
+                                      <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold text-amber-800">
+                                        COD · Tiền mặt
+                                      </span>
+                                    ) : (
+                                      <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[9px] font-semibold text-indigo-800">
+                                        PayOS · VietQR
+                                      </span>
+                                    )}
+                                  </div>
+                                  {msg.orderCard.focusSection === 'PAYMENT' && (
+                                    <span className="text-[10px] font-bold text-emerald-700 shrink-0">
+                                      ✓ Trọng tâm câu hỏi
+                                    </span>
+                                  )}
+                                </div>
                                 <span
-                                  className={`font-semibold ${
+                                  className={`font-semibold text-xs block mt-0.5 ${
                                     msg.orderCard.payment.status === 'PAID'
                                       ? 'text-emerald-700'
                                       : msg.orderCard.payment.status === 'PENDING'
@@ -1412,31 +1667,64 @@ export function BuyerAssistantWidget() {
                                     Lúc {formatVietnamTime(msg.orderCard.payment.paidAt)}
                                   </span>
                                 )}
+                                {msg.orderCard.payment.method === 'COD' ? (
+                                  <span className="block text-[10px] text-amber-800 bg-amber-50/80 rounded px-1.5 py-0.5 mt-1 border border-amber-200/50">
+                                    📦 Đồng kiểm tra hàng trước khi thanh toán tiền mặt cho bưu tá
+                                  </span>
+                                ) : msg.orderCard.payment.status === 'PAID' ? (
+                                  <span className="block text-[10px] text-emerald-800 bg-emerald-50/80 rounded px-1.5 py-0.5 mt-1 border border-emerald-200/50">
+                                    🛡️ Tiền được bảo chứng an toàn bởi Nexus Escrow
+                                  </span>
+                                ) : null}
                               </div>
                             </div>
 
                             {/* Dòng 2: Vận chuyển */}
-                            <div className="flex items-start gap-2">
-                              <Truck className="size-3.5 shrink-0 mt-0.5 text-stone-500" />
-                              <div className="min-w-0">
-                                <span className="text-[11px] text-muted block">Vận chuyển</span>
-                                <span className="font-semibold text-stone-900">
+                            <div
+                              className={`flex items-start gap-2 rounded-lg p-2 transition-colors ${
+                                msg.orderCard.focusSection === 'SHIPMENT'
+                                  ? 'border border-sky-200 bg-sky-50/90 shadow-2xs'
+                                  : 'bg-white/60'
+                              }`}
+                            >
+                              <Truck
+                                className={`size-3.5 shrink-0 mt-0.5 ${
+                                  msg.orderCard.focusSection === 'SHIPMENT'
+                                    ? 'text-sky-700'
+                                    : 'text-stone-500'
+                                }`}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-1 flex-wrap">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[11px] text-muted block font-medium">
+                                      Vận chuyển
+                                    </span>
+                                    {msg.orderCard.shipment.carrier && (
+                                      <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[9px] font-semibold text-sky-800">
+                                        {msg.orderCard.shipment.carrier}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {msg.orderCard.focusSection === 'SHIPMENT' && (
+                                    <span className="text-[10px] font-bold text-sky-700 shrink-0">
+                                      ✓ Trọng tâm câu hỏi
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="font-semibold text-stone-900 text-xs block mt-0.5">
                                   {msg.orderCard.shipment.label}
                                 </span>
                                 {(msg.orderCard.shipment.carrier ||
                                   msg.orderCard.shipment.trackingCode) && (
-                                  <span className="block text-[11px] text-stone-600">
-                                    {[
-                                      msg.orderCard.shipment.carrier,
-                                      msg.orderCard.shipment.trackingCode,
-                                    ]
-                                      .filter(Boolean)
-                                      .join(' · ')}
+                                  <span className="block text-[11px] font-mono text-stone-600">
+                                    Mã vận đơn:{' '}
+                                    {msg.orderCard.shipment.trackingCode || 'Đang cập nhật'}
                                   </span>
                                 )}
                                 {msg.orderCard.shipment.currentLocation && (
-                                  <span className="block text-[11px] text-muted">
-                                    {msg.orderCard.shipment.currentLocation}
+                                  <span className="block text-[11px] text-stone-700">
+                                    📍 {msg.orderCard.shipment.currentLocation}
                                   </span>
                                 )}
                                 {msg.orderCard.shipment.updatedAt && (
@@ -1446,7 +1734,7 @@ export function BuyerAssistantWidget() {
                                 )}
                                 {msg.orderCard.shipment.estimatedDeliveryAt && (
                                   <span className="block text-[11px] text-emerald-700 font-medium">
-                                    Dự kiến:{' '}
+                                    Dự kiến giao:{' '}
                                     {formatVietnamTime(msg.orderCard.shipment.estimatedDeliveryAt)}
                                   </span>
                                 )}

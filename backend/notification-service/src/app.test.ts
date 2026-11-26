@@ -213,3 +213,32 @@ test('TASK-NOT-01: SSE Stream, in-app inbox and mark as read', async () => {
     controller.abort();
   });
 });
+
+test('GET /api/v1/notifications alias and /preferences endpoints', async () => {
+  await withNotificationServer(async (baseUrl) => {
+    // 1. GET /api/v1/notifications trả về danh sách inbox trực tiếp
+    const aliasRes = await fetch(`${baseUrl}/api/v1/notifications`);
+    assert.equal(aliasRes.status, 200);
+    const aliasJson = (await aliasRes.json()) as any;
+    assert.equal(aliasJson.success, true);
+    assert.ok(Array.isArray(aliasJson.data.items));
+
+    // 2. GET /api/v1/notifications/preferences
+    const getPrefsRes = await fetch(`${baseUrl}/api/v1/notifications/preferences`);
+    assert.equal(getPrefsRes.status, 200);
+    const getPrefsJson = (await getPrefsRes.json()) as any;
+    assert.equal(getPrefsJson.success, true);
+    assert.equal(getPrefsJson.data.orderEmail, true);
+    assert.equal(getPrefsJson.data.orderPush, true);
+
+    // 3. PUT /api/v1/notifications/preferences
+    const putPrefsRes = await fetch(`${baseUrl}/api/v1/notifications/preferences`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderEmail: true, orderPush: false }),
+    });
+    assert.equal(putPrefsRes.status, 200);
+    const putPrefsJson = (await putPrefsRes.json()) as any;
+    assert.equal(putPrefsJson.success, true);
+  });
+});

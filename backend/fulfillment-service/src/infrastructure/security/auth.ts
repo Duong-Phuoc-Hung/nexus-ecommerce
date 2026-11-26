@@ -1,3 +1,8 @@
+import {
+  extractServiceToken,
+  type NexusServiceId,
+  type ServiceTokenClaims,
+} from './internal-service-auth';
 import crypto from 'node:crypto';
 import { NextFunction, Request, Response } from 'express';
 
@@ -21,6 +26,7 @@ export interface AuthenticatedUser {
 }
 
 export interface AuthenticatedRequest extends Request {
+  serviceAuth?: ServiceTokenClaims;
   user?: AuthenticatedUser;
 }
 
@@ -30,32 +36,19 @@ export function verifyJwtToken(token: string): AuthenticatedUser | null {
     if (parts.length !== 3) return null;
 
     const [header, payloadPart, signature] = parts;
+    const parsedHeader = JSON.parse(Buffer.from(header, 'base64url').toString('utf8'));
+    if (parsedHeader.alg !== 'HS256') return null;
 
-    const candidateSecrets = [
-      process.env.JWT_ACCESS_SECRET,
-      process.env.JWT_SECRET,
-      'your_super_secret_jwt_access_key_min_32_characters_here',
-      'nexus_super_secret_jwt_access_key_min_32_chars_local_dev',
-      'nexus-dev-secret',
-    ].filter(Boolean) as string[];
+    const secret = getJwtSecret();
+    const expectedSignature = crypto
+      .createHmac('sha256', secret)
+      .update(`${header}.${payloadPart}`)
+      .digest('base64url');
 
-    let validSignature = false;
-    for (const secret of candidateSecrets) {
-      const expectedSignature = crypto
-        .createHmac('sha256', secret)
-        .update(`${header}.${payloadPart}`)
-        .digest('base64url');
-
-      if (
-        Buffer.from(expectedSignature).length === Buffer.from(signature).length &&
-        crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(signature))
-      ) {
-        validSignature = true;
-        break;
-      }
-    }
-
-    if (!validSignature) {
+    if (
+      Buffer.from(expectedSignature).length !== Buffer.from(signature).length ||
+      !crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(signature))
+    ) {
       return null;
     }
 
@@ -84,26 +77,12 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     .replace(/^Bearer\s+/i, '')
     .trim();
 
-  const forwardedUserId = req.headers['x-user-id'];
-  const forwardedRole = req.headers['x-user-role'];
-
   if (token) {
     const payload = verifyJwtToken(token);
     if (payload) {
       (req as AuthenticatedRequest).user = payload;
       return next();
     }
-  }
-
-  if (forwardedUserId && typeof forwardedUserId === 'string') {
-    (req as AuthenticatedRequest).user = {
-      sub: forwardedUserId,
-      email: (req.headers['x-user-email'] as string) || '',
-      role: (forwardedRole as string) || 'BUYER',
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 3600,
-    };
-    return next();
   }
 
   res.status(401).json({
@@ -115,8 +94,25 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 export function requireShipmentPermission(
   action: 'VIEW' | 'LIST' | 'UPDATE_STATUS' | 'MANUAL_OVERRIDE' | 'CREATE',
 ) {
+  const scopeMap: Record<string, string[]> = {
+    CREATE: ['fulfillment:shipment:create'],
+    VIEW: ['fulfillment:shipment:read'],
+  };
+
   return (req: Request, res: Response, next: NextFunction): void => {
-    const user = (req as AuthenticatedRequest).user;
+    const authReq = req as AuthenticatedRequest;
+    if (authReq.serviceAuth) {
+      if ((scopeMap[action] || []).includes(authReq.serviceAuth.scope)) {
+        return next();
+      }
+      res.status(403).json({
+        success: false,
+        error: `Service scope '${authReq.serviceAuth.scope}' is not authorized for shipment '${action}'.`,
+      });
+      return;
+    }
+
+    const user = authReq.user;
     if (!user) {
       res.status(401).json({
         success: false,
@@ -208,7 +204,19 @@ export function requireInventoryPermission(action: 'VIEW' | 'ADJUST') {
 
 export function requireSupportCasePermission(action: 'VIEW' | 'RESOLVE' | 'SUBMIT_EVIDENCE') {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const user = (req as AuthenticatedRequest).user;
+    const authReq = req as AuthenticatedRequest;
+    if (authReq.serviceAuth) {
+      if (action === 'VIEW' && authReq.serviceAuth.scope === 'fulfillment:case:read') {
+        return next();
+      }
+      res.status(403).json({
+        success: false,
+        error: `Service scope '${authReq.serviceAuth.scope}' is not authorized for support case '${action}'.`,
+      });
+      return;
+    }
+
+    const user = authReq.user;
     if (!user) {
       res.status(401).json({
         success: false,
@@ -245,5 +253,26 @@ export function requireSupportCasePermission(action: 'VIEW' | 'RESOLVE' | 'SUBMI
       success: false,
       error: `Tài khoản với vai trò '${user.role}' không có quyền thực hiện '${action}' trên hồ sơ khiếu nại hỗ trợ.`,
     });
+  };
+}
+
+export function requireAuthOrScopedService(options: {
+  requiredScope: string | string[];
+  allowedIssuers: NexusServiceId[];
+  resourceResolver?: (req: Request) => string | undefined;
+}) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const expectedResource = options.resourceResolver ? options.resourceResolver(req) : undefined;
+    const svc = extractServiceToken(req, {
+      expectedAudience: 'fulfillment-service',
+      requiredScope: options.requiredScope,
+      allowedIssuers: options.allowedIssuers,
+      expectedResource,
+    });
+    if (svc) {
+      (req as AuthenticatedRequest).serviceAuth = svc;
+      return next();
+    }
+    requireAuth(req, res, next);
   };
 }

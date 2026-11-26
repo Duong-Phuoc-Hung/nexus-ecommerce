@@ -24,16 +24,26 @@ export class RuleBasedLlmProvider implements ILanguageModelProvider {
     // 1. Kịch bản Vận đơn / Tra cứu lộ trình đơn hàng
     if (
       lower.includes('đến đâu') ||
+      lower.includes('tới đâu') ||
+      lower.includes('ở đâu') ||
+      lower.includes('đang ở đâu') ||
+      lower.includes('vận chuyển') ||
       lower.includes('vận đơn') ||
       lower.includes('giao') ||
+      lower.includes('bưu tá') ||
       lower.includes('vị trí') ||
       lower.includes('tracking') ||
       lower.includes('ship') ||
-      lower.includes('kiện hàng')
+      lower.includes('kiện hàng') ||
+      lower.includes('lộ trình')
     ) {
-      // Tìm mã đơn hàng từ prompt (ví dụ: NX-ORD-8021) hoặc lấy từ context hội thoại
-      const orderMatch = text.match(/(NX-ORD-\d+|ord_[a-zA-Z0-9_-]+)/i);
-      const targetOrderId = orderMatch ? orderMatch[0].toUpperCase() : context.orderId;
+      // Tìm mã đơn hàng từ prompt (ví dụ: ORD-20261126-000023, NX-ORD-8021) hoặc lấy từ context hội thoại
+      const orderMatch = text.match(
+        /(?:NEX-TRK-)?((?:NX-)?ORD-(?:AUC-)?[a-zA-Z0-9-]+|ord_[a-zA-Z0-9_-]+)/i,
+      );
+      const targetOrderId = orderMatch
+        ? (orderMatch[1] || orderMatch[0]).toUpperCase()
+        : context.orderId;
 
       if (targetOrderId) {
         const trackingTool = this.orderTrackingTool || new OrderTrackingTool();
@@ -46,7 +56,7 @@ export class RuleBasedLlmProvider implements ILanguageModelProvider {
 
         let replyText = `Đơn hàng ${targetOrderId} của bạn hiện có trạng thái: ${trackingInfo?.status || 'Đang giao'}.`;
         if (trackingInfo) {
-          replyText = `Đơn hàng ${targetOrderId} đang được hãng ${trackingInfo.carrier} vận chuyển với mã tra cứu ${trackingInfo.trackingCode}. Hiện tại kiện hàng đang ở: ${trackingInfo.currentLocation} (${trackingInfo.estimatedDelivery || 'dự kiến giao sớm'}).`;
+          replyText = `🚚 Tiến trình vận chuyển đơn hàng ${targetOrderId}:\nHiện tại kiện hàng đang được hãng ${trackingInfo.carrier} vận chuyển với mã tra cứu ${trackingInfo.trackingCode}. Trạng thái: ${trackingInfo.status}.\nVị trí ghi nhận: ${trackingInfo.currentLocation} (${trackingInfo.estimatedDelivery || 'dự kiến giao sớm'}).`;
         }
 
         return {
@@ -61,6 +71,35 @@ export class RuleBasedLlmProvider implements ILanguageModelProvider {
           ],
           metadata: {
             topic: 'order_tracking',
+            orderId: targetOrderId,
+          },
+        };
+      }
+    }
+
+    // 1.1 Kịch bản Kiểm tra thanh toán đơn hàng
+    if (
+      lower.includes('thanh toán') ||
+      lower.includes('trừ tiền') ||
+      lower.includes('tiền') ||
+      lower.includes('payos') ||
+      lower.includes('chuyển khoản') ||
+      lower.includes('đã trả') ||
+      lower.includes('escrow')
+    ) {
+      const orderMatch = text.match(
+        /(?:NEX-TRK-)?((?:NX-)?ORD-(?:AUC-)?[a-zA-Z0-9-]+|ord_[a-zA-Z0-9_-]+)/i,
+      );
+      const targetOrderId = orderMatch
+        ? (orderMatch[1] || orderMatch[0]).toUpperCase()
+        : context.orderId;
+
+      if (targetOrderId) {
+        return {
+          content: `💳 Xác nhận thanh toán đơn hàng ${targetOrderId}:\nĐơn hàng đã được xác nhận thanh toán thành công qua cổng giao dịch PayOS (VietQR). Khoản tiền hiện được bảo chứng an toàn tại quỹ ký quỹ Nexus Escrow và chỉ giải ngân cho Người bán sau khi bạn nhận hàng nguyên vẹn và xác nhận hài lòng.`,
+          modelUsed: 'rule-based-fallback',
+          metadata: {
+            topic: 'order_payment',
             orderId: targetOrderId,
           },
         };

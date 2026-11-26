@@ -3,6 +3,10 @@ import { ApiError, unwrap, type RequestApi } from '@/lib/axios/http';
 
 export type OrderListItem = {
   id: string;
+  orderCode?: string;
+  orderSource?: 'DIRECT' | 'AUCTION' | string;
+  auctionId?: string | null;
+  auctionWinningBid?: number | null;
   buyer: string;
   email: string;
   seller: string;
@@ -19,6 +23,10 @@ export type OrderListItem = {
 
 export type OrderDetail = {
   id: string;
+  orderCode?: string;
+  orderSource?: 'DIRECT' | 'AUCTION' | string;
+  auctionId?: string | null;
+  auctionWinningBid?: number | null;
   buyerId: string;
   buyer: string;
   email: string;
@@ -58,6 +66,21 @@ export type OrderDetail = {
   updatedAt: string;
   timeline: { status: string; title: string; timestamp: string; note?: string }[];
 };
+
+export function isAuctionOrder(
+  order?: {
+    id?: string;
+    orderCode?: string;
+    orderSource?: string;
+    auctionId?: string | null;
+  } | null,
+): boolean {
+  if (!order) return false;
+  if (String(order.orderSource || '').toUpperCase() === 'AUCTION') return true;
+  if (order.auctionId && String(order.auctionId).trim().length > 0) return true;
+  const code = String(order.orderCode || order.id || '').toUpperCase();
+  return code.startsWith('ORD-AUC-');
+}
 
 export type OrderPage = {
   items: OrderListItem[];
@@ -320,7 +343,12 @@ export function createOrdersApi(request: RequestApi) {
         accountNumber?: string | null;
         accountName?: string | null;
         description?: string | null;
-      }>(await request(`/orders/${encodeURIComponent(orderId)}/payment-status`, { signal }));
+      }>(
+        await request(`/orders/${encodeURIComponent(orderId)}/payment-status?_t=${Date.now()}`, {
+          signal,
+          headers: { 'Cache-Control': 'no-cache, no-store' },
+        }),
+      );
     },
   };
 }
