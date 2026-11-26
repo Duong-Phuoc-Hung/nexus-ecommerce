@@ -344,6 +344,27 @@ export function SupportShipmentsPage() {
     }
   }
 
+  // Handler xác nhận đã thu tiền COD
+  async function handleConfirmCodPayment() {
+    if (!selected) return;
+    const targetOrderId = selected.orderId || selected.order || selected.code;
+    setActing(true);
+    setNotice('');
+    try {
+      await supportShipmentsApi.confirmCodPayment(selected.id, {
+        note: `Support Staff xác nhận đã thu tiền COD cho đơn hàng #${targetOrderId}`,
+      });
+      setNotice(`✓ Đã xác nhận thu tiền COD thành công cho đơn hàng #${targetOrderId}.`);
+      const updated = await supportShipmentsApi.getById(selected.id);
+      setSelected(updated);
+      setShipments((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+    } catch (err) {
+      setNotice(userMessage(err));
+    } finally {
+      setActing(false);
+    }
+  }
+
   // Xây dựng Stepper động tuân thủ State Machine một chiều theo SRS 3.6.2 & 2.8
   const stepperSteps = useMemo(() => {
     if (!selected) return [];
@@ -974,8 +995,8 @@ export function SupportShipmentsPage() {
               >
                 💡 <strong>Nguyên tắc vận hành:</strong> Trong môi trường Production thực tế, tiến
                 trình vận chuyển được cập nhật <strong>tự động 100% qua Webhook</strong> từ đối tác
-                giao nhận (GHN / GHTK API). Cụm công cụ này dành cho môi trường phát triển & kiểm
-                thử đồ án nhằm mô phỏng các sự kiện Shipper bưu cục cập nhật hành trình.
+                giao nhận (GHN / GHTK API). Cụm công cụ này dành cho môi trường phát triển &amp;
+                kiểm thử đồ án nhằm mô phỏng các sự kiện Shipper bưu cục cập nhật hành trình.
               </p>
 
               <div className="support-action-buttons">
@@ -1004,6 +1025,15 @@ export function SupportShipmentsPage() {
                   onClick={handleOpenOverride}
                 >
                   Điều chỉnh khu vực
+                </button>
+                <button
+                  type="button"
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
+                  disabled={acting}
+                  onClick={handleConfirmCodPayment}
+                  title="Xác nhận đối tác giao nhận/shipper đã thu đủ tiền COD từ khách hàng"
+                >
+                  💵 Xác nhận đã thanh toán COD
                 </button>
                 {selected.statusCode === 'FAILED' && (
                   <>

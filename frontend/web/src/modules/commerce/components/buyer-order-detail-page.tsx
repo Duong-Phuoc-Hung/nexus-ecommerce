@@ -262,6 +262,7 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
   const [returnError, setReturnError] = useState('');
   const [retryingRefundCaseId, setRetryingRefundCaseId] = useState('');
   const [renewingPayosLink, setRenewingPayosLink] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [livePaymentStatus, setLivePaymentStatus] = useState<LivePaymentStatusSnapshot | null>(
     null,
@@ -455,21 +456,25 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
     return () => c.abort();
   }, [fetchOrderDetail]);
 
-  // Chỉ đồng bộ lại khi người dùng thực sự rời tab > 60 giây rồi quay lại (tránh spam request khi click chuyển cửa sổ)
+  const handleManualRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    fetchOrderDetail();
+    void loadOrderCases();
+    setTimeout(() => setIsRefreshing(false), 600);
+  }, [fetchOrderDetail, loadOrderCases]);
+
+  // Tự động đồng bộ ngay khi người dùng quay lại tab (chống delay 60s)
   useEffect(() => {
     if (typeof window === 'undefined' || user?.role !== 'BUYER') return;
-    let hiddenAt = 0;
+    let lastRefetch = 0;
     const onVisibility = () => {
-      if (document.visibilityState === 'hidden') {
-        hiddenAt = Date.now();
-      } else if (
-        document.visibilityState === 'visible' &&
-        hiddenAt > 0 &&
-        Date.now() - hiddenAt > 60_000
-      ) {
-        hiddenAt = 0;
-        fetchOrderDetail();
-        void loadOrderCases();
+      if (document.visibilityState === 'visible') {
+        const now = Date.now();
+        if (now - lastRefetch > 2000) {
+          lastRefetch = now;
+          fetchOrderDetail();
+          void loadOrderCases();
+        }
       }
     };
     document.addEventListener('visibilitychange', onVisibility);
@@ -477,6 +482,23 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [fetchOrderDetail, loadOrderCases, user?.role]);
+
+  // Cơ chế polling tự động mỗi 6 giây khi đơn hàng đang trong tiến trình luân chuyển (PROCESSING / SHIPPED)
+  useEffect(() => {
+    if (typeof window === 'undefined' || user?.role !== 'BUYER' || !order) return;
+    const isTransitional =
+      order.status === 'PENDING_PAYMENT' ||
+      order.status === 'PROCESSING' ||
+      order.status === 'SHIPPED';
+    if (!isTransitional) return;
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchOrderDetail();
+      }
+    }, 6000);
+    return () => clearInterval(interval);
+  }, [fetchOrderDetail, order?.status, user?.role]);
 
   // Tải hình ảnh sản phẩm đại diện từ Catalog API nếu đơn hàng chưa có imageUrl sẵn
   useEffect(() => {
@@ -953,9 +975,11 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
           ? 'Đang luân chuyển'
           : isCancelled
             ? 'Không giao'
-            : 'Đang chuẩn bị kiện',
+            : order?.status === 'PROCESSING'
+              ? 'Đang chuẩn bị kiện'
+              : 'Đang chuẩn bị kiện',
       done: isShipped || isDelivered,
-      active: isShipped,
+      active: isShipped || order?.status === 'PROCESSING',
     },
     {
       key: 'FINAL',
@@ -1462,13 +1486,31 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
               className="mt-5 rounded-2xl border border-line bg-white p-5 sm:p-6 shadow-xs"
             >
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-3.5">
-                <h2 className="font-bold text-stone-900 text-base sm:text-lg flex items-center gap-2">
+                <div className="flex items-center gap-2">
                   <Clock className="size-4 text-brand-dark" />
-                  Diễn biến đơn hàng
-                </h2>
-                <span className="text-xs text-muted">
-                  Cập nhật theo tiến trình giao dịch & vận chuyển Nexus
-                </span>
+                  <h2 className="font-bold text-stone-900 text-base sm:text-lg">
+                    Diễn biến đơn hàng
+                  </h2>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="hidden sm:inline text-xs text-muted">
+                    Cập nhật theo tiến trình giao dịch & vận chuyển Nexus
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleManualRefresh}
+                    disabled={isRefreshing}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100 transition cursor-pointer"
+                    title="Đồng bộ dữ liệu thời gian thực từ đối tác vận chuyển"
+                  >
+                    <span
+                      className={`size-2 rounded-full bg-emerald-500 ${
+                        isRefreshing ? 'animate-spin' : 'animate-pulse'
+                      }`}
+                    />
+                    <span>{isRefreshing ? 'Đang đồng bộ...' : 'Đồng bộ trực tiếp'}</span>
+                  </button>
+                </div>
               </div>
 
               {/* Thanh tiến trình tổng quan (4 bước chuẩn hoặc 5 bước khi có khiếu nại / hoàn tiền) */}
@@ -1484,9 +1526,9 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
                       step.isAlert
                         ? 'border-red-200 bg-red-50/50'
                         : step.active
-                          ? 'border-amber-300 bg-amber-50/70 ring-1 ring-amber-200'
+                          ? 'border-amber-400 bg-amber-50/40 ring-1 ring-amber-300'
                           : step.done
-                            ? 'border-emerald-200 bg-emerald-50/40'
+                            ? 'border-emerald-300 bg-emerald-50/40'
                             : 'border-line bg-stone-50/60'
                     }`}
                   >
@@ -1495,7 +1537,9 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
                         className={`font-bold ${
                           step.active && !step.isAlert && !step.done
                             ? 'text-amber-900'
-                            : 'text-stone-500'
+                            : step.done
+                              ? 'text-emerald-900'
+                              : 'text-stone-500'
                         }`}
                       >
                         Bước {idx + 1}
@@ -1518,65 +1562,189 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
                 ))}
               </div>
 
-              {/* Chi tiết mốc thời gian và ghi chú từ đơn (lọc trùng trạng thái liên tiếp) */}
-              <ol className="mt-5 space-y-3 border-t border-line/60 pt-4 text-sm">
-                {order.timeline && order.timeline.length > 0 ? (
-                  order.timeline
-                    .filter((s, i, arr) => {
-                      if (i === 0) return true;
-                      const prev = arr[i - 1];
-                      return (
-                        (s.title || s.status) !== (prev.title || prev.status) ||
-                        (s.note || '') !== (prev.note || '')
-                      );
-                    })
-                    .map((s, i, filtered) => {
-                      const isLatest = i === filtered.length - 1;
-                      return (
-                        <li
-                          key={`${s.timestamp}-${i}`}
-                          className={`relative pl-5 border-l-2 pb-1 ${
-                            isLatest ? 'border-emerald-500' : 'border-stone-200'
-                          }`}
-                        >
-                          <span
-                            className={`absolute -left-[5px] top-1.5 size-2 rounded-full ${
-                              isLatest ? 'bg-emerald-500 ring-2 ring-emerald-100' : 'bg-stone-400'
-                            }`}
-                          />
-                          <div className="flex flex-wrap items-baseline justify-between gap-2">
-                            <strong className="text-stone-900 font-semibold text-xs sm:text-sm">
-                              {formatOrderStatus(s.title || s.status)}
-                            </strong>
-                            <span className="text-[11px] text-muted font-mono">
-                              {new Date(s.timestamp).toLocaleString('vi-VN')}
-                            </span>
-                          </div>
-                          {s.note && (
-                            <p className="mt-0.5 text-xs text-stone-600 leading-relaxed">
-                              {s.note}
-                            </p>
-                          )}
-                        </li>
-                      );
-                    })
-                ) : (
-                  <li className="relative pl-5 border-l-2 border-emerald-500">
-                    <span className="absolute -left-[5px] top-1.5 size-2 rounded-full bg-emerald-500 ring-2 ring-emerald-100" />
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <strong className="text-stone-900 font-semibold text-xs sm:text-sm">
-                        Đơn hàng được khởi tạo thành công
-                      </strong>
-                      <span className="text-[11px] text-muted font-mono">
-                        {formattedCreatedDate}
-                      </span>
+              {/* Chi tiết mốc thời gian và ghi chú từ đơn (Thanh tiến độ ngang liên kết theo chu kỳ thời gian) */}
+              <div className="mt-5 border-t border-line/60 pt-4">
+                <div className="flex items-center justify-between mb-3 px-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-stone-600">
+                      Lịch sử cập nhật tiến trình
+                    </span>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-stone-100 text-stone-600">
+                      Thanh tiến độ ngang
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-medium text-stone-400">
+                    Cuộn ngang để xem toàn bộ mốc
+                  </span>
+                </div>
+
+                {(() => {
+                  const rawTimeline =
+                    order.timeline && order.timeline.length > 0
+                      ? order.timeline
+                      : [
+                          {
+                            title: 'Đơn hàng được tạo thành công · Đang xử lý',
+                            status: 'PROCESSING',
+                            note: 'Khởi tạo đơn hàng trên sàn thương mại điện tử Nexus',
+                            timestamp: order.createdAt || new Date().toISOString(),
+                          },
+                        ];
+
+                  const filtered = rawTimeline.filter((s, i, arr) => {
+                    if (i === 0) return true;
+                    const prev = arr[i - 1];
+                    return (
+                      (s.title || s.status) !== (prev.title || prev.status) ||
+                      (s.note || '') !== (prev.note || '')
+                    );
+                  });
+
+                  return (
+                    <div className="rounded-xl border border-line/80 bg-stone-50/50 p-4 sm:p-5 shadow-2xs">
+                      <div className="relative overflow-x-auto pb-3 pt-2 scrollbar-thin">
+                        <div className="flex items-start min-w-max gap-0">
+                          {filtered.map((s, i) => {
+                            const isLatest = i === filtered.length - 1;
+                            const isFirst = i === 0;
+                            const isLast = i === filtered.length - 1;
+
+                            const upperTitle = (s.title || s.status || '').toUpperCase();
+                            const isCancelOrFailure =
+                              upperTitle.includes('CANCEL') ||
+                              upperTitle.includes('HỦY') ||
+                              upperTitle.includes('THẤT BẠI') ||
+                              upperTitle.includes('FAIL') ||
+                              upperTitle.includes('DAMAGED');
+                            const isDelivered =
+                              upperTitle.includes('DELIVER') ||
+                              upperTitle.includes('ĐÃ GIAO') ||
+                              upperTitle.includes('COMPLETED');
+                            const isShipping =
+                              upperTitle.includes('SHIP') ||
+                              upperTitle.includes('ĐANG GIAO') ||
+                              upperTitle.includes('TRANSIT');
+                            const isProcessing =
+                              upperTitle.includes('PROCESS') ||
+                              upperTitle.includes('XỬ LÝ') ||
+                              upperTitle.includes('CHUẨN BỊ');
+
+                            return (
+                              <div
+                                key={`${s.timestamp}-${i}`}
+                                className="relative flex flex-col items-center text-center px-3 w-[220px] sm:w-[250px] shrink-0"
+                              >
+                                {/* Thanh nối ngang (Connecting Line) */}
+                                <div className="relative w-full flex items-center justify-center mb-3">
+                                  {/* Đoạn nối bên trái */}
+                                  {!isFirst && (
+                                    <div
+                                      aria-hidden="true"
+                                      className={`absolute left-0 right-1/2 top-1/2 -translate-y-1/2 h-0.5 ${
+                                        isCancelOrFailure ? 'bg-red-300' : 'bg-emerald-400'
+                                      }`}
+                                    />
+                                  )}
+                                  {/* Đoạn nối bên phải */}
+                                  {!isLast && (
+                                    <div
+                                      aria-hidden="true"
+                                      className={`absolute left-1/2 right-0 top-1/2 -translate-y-1/2 h-0.5 ${
+                                        isCancelOrFailure ? 'bg-red-300' : 'bg-emerald-400'
+                                      }`}
+                                    />
+                                  )}
+
+                                  {/* Nút mốc tròn trên thanh tiến độ (Node Circle) */}
+                                  <div
+                                    className={`relative z-10 flex size-8 sm:size-9 items-center justify-center rounded-full transition-all duration-200 ${
+                                      isLatest
+                                        ? isCancelOrFailure
+                                          ? 'bg-red-600 text-white ring-4 ring-red-100 shadow-xs animate-pulse'
+                                          : isDelivered
+                                            ? 'bg-emerald-600 text-white ring-4 ring-emerald-100 shadow-xs'
+                                            : 'bg-emerald-600 text-white ring-4 ring-emerald-100 shadow-xs animate-pulse'
+                                        : isCancelOrFailure
+                                          ? 'bg-red-100 text-red-600 border border-red-200'
+                                          : isDelivered
+                                            ? 'bg-emerald-500 text-white'
+                                            : isShipping
+                                              ? 'bg-sky-500 text-white'
+                                              : isProcessing
+                                                ? 'bg-amber-500 text-white'
+                                                : 'bg-stone-800 text-white'
+                                    }`}
+                                  >
+                                    {isCancelOrFailure ? (
+                                      <XCircle className="size-4" />
+                                    ) : isDelivered ? (
+                                      <CheckCircle2 className="size-4" />
+                                    ) : isShipping ? (
+                                      <Truck className="size-4" />
+                                    ) : isProcessing ? (
+                                      <Clock className="size-4" />
+                                    ) : (
+                                      <Package className="size-4" />
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Thông tin mốc: Số thứ tự + Badge mới nhất */}
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <span className="font-mono text-[11px] font-bold text-stone-500">
+                                    Mốc #{i + 1}
+                                  </span>
+                                  {isLatest && (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-emerald-600 text-white">
+                                      Mới nhất
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Thời gian ghi nhận */}
+                                <span className="font-mono text-[11px] text-stone-500 mb-1.5">
+                                  {new Date(s.timestamp).toLocaleString('vi-VN')}
+                                </span>
+
+                                {/* Tiêu đề trạng thái */}
+                                <strong
+                                  className={`block text-xs font-bold leading-snug line-clamp-2 ${
+                                    isLatest
+                                      ? isCancelOrFailure
+                                        ? 'text-red-700'
+                                        : 'text-emerald-900'
+                                      : 'text-stone-900'
+                                  }`}
+                                >
+                                  {s.title ||
+                                    (s.status
+                                      ? `Trạng thái chuyển sang: ${formatOrderStatus(s.status)}`
+                                      : 'Cập nhật hành trình')}
+                                </strong>
+
+                                {/* Ghi chú chi tiết (khối thẻ nhỏ dưới từng mốc) */}
+                                {s.note && (
+                                  <p
+                                    className={`mt-2 w-full rounded-lg border p-2 text-left text-[11px] leading-relaxed transition-all ${
+                                      isLatest
+                                        ? isCancelOrFailure
+                                          ? 'border-red-200 bg-red-50/70 text-red-900 font-medium'
+                                          : 'border-emerald-200 bg-emerald-50/60 text-emerald-950 font-medium'
+                                        : 'border-line/70 bg-white text-stone-600 shadow-2xs'
+                                    }`}
+                                  >
+                                    {s.note}
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
-                    <p className="mt-0.5 text-xs text-stone-600">
-                      Hệ thống đã ghi nhận sản phẩm, giá bán và địa chỉ nhận hàng.
-                    </p>
-                  </li>
-                )}
-              </ol>
+                  );
+                })()}
+              </div>
             </section>
 
             {/* TRUNG TÂM NHẮN TIN ĐƠN HÀNG (SELLER / SUPPORT) & TRỢ LÝ NEXUS (AI) & HỒ SƠ KHIẾU NẠI */}

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { buildServiceAuthHeader } from '../../../infrastructure/security/internal-service-auth';
 import type { Pool } from 'pg';
+import { getCommerceDbPool } from '../../../infrastructure/database/pgPool';
 import { GetOrderDetailUseCase } from '../../../application/use-cases/GetOrderDetailUseCase';
 import { SearchOrdersUseCase } from '../../../application/use-cases/SearchOrdersUseCase';
 import { CancelOrderUseCase } from '../../../application/use-cases/CancelOrderUseCase';
@@ -644,6 +645,93 @@ export class OrderController {
       res.status(400).json({
         success: false,
         error: error.message || 'Không thể cập nhật trạng thái đơn hàng.',
+      });
+    }
+  }
+
+  /**
+   * POST /api/v1/orders/:id/confirm-cod
+   * Xác nhận đã thu tiền COD cho đơn hàng (từ Support Staff hoặc Webhook vận chuyển)
+   */
+  public async confirmCodPayment(req: Request, res: Response): Promise<void> {
+    try {
+      const orderId = String(req.params.id || '').trim();
+      const { note } = req.body || {};
+
+      const existingOrder = await this.getOrderDetailUseCase.execute(orderId);
+      if (!existingOrder) {
+        res.status(404).json({ success: false, error: `Không tìm thấy đơn hàng "${orderId}".` });
+        return;
+      }
+
+      const targetId = (existingOrder as any).internalId || existingOrder.id;
+      const orderCode = (existingOrder as any).orderCode || existingOrder.id;
+
+      if (process.env.USE_IN_MEMORY_DB !== 'true') {
+        const pool = this.dbPool || getCommerceDbPool();
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+
+          // Cập nhật payment record sang PAID
+          const updatePayRes = await client.query(
+            `UPDATE commerce_payments
+             SET status = 'PAID', paid_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+             WHERE order_id = $1::varchar OR order_id = $2::varchar`,
+            [targetId, orderCode],
+          );
+
+          // Nếu chưa có payment record nào (đơn COD tạo qua luồng cũ), tự động chèn record
+          if (updatePayRes.rowCount === 0) {
+            await client.query(
+              `INSERT INTO commerce_payments (order_id, payment_method, idempotency_key, amount, currency, status, paid_at, created_at, updated_at)
+               VALUES ($1, 'COD', $2, $3, 'VND', 'PAID', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+              [
+                targetId,
+                `cod_pay_${Date.now()}_${targetId.slice(-6)}`,
+                existingOrder.totalAmount || 0,
+              ],
+            );
+          }
+
+          // Cập nhật timeline trong commerce_orders
+          const timelineEntry = {
+            status: 'PAID',
+            title: 'Xác nhận thu tiền COD thành công',
+            note:
+              note ||
+              'Tiền thu hộ COD đã được đối tác giao nhận thu và xác nhận đối soát thành công.',
+            timestamp: new Date().toISOString(),
+          };
+
+          await client.query(
+            `UPDATE commerce_orders
+             SET timeline = COALESCE(timeline, '[]'::jsonb) || $1::jsonb,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $2::varchar OR order_code = $3::varchar`,
+            [JSON.stringify([timelineEntry]), targetId, orderCode],
+          );
+
+          await client.query('COMMIT');
+        } catch (dbErr) {
+          await client.query('ROLLBACK');
+          throw dbErr;
+        } finally {
+          client.release();
+        }
+      }
+
+      const updated = await this.getOrderDetailUseCase.execute(orderId);
+
+      res.status(200).json({
+        success: true,
+        message: 'Đã xác nhận thu tiền COD thành công cho đơn hàng.',
+        data: updated,
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Không thể xác nhận thanh toán COD.',
       });
     }
   }

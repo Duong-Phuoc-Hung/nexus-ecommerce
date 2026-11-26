@@ -8,6 +8,7 @@ import { ProcessCarrierWebhookUseCase } from '../../../application/use-cases/Pro
 import { CreateShipmentUseCase } from '../../../application/use-cases/CreateShipmentUseCase';
 import { RequestRedeliveryUseCase } from '../../../application/use-cases/RequestRedeliveryUseCase';
 import { ConfirmReturnUseCase } from '../../../application/use-cases/ConfirmReturnUseCase';
+import { ICommerceOrderClient } from '../../../infrastructure/clients/CommerceOrderClient';
 import { ShipmentNotFoundException } from '../../../domain/exceptions/ShipmentNotFoundException';
 import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
 import { PrismaClientWrapper } from '../../../infrastructure/database/PrismaClient';
@@ -23,6 +24,7 @@ export class ShipmentController {
     private readonly createShipmentUseCase?: CreateShipmentUseCase,
     private readonly requestRedeliveryUseCase?: RequestRedeliveryUseCase,
     private readonly confirmReturnUseCase?: ConfirmReturnUseCase,
+    private readonly commerceOrderClient?: ICommerceOrderClient,
   ) {}
 
   public async listShipments(req: Request, res: Response): Promise<void> {
@@ -563,6 +565,51 @@ export class ShipmentController {
       res.status(400).json({
         success: false,
         error: error.message || 'Không thể xác nhận hoàn trả đơn hàng.',
+      });
+    }
+  }
+
+  /**
+   * POST /api/v1/fulfillments/shipments/:id/confirm-cod
+   * Xác nhận đã thu tiền COD cho đơn hàng liên kết với vận đơn
+   */
+  public async confirmCodPayment(req: Request, res: Response): Promise<void> {
+    try {
+      const shipmentId = req.params.id as string;
+      const { note } = req.body || {};
+
+      const shipment = await this.getShipmentDetailUseCase.execute(shipmentId);
+      if (!shipment) {
+        res.status(404).json({ success: false, error: `Không tìm thấy vận đơn "${shipmentId}".` });
+        return;
+      }
+
+      const targetOrderId =
+        (shipment as any).orderId || (shipment as any).order || (shipment as any).id;
+      if (this.commerceOrderClient && targetOrderId) {
+        await this.commerceOrderClient.confirmCodPayment?.(
+          targetOrderId,
+          note || 'Xác nhận thu tiền COD từ Support Simulator',
+        );
+      }
+
+      res.status(200).json({
+        success: true,
+        message: `Đã xác nhận thu tiền COD cho đơn hàng ${targetOrderId} thành công.`,
+        data: {
+          shipmentId: shipment.id,
+          orderId: targetOrderId,
+          codPaid: true,
+        },
+      });
+    } catch (error: any) {
+      if (error instanceof ShipmentNotFoundException) {
+        res.status(404).json({ success: false, error: error.message });
+        return;
+      }
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Không thể xác nhận thanh toán COD.',
       });
     }
   }

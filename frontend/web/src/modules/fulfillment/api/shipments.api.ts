@@ -177,6 +177,19 @@ export function createShipmentsApi(request: RequestApi, prefix = '/support') {
         }),
       );
     },
+    async confirmCodPayment(
+      id: string,
+      input?: { note?: string },
+    ): Promise<{ success: boolean; message: string; data?: any }> {
+      const raw = await request<{ success: boolean; message: string; data?: any }>(
+        `${prefix}/shipments/${encodeURIComponent(id)}/confirm-cod`,
+        {
+          method: 'POST',
+          body: input || {},
+        },
+      );
+      return unwrap(raw);
+    },
   };
 }
 

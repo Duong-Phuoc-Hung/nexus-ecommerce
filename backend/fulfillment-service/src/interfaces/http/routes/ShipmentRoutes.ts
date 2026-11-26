@@ -88,5 +88,13 @@ export function createShipmentRoutes(controller: ShipmentController): Router {
     (req, res) => controller.confirmReturn(req, res),
   );
 
+  // 8. Xác nhận đã thu tiền COD cho đơn hàng liên kết
+  router.post(
+    '/shipments/:id/confirm-cod',
+    requireAuth,
+    requireShipmentPermission('UPDATE_STATUS'),
+    (req, res) => controller.confirmCodPayment(req, res),
+  );
+
   return router;
 }

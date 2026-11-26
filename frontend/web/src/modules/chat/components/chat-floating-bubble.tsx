@@ -252,22 +252,6 @@ export function ChatFloatingBubble({ role, targetUrl, badgeCount }: ChatFloating
             {displayCount}
           </span>
         )}
-
-        {/* Hiệu ứng xung nhịp Pulse ngầm khi có khiếu nại/tin nhắn đang chờ */}
-        {displayCount > 0 && (
-          <span
-            className="pointer-events-none"
-            style={{
-              position: 'absolute',
-              inset: 0,
-              borderRadius: '50%',
-              background: isSeller ? 'rgba(225, 29, 72, 0.4)' : 'rgba(37, 99, 235, 0.4)',
-              zIndex: -1,
-              animation: 'ping 2s cubic-bezier(0, 0, 0.2, 1) infinite',
-              pointerEvents: 'none',
-            }}
-          />
-        )}
       </Link>
     </div>
   );

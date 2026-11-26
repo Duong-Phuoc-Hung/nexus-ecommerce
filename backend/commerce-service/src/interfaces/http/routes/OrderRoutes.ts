@@ -130,6 +130,16 @@ export function createOrderRoutes(
     (req, res) => controller.updateStatus(req, res),
   );
   router.post(
+    '/:id/confirm-cod',
+    requireAuthOrScopedService({
+      requiredScope: 'order:status:sync',
+      allowedIssuers: ['fulfillment-service'],
+      resourceResolver: orderIdParam,
+    }),
+    requireOrderPermission('UPDATE_STATUS'),
+    (req, res) => controller.confirmCodPayment(req, res),
+  );
+  router.post(
     '/:id/refund/request',
     requireAuthOrScopedService({
       requiredScope: 'order:refund:request',
