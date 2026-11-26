@@ -114,4 +114,62 @@ export class InMemoryProductRepository implements IProductRepository {
   public async delete(id: string): Promise<void> {
     this.products.delete(id);
   }
+
+  private static readonly stockLedger = new Set<string>();
+
+  public async deductStockOnce(
+    productId: string,
+    quantity: number,
+    orderId?: string,
+  ): Promise<{ remainingStock: number; status: string; idempotentReplay: boolean }> {
+    const product = this.products.get(productId);
+    if (!product) {
+      throw new Error(`Không tìm thấy sản phẩm ${productId}`);
+    }
+    if (orderId) {
+      const key = `DEDUCT::${orderId}::${productId}`;
+      if (InMemoryProductRepository.stockLedger.has(key)) {
+        return {
+          remainingStock: product.stockQuantity,
+          status: product.status,
+          idempotentReplay: true,
+        };
+      }
+      InMemoryProductRepository.stockLedger.add(key);
+    }
+    product.reduceStock(quantity);
+    return {
+      remainingStock: product.stockQuantity,
+      status: product.status,
+      idempotentReplay: false,
+    };
+  }
+
+  public async restoreStockOnce(
+    productId: string,
+    quantity: number,
+    orderId?: string,
+  ): Promise<{ remainingStock: number; status: string; idempotentReplay: boolean }> {
+    const product = this.products.get(productId);
+    if (!product) {
+      throw new Error(`Không tìm thấy sản phẩm ${productId}`);
+    }
+    if (orderId) {
+      const key = `RESTORE::${orderId}::${productId}`;
+      if (InMemoryProductRepository.stockLedger.has(key)) {
+        return {
+          remainingStock: product.stockQuantity,
+          status: product.status,
+          idempotentReplay: true,
+        };
+      }
+      InMemoryProductRepository.stockLedger.add(key);
+    }
+    product.increaseStock(quantity);
+    return {
+      remainingStock: product.stockQuantity,
+      status: product.status,
+      idempotentReplay: false,
+    };
+  }
 }

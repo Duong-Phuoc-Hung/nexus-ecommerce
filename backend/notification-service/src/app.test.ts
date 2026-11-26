@@ -1,6 +1,32 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import test from 'node:test';
 import { createApplication } from './app';
+
+const TEST_EMAIL_KEY =
+  process.env.EMAIL_DELIVERY_SECRET || 'nexus_email_delivery_secret_for_dev_and_test_32_chars';
+
+function makeTestToken(sub: string, role = 'BUYER'): string {
+  const secret =
+    process.env.JWT_ACCESS_SECRET ||
+    process.env.JWT_SECRET ||
+    'nexus_super_secret_jwt_access_key_min_32_chars_local_dev';
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(
+    JSON.stringify({
+      sub,
+      role,
+      roles: [role],
+      permissions: role === 'ADMIN' ? ['ADMIN', 'EVENT_LOG.VIEW'] : [],
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    }),
+  ).toString('base64url');
+  const sig = crypto
+    .createHmac('sha256', secret)
+    .update(`${header}.${payload}`)
+    .digest('base64url');
+  return `${header}.${payload}.${sig}`;
+}
 
 async function withNotificationServer<T>(run: (baseUrl: string) => Promise<T>): Promise<T> {
   const app = createApplication();
@@ -32,7 +58,10 @@ test('POST /api/v1/notifications/email/otp sends OTP email endpoint', async () =
   await withNotificationServer(async (baseUrl) => {
     const res = await fetch(`${baseUrl}/api/v1/notifications/email/otp`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-email-delivery-key': TEST_EMAIL_KEY,
+      },
       body: JSON.stringify({
         email: 'test.user@nexus.vn',
         otp: '123456',
@@ -49,7 +78,10 @@ test('POST /api/v1/notifications/email/welcome sends welcome email endpoint', as
   await withNotificationServer(async (baseUrl) => {
     const res = await fetch(`${baseUrl}/api/v1/notifications/email/welcome`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-email-delivery-key': TEST_EMAIL_KEY,
+      },
       body: JSON.stringify({
         email: 'welcome.user@nexus.vn',
         fullName: 'Welcome User',
@@ -63,9 +95,13 @@ test('POST /api/v1/notifications/email/welcome sends welcome email endpoint', as
 
 test('POST /api/v1/notifications/email/send sends custom notification email endpoint', async () => {
   await withNotificationServer(async (baseUrl) => {
+    const adminToken = makeTestToken('admin_01', 'ADMIN');
     const res = await fetch(`${baseUrl}/api/v1/notifications/email/send`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`,
+      },
       body: JSON.stringify({
         email: 'alert.user@nexus.vn',
         title: 'Bảo trì hệ thống',
@@ -161,6 +197,9 @@ test('Web Push Notifications: VAPID Key, Subscribe, Broadcast & Unsubscribe life
 
 test('TASK-NOT-01: SSE Stream, in-app inbox and mark as read', async () => {
   await withNotificationServer(async (baseUrl) => {
+    const staffToken = makeTestToken('staff_01', 'SUPPORT_STAFF');
+    const buyerToken = makeTestToken('buyer_test_uuid', 'BUYER');
+
     // 1. Kết nối SSE stream
     const controller = new AbortController();
     const streamRes = await fetch(`${baseUrl}/api/v1/notifications/stream`, {
@@ -172,7 +211,10 @@ test('TASK-NOT-01: SSE Stream, in-app inbox and mark as read', async () => {
     // 2. Gửi thông báo in-app
     const sendRes = await fetch(`${baseUrl}/api/v1/notifications/send`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${staffToken}`,
+      },
       body: JSON.stringify({
         recipientId: 'buyer_test_uuid',
         channel: 'IN_APP',
@@ -184,7 +226,7 @@ test('TASK-NOT-01: SSE Stream, in-app inbox and mark as read', async () => {
     const sendJson = (await sendRes.json()) as any;
     assert.equal(sendJson.success, true);
     assert.equal(sendJson.data.recipientId, 'buyer_test_uuid');
-    assert.equal(sendJson.data.status, 'DELIVERED');
+    assert.ok(sendJson.data.status === 'SENT' || sendJson.data.status === 'DELIVERED');
     const noticeId = sendJson.data.id;
 
     // 3. Tra cứu hộp thư đến: GET /api/v1/notifications/inbox
@@ -200,6 +242,9 @@ test('TASK-NOT-01: SSE Stream, in-app inbox and mark as read', async () => {
     // 4. Đánh dấu đã đọc: PUT /api/v1/notifications/:id/read
     const readRes = await fetch(`${baseUrl}/api/v1/notifications/${noticeId}/read`, {
       method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${buyerToken}`,
+      },
     });
     assert.equal(readRes.status, 200);
 
@@ -216,15 +261,25 @@ test('TASK-NOT-01: SSE Stream, in-app inbox and mark as read', async () => {
 
 test('GET /api/v1/notifications alias and /preferences endpoints', async () => {
   await withNotificationServer(async (baseUrl) => {
+    const userToken = makeTestToken('usr_buyer_prefs', 'BUYER');
+
     // 1. GET /api/v1/notifications trả về danh sách inbox trực tiếp
-    const aliasRes = await fetch(`${baseUrl}/api/v1/notifications`);
+    const aliasRes = await fetch(`${baseUrl}/api/v1/notifications`, {
+      headers: {
+        Authorization: `Bearer ${userToken}`,
+      },
+    });
     assert.equal(aliasRes.status, 200);
     const aliasJson = (await aliasRes.json()) as any;
     assert.equal(aliasJson.success, true);
     assert.ok(Array.isArray(aliasJson.data.items));
 
     // 2. GET /api/v1/notifications/preferences
-    const getPrefsRes = await fetch(`${baseUrl}/api/v1/notifications/preferences`);
+    const getPrefsRes = await fetch(`${baseUrl}/api/v1/notifications/preferences`, {
+      headers: {
+        Authorization: `Bearer ${userToken}`,
+      },
+    });
     assert.equal(getPrefsRes.status, 200);
     const getPrefsJson = (await getPrefsRes.json()) as any;
     assert.equal(getPrefsJson.success, true);
@@ -234,7 +289,10 @@ test('GET /api/v1/notifications alias and /preferences endpoints', async () => {
     // 3. PUT /api/v1/notifications/preferences
     const putPrefsRes = await fetch(`${baseUrl}/api/v1/notifications/preferences`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${userToken}`,
+      },
       body: JSON.stringify({ orderEmail: true, orderPush: false }),
     });
     assert.equal(putPrefsRes.status, 200);

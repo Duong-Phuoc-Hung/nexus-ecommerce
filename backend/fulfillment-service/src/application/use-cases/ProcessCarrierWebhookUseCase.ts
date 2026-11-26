@@ -88,15 +88,14 @@ export class ProcessCarrierWebhookUseCase {
 
     const mappedStatus = this.mapStatus(input.status);
 
-    // Chống sự kiện webhook cũ/trễ làm lùi trạng thái vận đơn & đơn hàng trong môi trường Production
-    const isProd = process.env.NODE_ENV === 'production';
-    if (isProd && input.timestamp) {
+    // Chống sự kiện webhook cũ/trễ làm lùi trạng thái vận đơn & đơn hàng (P1 Phát hiện 05)
+    if (input.timestamp) {
       const eventTime = new Date(input.timestamp).getTime();
       if (!Number.isNaN(eventTime) && eventTime < shipment.updatedAt.getTime() - 5000) {
         return shipment;
       }
     }
-    if (isProd && !this.isValidProgression(shipment.status, mappedStatus)) {
+    if (!this.isValidProgression(shipment.status, mappedStatus)) {
       return shipment;
     }
 

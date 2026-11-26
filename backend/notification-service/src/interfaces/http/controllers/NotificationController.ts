@@ -285,6 +285,12 @@ export class NotificationController {
 
       notification.markAsRead();
       await this.notificationRepository.update(notification);
+
+      const foundInMem = this.inAppNotifications.find((n) => n.id === id);
+      if (foundInMem) {
+        foundInMem.read = true;
+      }
+
       res.status(200).json({
         success: true,
         data: notification.toJSON(),
@@ -306,6 +312,12 @@ export class NotificationController {
       if (!authUser) {
         res.status(401).json({ success: false, error: 'Authentication required.' });
         return;
+      }
+
+      for (const item of this.inAppNotifications) {
+        if (item.recipientId === authUser.sub || item.recipientId === 'ALL') {
+          item.read = true;
+        }
       }
       if (!this.notificationRepository) {
         res.status(200).json({ success: true, data: { updatedCount: 0 } });
@@ -425,6 +437,17 @@ export class NotificationController {
         await this.notificationRepository.save(entity);
       }
 
+      this.inAppNotifications.push({
+        id,
+        recipientId: resolvedRecipient,
+        channel: resolvedChannel,
+        title: title || 'Thông báo từ Nexus',
+        body: body || 'Bạn có cập nhật mới từ hệ thống.',
+        data: req.body?.data,
+        read: false,
+        createdAt: now,
+      });
+
       if (this.eventPublisher) {
         await this.eventPublisher.publish(
           'NotificationDispatched',
@@ -444,6 +467,7 @@ export class NotificationController {
         success: true,
         message: 'Notification queued for delivery',
         data: {
+          id,
           notificationId: id,
           recipientId: resolvedRecipient,
           channel: resolvedChannel,

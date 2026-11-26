@@ -148,7 +148,8 @@ export function isInternalServiceRequest(
   const configured = process.env.INTERNAL_SERVICE_SECRET?.trim();
   const expected =
     configured || (process.env.NODE_ENV === 'production' ? '' : 'nexus-internal-service-key');
-  const provided = req.headers['x-internal-service-key'];
+  const provided =
+    req.headers['x-internal-service-key'] || req.headers['x-internal-service-secret'];
   if (expected && typeof provided === 'string' && provided.length === expected.length) {
     try {
       if (crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected))) {

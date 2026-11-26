@@ -11,6 +11,17 @@ export class CommerceNotificationClient implements INotificationClient {
       `http://localhost:${process.env.NOTIFICATION_SERVICE_PORT || 4006}`,
   ) {}
 
+  private getInternalHeaders(): Record<string, string> {
+    const secret =
+      process.env.INTERNAL_SERVICE_SECRET?.trim() ||
+      process.env.INTERNAL_SERVICE_JWT_SECRET?.trim() ||
+      'nexus-internal-service-key';
+    return {
+      'Content-Type': 'application/json',
+      'x-internal-service-key': secret,
+    };
+  }
+
   public async sendInAppNotification(params: {
     recipientId: string;
     channel?: string;
@@ -22,7 +33,7 @@ export class CommerceNotificationClient implements INotificationClient {
       const orderId = typeof params.data?.orderId === 'string' ? params.data.orderId : undefined;
       const res = await fetch(`${this.baseUrl}/api/v1/notifications/internal/dispatch`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.getInternalHeaders(),
         body: JSON.stringify({
           recipientId: params.recipientId,
           channel: 'IN_APP',
@@ -52,7 +63,7 @@ export class CommerceNotificationClient implements INotificationClient {
     try {
       const res = await fetch(`${this.baseUrl}/api/v1/notifications/internal/dispatch`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.getInternalHeaders(),
         body: JSON.stringify({
           recipientId: params.recipientId || params.email,
           recipientEmail: params.email,

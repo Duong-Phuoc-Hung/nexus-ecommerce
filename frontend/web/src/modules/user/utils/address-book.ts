@@ -1,4 +1,4 @@
-import { ApiError } from '@/lib/axios/http';
+import { ApiError } from '../../../lib/axios/http';
 import { addressApi, type BackendAddress } from '../api/address.api';
 
 export type ShippingAddress = {

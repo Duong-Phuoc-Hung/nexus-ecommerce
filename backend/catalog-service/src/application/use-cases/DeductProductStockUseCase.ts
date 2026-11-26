@@ -16,9 +16,9 @@ export interface DeductProductStockResult {
 }
 
 export class DeductProductStockUseCase {
-  // Chống trừ / hoàn kho lặp theo (orderId, productId) trong cùng tiến trình
-  private readonly deductedOrderKeys = new Set<string>();
-  private readonly restoredOrderKeys = new Set<string>();
+  // Chống trừ / hoàn kho lặp theo (orderId, productId) qua mọi instance trong cùng tiến trình
+  private static readonly deductedOrderKeys = new Set<string>();
+  private static readonly restoredOrderKeys = new Set<string>();
 
   constructor(private readonly productRepository: IProductRepository) {}
 
@@ -50,7 +50,7 @@ export class DeductProductStockUseCase {
     }
 
     const dedupKey = input.orderId ? `${input.orderId}::${input.productId}` : null;
-    if (dedupKey && this.deductedOrderKeys.has(dedupKey)) {
+    if (dedupKey && DeductProductStockUseCase.deductedOrderKeys.has(dedupKey)) {
       return {
         id: product.id,
         remainingStock: product.stockQuantity,
@@ -66,7 +66,7 @@ export class DeductProductStockUseCase {
     await this.productRepository.update(product);
 
     if (dedupKey) {
-      this.deductedOrderKeys.add(dedupKey);
+      DeductProductStockUseCase.deductedOrderKeys.add(dedupKey);
     }
 
     return {
@@ -104,7 +104,7 @@ export class DeductProductStockUseCase {
     }
 
     const restoreKey = input.orderId ? `${input.orderId}::${input.productId}` : null;
-    if (restoreKey && this.restoredOrderKeys.has(restoreKey)) {
+    if (restoreKey && DeductProductStockUseCase.restoredOrderKeys.has(restoreKey)) {
       return {
         id: product.id,
         remainingStock: product.stockQuantity,
@@ -123,8 +123,8 @@ export class DeductProductStockUseCase {
     await this.productRepository.update(product);
 
     if (restoreKey) {
-      this.restoredOrderKeys.add(restoreKey);
-      this.deductedOrderKeys.delete(restoreKey);
+      DeductProductStockUseCase.restoredOrderKeys.add(restoreKey);
+      DeductProductStockUseCase.deductedOrderKeys.delete(restoreKey);
     }
 
     return {

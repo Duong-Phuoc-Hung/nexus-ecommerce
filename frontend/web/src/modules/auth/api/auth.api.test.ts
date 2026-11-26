@@ -57,9 +57,10 @@ test('login stores JWT and profile request sends bearer token', async () => {
     assert.equal(authorization, 'Bearer test-jwt');
     return { success: true, data: user };
   });
-  await authApi.login(user.email, 'StrongPassword123!');
+  await authApi.login(user.email, 'StrongPassword123!', false);
   assert.equal(getToken(), 'test-jwt');
   assert.equal(localStorage.getItem('nexus.accessToken'), null);
+  assert.equal(sessionStorage.getItem('nexus.accessToken'), 'test-jwt');
   assert.equal((await authApi.getProfile()).id, 'u1');
 });
 test('401 clears the saved JWT in both storage areas', async () => {

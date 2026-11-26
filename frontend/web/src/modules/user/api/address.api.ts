@@ -1,5 +1,5 @@
-import { requestApi } from '@/lib/axios/api-client';
-import { unwrap, type RequestApi } from '@/lib/axios/http';
+import { requestApi } from '../../../lib/axios/api-client';
+import { unwrap, type RequestApi } from '../../../lib/axios/http';
 
 export type BackendAddress = {
   id: string;

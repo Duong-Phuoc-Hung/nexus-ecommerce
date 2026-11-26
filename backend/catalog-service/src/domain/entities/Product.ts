@@ -164,6 +164,17 @@ export class Product {
     }
     this._updatedAt = new Date();
   }
+
+  public increaseStock(quantity: number): void {
+    if (quantity <= 0) {
+      throw new Error('Số lượng hoàn kho phải lớn hơn 0.');
+    }
+    this._stockQuantity += quantity;
+    if (this._status === ProductStatus.OUT_OF_STOCK && this._stockQuantity > 0) {
+      this._status = ProductStatus.ACTIVE;
+    }
+    this._updatedAt = new Date();
+  }
   public updateDetails(props: {
     title?: string;
     description?: string;

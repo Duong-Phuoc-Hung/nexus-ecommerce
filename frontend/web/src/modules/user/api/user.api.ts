@@ -1,7 +1,7 @@
-import { requestApi } from '@/lib/axios/api-client';
-import { unwrap } from '@/lib/axios/http';
+import { requestApi } from '../../../lib/axios/api-client';
+import { unwrap } from '../../../lib/axios/http';
 import type { SessionUser } from '../types/user.types';
-import type { RequestApi } from '@/lib/axios/http';
+import type { RequestApi } from '../../../lib/axios/http';
 
 export type SupportUser = SessionUser & {
   reputationScore: number;

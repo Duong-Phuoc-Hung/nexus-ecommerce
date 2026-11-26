@@ -108,6 +108,8 @@ export function parseShippingAddress(body: unknown): ShippingAddress {
 }
 
 export class CheckoutService {
+  private readonly completedPostPaymentOrderIds = new Set<string>();
+
   constructor(
     private readonly repository: ICheckoutRepository,
     private readonly catalog: ICatalogClient,
@@ -625,7 +627,7 @@ export class CheckoutService {
               success: true,
               raw: remote,
             });
-            if (reconcileOutcome === 'PAID') {
+            if (reconcileOutcome === 'PAID' || reconcileOutcome === 'DUPLICATE') {
               await this.runPostPaymentEffects(order, latest.amount);
             }
             throw new CheckoutError(409, 'ORDER_ALREADY_PAID', 'Đơn hàng đã được thanh toán.');
@@ -679,21 +681,19 @@ export class CheckoutService {
     }
     const outcome = await this.repository.applyPaymentResult(webhook);
 
-    // Tự động kích hoạt trừ tồn kho phía Catalog và gửi thông báo khi thanh toán PayOS thành công (PAID)
-    if (outcome === 'PAID' && this.repository.findOrderByPayosCode) {
-      this.repository
-        .findOrderByPayosCode(webhook.orderCode)
-        .then((order) => {
-          if (order) {
-            void this.runPostPaymentEffects(order, webhook.amount);
-          }
-        })
-        .catch((err: any) => {
-          console.warn(
-            `[CheckoutService] Error finding order for stock deduction / notification:`,
-            err?.message,
-          );
-        });
+    // Tự động kích hoạt trừ tồn kho phía Catalog và gửi thông báo khi thanh toán PayOS thành công (PAID hoặc DUPLICATE)
+    if ((outcome === 'PAID' || outcome === 'DUPLICATE') && this.repository.findOrderByPayosCode) {
+      try {
+        const order = await this.repository.findOrderByPayosCode(webhook.orderCode);
+        if (order) {
+          await this.runPostPaymentEffects(order, webhook.amount);
+        }
+      } catch (err: any) {
+        console.warn(
+          `[CheckoutService] Error finding order for stock deduction / notification in webhook:`,
+          err?.message || err,
+        );
+      }
     }
 
     return outcome;
@@ -709,14 +709,33 @@ export class CheckoutService {
     },
     amount?: number,
   ): Promise<void> {
-    if (this.catalog.deductStock) {
-      for (const item of order.items || []) {
-        this.catalog.deductStock(item.productId, item.quantity, order.id).catch((err: any) => {
+    if (!order?.id || this.completedPostPaymentOrderIds.has(order.id)) {
+      return;
+    }
+    this.completedPostPaymentOrderIds.add(order.id);
+
+    let items = order.items;
+    if ((!items || items.length === 0) && this.repository.findOrder) {
+      try {
+        const fullOrder = await this.repository.findOrder(order.id);
+        if (fullOrder?.items && fullOrder.items.length > 0) {
+          items = fullOrder.items;
+        }
+      } catch {
+        // Fallback giữ nguyên
+      }
+    }
+
+    if (this.catalog.deductStock && items && items.length > 0) {
+      for (const item of items) {
+        try {
+          await this.catalog.deductStock(item.productId, item.quantity, order.id);
+        } catch (err: any) {
           console.warn(
             `[CheckoutService] Deduct stock failed for product ${item.productId}:`,
-            err?.message,
+            err?.message || err,
           );
-        });
+        }
       }
     }
     if (this.notificationClient && order.buyerId) {
@@ -724,15 +743,17 @@ export class CheckoutService {
       const formattedAmount = new Intl.NumberFormat('vi-VN').format(
         amount ?? order.totalAmount ?? 0,
       );
-      this.notificationClient
-        .sendInAppNotification({
+      try {
+        await this.notificationClient.sendInAppNotification({
           recipientId: order.buyerId,
           channel: 'IN_APP',
           title: `Xác nhận thanh toán thành công #${orderCode}`,
           body: `Đơn hàng #${orderCode} đã thanh toán thành công qua PayOS (${formattedAmount} ₫). Đơn hàng đang được chuẩn bị để giao tới bạn.`,
           data: { orderId: order.id, orderCode, status: 'PAID' },
-        })
-        .catch(() => {});
+        });
+      } catch {
+        // Safe non-blocking
+      }
     }
   }
 
@@ -766,7 +787,7 @@ export class CheckoutService {
             order.status = updatedOrder.status;
           }
           // GAP-LOG-01: Đối soát PayOS qua polling cũng kích hoạt trừ kho & thông báo (idempotent)
-          if (pollOutcome === 'PAID' && updatedOrder) {
+          if ((pollOutcome === 'PAID' || pollOutcome === 'DUPLICATE') && updatedOrder) {
             await this.runPostPaymentEffects(updatedOrder, payment?.amount);
           }
         } else if (remoteStatus === 'CANCELLED' || remoteStatus === 'EXPIRED') {

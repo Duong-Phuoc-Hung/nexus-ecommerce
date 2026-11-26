@@ -294,7 +294,7 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
     if ((isRegister || isReset) && values.confirmPassword !== values.password)
       validation.confirmPassword = 'Mật khẩu xác nhận chưa trùng khớp.';
     if (isReset && !values.resetToken.trim() && !token.current)
-      validation.token = 'Vui lòng nhập mã đặt lại mật khẩu hoặc mở liên kết từ email.';
+      validation.resetToken = 'Vui lòng nhập mã đặt lại mật khẩu hoặc mở liên kết từ email.';
 
     setErrors(validation);
     setSuccess(false);
@@ -627,6 +627,32 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
                     )}
                     {!isForgot && (
                       <>
+                        {isReset && (
+                          <div className="form-field">
+                            <label htmlFor="auth-resetToken">Mã xác thực đặt lại mật khẩu</label>
+                            <Input
+                              id="auth-resetToken"
+                              name="resetToken"
+                              type="text"
+                              placeholder="Dán mã đặt lại mật khẩu từ email"
+                              value={values.resetToken}
+                              onChange={(e) => field('resetToken', e.target.value)}
+                              aria-invalid={!!errors.resetToken}
+                              aria-describedby={
+                                errors.resetToken ? 'auth-resetToken-error' : 'auth-resetToken-hint'
+                              }
+                            />
+                            {errors.resetToken ? (
+                              <span className="field-error" id="auth-resetToken-error">
+                                {errors.resetToken}
+                              </span>
+                            ) : (
+                              <span id="auth-resetToken-hint" className="auth-week-hint">
+                                Nhập mã đặt lại mật khẩu từ email hoặc mở liên kết đặt lại.
+                              </span>
+                            )}
+                          </div>
+                        )}
                         <div className="form-field">
                           <label htmlFor="auth-password">
                             {isReset ? 'Mật khẩu mới' : 'Mật khẩu'}
