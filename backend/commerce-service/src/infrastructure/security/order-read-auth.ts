@@ -3,24 +3,12 @@ import { NextFunction, Request, Response } from 'express';
 import type { AuthenticatedRequest, AuthenticatedUser } from './auth';
 
 function getJwtSecrets(): string[] {
-  const isProd = process.env.NODE_ENV === 'production';
-  const envSecrets = [process.env.JWT_ACCESS_SECRET, process.env.JWT_SECRET].filter(
-    Boolean,
-  ) as string[];
-
-  if (isProd) {
-    if (envSecrets.length === 0) {
-      throw new Error('JWT_ACCESS_SECRET or JWT_SECRET must be configured in production.');
-    }
-    // Trong production: Tuyệt đối từ chối các khóa dev hard-code
-    return envSecrets;
-  }
-
-  return [
-    ...envSecrets,
-    'nexus_super_secret_jwt_access_key_min_32_chars_local_dev',
-    'nexus-dev-secret',
-  ].filter(Boolean) as string[];
+  const configured = [process.env.JWT_ACCESS_SECRET, process.env.JWT_SECRET].filter(
+    (secret): secret is string => Boolean(secret),
+  );
+  if (configured.length) return [configured[0]];
+  if (process.env.NODE_ENV === 'production') return [];
+  return ['nexus_super_secret_jwt_access_key_min_32_chars_local_dev'];
 }
 
 function verifyJwtToken(token: string): AuthenticatedUser | null {
@@ -29,6 +17,8 @@ function verifyJwtToken(token: string): AuthenticatedUser | null {
     if (parts.length !== 3) return null;
 
     const [header, payloadPart, signature] = parts;
+    const tokenHeader = JSON.parse(Buffer.from(header, 'base64url').toString('utf8'));
+    if (tokenHeader.alg !== 'HS256') return null;
 
     // Danh sách secret (chỉ chấp nhận dev fallback khi KHÔNG phải production)
     const candidateSecrets = getJwtSecrets();
@@ -61,7 +51,7 @@ function verifyJwtToken(token: string): AuthenticatedUser | null {
       typeof payload.sub !== 'string' ||
       !payload.sub.trim() ||
       !Number.isFinite(payload.exp) ||
-      payload.exp <= Math.floor(Date.now() / 1000)
+      payload.exp <= Date.now() / 1000
     ) {
       return null;
     }

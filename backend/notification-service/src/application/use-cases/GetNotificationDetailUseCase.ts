@@ -12,14 +12,6 @@ export class GetNotificationDetailUseCase {
       throw new NotificationNotFoundException(id);
     }
 
-    return {
-      id: notification.id,
-      recipientId: notification.recipientId,
-      channel: notification.channel,
-      title: notification.title,
-      body: notification.body,
-      status: notification.status,
-      createdAt: new Date().toISOString(),
-    };
+    return notification.toJSON();
   }
 }

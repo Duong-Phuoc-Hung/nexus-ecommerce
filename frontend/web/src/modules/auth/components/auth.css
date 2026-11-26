@@ -870,7 +870,7 @@
 .auth-otp-email-badge strong {
   color: #0f172a;
   font-weight: 600;
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 .auth-otp-change-email-btn {

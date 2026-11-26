@@ -30,7 +30,7 @@ export function AdminProducts() {
     const c = new AbortController();
     setLoading(true);
     setError('');
-    requestApi('/products', { signal: c.signal })
+    requestApi('/products?scope=admin&limit=100', { signal: c.signal })
       .then((raw) => {
         if (c.signal.aborted) return;
         const data = unwrap<unknown>(raw);
@@ -89,10 +89,6 @@ export function AdminProducts() {
           </Link>
         </Button>
       </header>
-      <p className="rounded-xl bg-slate-100 p-4 text-sm text-slate-600">
-        Tìm kiếm và phân trang trong danh sách đã tải, tối đa 50 sản phẩm. Phạm vi toàn sàn đang
-        được hoàn thiện.
-      </p>
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
         <form
           onSubmit={(e) => {

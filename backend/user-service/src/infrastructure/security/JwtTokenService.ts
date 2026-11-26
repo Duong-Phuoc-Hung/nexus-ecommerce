@@ -16,7 +16,7 @@ export class JwtTokenService implements ITokenService {
       'nexus_super_secret_jwt_access_key_min_32_chars_local_dev',
     refreshSecret: string = process.env.JWT_REFRESH_SECRET ||
       'nexus_super_secret_jwt_refresh_key_min_32_chars_local_dev',
-    accessExpiresIn: string = process.env.JWT_ACCESS_EXPIRES_IN || '15m',
+    accessExpiresIn: string = process.env.JWT_ACCESS_EXPIRES_IN || '8h',
     refreshExpiresIn: string = process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   ) {
     this.accessSecret = accessSecret;
@@ -31,6 +31,7 @@ export class JwtTokenService implements ITokenService {
       email: payload.email,
       roles: payload.roles,
       privileges: payload.privileges || [],
+      iatMs: Date.now(),
     };
 
     const accessSignOptions: SignOptions = {
@@ -43,7 +44,7 @@ export class JwtTokenService implements ITokenService {
 
     const accessToken = jwt.sign(claims, this.accessSecret, accessSignOptions);
     const refreshToken = jwt.sign(
-      { sub: payload.userId, type: 'refresh' },
+      { sub: payload.userId, type: 'refresh', iatMs: claims.iatMs },
       this.refreshSecret,
       refreshSignOptions,
     );

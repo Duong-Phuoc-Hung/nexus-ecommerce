@@ -166,11 +166,12 @@ export class RedisOtpStore {
     this.clearMemoryOtp(key, attemptsKey);
   }
 
-  private verifyAndConsumeFromMemory(
+  private verifyFromMemory(
     key: string,
     attemptsKey: string,
     trimmedInput: string,
     maxFailedAttempts: number,
+    consumeOnMatch: boolean,
   ): boolean {
     const memoryRecord = this.memoryFallback.get(key);
     if (!memoryRecord) return false;
@@ -187,7 +188,9 @@ export class RedisOtpStore {
     }
 
     if (memoryRecord.otp === trimmedInput) {
-      this.clearMemoryOtp(key, attemptsKey);
+      if (consumeOnMatch) {
+        this.clearMemoryOtp(key, attemptsKey);
+      }
       return true;
     }
 
@@ -325,12 +328,14 @@ export class RedisOtpStore {
   }
 
   /**
-   * Xác thực và tiêu thụ mã OTP (dùng một lần, bảo vệ chống brute-force tối đa 5 lần thử sai)
+   * Xác thực mã OTP mà CHƯA tiêu thụ (dùng trước khi lưu DB để lỗi DB/validate khác không làm mất mã hợp lệ).
+   * Vẫn đếm số lần nhập sai để chống brute-force (khóa và hủy OTP sau maxFailedAttempts lần sai).
    */
-  public async verifyAndConsumeOtp(
+  public async verifyOtp(
     email: string,
     inputOtp: string,
     maxFailedAttempts: number = 5,
+    consumeOnMatch: boolean = false,
   ): Promise<boolean> {
     await this.ensureReady();
     const key = this.getKey(email);
@@ -352,7 +357,9 @@ export class RedisOtpStore {
           }
 
           if (storedOtp.trim() === trimmedInput) {
-            await this.clearRedisAndMemoryOtp(key, attemptsKey);
+            if (consumeOnMatch) {
+              await this.clearRedisAndMemoryOtp(key, attemptsKey);
+            }
             return true;
           }
 
@@ -377,7 +384,32 @@ export class RedisOtpStore {
       }
     }
 
-    return this.verifyAndConsumeFromMemory(key, attemptsKey, trimmedInput, maxFailedAttempts);
+    return this.verifyFromMemory(key, attemptsKey, trimmedInput, maxFailedAttempts, consumeOnMatch);
+  }
+
+  /**
+   * Tiêu thụ (xóa) mã OTP sau khi tạo tài khoản thành công (đảm bảo dùng một lần)
+   */
+  public async consumeOtp(email: string): Promise<void> {
+    await this.ensureReady();
+    const key = this.getKey(email);
+    const attemptsKey = this.getAttemptsKey(email);
+    try {
+      await this.clearRedisAndMemoryOtp(key, attemptsKey);
+    } catch {
+      this.clearMemoryOtp(key, attemptsKey);
+    }
+  }
+
+  /**
+   * Xác thực và tiêu thụ mã OTP (dùng một lần, bảo vệ chống brute-force tối đa 5 lần thử sai)
+   */
+  public async verifyAndConsumeOtp(
+    email: string,
+    inputOtp: string,
+    maxFailedAttempts: number = 5,
+  ): Promise<boolean> {
+    return this.verifyOtp(email, inputOtp, maxFailedAttempts, true);
   }
 
   /**

@@ -14,7 +14,7 @@ export interface ChatContext {
 
 export interface AiReplyResult {
   content: string;
-  modelUsed: 'gemini-1.5-flash' | 'rule-based-fallback';
+  modelUsed: string;
   toolCalls?: Array<{ name: string; args: Record<string, any>; result?: any }>;
   metadata?: Record<string, any>;
 }

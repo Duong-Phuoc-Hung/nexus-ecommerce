@@ -262,7 +262,7 @@ export function CatalogListing({ embedded = false }: { embedded?: boolean }) {
       <div className="mb-6 rounded-2xl border border-line bg-white p-4 sm:p-5">
         <form role="search" onSubmit={submit}>
           <div className="flex flex-wrap gap-3">
-            <div className="min-w-0 flex-1">
+            <div className="w-full sm:w-auto sm:min-w-0 sm:flex-1">
               <label htmlFor="catalog-query" className="sr-only">
                 Tìm sản phẩm
               </label>

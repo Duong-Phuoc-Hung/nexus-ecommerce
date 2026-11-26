@@ -30,6 +30,7 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { requestApi } from '@/lib/axios/api-client';
 import { unwrap, userMessage } from '@/lib/axios/http';
+import { fetchDeduplicated } from '@/lib/axios/resource-cache';
 import { useSession } from '@/modules/auth/hooks/use-session';
 import { useSellerApplication } from '@/modules/user/hooks/use-seller-application';
 import { SELLER_APPLICATION_STATUS_META } from '@/modules/user/types/seller-application.types';
@@ -47,14 +48,18 @@ const GENDER_LABELS: Record<string, string> = {
 type MyReputationSnapshot = {
   reputationScore: number;
   trustTierLabel: string;
-  successRate?: number;
-  completedTransactions?: number;
+  successRate?: number | null;
+  completedTransactions?: number | null;
+  averageRatingReceived?: number | null;
+  totalRatingsReceived?: number;
   biddingEligible?: boolean;
+  minScoreRequiredToBid?: number;
   activeRestrictions: Array<{ feature: string; reason: string; expiresAt?: string }>;
+  recentHistory?: Array<{ id: string; delta: number; reason: string; createdAt: string }>;
 };
 
 export default function AccountPage() {
-  const { user, phase, error, retry } = useSession();
+  const { user, phase, error, retry, logout } = useSession();
 
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
@@ -91,7 +96,11 @@ export default function AccountPage() {
     setPhone(readContactPhone(user.id));
 
     const controller = new AbortController();
-    requestApi('/users/profile', { signal: controller.signal })
+    fetchDeduplicated(
+      'user:profile:detail',
+      () => requestApi('/users/profile', { signal: controller.signal }),
+      { ttlMs: 10_000 },
+    )
       .then((raw) => {
         if (controller.signal.aborted) return;
         const data = unwrap<Record<string, unknown>>(raw);
@@ -116,12 +125,14 @@ export default function AccountPage() {
                 reputationScore: score,
                 trustTierLabel:
                   score >= 90
-                    ? 'Tin cậy cao'
-                    : score >= 70
-                      ? 'Tiêu chuẩn'
+                    ? 'Uy tín cao'
+                    : score >= 75
+                      ? 'Tốt'
                       : score >= 50
-                        ? 'Cần theo dõi'
-                        : 'Bị giới hạn',
+                        ? 'Tiêu chuẩn'
+                        : score >= 40
+                          ? 'Đủ điều kiện đấu giá'
+                          : 'Cần khôi phục',
                 activeRestrictions: [],
               },
           );
@@ -131,7 +142,11 @@ export default function AccountPage() {
         // Giữ thông tin phiên hiện tại
       });
 
-    requestApi('/users/me/reputation', { signal: controller.signal })
+    fetchDeduplicated(
+      'user:me:reputation:raw',
+      () => requestApi('/users/me/reputation', { signal: controller.signal }),
+      { ttlMs: 15_000 },
+    )
       .then((raw) => {
         if (controller.signal.aborted) return;
         const data = unwrap<Record<string, unknown>>(raw);
@@ -144,17 +159,34 @@ export default function AccountPage() {
                 expiresAt: typeof r.expiresAt === 'string' ? r.expiresAt : undefined,
               }))
             : [];
+          const recentHistory = Array.isArray(data.recentHistory)
+            ? (data.recentHistory as Array<Record<string, unknown>>).map((h, idx) => ({
+                id: String(h.id ?? `rh-${idx}`),
+                delta: Number(h.appliedDelta ?? h.delta ?? 0),
+                reason: String(h.reason ?? ''),
+                createdAt: String(h.createdAt ?? ''),
+              }))
+            : [];
           setReputation({
             reputationScore: data.reputationScore,
-            trustTierLabel: String(data.trustTierLabel ?? 'Tiêu chuẩn'),
-            successRate: typeof stats.successRate === 'number' ? stats.successRate : undefined,
+            trustTierLabel: String(data.tierLabel ?? data.trustTierLabel ?? 'Tiêu chuẩn'),
+            successRate: typeof stats.successRate === 'number' ? stats.successRate : null,
             completedTransactions:
-              typeof stats.completedTransactions === 'number'
-                ? stats.completedTransactions
+              typeof stats.completedTransactions === 'number' ? stats.completedTransactions : null,
+            averageRatingReceived:
+              typeof stats.averageRatingReceived === 'number' ? stats.averageRatingReceived : null,
+            totalRatingsReceived:
+              typeof stats.totalRatingsReceived === 'number'
+                ? stats.totalRatingsReceived
                 : undefined,
             biddingEligible:
               typeof data.biddingEligible === 'boolean' ? data.biddingEligible : undefined,
+            minScoreRequiredToBid:
+              typeof data.minScoreRequiredToBid === 'number'
+                ? data.minScoreRequiredToBid
+                : undefined,
             activeRestrictions: restrictions,
+            recentHistory,
           });
         }
       })
@@ -204,8 +236,8 @@ export default function AccountPage() {
         body: {
           fullName: cleanName,
           ...(cleanPhone ? { phone: cleanPhone } : {}),
-          ...(dateOfBirth ? { dateOfBirth } : {}),
-          ...(gender && gender !== 'UNSPECIFIED' ? { gender } : {}),
+          dateOfBirth: dateOfBirth || null,
+          gender: gender || null,
         },
       });
       if (cleanPhone) saveContactPhone(user.id, cleanPhone);
@@ -253,7 +285,10 @@ export default function AccountPage() {
       setNewPassword('');
       setConfirmPassword('');
       setPasswordOpen(false);
-      setPasswordNotice('Đã đổi mật khẩu thành công.');
+      setPasswordNotice(
+        'Đã đổi mật khẩu thành công. Phiên hiện tại đã được đăng xuất để bảo mật, vui lòng đăng nhập lại.',
+      );
+      await logout();
     } catch (err) {
       setPasswordError(userMessage(err));
     } finally {
@@ -556,12 +591,14 @@ export default function AccountPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex gap-6 text-right text-xs">
+                    <div className="flex flex-wrap items-center gap-4 text-right text-xs">
                       {reputation.completedTransactions !== undefined && (
                         <div>
                           <p className="text-muted">Giao dịch thành công</p>
                           <p className="mt-0.5 text-sm font-bold text-stone-900 tabular-nums">
-                            {reputation.completedTransactions}
+                            {reputation.completedTransactions != null
+                              ? reputation.completedTransactions
+                              : 'Chưa có dữ liệu'}
                           </p>
                         </div>
                       )}
@@ -569,12 +606,49 @@ export default function AccountPage() {
                         <div>
                           <p className="text-muted">Tỷ lệ hoàn tất</p>
                           <p className="mt-0.5 text-sm font-bold text-emerald-800 tabular-nums">
-                            {reputation.successRate.toFixed(0)}%
+                            {reputation.successRate != null
+                              ? `${reputation.successRate.toFixed(0)}%`
+                              : 'Chưa có dữ liệu'}
                           </p>
                         </div>
                       )}
+                      <Button
+                        asChild
+                        variant="outline"
+                        size="sm"
+                        className="min-h-10 rounded-xl border-emerald-700/30 text-xs font-semibold text-emerald-900 hover:bg-emerald-50"
+                      >
+                        <Link href="/account/reputation">Nhiệm vụ &amp; sổ điểm</Link>
+                      </Button>
                     </div>
                   </div>
+
+                  {reputation.recentHistory && reputation.recentHistory.length > 0 && (
+                    <div className="mt-4 border-t border-line pt-3.5">
+                      <p className="text-xs font-semibold text-stone-700">
+                        Biến động uy tín gần đây
+                      </p>
+                      <ul className="mt-2 divide-y divide-stone-100 text-xs">
+                        {reputation.recentHistory.slice(0, 5).map((item) => (
+                          <li
+                            key={item.id}
+                            className="flex items-center justify-between gap-3 py-2"
+                          >
+                            <span className="text-stone-700">
+                              {item.reason || 'Điều chỉnh điểm'}
+                            </span>
+                            <span
+                              className={`shrink-0 font-mono font-bold ${
+                                item.delta >= 0 ? 'text-emerald-700' : 'text-red-700'
+                              }`}
+                            >
+                              {item.delta >= 0 ? `+${item.delta}` : item.delta}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
 
                   {reputation.activeRestrictions.length > 0 && (
                     <div

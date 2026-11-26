@@ -240,7 +240,7 @@ export class PostgresAuctionRepository implements IAuctionRepository {
         update: {
           winnerId: settlement.winnerId,
           winningBidAmount: settlement.winningBidAmount,
-          paymentDeadline: settlement.paymentDeadline,
+
           orderId: settlement.orderId ?? undefined,
           status: settlement.status,
         },
@@ -280,15 +280,13 @@ export class PostgresAuctionRepository implements IAuctionRepository {
     const now = new Date();
 
     // Tự động chuẩn hóa trạng thái theo thời gian thực (Life-cycle Synchronization)
-    if (status !== AuctionStatus.CANCELLED && status !== AuctionStatus.SETTLED) {
+    if (
+      status !== AuctionStatus.ENDED &&
+      status !== AuctionStatus.CANCELLED &&
+      status !== AuctionStatus.SETTLED
+    ) {
       const isPastEndTime = record.endTime && new Date(record.endTime) <= now;
-      const isBuyNowReached =
-        record.buyNowPrice &&
-        Number(record.buyNowPrice) > 0 &&
-        record.winnerId &&
-        Number(record.currentPrice) >= Number(record.buyNowPrice);
-
-      if (isPastEndTime || isBuyNowReached) {
+      if (isPastEndTime) {
         status = AuctionStatus.ENDED;
       } else if (record.startTime && new Date(record.startTime) <= now) {
         status = AuctionStatus.ACTIVE;

@@ -51,55 +51,45 @@ export class PostgresSupportCaseRepository implements ISupportCaseRepository {
     const rawClean = id.trim();
     const cleanId = rawClean.replace(/^[#]/, '').trim();
 
-    try {
-      const row = await this.prisma.supportCase.findFirst({
-        where: {
-          OR: [
-            { id: { equals: cleanId, mode: 'insensitive' } },
-            { id: { equals: rawClean, mode: 'insensitive' } },
-          ],
-        },
-      });
+    const row = await this.prisma.supportCase.findFirst({
+      where: {
+        OR: [
+          { id: { equals: cleanId, mode: 'insensitive' } },
+          { id: { equals: rawClean, mode: 'insensitive' } },
+        ],
+      },
+    });
 
-      if (!row) {
-        return null;
-      }
-
-      return this.mapToDomain(row);
-    } catch (err) {
-      console.error('[PostgresSupportCaseRepository] findById error:', (err as Error).message);
+    if (!row) {
       return null;
     }
+
+    return this.mapToDomain(row);
+  }
+
+  public async findAllByOrderId(orderIds: string | string[]): Promise<SupportCase[]> {
+    const candidates = (Array.isArray(orderIds) ? orderIds : [orderIds])
+      .map((v) => String(v || '').trim())
+      .filter(Boolean);
+    if (candidates.length === 0) return [];
+
+    const orClauses = candidates.flatMap((cleanId) => [
+      { orderId: { equals: cleanId, mode: 'insensitive' as const } },
+      { orderCode: { equals: cleanId, mode: 'insensitive' as const } },
+    ]);
+
+    const rows = await this.prisma.supportCase.findMany({
+      where: { OR: orClauses },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return rows.map((r) => this.mapToDomain(r));
   }
 
   public async findByOrderId(orderId: string): Promise<SupportCase | null> {
-    const rawClean = orderId.trim();
-    const cleanId = rawClean.replace(/^[#]/, '').trim();
-
-    try {
-      const row = await this.prisma.supportCase.findFirst({
-        where: {
-          OR: [
-            { orderId: { equals: cleanId, mode: 'insensitive' } },
-            { orderId: { equals: rawClean, mode: 'insensitive' } },
-            { orderCode: { equals: cleanId, mode: 'insensitive' } },
-            { orderCode: { equals: rawClean, mode: 'insensitive' } },
-          ],
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
-      });
-
-      if (!row) {
-        return null;
-      }
-
-      return this.mapToDomain(row);
-    } catch (err) {
-      console.error('[PostgresSupportCaseRepository] findByOrderId error:', (err as Error).message);
-      return null;
-    }
+    const cleanId = orderId.replace(/^[#]/, '').trim();
+    const list = await this.findAllByOrderId(cleanId);
+    return list[0] || null;
   }
 
   public async search(criteria: SupportCaseSearchCriteria): Promise<SupportCaseSearchPage> {

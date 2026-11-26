@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { Request, Response } from 'express';
+import { buildServiceAuthHeader } from '../../../infrastructure/security/internal-service-auth';
 import { ListSupportCasesUseCase } from '../../../application/use-cases/ListSupportCasesUseCase';
 import { ResolveSupportCaseUseCase } from '../../../application/use-cases/ResolveSupportCaseUseCase';
 import { GetDisputesUseCase } from '../../../application/use-cases/GetDisputesUseCase';
@@ -224,6 +225,49 @@ export class SupportCaseController {
     }
   }
 
+  public async getDisputeSyncStatus(req: Request, res: Response): Promise<void> {
+    try {
+      if (!this.issueDisputeVerdictUseCase) {
+        res
+          .status(500)
+          .json({ success: false, error: 'IssueDisputeVerdictUseCase not configured.' });
+        return;
+      }
+      const caseId = String(req.params.caseId || '').trim();
+      const record = await this.issueDisputeVerdictUseCase.getSyncStatus(caseId);
+      res.status(200).json({ success: true, data: record });
+    } catch (error: any) {
+      res
+        .status(500)
+        .json({ success: false, error: error.message || 'Không thể kiểm tra trạng thái đồng bộ.' });
+    }
+  }
+
+  public async retryDisputeSync(req: Request, res: Response): Promise<void> {
+    try {
+      if (!this.issueDisputeVerdictUseCase) {
+        res
+          .status(500)
+          .json({ success: false, error: 'IssueDisputeVerdictUseCase not configured.' });
+        return;
+      }
+      const caseId = String(req.params.caseId || '').trim();
+      const result = await this.issueDisputeVerdictUseCase.retryCommerceSync(caseId);
+      res.status(200).json({
+        success: true,
+        message:
+          result.commerceSync.status === 'SYNCED'
+            ? 'Đồng bộ hoàn tiền sang Commerce Service thành công.'
+            : 'Commerce Service vẫn chưa sẵn sàng; đã lên lịch thử lại tự động.',
+        data: result,
+      });
+    } catch (error: any) {
+      res
+        .status(400)
+        .json({ success: false, error: error.message || 'Không thể thử lại đồng bộ Commerce.' });
+    }
+  }
+
   /**
    * POST /api/v1/support/disputes/:caseId/seller-evidence
    * POST /api/v1/support/orders/:orderId/dispute-evidence
@@ -428,36 +472,172 @@ export class SupportCaseController {
       }
 
       const user = (req as AuthenticatedRequest).user;
-      const found = await this.supportCaseRepository.findByOrderId(orderId);
-      if (!found) {
-        res.status(404).json({
-          success: false,
-          error: `Không tìm thấy hồ sơ khiếu nại cho đơn hàng "${orderId}".`,
+      const altIdsRaw = typeof req.query.altIds === 'string' ? req.query.altIds : '';
+      const candidateIds = Array.from(
+        new Set([orderId, ...altIdsRaw.split(',')].map((v) => v.trim()).filter(Boolean)),
+      );
+
+      let foundList = this.supportCaseRepository.findAllByOrderId
+        ? await this.supportCaseRepository.findAllByOrderId(candidateIds)
+        : [];
+      if (foundList.length === 0 && !this.supportCaseRepository.findAllByOrderId) {
+        const single = await this.supportCaseRepository.findByOrderId(orderId);
+        if (single) foundList = [single];
+      }
+
+      if (foundList.length === 0) {
+        res.status(200).json({
+          success: true,
+          data: [],
         });
         return;
       }
 
-      if (
-        found &&
-        user?.role === 'BUYER' &&
-        found.userId.toLowerCase() !== user.sub.toLowerCase()
-      ) {
-        res.status(403).json({
-          success: false,
-          error: 'Bạn không có quyền truy cập khiếu nại của đơn hàng này.',
-        });
-        return;
+      if (user?.role === 'BUYER') {
+        const owned = foundList.filter(
+          (c) => !c.userId || c.userId.toLowerCase() === user.sub.toLowerCase(),
+        );
+        if (owned.length === 0) {
+          res.status(403).json({
+            success: false,
+            error: 'Bạn không có quyền truy cập khiếu nại của đơn hàng này.',
+          });
+          return;
+        }
+        foundList = owned;
       }
 
       res.status(200).json({
         success: true,
-        data: found ? [found.toDisputeDto()] : [],
+        data: foundList.map((c) => c.toDisputeDto()),
       });
     } catch (error: any) {
       console.error('[SupportCaseController.getCaseByOrderId Error]:', error);
       res.status(500).json({
         success: false,
         error: error.message || 'Không thể tra cứu hồ sơ khiếu nại theo đơn hàng.',
+      });
+    }
+  }
+
+  /**
+   * GET /api/v1/support/cases/:caseId
+   * Tra cứu trực tiếp 1 hồ sơ theo caseId có kiểm tra quyền sở hữu (D1/D2)
+   */
+  public async getCaseById(req: Request, res: Response): Promise<void> {
+    try {
+      if (!this.supportCaseRepository) {
+        res.status(500).json({ success: false, error: 'SupportCaseRepository not configured.' });
+        return;
+      }
+
+      const caseId = String(req.params.caseId || req.params.id || '').trim();
+      if (!caseId) {
+        res.status(400).json({ success: false, error: 'caseId không được để trống.' });
+        return;
+      }
+
+      const found = await this.supportCaseRepository.findById(caseId);
+      if (!found) {
+        res.status(404).json({
+          success: false,
+          error: `Không tìm thấy hồ sơ khiếu nại "${caseId}".`,
+        });
+        return;
+      }
+
+      const user = (req as AuthenticatedRequest).user;
+      if (
+        user?.role === 'BUYER' &&
+        found.userId &&
+        found.userId.toLowerCase() !== user.sub.toLowerCase()
+      ) {
+        res.status(403).json({
+          success: false,
+          error: 'Bạn không có quyền truy cập hồ sơ khiếu nại của tài khoản khác.',
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: found.toDisputeDto(),
+      });
+    } catch (error: any) {
+      console.error('[SupportCaseController.getCaseById Error]:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Không thể tra cứu hồ sơ khiếu nại.',
+      });
+    }
+  }
+
+  /**
+   * POST /api/v1/support/cases/:caseId/return-shipment
+   * Buyer gửi mã vận đơn hoàn trả & bằng chứng khi phán quyết yêu cầu REQUIRE_RETURN_FIRST (D4)
+   */
+  public async submitReturnShipment(req: Request, res: Response): Promise<void> {
+    try {
+      if (!this.supportCaseRepository) {
+        res.status(500).json({ success: false, error: 'SupportCaseRepository not configured.' });
+        return;
+      }
+
+      const caseId = String(req.params.caseId || req.params.id || '').trim();
+      const trackingCode = String(req.body?.trackingCode || '').trim();
+      const carrier = String(req.body?.carrier || '').trim();
+      const note = String(req.body?.note || '').trim();
+
+      if (!trackingCode) {
+        res.status(400).json({ success: false, error: 'Vui lòng nhập mã vận đơn hoàn trả.' });
+        return;
+      }
+
+      const found = await this.supportCaseRepository.findById(caseId);
+      if (!found) {
+        res.status(404).json({ success: false, error: `Không tìm thấy hồ sơ "${caseId}".` });
+        return;
+      }
+
+      const user = (req as AuthenticatedRequest).user;
+      if (
+        user?.role === 'BUYER' &&
+        found.userId &&
+        found.userId.toLowerCase() !== user.sub.toLowerCase()
+      ) {
+        res.status(403).json({
+          success: false,
+          error: 'Bạn không có quyền cập nhật hồ sơ này.',
+        });
+        return;
+      }
+
+      const existingPhotos = found.buyerEvidence?.photos || [];
+      const extraPhotos = Array.isArray(req.body?.photos)
+        ? req.body.photos.filter(
+            (x: unknown): x is string => typeof x === 'string' && x.trim().length > 0,
+          )
+        : [];
+      const existingNote = found.buyerEvidence?.note || '';
+      const returnLine = `[Mã vận đơn hoàn trả] ${carrier ? `${carrier} - ` : ''}${trackingCode}${note ? ` (${note})` : ''}`;
+
+      found.updateBuyerEvidence({
+        photos: [...existingPhotos, ...extraPhotos],
+        note: existingNote ? `${existingNote}\n${returnLine}` : returnLine,
+      });
+
+      await this.supportCaseRepository.save(found);
+
+      res.status(200).json({
+        success: true,
+        message: 'Đã ghi nhận mã vận đơn hoàn trả hàng.',
+        data: found.toDisputeDto(),
+      });
+    } catch (error: any) {
+      console.error('[SupportCaseController.submitReturnShipment Error]:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Không thể lưu mã vận đơn hoàn trả.',
       });
     }
   }
@@ -487,8 +667,13 @@ export class SupportCaseController {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-user-id': requesterId || 'usr_buyer',
-            'x-user-role': 'BUYER',
+            ...buildServiceAuthHeader({
+              issuer: 'fulfillment-service',
+              audience: 'commerce-service',
+              scope: 'order:refund:request',
+              resource: orderId,
+              actor: requesterId ? { sub: requesterId, role: 'BUYER' } : undefined,
+            }),
           },
           body: JSON.stringify({
             reason: reason || 'Khách hàng tạo khiếu nại yêu cầu trả hàng / hoàn tiền',

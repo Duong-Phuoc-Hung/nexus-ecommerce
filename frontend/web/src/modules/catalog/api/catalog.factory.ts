@@ -215,8 +215,20 @@ export function parseCatalogQuery(params: URLSearchParams): CatalogQuery {
 }
 export function queryString(query: CatalogQuery) {
   const p = new URLSearchParams();
-  for (const [k, v] of Object.entries(query))
-    if (v !== '' && !(k === 'sort' && v === 'featured')) p.set(k, String(v));
+  for (const [k, v] of Object.entries(query)) {
+    if (v === '' || (k === 'sort' && v === 'featured')) continue;
+    if (k === 'pageSize') {
+      p.set('limit', String(v));
+      continue;
+    }
+    if (k === 'sort') {
+      const mapped =
+        v === 'price-asc' ? 'price_asc' : v === 'price-desc' ? 'price_desc' : String(v);
+      p.set('sort', mapped);
+      continue;
+    }
+    p.set(k, String(v));
+  }
   return p.toString();
 }
 export function formatPrice(product: Pick<CatalogProduct, 'price' | 'currency'>): string {

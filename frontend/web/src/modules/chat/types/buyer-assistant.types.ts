@@ -46,6 +46,8 @@ export interface BuyerPageContextState {
 export interface PaymentStatusSnapshot {
   status: 'PAID' | 'PENDING' | 'COD' | 'EXPIRED' | 'CANCELLED' | 'UNKNOWN' | 'ERROR';
   label: string;
+  method?: 'PAYOS' | 'COD' | string;
+  methodLabel?: string;
   paidAt?: string | null;
   expiresAt?: string | null;
   amount?: number | null;

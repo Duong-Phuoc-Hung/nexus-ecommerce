@@ -6,6 +6,7 @@ export enum OrderStatus {
   DELIVERED = 'DELIVERED',
   COMPLETED = 'COMPLETED',
   CANCELLED = 'CANCELLED',
+  RETURN_PENDING = 'RETURN_PENDING',
   REFUND_REQUESTED = 'REFUND_REQUESTED',
   REFUNDED = 'REFUNDED',
 }
@@ -386,12 +387,14 @@ export class Order {
   }
 
   /**
-   * Kích hoạt hoàn tiền thật qua Cổng thanh toán (PayOS Refund Integration)
+   * Ghi nhận kết quả hoàn tiền từ Cổng thanh toán.
+   * Chỉ chuyển OrderStatus sang REFUNDED khi provider xác nhận status === 'SUCCESS'.
    */
   public executeRefund(params: {
     refundTransactionId: string;
     amount: number;
     reason?: string;
+    status?: 'PENDING' | 'SUCCESS' | 'FAILED';
   }): void {
     if (
       this._status !== OrderStatus.PAID &&
@@ -399,27 +402,52 @@ export class Order {
       this._status !== OrderStatus.DELIVERED &&
       this._status !== OrderStatus.PROCESSING &&
       this._status !== OrderStatus.SHIPPED &&
+      this._status !== OrderStatus.RETURN_PENDING &&
       this._status !== OrderStatus.REFUND_REQUESTED &&
       this._status !== OrderStatus.REFUNDED
     ) {
       throw new Error(`Không thể hoàn tiền cho đơn hàng ở trạng thái "${this._status}".`);
     }
 
-    this._status = OrderStatus.REFUNDED;
-    this._refundTransactionId = params.refundTransactionId;
+    const outcome = params.status || 'SUCCESS';
+    if (params.refundTransactionId) {
+      this._refundTransactionId = params.refundTransactionId;
+    }
     this._refundAmount = params.amount;
-    this._refundStatus = 'SUCCESS';
-    this._escrowStatus = 'REFUNDED';
+    this._refundStatus = outcome;
 
-    this._timeline.push({
-      status: 'REFUNDED',
-      title:
-        'Hoàn tiền thành công qua cổng thanh toán PayOS (Giải phóng ký quỹ hoàn cho Người mua)',
-      timestamp: new Date(),
-      note: `Mã hoàn tiền (Refund Txn): ${params.refundTransactionId} · Số tiền: ${params.amount.toLocaleString(
-        'vi-VN',
-      )} VND${params.reason ? ` · ${params.reason}` : ''}`,
-    });
+    if (outcome === 'SUCCESS') {
+      this._status = OrderStatus.REFUNDED;
+      this._escrowStatus = 'REFUNDED';
+      this._timeline.push({
+        status: 'REFUNDED',
+        title:
+          'Hoàn tiền thành công qua cổng thanh toán PayOS (Giải phóng ký quỹ hoàn cho Người mua)',
+        timestamp: new Date(),
+        note: `Mã hoàn tiền (Refund Txn): ${params.refundTransactionId} · Số tiền: ${params.amount.toLocaleString(
+          'vi-VN',
+        )} VND${params.reason ? ` · ${params.reason}` : ''}`,
+      });
+    } else if (outcome === 'PENDING') {
+      if (this._status !== OrderStatus.REFUNDED) {
+        this._status = OrderStatus.REFUND_REQUESTED;
+      }
+      this._timeline.push({
+        status: 'REFUND_PENDING',
+        title: 'Đang chờ xác nhận hoàn tiền từ cổng thanh toán',
+        timestamp: new Date(),
+        note: `Mã tham chiếu hoàn tiền: ${params.refundTransactionId || 'N/A'} · Số tiền: ${params.amount.toLocaleString(
+          'vi-VN',
+        )} VND${params.reason ? ` · ${params.reason}` : ''}`,
+      });
+    } else {
+      this._timeline.push({
+        status: 'REFUND_FAILED',
+        title: 'Hoàn tiền chưa thành công từ cổng thanh toán',
+        timestamp: new Date(),
+        note: `Số tiền: ${params.amount.toLocaleString('vi-VN')} VND${params.reason ? ` · ${params.reason}` : ''}`,
+      });
+    }
     this._updatedAt = new Date();
   }
 

@@ -391,9 +391,13 @@ export class CheckoutService {
           'Danh sách sản phẩm trong giỏ hàng đã thay đổi so với báo giá, vui lòng báo giá lại.',
         );
       }
-      for (const line of lines) {
+      for (const line of priced.items) {
         const quoteItem = quote.items.find((i) => i.productId === line.productId);
-        if (!quoteItem || quoteItem.quantity !== line.quantity) {
+        if (
+          !quoteItem ||
+          quoteItem.quantity !== line.quantity ||
+          quoteItem.unitPrice !== line.unitPrice
+        ) {
           throw new CheckoutError(
             409,
             'QUOTE_PRICE_CHANGED',
@@ -558,7 +562,7 @@ export class CheckoutService {
      *   sau đó phát tán qua RabbitMQ Event Broker. Catalog Service đăng ký subscribe và trừ kho bất đồng bộ an toàn,
      *   có cơ chế bù trừ (Compensating Transaction) nếu phát sinh sự cố.
      */
-    if (paymentMethod === 'COD' && this.catalog.deductStock) {
+    if (!created.replay && paymentMethod === 'COD' && this.catalog.deductStock) {
       for (const item of priced.items) {
         this.catalog
           .deductStock(item.productId, item.quantity, created.order.id)
@@ -596,13 +600,43 @@ export class CheckoutService {
     const renew = isRecord(body) && body.renew === true;
     const latest = await this.repository.latestPayment(order.id);
 
-    if (latest && latest.status === 'PENDING' && !renew) {
-      const payment = await this.ensureLink(order, latest);
-      return { reused: true, ...this.toCheckoutResponse(order, payment) };
+    if (latest) {
+      let reusable = latest.status === 'PENDING' && !renew;
+      if (latest.payosOrderCode && this.gateway.isConfigured() && this.gateway.getPaymentStatus) {
+        try {
+          const remote = await this.gateway.getPaymentStatus(latest.payosOrderCode);
+          if (!remote)
+            throw new CheckoutError(
+              503,
+              'PAYMENT_RECONCILING',
+              'Đang đối soát thanh toán. Vui lòng thử lại.',
+            );
+          const remoteSt = String(remote.status || '').toUpperCase();
+          if (remoteSt === 'PENDING') reusable = true;
+          if (remoteSt === 'PAID') {
+            await this.repository.applyPaymentResult({
+              orderCode: latest.payosOrderCode,
+              amount: latest.amount,
+              success: true,
+              raw: remote,
+            });
+            throw new CheckoutError(409, 'ORDER_ALREADY_PAID', 'Đơn hàng đã được thanh toán.');
+          }
+          if (remoteSt === 'CANCELLED' || remoteSt === 'EXPIRED') {
+            reusable = false;
+          }
+        } catch (err) {
+          if (err instanceof CheckoutError) throw err;
+        }
+      }
+      if (reusable) {
+        const payment = await this.ensureLink(order, latest);
+        return { reused: true, ...this.toCheckoutResponse(order, payment) };
+      }
     }
 
     const attempts = await this.repository.countPayments(order.id);
-    if (attempts >= MAX_PAYMENT_ATTEMPTS) {
+    if (attempts >= MAX_PAYMENT_ATTEMPTS && !order.orderCode.startsWith('ORD-AUC-')) {
       throw new CheckoutError(
         409,
         'PAYMENT_ATTEMPTS_EXCEEDED',
@@ -687,6 +721,7 @@ export class CheckoutService {
     let payment = await this.repository.latestPayment(order.id);
 
     // Tự động kiểm tra trực tiếp từ PayOS nếu đang ở trạng thái PENDING
+    let payosLinkCancelledOrExpired = false;
     if (
       payment &&
       payment.status === 'PENDING' &&
@@ -696,8 +731,9 @@ export class CheckoutService {
     ) {
       try {
         const remote = await this.gateway.getPaymentStatus(payment.payosOrderCode);
-        if (remote && remote.status === 'PAID') {
-          await this.repository.applyPaymentResult({
+        const remoteStatus = String(remote?.status || '').toUpperCase();
+        if (remote && remoteStatus === 'PAID') {
+          const pollOutcome = await this.repository.applyPaymentResult({
             orderCode: payment.payosOrderCode,
             amount: payment.amount,
             success: true,
@@ -708,6 +744,21 @@ export class CheckoutService {
           if (updatedOrder) {
             order.status = updatedOrder.status;
           }
+          // GAP-LOG-01: Đối soát PayOS qua polling cũng kích hoạt trừ kho Catalog (idempotent theo orderId+productId)
+          if (pollOutcome === 'PAID' && this.catalog.deductStock && updatedOrder?.items) {
+            for (const item of updatedOrder.items) {
+              this.catalog
+                .deductStock(item.productId, item.quantity, order.id)
+                .catch((err: any) => {
+                  console.warn(
+                    `[CheckoutService] Polling deduct stock failed for product ${item.productId}:`,
+                    err?.message,
+                  );
+                });
+            }
+          }
+        } else if (remoteStatus === 'CANCELLED' || remoteStatus === 'EXPIRED') {
+          payosLinkCancelledOrExpired = true;
         }
       } catch (err) {
         console.error('[paymentStatus] auto-check PayOS error:', err);
@@ -716,12 +767,22 @@ export class CheckoutService {
 
     const expired = order.status === 'PENDING_PAYMENT' && order.expiresAt.getTime() < Date.now();
 
+    // QR renewal is an explicit payment-link mutation. A status read never creates attempts.
+
+    const rawPayStatus = payment ? String(payment.status).toUpperCase() : 'NOT_STARTED';
+    const normalizedPaymentStatus =
+      rawPayStatus === 'SUCCEEDED' ||
+      rawPayStatus === 'PAID' ||
+      String(order.status).toUpperCase() === 'PAID'
+        ? 'PAID'
+        : rawPayStatus;
+
     return {
       orderId: order.id,
       orderCode: order.orderCode,
       orderStatus: order.status,
       paymentMethod: payment?.paymentMethod || 'PAYOS',
-      paymentStatus: payment ? payment.status : 'NOT_STARTED',
+      paymentStatus: normalizedPaymentStatus,
       amount: order.totalAmount,
       currency: CURRENCY,
       paidAt: payment?.paidAt ? payment.paidAt.toISOString() : null,
@@ -844,7 +905,7 @@ export class CheckoutService {
           `Sản phẩm ${line.productId} không còn bán.`,
         );
       }
-      if (product.stockQuantity < line.quantity) {
+      if (!Number.isSafeInteger(product.stockQuantity) || product.stockQuantity < line.quantity) {
         throw new CheckoutError(
           409,
           'INSUFFICIENT_STOCK',
@@ -866,7 +927,18 @@ export class CheckoutService {
       }
 
       stockByProduct[product.id] = product.stockQuantity;
-      const unitPrice = line.price !== undefined && line.price > 0 ? line.price : product.price;
+      const unitPrice = product.price;
+      if (
+        !Number.isFinite(unitPrice) ||
+        unitPrice <= 0 ||
+        !Number.isSafeInteger(Math.round(unitPrice * line.quantity))
+      ) {
+        throw new CheckoutError(
+          409,
+          'PRODUCT_PRICE_UNAVAILABLE',
+          'Giá sản phẩm chưa hợp lệ, vui lòng thử lại.',
+        );
+      }
       items.push({
         productId: product.id,
         title: product.title,
@@ -893,9 +965,11 @@ export class CheckoutService {
       );
     }
 
-    const effectiveLines = items.map((i) => ({ productId: i.productId, quantity: i.quantity }));
-    const shipping = await this.shipping.quote(address, effectiveLines);
-    if (!shipping.supported) {
+    const shipping = await this.shipping.quote(
+      address,
+      lines.map(({ productId, quantity }) => ({ productId, quantity })),
+    );
+    if (!shipping.supported || !Number.isFinite(shipping.fee) || shipping.fee < 0) {
       throw new CheckoutError(
         422,
         'SHIPPING_NOT_SUPPORTED',

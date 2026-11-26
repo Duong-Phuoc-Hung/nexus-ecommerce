@@ -35,12 +35,23 @@ export function normalizeApiError(error: unknown): ApiError {
   if (raw && typeof raw === 'object')
     for (const [key, value] of Object.entries(raw))
       fields[key] = Array.isArray(value) ? value.join('. ') : String(value);
-  const explicitMessage =
+  const rawExplicitMessage =
     typeof detail.message === 'string'
       ? detail.message
       : typeof body.error === 'string'
         ? body.error
         : undefined;
+  const looksLikeInternalTrace = (msg?: string): boolean =>
+    Boolean(
+      msg &&
+      (/Invalid `[^`]+` invocation/i.test(msg) ||
+        /does not exist in the current database/i.test(msg) ||
+        /prisma|sequelize|postgres|syntax error at or near|ECONNREFUSED/i.test(msg) ||
+        /[A-Za-z]:\\|\\src\\|node_modules/i.test(msg)),
+    );
+  const explicitMessage = looksLikeInternalTrace(rawExplicitMessage)
+    ? undefined
+    : rawExplicitMessage;
   const message =
     explicitMessage ||
     ((e?.response?.status ?? 0) >= 500

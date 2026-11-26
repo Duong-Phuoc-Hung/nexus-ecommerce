@@ -24,6 +24,7 @@ export interface ProductSearchPage {
  */
 export interface IProductRepository {
   findById(id: string): Promise<Product | null>;
+  findByIdIncludingDeleted?(id: string): Promise<Product | null>;
   findAll(limit?: number, offset?: number): Promise<Product[]>;
   findByCategory(categoryId: string): Promise<Product[]>;
   findBySellerId(sellerId: string, status?: string): Promise<Product[]>;

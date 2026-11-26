@@ -20,13 +20,15 @@ export function AdminReputationActions({ data, onSaved }: { data: Row; onSaved: 
   const userId = String(data.id ?? '');
   const score = Number(data.reputationScore ?? 100);
   const tier =
-    score >= 90
-      ? 'Tin cậy cao'
-      : score >= 70
-        ? 'Tiêu chuẩn'
-        : score >= 40
-          ? 'Cần theo dõi'
-          : 'Bị hạn chế';
+    score >= 85
+      ? 'Rất cao (HIGH_TRUST)'
+      : score >= 75
+        ? 'Tốt (GOOD)'
+        : score >= 50
+          ? 'Tiêu chuẩn (STANDARD)'
+          : score >= 40
+            ? 'Đủ điều kiện đấu giá (AUCTION_ELIGIBLE)'
+            : 'Cần khôi phục (NEEDS_RECOVERY)';
 
   const [mode, setMode] = useState<'none' | 'adjust' | 'restrict'>('none');
   const [delta, setDelta] = useState('-10');
@@ -79,16 +81,23 @@ export function AdminReputationActions({ data, onSaved }: { data: Row; onSaved: 
           setBusy(false);
           return;
         }
-        await requestApi(`/users/${encodeURIComponent(userId)}/restrict-features`, {
-          method: 'POST',
-          body: {
-            restrictedFeatures: features,
-            features,
-            durationDays: Number(durationDays) || 7,
-            reason: reason.trim(),
-          },
-        });
-        setNotice('Đã áp dụng hạn chế tính năng cho tài khoản.');
+        const parsedDays = Number(durationDays);
+        if (!Number.isInteger(parsedDays) || parsedDays <= 0 || parsedDays > 36500) {
+          setError('Thời hạn chế tài phải là số nguyên dương (1 - 36500 ngày).');
+          setBusy(false);
+          return;
+        }
+        for (const restriction of features) {
+          await requestApi(`/users/${encodeURIComponent(userId)}/restrict-features`, {
+            method: 'POST',
+            body: {
+              restriction,
+              durationDays: parsedDays,
+              reason: reason.trim(),
+            },
+          });
+        }
+        setNotice(`Đã áp dụng ${features.length} chế tài (${parsedDays} ngày) cho tài khoản.`);
       }
 
       setMode('none');

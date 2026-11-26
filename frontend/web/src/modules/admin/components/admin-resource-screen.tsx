@@ -137,6 +137,9 @@ export function AdminResourceScreen({ section }: { section: string }) {
   const [formName, setFormName] = useState('');
   const [formEmail, setFormEmail] = useState('');
   const [formPhone, setFormPhone] = useState('');
+  const [formIdentifyNumber, setFormIdentifyNumber] = useState('');
+  const [formGender, setFormGender] = useState('MALE');
+  const [formDateOfBirth, setFormDateOfBirth] = useState('');
   const [formStatus, setFormStatus] = useState('ACTIVE');
   const [formPassword, setFormPassword] = useState('');
   const [formPasswordConfirm, setFormPasswordConfirm] = useState('');
@@ -200,13 +203,9 @@ export function AdminResourceScreen({ section }: { section: string }) {
       })
       .catch((e) => {
         if (c.signal.aborted) return;
-        const msg = userMessage(e);
-        if (['events', 'audit', 'notifications'].includes(section) && msg.includes('404')) {
-          setRows([]);
-          setError('');
-        } else {
-          setError(msg);
-        }
+        // Admin P1: Không biến lỗi 404/5xx thành danh sách rỗng giả ở Audit/Events
+        setRows([]);
+        setError(userMessage(e));
       })
       .finally(() => {
         if (!c.signal.aborted) setLoading(false);
@@ -274,6 +273,9 @@ export function AdminResourceScreen({ section }: { section: string }) {
     setFormName(String(row?.fullName ?? row?.name ?? ''));
     setFormEmail(String(row?.email ?? ''));
     setFormPhone(String(row?.phone ?? ''));
+    setFormIdentifyNumber(String(row?.identifyNumber ?? ''));
+    setFormGender(String(row?.gender ?? 'MALE').toUpperCase() || 'MALE');
+    setFormDateOfBirth(String(row?.dateOfBirth ?? ''));
     setFormStatus(String(row?.status ?? 'ACTIVE').toUpperCase());
     setFormPassword('');
     setFormPasswordConfirm('');
@@ -284,7 +286,7 @@ export function AdminResourceScreen({ section }: { section: string }) {
     setFormDelta('-10');
     setFormOrderId(String(row?.orderId ?? ''));
     setFormCarrier('GHN');
-    setFormAddress('');
+    setFormAddress(String(row?.address ?? ''));
   }
 
   async function submitAction(e: FormEvent) {
@@ -304,8 +306,17 @@ export function AdminResourceScreen({ section }: { section: string }) {
         });
         setNotice('Đã cập nhật vai trò người dùng.');
       } else if (action === 'Tạo tài khoản') {
-        if (!formName.trim() || !formEmail.trim()) {
-          throw new Error('Vui lòng nhập đầy đủ họ tên và email.');
+        if (
+          !formName.trim() ||
+          !formEmail.trim() ||
+          !formPhone.trim() ||
+          !formIdentifyNumber.trim() ||
+          !formDateOfBirth.trim() ||
+          !formAddress.trim()
+        ) {
+          throw new Error(
+            'Vui lòng nhập đầy đủ họ tên, email, điện thoại, CCCD/CMND, ngày sinh và địa chỉ.',
+          );
         }
         if (!PASSWORD_POLICY_RE.test(formPassword)) {
           throw new Error('Mật khẩu cần 8–64 ký tự, gồm chữ hoa, chữ thường và chữ số.');
@@ -315,7 +326,11 @@ export function AdminResourceScreen({ section }: { section: string }) {
           body: {
             fullName: formName.trim(),
             email: formEmail.trim(),
-            phone: formPhone.trim() || undefined,
+            phone: formPhone.trim(),
+            identifyNumber: formIdentifyNumber.trim(),
+            gender: formGender || 'MALE',
+            dateOfBirth: formDateOfBirth.trim(),
+            address: formAddress.trim(),
             password: formPassword,
             role: role || 'BUYER',
           },
@@ -331,17 +346,19 @@ export function AdminResourceScreen({ section }: { section: string }) {
             body: { status: formStatus, reason: formReason.trim() || undefined },
           });
         }
-        const nameChanged = formName.trim() !== String(selected.fullName ?? '');
-        const phoneChanged = formPhone.trim() !== String(selected.phone ?? '');
-        if (nameChanged || phoneChanged) {
-          await requestApi(`/users/${uid}`, {
-            method: 'PATCH',
-            body: {
-              fullName: formName.trim(),
-              phone: formPhone.trim() || undefined,
-            },
-          });
-        }
+        await requestApi(`/users/${uid}`, {
+          method: 'PATCH',
+          body: {
+            fullName: formName.trim(),
+            email: formEmail.trim() || undefined,
+            phone: formPhone.trim() || undefined,
+            identifyNumber: formIdentifyNumber.trim() || undefined,
+            gender: formGender || undefined,
+            dateOfBirth: formDateOfBirth.trim() || undefined,
+            address: formAddress.trim() || undefined,
+            status: formStatus || undefined,
+          },
+        });
         setNotice('Đã cập nhật hồ sơ tài khoản.');
       } else if (action === 'Đổi mật khẩu' && selected?.id) {
         if (!PASSWORD_POLICY_RE.test(formPassword)) {
@@ -420,7 +437,7 @@ export function AdminResourceScreen({ section }: { section: string }) {
       } else if (action === 'Cập nhật trạng thái' && selected?.id) {
         await requestApi(`/orders/${encodeURIComponent(String(selected.id))}/status`, {
           method: 'PATCH',
-          body: { status: formStatus, reason: formReason.trim() || undefined },
+          body: { status: formStatus, note: formReason.trim() || undefined },
         });
         setNotice(`Đã cập nhật trạng thái đơn sang ${formStatus}.`);
       }
@@ -461,12 +478,12 @@ export function AdminResourceScreen({ section }: { section: string }) {
         await requestApi(`/users/${encodeURIComponent(String(selected.id))}/restrict-features`, {
           method: 'POST',
           body: {
-            restrictedFeatures: ['AUCTION_BID'],
-            features: ['AUCTION_BID'],
+            restriction: 'AUCTION_BID',
+            durationDays: 7,
             reason: formReason.trim(),
           },
         });
-        setNotice('Đã áp dụng chế tài cho tài khoản.');
+        setNotice('Đã áp dụng chế tài hạn chế đấu giá (7 ngày) cho tài khoản.');
       }
 
       setAction('');
@@ -957,25 +974,70 @@ export function AdminResourceScreen({ section }: { section: string }) {
             {/* TẠO TÀI KHOẢN */}
             {action === 'Tạo tài khoản' && (
               <div className="space-y-3">
-                <label className="block space-y-1.5 text-sm font-medium">
-                  Họ và tên *
-                  <Input value={formName} onChange={(e) => setFormName(e.target.value)} />
-                </label>
-                <label className="block space-y-1.5 text-sm font-medium">
-                  Email *
-                  <Input
-                    type="email"
-                    value={formEmail}
-                    onChange={(e) => setFormEmail(e.target.value)}
-                  />
-                </label>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="block space-y-1.5 text-sm font-medium">
-                    Điện thoại
-                    <Input value={formPhone} onChange={(e) => setFormPhone(e.target.value)} />
+                    Họ và tên *
+                    <Input
+                      value={formName}
+                      onChange={(e) => setFormName(e.target.value)}
+                      required
+                    />
                   </label>
                   <label className="block space-y-1.5 text-sm font-medium">
-                    Vai trò
+                    Email *
+                    <Input
+                      type="email"
+                      value={formEmail}
+                      onChange={(e) => setFormEmail(e.target.value)}
+                      required
+                    />
+                  </label>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block space-y-1.5 text-sm font-medium">
+                    Điện thoại *
+                    <Input
+                      value={formPhone}
+                      onChange={(e) => setFormPhone(e.target.value)}
+                      placeholder="0901234567"
+                      required
+                    />
+                  </label>
+                  <label className="block space-y-1.5 text-sm font-medium">
+                    Số CCCD/CMND *
+                    <Input
+                      value={formIdentifyNumber}
+                      onChange={(e) => setFormIdentifyNumber(e.target.value)}
+                      placeholder="001099001234"
+                      required
+                    />
+                  </label>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <label className="block space-y-1.5 text-sm font-medium">
+                    Giới tính *
+                    <Select value={formGender} onValueChange={setFormGender}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="MALE">Nam</SelectItem>
+                        <SelectItem value="FEMALE">Nữ</SelectItem>
+                        <SelectItem value="OTHER">Khác</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </label>
+                  <label className="block space-y-1.5 text-sm font-medium">
+                    Ngày sinh *
+                    <Input
+                      type="date"
+                      value={formDateOfBirth}
+                      onChange={(e) => setFormDateOfBirth(e.target.value)}
+                      required
+                    />
+                  </label>
+                  <label className="block space-y-1.5 text-sm font-medium">
+                    Vai trò *
                     <Select value={role || 'BUYER'} onValueChange={setRole}>
                       <SelectTrigger>
                         <SelectValue />
@@ -990,12 +1052,22 @@ export function AdminResourceScreen({ section }: { section: string }) {
                   </label>
                 </div>
                 <label className="block space-y-1.5 text-sm font-medium">
+                  Địa chỉ liên hệ *
+                  <Input
+                    value={formAddress}
+                    onChange={(e) => setFormAddress(e.target.value)}
+                    placeholder="Số nhà, đường, quận/huyện, tỉnh/thành phố"
+                    required
+                  />
+                </label>
+                <label className="block space-y-1.5 text-sm font-medium">
                   Mật khẩu khởi tạo *
                   <Input
                     type="password"
                     value={formPassword}
                     onChange={(e) => setFormPassword(e.target.value)}
                     placeholder="Tối thiểu 8 ký tự, gồm hoa, thường và số"
+                    required
                   />
                 </label>
               </div>
@@ -1004,17 +1076,62 @@ export function AdminResourceScreen({ section }: { section: string }) {
             {/* SỬA HỒ SƠ USER */}
             {action === 'Sửa hồ sơ' && (
               <div className="space-y-3">
-                <label className="block space-y-1.5 text-sm font-medium">
-                  Họ và tên *
-                  <Input value={formName} onChange={(e) => setFormName(e.target.value)} />
-                </label>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block space-y-1.5 text-sm font-medium">
+                    Họ và tên *
+                    <Input
+                      value={formName}
+                      onChange={(e) => setFormName(e.target.value)}
+                      required
+                    />
+                  </label>
+                  <label className="block space-y-1.5 text-sm font-medium">
+                    Email
+                    <Input
+                      type="email"
+                      value={formEmail}
+                      onChange={(e) => setFormEmail(e.target.value)}
+                    />
+                  </label>
+                </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="block space-y-1.5 text-sm font-medium">
                     Điện thoại
                     <Input value={formPhone} onChange={(e) => setFormPhone(e.target.value)} />
                   </label>
                   <label className="block space-y-1.5 text-sm font-medium">
-                    Trạng thái tài khoản
+                    Số CCCD/CMND
+                    <Input
+                      value={formIdentifyNumber}
+                      onChange={(e) => setFormIdentifyNumber(e.target.value)}
+                    />
+                  </label>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <label className="block space-y-1.5 text-sm font-medium">
+                    Giới tính
+                    <Select value={formGender} onValueChange={setFormGender}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="MALE">Nam</SelectItem>
+                        <SelectItem value="FEMALE">Nữ</SelectItem>
+                        <SelectItem value="OTHER">Khác</SelectItem>
+                        <SelectItem value="UNSPECIFIED">Không rõ</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </label>
+                  <label className="block space-y-1.5 text-sm font-medium">
+                    Ngày sinh
+                    <Input
+                      type="date"
+                      value={formDateOfBirth}
+                      onChange={(e) => setFormDateOfBirth(e.target.value)}
+                    />
+                  </label>
+                  <label className="block space-y-1.5 text-sm font-medium">
+                    Trạng thái
                     <Select value={formStatus} onValueChange={setFormStatus}>
                       <SelectTrigger>
                         <SelectValue />
@@ -1022,11 +1139,15 @@ export function AdminResourceScreen({ section }: { section: string }) {
                       <SelectContent>
                         <SelectItem value="ACTIVE">Đang hoạt động</SelectItem>
                         <SelectItem value="SUSPENDED">Đình chỉ</SelectItem>
-                        <SelectItem value="INACTIVE">Tạm ngưng</SelectItem>
+                        <SelectItem value="PENDING_VERIFICATION">Chờ xác minh</SelectItem>
                       </SelectContent>
                     </Select>
                   </label>
                 </div>
+                <label className="block space-y-1.5 text-sm font-medium">
+                  Địa chỉ
+                  <Input value={formAddress} onChange={(e) => setFormAddress(e.target.value)} />
+                </label>
                 <label className="block space-y-1.5 text-sm font-medium">
                   Ghi chú thay đổi (tùy chọn)
                   <Textarea

@@ -97,10 +97,87 @@ export class ShipmentController {
     }
   }
 
+  private async verifyBuyerOrderAccess(
+    req: Request,
+    orderId: string,
+  ): Promise<{ allowed: boolean; status: number; error?: string }> {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user || user.role !== 'BUYER') {
+      return { allowed: true, status: 200 };
+    }
+    const cleanOrderId = String(orderId || '').trim();
+    if (!cleanOrderId) {
+      return { allowed: false, status: 403, error: 'Bạn không có quyền truy cập vận đơn này.' };
+    }
+    const commerceBase = (
+      process.env.COMMERCE_SERVICE_URL ||
+      `http://127.0.0.1:${process.env.COMMERCE_SERVICE_PORT || 4003}`
+    ).replace(/\/$/, '');
+    try {
+      const response = await fetch(
+        `${commerceBase}/api/v1/orders/${encodeURIComponent(cleanOrderId)}`,
+        {
+          headers: {
+            Authorization: String(req.headers.authorization || ''),
+          },
+          signal: AbortSignal.timeout(3000),
+        },
+      );
+      if (response.status === 403) {
+        return {
+          allowed: false,
+          status: 403,
+          error: 'Bạn không có quyền truy cập vận đơn của đơn hàng khác.',
+        };
+      }
+      if (response.status === 404) {
+        if (process.env.USE_IN_MEMORY_DB === 'true') {
+          return { allowed: true, status: 200 };
+        }
+        return {
+          allowed: false,
+          status: 403,
+          error: 'Không xác minh được quyền sở hữu đơn hàng của vận đơn này.',
+        };
+      }
+      if (response.ok) {
+        const body = (await response.json().catch(() => ({}))) as {
+          data?: { buyerId?: string };
+        };
+        if (body.data?.buyerId && body.data.buyerId !== user.sub) {
+          return {
+            allowed: false,
+            status: 403,
+            error: 'Bạn không có quyền truy cập vận đơn của đơn hàng khác.',
+          };
+        }
+        return { allowed: true, status: 200 };
+      }
+    } catch {
+      if (process.env.USE_IN_MEMORY_DB === 'true') {
+        return { allowed: true, status: 200 };
+      }
+    }
+    return {
+      allowed: false,
+      status: 403,
+      error: 'Không xác minh được quyền sở hữu vận đơn.',
+    };
+  }
+
   public async getById(req: Request, res: Response): Promise<void> {
     try {
       const shipmentId = (req.params.id || 'shp_01hqz222trk') as string;
       const shipment = await this.getShipmentDetailUseCase.execute(shipmentId);
+      const targetOrderId = String((shipment as any)?.orderId || (shipment as any)?.order || '');
+      const access = await this.verifyBuyerOrderAccess(req, targetOrderId);
+      if (!access.allowed) {
+        res.status(access.status).json({
+          success: false,
+          error: access.error || 'Bạn không có quyền truy cập vận đơn này.',
+        });
+        return;
+      }
       res.status(200).json({
         success: true,
         data: shipment,
@@ -262,22 +339,17 @@ export class ShipmentController {
         .replace(/^[#]/, '')
         .replace(/^NEX-TRK-/i, '')
         .trim();
-      let shipment: any;
-      try {
-        shipment = await this.getShipmentDetailUseCase.execute(orderId);
-      } catch (err) {
-        if (err instanceof ShipmentNotFoundException && this.createShipmentUseCase) {
-          // Tự động cấp phát vận đơn Sandbox cho đơn hàng trong hệ thống nếu chưa từng tạo
-          shipment = await this.createShipmentUseCase.execute({
-            orderId,
-            carrier: 'GHN',
-            shippingAddress: 'Địa chỉ giao hàng mặc định (Sandbox)',
-            status: 'READY_TO_PICK',
-          });
-        } else {
-          throw err;
-        }
+      const access = await this.verifyBuyerOrderAccess(req, orderId);
+      if (!access.allowed) {
+        res.status(access.status).json({
+          success: false,
+          error: access.error || 'Bạn không có quyền truy cập vận đơn của đơn hàng khác.',
+        });
+        return;
       }
+      // GAP-LOG-09: GET /shipments/by-order/:orderId là truy vấn chỉ đọc (read-only),
+      // tuyệt đối không tự động INSERT vận đơn giả vào CSDL khi chưa được khởi tạo.
+      const shipment = await this.getShipmentDetailUseCase.execute(orderId);
       res.status(200).json({
         success: true,
         data: shipment,

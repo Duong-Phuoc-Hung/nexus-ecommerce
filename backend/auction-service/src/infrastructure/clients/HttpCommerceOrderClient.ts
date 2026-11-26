@@ -4,74 +4,85 @@ import {
   ICommerceOrderClient,
 } from '../../application/ports/ICommerceOrderClient';
 import { generateUuidV7 } from '../utils/uuid';
+import { buildServiceAuthHeader } from '../security/internal-service-auth';
 
 export class HttpCommerceOrderClient implements ICommerceOrderClient {
+  private readonly baseUrl: string;
+
   constructor(
-    private readonly baseUrl: string = process.env.COMMERCE_SERVICE_URL ||
-      `http://localhost:${process.env.COMMERCE_SERVICE_PORT || 4003}`,
-  ) {}
+    baseUrl: string = process.env.COMMERCE_SERVICE_URL ||
+      `http://127.0.0.1:${process.env.COMMERCE_SERVICE_PORT || 4003}`,
+  ) {
+    this.baseUrl = baseUrl.replace('http://localhost:', 'http://127.0.0.1:');
+  }
 
   public async createOrder(input: CreateAuctionOrderInput): Promise<AuctionOrderCheckoutResult> {
-    try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (input.buyerToken) {
-        headers['Authorization'] = input.buyerToken.startsWith('Bearer ')
-          ? input.buyerToken
-          : `Bearer ${input.buyerToken}`;
-      }
-      if (input.auctionId) {
-        headers['Idempotency-Key'] = `auc-${input.auctionId}`;
-      }
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...buildServiceAuthHeader({
+        issuer: 'auction-service',
+        audience: 'commerce-service',
+        scope: 'order:auction:create',
+        resource: input.auctionId,
+        actor: { sub: input.buyerId, role: 'BUYER' },
+      }),
+    };
+    if (input.buyerToken) {
+      headers['Authorization'] = input.buyerToken.startsWith('Bearer ')
+        ? input.buyerToken
+        : `Bearer ${input.buyerToken}`;
+    }
+    if (input.auctionId) {
+      headers['Idempotency-Key'] = `auction-checkout:${input.auctionId}:${input.buyerId}`;
+    }
 
-      const response = await fetch(`${this.baseUrl}/api/v1/orders/checkout`, {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/v1/orders/from-auction`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          orderType: 'AUCTION',
-          source: 'AUCTION',
           auctionId: input.auctionId,
-          items: [
-            {
-              productId: input.productId,
-              quantity: 1,
-              price: input.amount,
-            },
-          ],
+          productId: input.productId,
+          productTitle: input.productTitle,
+          sellerId: input.sellerId,
+          amount: input.amount,
           shippingAddress: input.shippingAddress,
         }),
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(8000),
       });
 
-      if (response.ok) {
-        const body = (await response.json()) as any;
-        if (body.success && body.data) {
-          const checkoutUrl =
-            body.data.checkoutUrl ||
-            body.data.payment?.checkoutUrl ||
-            (body.data.paymentLinkId
-              ? `https://pay.payos.vn/web/${body.data.paymentLinkId}`
-              : null) ||
-            'https://pay.payos.vn/web/checkout-preview';
-          return {
-            orderId: String(body.data.orderId || body.data.id),
-            orderCode: body.data.orderCode,
-            totalAmount: Number(body.data.totalAmount || input.amount),
-            payment: {
-              paymentLinkId: body.data.paymentLinkId || body.data.payment?.paymentLinkId,
-              checkoutUrl,
-              status: body.data.status || body.data.payment?.status || 'PENDING',
-            },
-          };
-        }
+      const body = (await response.json().catch(() => ({}))) as any;
+      if (response.ok && body.success && body.data) {
+        return {
+          orderId: String(body.data.orderId || body.data.id),
+          orderCode: body.data.orderCode,
+          totalAmount: Number(body.data.totalAmount || input.amount),
+          payment: {
+            paymentLinkId: body.data.payment?.paymentLinkId,
+            checkoutUrl: body.data.payment?.checkoutUrl || '',
+            status: body.data.payment?.status || 'PENDING',
+          },
+        };
       }
-    } catch {
-      // Fallback khi Commerce service chưa khởi chạy hoặc trong môi trường test độc lập
+
+      // Trong môi trường test độc lập vẫn cho phép mock fallback nếu không bật Commerce Service
+      if (process.env.NODE_ENV !== 'test') {
+        throw new Error(
+          body?.error?.message ||
+            body?.error ||
+            'Không thể tạo đơn hàng thắng đấu giá trên Commerce Service. Vui lòng thử lại.',
+        );
+      }
+    } catch (err) {
+      if (process.env.NODE_ENV !== 'test') {
+        throw err instanceof Error
+          ? err
+          : new Error('Không kết nối được Commerce Service để tạo đơn thanh toán.');
+      }
     }
 
-    // Dự phòng (Mock Fallback) cho phép thông luồng sinh mã VietQR PayOS
-    const orderCode = Math.floor(100000 + Math.random() * 900000);
+    // Chỉ dùng mock fallback trong unit test độc lập
+    const orderCode = `ORD-AUC-TEST-${Math.floor(100000 + Math.random() * 900000)}`;
     return {
       orderId: generateUuidV7(),
       orderCode,

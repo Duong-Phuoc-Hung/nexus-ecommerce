@@ -27,11 +27,11 @@ function toPayment(row: any): PaymentRecord {
     currency: row.currency || 'VND',
     checkoutUrl: row.checkoutUrl || row.checkout_url || undefined,
     paymentLinkId: row.paymentLinkId || row.payment_link_id || undefined,
-    qrCode: row.qrCode || undefined,
-    bin: row.bankBin || undefined,
-    accountNumber: row.accountNumber || undefined,
-    accountName: row.accountName || undefined,
-    description: row.transferDescription || undefined,
+    qrCode: row.qrCode || row.qr_code || undefined,
+    bin: row.bankBin || row.bank_bin || undefined,
+    accountNumber: row.accountNumber || row.account_number || undefined,
+    accountName: row.accountName || row.account_name || undefined,
+    description: row.transferDescription || row.transfer_description || undefined,
     expiresAt:
       row.expiresAt || row.expires_at ? new Date(row.expiresAt || row.expires_at) : undefined,
     paidAt: row.paidAt || row.paid_at ? new Date(row.paidAt || row.paid_at) : undefined,
@@ -509,8 +509,26 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
   }
 
   public async findOrder(orderId: string): Promise<OrderRecord | null> {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
+    const clean = String(orderId || '').trim();
+    if (!clean) return null;
+
+    const orConditions: Array<Record<string, unknown>> = [{ id: clean }, { orderCode: clean }];
+
+    // Hỗ trợ tra cứu đơn theo payosOrderCode số nguyên khi PayOS callback gửi orderCode dạng số
+    if (/^\d{4,15}$/.test(clean)) {
+      const payment = await this.prisma.payment.findFirst({
+        where: { payosOrderCode: BigInt(clean) },
+        orderBy: { id: 'desc' },
+      });
+      if (payment?.orderId) {
+        orConditions.unshift({ id: String(payment.orderId) });
+      }
+    }
+
+    const order = await this.prisma.order.findFirst({
+      where: {
+        OR: orConditions,
+      },
       include: {
         items: {
           orderBy: { id: 'asc' },

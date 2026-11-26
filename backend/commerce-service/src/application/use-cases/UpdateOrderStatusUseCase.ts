@@ -204,7 +204,7 @@ export class UpdateOrderStatusUseCase {
         return OrderStatus.REFUNDED;
       default:
         throw new Error(
-          `Trạng thái đơn hàng không hợp lệ: "${raw}". Các giá trị hợp lệ: PENDING, PAID, PROCESSING, SHIPPED, DELIVERED, COMPLETED, CANCELLED, REFUND_REQUESTED, REFUNDED.`,
+          `Trạng thái đơn hàng không hợp lệ: "${raw}". Các giá trị hợp lệ: PENDING, PAID, PROCESSING, SHIPPED, DELIVERED, COMPLETED, CANCELLED, RETURN_PENDING, REFUND_REQUESTED, REFUNDED.`,
         );
     }
   }

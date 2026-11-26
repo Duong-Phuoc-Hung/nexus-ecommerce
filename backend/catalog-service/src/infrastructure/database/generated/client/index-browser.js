@@ -188,7 +188,8 @@ exports.Prisma.ReviewScalarFieldEnum = {
   comment: 'comment',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
-  moderatedHidden: 'moderatedHidden'
+  moderatedHidden: 'moderatedHidden',
+  orderId: 'orderId'
 };
 
 exports.Prisma.ModerationCaseScalarFieldEnum = {

@@ -1,13 +1,14 @@
 import crypto from 'node:crypto';
 import { NextFunction, Request, Response } from 'express';
+import { extractServiceToken, NexusServiceId, ServiceTokenClaims } from './internal-service-auth';
 
-function getJwtSecret(): string {
-  const secret = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET;
-  if (secret) return secret;
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('JWT_ACCESS_SECRET or JWT_SECRET must be configured in production.');
-  }
-  return 'nexus_super_secret_jwt_access_key_min_32_chars_local_dev';
+function getJwtSecrets(): string[] {
+  const configured = [process.env.JWT_ACCESS_SECRET, process.env.JWT_SECRET].filter(
+    (secret): secret is string => Boolean(secret),
+  );
+  if (configured.length) return [configured[0]];
+  if (process.env.NODE_ENV === 'production') return [];
+  return ['nexus_super_secret_jwt_access_key_min_32_chars_local_dev'];
 }
 
 export interface AuthenticatedUser {
@@ -22,6 +23,7 @@ export interface AuthenticatedUser {
 
 export interface AuthenticatedRequest extends Request {
   user?: AuthenticatedUser;
+  serviceAuth?: ServiceTokenClaims;
 }
 
 export function verifyJwtToken(token: string): AuthenticatedUser | null {
@@ -30,15 +32,11 @@ export function verifyJwtToken(token: string): AuthenticatedUser | null {
     if (parts.length !== 3) return null;
 
     const [header, payloadPart, signature] = parts;
+    const tokenHeader = JSON.parse(Buffer.from(header, 'base64url').toString('utf8'));
+    if (tokenHeader.alg !== 'HS256') return null;
 
     // Danh sách secret dự phòng (Access secret, Secret chung, Dev fallback)
-    const candidateSecrets = [
-      process.env.JWT_ACCESS_SECRET,
-      process.env.JWT_SECRET,
-      'your_super_secret_jwt_access_key_min_32_characters_here',
-      'nexus_super_secret_jwt_access_key_min_32_chars_local_dev',
-      'nexus-dev-secret',
-    ].filter(Boolean) as string[];
+    const candidateSecrets = getJwtSecrets();
 
     let validSignature = false;
     for (const secret of candidateSecrets) {
@@ -64,7 +62,12 @@ export function verifyJwtToken(token: string): AuthenticatedUser | null {
       Buffer.from(payloadPart, 'base64url').toString('utf8'),
     ) as AuthenticatedUser;
 
-    if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) {
+    if (
+      typeof payload.sub !== 'string' ||
+      !payload.sub.trim() ||
+      !Number.isFinite(payload.exp) ||
+      payload.exp <= Date.now() / 1000
+    ) {
       return null;
     }
 
@@ -86,10 +89,6 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     .replace(/^Bearer\s+/i, '')
     .trim();
 
-  // Hỗ trợ cả gateway header forwarding nếu proxy truyền x-user-id / x-user-role
-  const forwardedUserId = req.headers['x-user-id'];
-  const forwardedRole = req.headers['x-user-role'];
-
   if (token) {
     const payload = verifyJwtToken(token);
     if (payload) {
@@ -98,21 +97,61 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     }
   }
 
-  if (forwardedUserId && typeof forwardedUserId === 'string') {
-    (req as AuthenticatedRequest).user = {
-      sub: forwardedUserId,
-      email: (req.headers['x-user-email'] as string) || '',
-      role: (forwardedRole as string) || 'BUYER',
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 3600,
-    };
-    return next();
-  }
-
   res.status(401).json({
     success: false,
     error: 'Authentication required. Vui lòng đăng nhập với tài khoản hợp lệ.',
   });
+}
+
+/**
+ * Cho phép HOẶC user JWT hợp lệ (tiếp tục kiểm tra quyền user ở middleware sau),
+ * HOẶC scoped S2S JWT có đúng audience/scope/issuer/resource.
+ * Tuyệt đối KHÔNG ánh xạ service credential thành ADMIN hay SUPPORT_STAFF.
+ */
+export function requireAuthOrScopedService(options: {
+  requiredScope: string | string[];
+  allowedIssuers: NexusServiceId[];
+  resourceResolver?: (req: Request) => string | undefined;
+}) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const expectedResource = options.resourceResolver ? options.resourceResolver(req) : undefined;
+    const svc = extractServiceToken(req, {
+      expectedAudience: 'commerce-service',
+      requiredScope: options.requiredScope,
+      allowedIssuers: options.allowedIssuers,
+      expectedResource,
+    });
+    if (svc) {
+      (req as AuthenticatedRequest).serviceAuth = svc;
+      return next();
+    }
+    requireAuth(req, res, next);
+  };
+}
+
+export function requireScopedServiceOnly(options: {
+  requiredScope: string | string[];
+  allowedIssuers: NexusServiceId[];
+  resourceResolver?: (req: Request) => string | undefined;
+}) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const expectedResource = options.resourceResolver ? options.resourceResolver(req) : undefined;
+    const svc = extractServiceToken(req, {
+      expectedAudience: 'commerce-service',
+      requiredScope: options.requiredScope,
+      allowedIssuers: options.allowedIssuers,
+      expectedResource,
+    });
+    if (!svc) {
+      res.status(401).json({
+        success: false,
+        error: 'Valid scoped service credential required.',
+      });
+      return;
+    }
+    (req as AuthenticatedRequest).serviceAuth = svc;
+    next();
+  };
 }
 
 export function requireOrderPermission(
@@ -126,8 +165,28 @@ export function requireOrderPermission(
     | 'UPDATE_STATUS'
     | 'CONFIRM_RECEIPT',
 ) {
+  const actionScopeMap: Record<string, string[]> = {
+    LIST: ['order:eligibility:read'],
+    REFUND: ['order:refund:execute', 'order:refund:cancel'],
+    REQUEST_REFUND: ['order:refund:request'],
+    UPDATE_STATUS: ['order:status:sync'],
+  };
+
   return (req: Request, res: Response, next: NextFunction): void => {
-    const user = (req as AuthenticatedRequest).user;
+    const authReq = req as AuthenticatedRequest;
+    if (authReq.serviceAuth) {
+      const allowedScopes = actionScopeMap[action] || [];
+      if (allowedScopes.includes(authReq.serviceAuth.scope)) {
+        return next();
+      }
+      res.status(403).json({
+        success: false,
+        error: `Service scope '${authReq.serviceAuth.scope}' is not authorized for order action '${action}'.`,
+      });
+      return;
+    }
+
+    const user = authReq.user;
     if (!user) {
       res.status(401).json({
         success: false,

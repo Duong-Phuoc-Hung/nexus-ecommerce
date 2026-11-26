@@ -50,15 +50,20 @@ export class SettleAuctionUseCase {
     }
 
     const settledAt = new Date();
-    // Hạn chót thanh toán: 48 giờ sau khi chốt phiên (SRS 3.5 & TASK-COM-01)
-    const paymentDeadline = new Date(settledAt.getTime() + 48 * 60 * 60 * 1000);
+    const endedAt = auction.actualEndTime ?? auction.endTime;
+    if (endedAt.getTime() > settledAt.getTime()) {
+      throw new Error('Chỉ có thể chốt phiên đã kết thúc.');
+    }
+    const existing = await this.auctionRepository.findSettlementByAuctionId?.(auctionId);
+    const paymentDeadline =
+      existing?.paymentDeadline ?? new Date(endedAt.getTime() + 24 * 3600_000);
 
     // 5. Chuyển trạng thái phiên đấu giá sang SETTLED trong Domain Entity
-    auction.settle(settledAt);
+    auction.settle(endedAt);
     await this.auctionRepository.update(auction);
 
     // 6. Ghi nhận dữ liệu chốt phiên vào bảng auction_settlements
-    if (this.auctionRepository.saveSettlement) {
+    if (!existing && this.auctionRepository.saveSettlement) {
       await this.auctionRepository.saveSettlement({
         auctionId: auction.id,
         winnerId: auction.highestBidderId,

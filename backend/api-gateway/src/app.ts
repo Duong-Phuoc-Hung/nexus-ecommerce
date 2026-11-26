@@ -104,6 +104,11 @@ export function createApplication(): Application {
           target: SERVICE_ENDPOINTS.notification,
         },
         {
+          name: 'Event Logs (Notification Audit)',
+          prefix: '/api/v1/event-logs',
+          target: SERVICE_ENDPOINTS.notification,
+        },
+        {
           name: 'AI Chat & Support',
           prefix: '/api/v1/chat',
           target: SERVICE_ENDPOINTS.chat,
@@ -161,7 +166,11 @@ export function createApplication(): Application {
               'transfer-encoding',
               'content-encoding',
               'expect',
-            ].includes(name.toLowerCase())
+            ].includes(name.toLowerCase()) ||
+            name.toLowerCase().startsWith('x-user-') ||
+            ['x-internal-service-key', 'x-email-delivery-key', 'x-service-authorization'].includes(
+              name.toLowerCase(),
+            )
           )
             continue;
           if (Array.isArray(value)) {
@@ -218,6 +227,8 @@ export function createApplication(): Application {
 
   app.use('/api/v1/auth', createProxy('User Service', SERVICE_ENDPOINTS.user));
   app.use('/api/v1/users', createProxy('User Service', SERVICE_ENDPOINTS.user));
+  app.use('/api/v1/audit-logs', createProxy('User Service', SERVICE_ENDPOINTS.user));
+  app.use('/api/v1/system', createProxy('User Service', SERVICE_ENDPOINTS.user));
   app.use('/api/v1/seller-applications', createProxy('User Service', SERVICE_ENDPOINTS.user));
   app.use('/api/v1/admin/seller-applications', createProxy('User Service', SERVICE_ENDPOINTS.user));
   app.use('/api/v1/ratings', createProxy('User Service', SERVICE_ENDPOINTS.user));
@@ -240,6 +251,10 @@ export function createApplication(): Application {
   );
   app.use(
     '/api/v1/notifications',
+    createProxy('Notification Service', SERVICE_ENDPOINTS.notification),
+  );
+  app.use(
+    '/api/v1/event-logs',
     createProxy('Notification Service', SERVICE_ENDPOINTS.notification),
   );
   app.use('/api/v1/chat', createProxy('Chat Service', SERVICE_ENDPOINTS.chat));

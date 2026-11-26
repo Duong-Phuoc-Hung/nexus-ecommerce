@@ -85,6 +85,23 @@ const FALLBACK_CARRIERS: CarrierQuoteOption[] = [
 
 const money = (v: number) => `${new Intl.NumberFormat('vi-VN').format(Math.round(v))} ₫`;
 
+const SHIPMENT_STATUS_LABEL: Record<string, string> = {
+  READY_TO_PICK: 'Chờ lấy hàng',
+  PICKED: 'Đã lấy hàng',
+  IN_TRANSIT: 'Đang vận chuyển',
+  OUT_FOR_DELIVERY: 'Đang giao hàng',
+  DELIVERED: 'Đã giao',
+  FAILED: 'Giao thất bại',
+  RETURNED: 'Đã hoàn trả',
+};
+
+type WarehouseOption = {
+  id: string;
+  code?: string;
+  name: string;
+  city?: string;
+};
+
 export function AdminShipmentsScreen() {
   const [rows, setRows] = useState<ShipmentRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,12 +118,13 @@ export function AdminShipmentsScreen() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
   const [eligibleOrders, setEligibleOrders] = useState<EligibleOrder[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
   const [orderId, setOrderId] = useState('');
   const [recipientName, setRecipientName] = useState('');
   const [recipientPhone, setRecipientPhone] = useState('');
   const [shippingAddress, setShippingAddress] = useState('');
   const [destinationProvince, setDestinationProvince] = useState('');
-  const [warehouseId, setWarehouseId] = useState('WH-HCM-01');
+  const [warehouseId, setWarehouseId] = useState('');
   const [quoteOptions, setQuoteOptions] = useState<CarrierQuoteOption[]>(FALLBACK_CARRIERS);
   const [selectedOptionId, setSelectedOptionId] = useState('GHN_STD');
   const [quoteBusy, setQuoteBusy] = useState(false);
@@ -167,6 +185,27 @@ export function AdminShipmentsScreen() {
     setSelectedOptionId('GHN_STD');
     setWizardError('');
 
+    requestApi('/fulfillments/inventory/warehouses')
+      .then((raw) => {
+        const data = unwrap<unknown>(raw);
+        const list = Array.isArray(data) ? data : [];
+        const parsed: WarehouseOption[] = (list as Array<Record<string, unknown>>)
+          .map((w) => ({
+            id: String(w.id ?? w.code ?? ''),
+            code: w.code ? String(w.code) : undefined,
+            name: String(w.name ?? w.code ?? w.id ?? 'Kho mặc định'),
+            city: w.city ? String(w.city) : undefined,
+          }))
+          .filter((w) => Boolean(w.id));
+        setWarehouses(parsed);
+        if (parsed.length > 0) {
+          setWarehouseId((prev) =>
+            prev && parsed.some((w) => w.id === prev) ? prev : parsed[0].id,
+          );
+        }
+      })
+      .catch(() => setWarehouses([]));
+
     requestApi('/orders?page=1&limit=30')
       .then((raw) => {
         const data = unwrap<unknown>(raw);
@@ -177,9 +216,7 @@ export function AdminShipmentsScreen() {
             : [];
         const ready = (list as Array<Record<string, unknown>>)
           .filter((o) =>
-            ['PAID', 'CONFIRMED', 'PROCESSING'].includes(
-              String(o.orderStatus ?? o.status ?? '').toUpperCase(),
-            ),
+            ['PAID', 'PROCESSING'].includes(String(o.orderStatus ?? o.status ?? '').toUpperCase()),
           )
           .map((o) => {
             const addr = (o.shippingAddress ?? {}) as Record<string, unknown>;
@@ -226,13 +263,47 @@ export function AdminShipmentsScreen() {
         body: {
           orderId: orderId.trim(),
           warehouseId,
+          city: destinationProvince || shippingAddress.trim(),
           destinationProvince: destinationProvince || undefined,
           destinationAddress: shippingAddress.trim(),
         },
       });
-      const data = unwrap<Record<string, unknown>>(raw);
-      if (Array.isArray(data?.options) && data.options.length > 0) {
-        const opts = data.options as CarrierQuoteOption[];
+      const unwrapped = unwrap<unknown>(raw);
+      const rawList = Array.isArray(unwrapped)
+        ? unwrapped
+        : Array.isArray((unwrapped as Record<string, unknown>)?.options)
+          ? ((unwrapped as Record<string, unknown>).options as unknown[])
+          : [];
+
+      if (rawList.length > 0) {
+        const opts: CarrierQuoteOption[] = (rawList as Array<Record<string, unknown>>).map(
+          (item, idx) => {
+            const carrier = String(item.carrier ?? `CARRIER_${idx + 1}`);
+            const days = Number(item.estimatedDays ?? item.etaDaysMax ?? 0);
+            const deliveryDate =
+              typeof item.estimatedDeliveryDate === 'string'
+                ? item.estimatedDeliveryDate
+                : typeof item.estimatedDeliveryAt === 'string'
+                  ? item.estimatedDeliveryAt
+                  : undefined;
+            const etaText =
+              typeof item.etaText === 'string' && item.etaText.trim()
+                ? item.etaText
+                : days > 0
+                  ? `Dự kiến ${days} ngày${deliveryDate ? ` (${deliveryDate})` : ''}`
+                  : deliveryDate || 'Đang cập nhật';
+            return {
+              optionId: String(item.optionId ?? `${carrier}_${idx}`),
+              carrier,
+              carrierName: String(item.carrierName ?? carrier),
+              serviceName: String(item.serviceName ?? 'Tiêu chuẩn'),
+              fee: Number(item.fee ?? item.estimatedFee ?? 0),
+              etaText,
+              estimatedDeliveryAt: deliveryDate,
+              recommended: Boolean(item.recommended ?? idx === 0),
+            };
+          },
+        );
         setQuoteOptions(opts);
         setSelectedOptionId(opts.find((o) => o.recommended)?.optionId || opts[0].optionId);
       }
@@ -341,11 +412,13 @@ export function AdminShipmentsScreen() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">Tất cả trạng thái</SelectItem>
-                <SelectItem value="PENDING">Chờ lấy hàng</SelectItem>
-                <SelectItem value="PICKED_UP">Đã lấy hàng</SelectItem>
-                <SelectItem value="IN_TRANSIT">Đang giao</SelectItem>
+                <SelectItem value="READY_TO_PICK">Chờ lấy hàng</SelectItem>
+                <SelectItem value="PICKED">Đã lấy hàng</SelectItem>
+                <SelectItem value="IN_TRANSIT">Đang vận chuyển</SelectItem>
+                <SelectItem value="OUT_FOR_DELIVERY">Đang giao hàng</SelectItem>
                 <SelectItem value="DELIVERED">Đã giao</SelectItem>
-                <SelectItem value="FAILED_DELIVERY">Giao thất bại</SelectItem>
+                <SelectItem value="FAILED">Giao thất bại</SelectItem>
+                <SelectItem value="RETURNED">Đã hoàn trả</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -393,7 +466,9 @@ export function AdminShipmentsScreen() {
                     <td className="px-5 py-4 font-medium text-slate-800">{r.carrier}</td>
                     <td className="px-5 py-4 text-slate-700">{r.recipientName}</td>
                     <td className="px-5 py-4">
-                      <span className="admin-neutral-badge">{r.status}</span>
+                      <span className="admin-neutral-badge">
+                        {SHIPMENT_STATUS_LABEL[r.status] ?? r.status}
+                      </span>
                     </td>
                     <td className="px-5 py-4 text-right">
                       <Button asChild variant="ghost" size="sm">
@@ -485,12 +560,19 @@ export function AdminShipmentsScreen() {
                   Kho lấy hàng
                   <Select value={warehouseId} onValueChange={setWarehouseId}>
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Chọn kho lấy hàng…" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="WH-HCM-01">Kho TP. Hồ Chí Minh</SelectItem>
-                      <SelectItem value="WH-HN-01">Kho Hà Nội</SelectItem>
-                      <SelectItem value="WH-DN-01">Kho Đà Nẵng</SelectItem>
+                      {warehouses.length > 0 ? (
+                        warehouses.map((w) => (
+                          <SelectItem key={w.id} value={w.id}>
+                            {w.name}
+                            {w.city ? ` (${w.city})` : ''}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="WH_001">Kho mặc định (WH_001)</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </label>

@@ -8,6 +8,8 @@ export interface UserProfileDto {
   reputationScore: number;
   dateOfBirth?: string | null;
   gender?: string | null;
+  identifyNumber?: string | null;
+  address?: string | null;
   updatedAt?: string;
   createdAt: string;
 }

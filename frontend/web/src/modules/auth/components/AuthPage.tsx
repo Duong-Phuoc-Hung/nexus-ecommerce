@@ -192,7 +192,11 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
     setBusy(true);
     setNotice('');
     try {
-      const res = await authApi.sendRegistrationOtp(values.email.trim(), values.fullName.trim());
+      const res = await authApi.sendRegistrationOtp(
+        values.email.trim(),
+        values.fullName.trim(),
+        values.phone.replace(/[\s.-]/g, ''),
+      );
       setOtpCooldown(60);
       if (res?.devOtp) setDevOtpCode(res.devOtp);
       setSuccess(true);
@@ -254,13 +258,10 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
         const destination = resolveAuthDestination(profile.role, next);
         window.location.assign(destination);
       } catch (error) {
-        const e = error instanceof ApiError ? error : null;
-        setErrors({ otp: 'Mã OTP không hợp lệ hoặc đã hết hạn.' });
-        setNotice(
-          e?.status === 400
-            ? 'Mã xác thực OTP không chính xác hoặc đã hết hạn. Vui lòng kiểm tra lại hoặc nhận lại mã mới.'
-            : userMessage(error),
-        );
+        const message = userMessage(error);
+        const isOtpError = /otp|mã xác thực/i.test(message);
+        setErrors(isOtpError ? { otp: message } : {});
+        setNotice(message);
         setSuccess(false);
         focusError();
       } finally {
@@ -275,8 +276,9 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
       validation.email = 'Nhập địa chỉ email hợp lệ.';
     if (isRegister && (!values.fullName.trim() || values.fullName.trim().length > 100))
       validation.fullName = 'Nhập họ và tên từ 1 đến 100 ký tự.';
-    if (isRegister && !/^(?:0|\+84)\d{9}$/.test(values.phone.replace(/[\s.-]/g, '')))
-      validation.phone = 'Nhập số điện thoại Việt Nam hợp lệ để liên hệ giao hàng.';
+    if (isRegister && !/^(?:0|\+84)(?:3|5|7|8|9)\d{8}$/.test(values.phone.replace(/[\s.-]/g, '')))
+      validation.phone =
+        'Nhập số điện thoại di động Việt Nam hợp lệ (10 số, đầu 03, 05, 07, 08 hoặc 09).';
     if (
       !isForgot &&
       (!values.password ||
@@ -319,8 +321,12 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
         setSuccess(true);
         setNotice('Mật khẩu đã được thay đổi. Vui lòng đăng nhập lại bằng mật khẩu mới.');
       } else if (isRegister) {
-        // Gửi OTP qua Gmail và chuyển sang màn hình 6 ô nhập mã
-        const res = await authApi.sendRegistrationOtp(values.email.trim(), values.fullName.trim());
+        // Gửi OTP qua Gmail (kiểm tra cả email & số điện thoại ngay bước 1)
+        const res = await authApi.sendRegistrationOtp(
+          values.email.trim(),
+          values.fullName.trim(),
+          values.phone.replace(/[\s.-]/g, ''),
+        );
         setOtpStep(true);
         setOtpValues(['', '', '', '', '', '']);
         setOtpCooldown(60);
@@ -352,9 +358,9 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
           : e?.status === 401
             ? 'Email hoặc mật khẩu chưa chính xác.'
             : e?.status === 409
-              ? 'Email này đã được sử dụng. Bạn có thể đăng nhập hoặc đặt lại mật khẩu.'
+              ? userMessage(error)
               : e?.status === 429
-                ? 'Bạn đã yêu cầu gửi mã quá nhiều lần. Vui lòng đợi 1 lát rồi thử lại.'
+                ? userMessage(error)
                 : isReset && e?.status === 400
                   ? 'Mật khẩu chưa hợp lệ hoặc liên kết đã hết hạn/được sử dụng. Hãy kiểm tra thông tin hoặc gửi yêu cầu mới.'
                   : userMessage(error),
@@ -528,12 +534,13 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
                 {isRegister && otpStep ? (
                   <div className="auth-otp-wrap">
                     <div className="auth-otp-email-badge">
-                      <span>
-                        Mã gửi tới: <strong>{values.email}</strong>
-                      </span>
+                      <div className="min-w-0">
+                        <span className="block text-xs text-slate-500">Mã xác thực đã gửi tới</span>
+                        <strong className="block break-words">{values.email}</strong>
+                      </div>
                       <button
                         type="button"
-                        className="auth-otp-change-email-btn"
+                        className="auth-otp-change-email-btn shrink-0"
                         onClick={() => {
                           setOtpStep(false);
                           setNotice('');
@@ -542,7 +549,7 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
                         }}
                         disabled={busy}
                       >
-                        Đổi email
+                        Sửa thông tin
                       </button>
                     </div>
 
@@ -611,8 +618,7 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
                       <>
                         {input('phone', 'Số điện thoại liên hệ', 'tel', 'tel')}
                         <p className="auth-week-hint">
-                          Số này dùng để điền nhanh thông tin giao hàng; hiện lưu trên trình duyệt
-                          này.
+                          Dùng để xác thực tài khoản và liên hệ giao nhận đơn hàng.
                         </p>
                       </>
                     )}

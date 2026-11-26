@@ -1,5 +1,6 @@
 import { requestApi } from '@/lib/axios/api-client';
 import { unwrap } from '@/lib/axios/http';
+import { fetchDeduplicated } from '@/lib/axios/resource-cache';
 import type {
   ChatMessageDto,
   ChatThreadItem,
@@ -267,7 +268,11 @@ export const chatApi = {
   },
 
   async getBuyerThreads(buyerId?: string, signal?: AbortSignal): Promise<ChatThreadItem[]> {
-    return getInboxThreads('BUYER', { buyerId, signal });
+    return fetchDeduplicated(
+      `chat:inbox:BUYER:${buyerId || 'self'}`,
+      () => getInboxThreads('BUYER', { buyerId, signal }),
+      { ttlMs: 3_000 },
+    );
   },
 
   async getSellerThreads(): Promise<ChatThreadItem[]> {
@@ -306,6 +311,10 @@ async function getInboxThreads(
       (conversation.channelType === 'AI_BOT' && conversation.status === 'WAITING_STAFF')
     );
   });
+
+  if (conversations.length === 0) {
+    return [];
+  }
 
   const orderPath =
     role === 'BUYER' && options?.buyerId

@@ -2,6 +2,9 @@ export type OrderSummary = {
   id: string;
   internalId?: string;
   orderCode?: string;
+  orderSource?: 'DIRECT' | 'AUCTION' | string;
+  auctionId?: string | null;
+  auctionWinningBid?: number | null;
   buyer: string;
   email: string;
   seller: string;
@@ -37,6 +40,10 @@ export type OrderDetail = OrderSummary & {
   subtotal?: number;
   shippingFee?: number;
   discountAmount?: number;
+  promoCode?: string | null;
+  shippingCarrier?: string | null;
+  shippingServiceName?: string | null;
+  estimatedDeliveryAt?: string | null;
   paymentMethod?: string | null;
   shippingAddress?: OrderShippingAddress;
   timeline: { status: string; title: string; timestamp: string; note?: string }[];

@@ -10,6 +10,11 @@ export function createInventoryRoutes(controller: InventoryController): Router {
     controller.listInventory(req, res),
   );
 
+  // 1.0 GET /api/v1/fulfillments/inventory/warehouses - Danh sách kho hàng
+  router.get('/warehouses', requireAuth, requireInventoryPermission('VIEW'), (req, res) =>
+    controller.listWarehouses(req, res),
+  );
+
   // 1.1 GET /api/v1/fulfillments/inventory/:sku/ledger - Tra cứu sổ cái biến động kho
   router.get('/:sku/ledger', requireAuth, requireInventoryPermission('VIEW'), (req, res) =>
     controller.getSkuLedger(req, res),
