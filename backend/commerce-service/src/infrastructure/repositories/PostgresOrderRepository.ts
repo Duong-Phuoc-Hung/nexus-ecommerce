@@ -452,17 +452,30 @@ export class PostgresOrderRepository implements IOrderRepository {
     }
 
     const latestPayment = Array.isArray(orderRow.payments) ? orderRow.payments[0] : undefined;
-    const resolvedPaymentMethod: string =
+    const rawOrderMethod = (
       orderRow.paymentMethod ||
       latestPayment?.paymentMethod ||
       shippingAddress.paymentMethod ||
-      (timeline.some((t) =>
-        String(t.note || '')
-          .toUpperCase()
-          .includes('PAYOS'),
-      )
-        ? 'PAYOS'
-        : 'COD');
+      ''
+    )
+      .trim()
+      .toUpperCase();
+    const hasCodInTimeline = timeline.some((t) =>
+      /COD|TIỀN MẶT|NHẬN HÀNG/i.test(`${t.note || ''} ${t.title || ''}`),
+    );
+    const hasPayOsInTimeline = timeline.some((t) =>
+      /PAYOS|VIETQR/i.test(`${t.note || ''} ${t.title || ''}`),
+    );
+
+    let resolvedPaymentMethod = latestPayment ? 'PAYOS' : 'COD';
+    if (rawOrderMethod === 'COD' || hasCodInTimeline) {
+      resolvedPaymentMethod = 'COD';
+    } else if (rawOrderMethod === 'PAYOS' || hasPayOsInTimeline) {
+      resolvedPaymentMethod = 'PAYOS';
+    } else if (rawOrderMethod && rawOrderMethod !== 'STRIPE') {
+      resolvedPaymentMethod = rawOrderMethod;
+    }
+
     const resolvedPaymentTxnId: string | undefined =
       orderRow.paymentTransactionId ||
       latestPayment?.transactionId ||

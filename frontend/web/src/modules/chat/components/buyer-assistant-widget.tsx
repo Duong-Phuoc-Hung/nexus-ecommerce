@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   ArrowRight,
+  Banknote,
   Bot,
   CheckCircle2,
   CreditCard,
@@ -17,6 +18,7 @@ import {
   RotateCcw,
   Send,
   ShieldAlert,
+  ShieldCheck,
   Sparkles,
   Store,
   Truck,
@@ -383,12 +385,38 @@ export function BuyerAssistantWidget() {
             : '';
 
           if (card.shipment.state === 'HAS_SHIPMENT') {
+            const rawLabel = (card.shipment.label || '').toLowerCase();
+            let dynamicNotice = '';
+            if (rawLabel.includes('thất bại') || rawLabel.includes('sự cố')) {
+              dynamicNotice =
+                '⚠️ Bưu tá phát kiện hàng không thành công. Kiện hàng hiện đang được lưu giữ tại bưu cục phát để hẹn lịch giao lại hoặc hỗ trợ giải quyết.';
+            } else if (rawLabel.includes('đã giao') || rawLabel.includes('thành công')) {
+              dynamicNotice =
+                '🎉 Kiện hàng đã được phát thành công đến địa chỉ người nhận. Bạn vui lòng kiểm tra sản phẩm.';
+            } else if (rawLabel.includes('hoàn') || rawLabel.includes('trả')) {
+              dynamicNotice = '📦 Kiện hàng đang được chuyển hoàn về kho của Người bán.';
+            } else if (
+              rawLabel.includes('đang trên đường giao') ||
+              rawLabel.includes('đang giao')
+            ) {
+              dynamicNotice =
+                '🛵 Bưu tá đang trên đường đi phát kiện hàng đến địa chỉ của bạn trong ngày hôm nay. Bạn vui lòng chú ý điện thoại để nhận hàng.';
+            } else if (rawLabel.includes('vận chuyển')) {
+              dynamicNotice =
+                '🚛 Kiện hàng đang được luân chuyển giữa các trung tâm phân loại bưu chính.';
+            } else if (rawLabel.includes('đã lấy')) {
+              dynamicNotice = '📦 Bưu tá đã lấy hàng từ kho Người bán và đưa về bưu cục phân loại.';
+            } else {
+              dynamicNotice =
+                'Đơn vị vận chuyển đang chuẩn bị tiếp nhận để phát kiện hàng đến địa chỉ của bạn.';
+            }
+
             summaryText =
               `🚚 Tiến trình vận chuyển đơn #${card.orderId}:\n\n` +
               `• Trạng thái bưu tá: ${card.shipment.label.toUpperCase()}\n` +
               (carrierInfo ? `• Đơn vị vận chuyển: ${carrierInfo}\n` : '') +
               `${loc}${est}${upd}\n\n` +
-              `Đơn vị vận chuyển đang xử lý tiếp nhận để phát kiện hàng đến địa chỉ của bạn.`;
+              dynamicNotice;
           } else if (card.shipment.state === 'PREPARING') {
             summaryText =
               `📦 Tiến trình đơn hàng #${card.orderId}:\n\n` +
@@ -1602,146 +1630,294 @@ export function BuyerAssistantWidget() {
                           </div>
                         )}
 
-                        {/* Thẻ tách riêng Thanh toán & Vận chuyển với hiệu ứng Focus theo loại câu hỏi */}
-                        {msg.orderCard && (
-                          <div className="mt-2.5 rounded-xl border border-line bg-stone-50/80 p-3 space-y-2.5 text-xs">
-                            <div className="flex items-center justify-between border-b border-line pb-2 gap-2">
-                              <strong className="font-mono text-stone-900 text-xs truncate">
-                                Đơn {msg.orderCard.orderNumberLabel}
-                              </strong>
-                              <span className="font-bold text-brand-dark shrink-0 whitespace-nowrap text-xs">
-                                {money(msg.orderCard.totalAmount)}
-                              </span>
-                            </div>
-
-                            {/* Dòng 1: Thanh toán */}
-                            <div
-                              className={`flex items-start gap-2 rounded-lg p-2 transition-colors ${
-                                msg.orderCard.focusSection === 'PAYMENT'
-                                  ? 'border border-emerald-200 bg-emerald-50/90 shadow-2xs'
-                                  : 'bg-white/60'
-                              }`}
-                            >
-                              <CreditCard
-                                className={`size-3.5 shrink-0 mt-0.5 ${
-                                  msg.orderCard.focusSection === 'PAYMENT'
-                                    ? 'text-emerald-700'
-                                    : 'text-stone-500'
-                                }`}
-                              />
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center justify-between gap-1 flex-wrap">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-[11px] text-muted block font-medium">
-                                      Thanh toán
-                                    </span>
-                                    {msg.orderCard.payment.method === 'COD' ? (
-                                      <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold text-amber-800">
-                                        COD · Tiền mặt
-                                      </span>
-                                    ) : (
-                                      <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[9px] font-semibold text-indigo-800">
-                                        PayOS · VietQR
-                                      </span>
-                                    )}
-                                  </div>
-                                  {msg.orderCard.focusSection === 'PAYMENT' && (
-                                    <span className="text-[10px] font-bold text-emerald-700 shrink-0">
-                                      ✓ Trọng tâm câu hỏi
-                                    </span>
-                                  )}
+                        {/* Thẻ Thanh toán & Vận chuyển — Luxury Modern E-Commerce UI */}
+                        {msg.orderCard &&
+                          (() => {
+                            const card = msg.orderCard;
+                            const isCod =
+                              card.payment.method === 'COD' || card.payment.status === 'COD';
+                            const isPaymentFocus = card.focusSection === 'PAYMENT';
+                            const isShipmentFocus = card.focusSection === 'SHIPMENT';
+                            const shipLabel = (card.shipment.label || '').toLowerCase();
+                            const isShipFailed =
+                              shipLabel.includes('thất bại') ||
+                              shipLabel.includes('sự cố') ||
+                              card.shipment.state === 'INTERRUPTED';
+                            const isDelivered =
+                              shipLabel.includes('đã giao') || shipLabel.includes('thành công');
+                            const isReturned =
+                              shipLabel.includes('hoàn') || shipLabel.includes('trả');
+                            return (
+                              <div className="mt-2.5 rounded-xl border border-stone-200/80 bg-white shadow-sm overflow-hidden text-xs">
+                                {/* Header */}
+                                <div className="flex items-center justify-between bg-stone-50 border-b border-stone-100 px-3 py-2 gap-2">
+                                  <span className="font-mono text-[11px] font-semibold text-stone-600 tracking-tight truncate">
+                                    {card.orderNumberLabel}
+                                  </span>
+                                  <span className="font-bold text-brand-dark shrink-0 text-xs">
+                                    {money(card.totalAmount)}
+                                  </span>
                                 </div>
-                                <span
-                                  className={`font-semibold text-xs block mt-0.5 ${
-                                    msg.orderCard.payment.status === 'PAID'
-                                      ? 'text-emerald-700'
-                                      : msg.orderCard.payment.status === 'PENDING'
-                                        ? 'text-amber-700'
-                                        : 'text-stone-900'
+
+                                {/* Row 1: Thanh toán */}
+                                <div
+                                  className={`flex items-start gap-2.5 px-3 py-2.5 border-b border-stone-100 transition-colors ${
+                                    isPaymentFocus
+                                      ? isCod
+                                        ? 'bg-amber-50/60'
+                                        : 'bg-emerald-50/60'
+                                      : 'bg-white'
                                   }`}
                                 >
-                                  {msg.orderCard.payment.label}
-                                </span>
-                                {msg.orderCard.payment.paidAt && (
-                                  <span className="block text-[11px] text-muted">
-                                    Lúc {formatVietnamTime(msg.orderCard.payment.paidAt)}
-                                  </span>
-                                )}
-                                {msg.orderCard.payment.method === 'COD' ? (
-                                  <span className="block text-[10px] text-amber-800 bg-amber-50/80 rounded px-1.5 py-0.5 mt-1 border border-amber-200/50">
-                                    📦 Đồng kiểm tra hàng trước khi thanh toán tiền mặt cho bưu tá
-                                  </span>
-                                ) : msg.orderCard.payment.status === 'PAID' ? (
-                                  <span className="block text-[10px] text-emerald-800 bg-emerald-50/80 rounded px-1.5 py-0.5 mt-1 border border-emerald-200/50">
-                                    🛡️ Tiền được bảo chứng an toàn bởi Nexus Escrow
-                                  </span>
-                                ) : null}
-                              </div>
-                            </div>
-
-                            {/* Dòng 2: Vận chuyển */}
-                            <div
-                              className={`flex items-start gap-2 rounded-lg p-2 transition-colors ${
-                                msg.orderCard.focusSection === 'SHIPMENT'
-                                  ? 'border border-sky-200 bg-sky-50/90 shadow-2xs'
-                                  : 'bg-white/60'
-                              }`}
-                            >
-                              <Truck
-                                className={`size-3.5 shrink-0 mt-0.5 ${
-                                  msg.orderCard.focusSection === 'SHIPMENT'
-                                    ? 'text-sky-700'
-                                    : 'text-stone-500'
-                                }`}
-                              />
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center justify-between gap-1 flex-wrap">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-[11px] text-muted block font-medium">
-                                      Vận chuyển
-                                    </span>
-                                    {msg.orderCard.shipment.carrier && (
-                                      <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[9px] font-semibold text-sky-800">
-                                        {msg.orderCard.shipment.carrier}
-                                      </span>
+                                  {/* Icon */}
+                                  <div
+                                    className={`mt-0.5 size-5 shrink-0 rounded-full flex items-center justify-center ${
+                                      isCod
+                                        ? 'bg-amber-100'
+                                        : card.payment.status === 'PAID'
+                                          ? 'bg-emerald-100'
+                                          : 'bg-stone-100'
+                                    }`}
+                                  >
+                                    {isCod ? (
+                                      <Banknote className="size-3 text-amber-700" />
+                                    ) : (
+                                      <CreditCard
+                                        className={`size-3 ${
+                                          card.payment.status === 'PAID'
+                                            ? 'text-emerald-700'
+                                            : 'text-stone-500'
+                                        }`}
+                                      />
                                     )}
                                   </div>
-                                  {msg.orderCard.focusSection === 'SHIPMENT' && (
-                                    <span className="text-[10px] font-bold text-sky-700 shrink-0">
-                                      ✓ Trọng tâm câu hỏi
+
+                                  {/* Content */}
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center justify-between gap-1">
+                                      <span className="text-[10px] font-medium text-stone-400 uppercase tracking-wide">
+                                        Thanh toán
+                                      </span>
+                                      <div className="flex items-center gap-1">
+                                        {/* Method badge */}
+                                        {isCod ? (
+                                          <span className="rounded-full bg-amber-100 px-2 py-px text-[9px] font-bold text-amber-800 tracking-tight">
+                                            COD · Tiền mặt
+                                          </span>
+                                        ) : (
+                                          <span className="rounded-full bg-indigo-100 px-2 py-px text-[9px] font-bold text-indigo-700 tracking-tight">
+                                            PayOS · VietQR
+                                          </span>
+                                        )}
+                                        {isPaymentFocus && (
+                                          <span className="text-[9px] font-bold text-emerald-600">
+                                            ✓ Trọng tâm
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Status label */}
+                                    <span
+                                      className={`block mt-0.5 text-[12px] font-semibold leading-snug ${
+                                        card.payment.status === 'PAID'
+                                          ? 'text-emerald-700'
+                                          : card.payment.status === 'PENDING'
+                                            ? 'text-amber-600'
+                                            : card.payment.status === 'CANCELLED'
+                                              ? 'text-stone-400 line-through'
+                                              : isCod
+                                                ? 'text-amber-700'
+                                                : 'text-stone-800'
+                                      }`}
+                                    >
+                                      {card.payment.label}
                                     </span>
-                                  )}
+
+                                    {/* Paid timestamp */}
+                                    {card.payment.paidAt && (
+                                      <span className="block mt-0.5 text-[10px] text-stone-400">
+                                        Lúc {formatVietnamTime(card.payment.paidAt)}
+                                      </span>
+                                    )}
+
+                                    {/* Sub-note */}
+                                    {isCod && card.payment.status !== 'PAID' ? (
+                                      <div className="mt-1.5 flex items-start gap-1 rounded-lg bg-amber-50 border border-amber-200/70 px-2 py-1">
+                                        <Package className="size-2.5 shrink-0 mt-0.5 text-amber-600" />
+                                        <span className="text-[9.5px] text-amber-800 leading-relaxed">
+                                          Được quyền đồng kiểm hàng trước khi trả tiền mặt cho bưu
+                                          tá
+                                        </span>
+                                      </div>
+                                    ) : isCod && card.payment.status === 'PAID' ? (
+                                      <div className="mt-1.5 flex items-center gap-1 rounded-lg bg-emerald-50 border border-emerald-200/70 px-2 py-1">
+                                        <ShieldCheck className="size-2.5 shrink-0 text-emerald-600" />
+                                        <span className="text-[9.5px] text-emerald-800">
+                                          Bưu tá đã thu tiền khi giao
+                                        </span>
+                                      </div>
+                                    ) : !isCod && card.payment.status === 'PAID' ? (
+                                      <div className="mt-1.5 flex items-center gap-1 rounded-lg bg-emerald-50 border border-emerald-200/70 px-2 py-1">
+                                        <ShieldCheck className="size-2.5 shrink-0 text-emerald-600" />
+                                        <span className="text-[9.5px] text-emerald-800">
+                                          Nexus Escrow bảo chứng · Giải ngân sau khi nhận hàng
+                                          nguyên vẹn
+                                        </span>
+                                      </div>
+                                    ) : !isCod && card.payment.status === 'PENDING' ? (
+                                      <div className="mt-1.5 flex items-center gap-1 rounded-lg bg-sky-50 border border-sky-200/70 px-2 py-1">
+                                        <span className="text-[9.5px] text-sky-700">
+                                          Quét mã VietQR để hoàn tất thanh toán
+                                        </span>
+                                      </div>
+                                    ) : null}
+                                  </div>
                                 </div>
-                                <span className="font-semibold text-stone-900 text-xs block mt-0.5">
-                                  {msg.orderCard.shipment.label}
-                                </span>
-                                {(msg.orderCard.shipment.carrier ||
-                                  msg.orderCard.shipment.trackingCode) && (
-                                  <span className="block text-[11px] font-mono text-stone-600">
-                                    Mã vận đơn:{' '}
-                                    {msg.orderCard.shipment.trackingCode || 'Đang cập nhật'}
-                                  </span>
-                                )}
-                                {msg.orderCard.shipment.currentLocation && (
-                                  <span className="block text-[11px] text-stone-700">
-                                    📍 {msg.orderCard.shipment.currentLocation}
-                                  </span>
-                                )}
-                                {msg.orderCard.shipment.updatedAt && (
-                                  <span className="block text-[11px] text-muted">
-                                    Cập nhật {formatVietnamTime(msg.orderCard.shipment.updatedAt)}
-                                  </span>
-                                )}
-                                {msg.orderCard.shipment.estimatedDeliveryAt && (
-                                  <span className="block text-[11px] text-emerald-700 font-medium">
-                                    Dự kiến giao:{' '}
-                                    {formatVietnamTime(msg.orderCard.shipment.estimatedDeliveryAt)}
-                                  </span>
-                                )}
+
+                                {/* Row 2: Vận chuyển */}
+                                <div
+                                  className={`flex items-start gap-2.5 px-3 py-2.5 transition-colors ${
+                                    isShipmentFocus
+                                      ? isShipFailed
+                                        ? 'bg-red-50/70'
+                                        : isDelivered
+                                          ? 'bg-emerald-50/60'
+                                          : 'bg-sky-50/60'
+                                      : 'bg-white'
+                                  }`}
+                                >
+                                  {/* Icon */}
+                                  <div
+                                    className={`mt-0.5 size-5 shrink-0 rounded-full flex items-center justify-center ${
+                                      isShipFailed
+                                        ? 'bg-red-100'
+                                        : isDelivered
+                                          ? 'bg-emerald-100'
+                                          : isReturned
+                                            ? 'bg-orange-100'
+                                            : 'bg-sky-100'
+                                    }`}
+                                  >
+                                    {isShipFailed ? (
+                                      <AlertCircle className="size-3 text-red-600" />
+                                    ) : (
+                                      <Truck
+                                        className={`size-3 ${
+                                          isDelivered
+                                            ? 'text-emerald-600'
+                                            : isReturned
+                                              ? 'text-orange-600'
+                                              : 'text-sky-600'
+                                        }`}
+                                      />
+                                    )}
+                                  </div>
+
+                                  {/* Content */}
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center justify-between gap-1">
+                                      <span className="text-[10px] font-medium text-stone-400 uppercase tracking-wide">
+                                        Vận chuyển
+                                      </span>
+                                      <div className="flex items-center gap-1">
+                                        {/* Carrier badge */}
+                                        {card.shipment.carrier && (
+                                          <span
+                                            className={`rounded-full px-2 py-px text-[9px] font-bold tracking-tight ${
+                                              isShipFailed
+                                                ? 'bg-red-100 text-red-700'
+                                                : 'bg-sky-100 text-sky-700'
+                                            }`}
+                                          >
+                                            {card.shipment.carrier}
+                                          </span>
+                                        )}
+                                        {/* Failed badge */}
+                                        {isShipFailed && (
+                                          <span className="rounded-full bg-red-100 px-2 py-px text-[9px] font-bold text-red-700">
+                                            Sự cố phát hàng
+                                          </span>
+                                        )}
+                                        {isShipmentFocus && (
+                                          <span
+                                            className={`text-[9px] font-bold ${
+                                              isShipFailed ? 'text-red-600' : 'text-sky-600'
+                                            }`}
+                                          >
+                                            ✓ Trọng tâm
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Status label */}
+                                    <span
+                                      className={`block mt-0.5 text-[12px] font-semibold leading-snug ${
+                                        isShipFailed
+                                          ? 'text-red-700'
+                                          : isDelivered
+                                            ? 'text-emerald-700'
+                                            : isReturned
+                                              ? 'text-orange-700'
+                                              : 'text-stone-800'
+                                      }`}
+                                    >
+                                      {isShipFailed
+                                        ? 'Giao hàng chưa thành công (Chờ phát lại)'
+                                        : card.shipment.label}
+                                    </span>
+
+                                    {/* Tracking code */}
+                                    {card.shipment.trackingCode && (
+                                      <span className="block mt-0.5 text-[10px] font-mono text-stone-500">
+                                        {card.shipment.trackingCode}
+                                      </span>
+                                    )}
+
+                                    {/* Location */}
+                                    {card.shipment.currentLocation && (
+                                      <span
+                                        className={`block mt-0.5 text-[10px] leading-snug ${
+                                          isShipFailed ? 'text-red-600' : 'text-stone-500'
+                                        }`}
+                                      >
+                                        📍 {card.shipment.currentLocation}
+                                      </span>
+                                    )}
+
+                                    {/* Updated at */}
+                                    {card.shipment.updatedAt && (
+                                      <span className="block mt-0.5 text-[10px] text-stone-400">
+                                        Cập nhật {formatVietnamTime(card.shipment.updatedAt)}
+                                      </span>
+                                    )}
+
+                                    {/* ETA */}
+                                    {card.shipment.estimatedDeliveryAt && !isShipFailed && (
+                                      <div className="mt-1 flex items-center gap-1">
+                                        <span className="text-[10px] font-medium text-emerald-600">
+                                          Dự kiến:{' '}
+                                          {formatVietnamTime(card.shipment.estimatedDeliveryAt)}
+                                        </span>
+                                      </div>
+                                    )}
+
+                                    {/* Failed sub-note */}
+                                    {isShipFailed && (
+                                      <div className="mt-1.5 flex items-start gap-1 rounded-lg bg-red-50 border border-red-200/70 px-2 py-1">
+                                        <AlertCircle className="size-2.5 shrink-0 mt-0.5 text-red-500" />
+                                        <span className="text-[9.5px] text-red-700 leading-relaxed">
+                                          Bưu tá không giao được · Kiện hàng lưu tại bưu cục phát ·
+                                          Hẹn giao lại trong 24–48h
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                          </div>
-                        )}
+                            );
+                          })()}
 
                         {/* Danh sách chọn nhanh tối đa 3 đơn khi hỏi trùng tên sản phẩm */}
                         {msg.orderChoices && msg.orderChoices.length > 0 && (

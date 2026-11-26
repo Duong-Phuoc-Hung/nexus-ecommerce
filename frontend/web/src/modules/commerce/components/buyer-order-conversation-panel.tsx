@@ -201,6 +201,7 @@ export function BuyerOrderConversationPanel({
   const [pendingAttachments, setPendingAttachments] = useState<ConversationAttachment[]>([]);
   const [uploadingAttachment, setUploadingAttachment] = useState<boolean>(false);
   const [sendingMessage, setSendingMessage] = useState<boolean>(false);
+  const [reopeningConversation, setReopeningConversation] = useState<boolean>(false);
   const [simulateNextSendFailure, setSimulateNextSendFailure] = useState<boolean>(false);
 
   // Handoff & Escalate
@@ -1842,12 +1843,43 @@ export function BuyerOrderConversationPanel({
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-8 rounded-xl bg-white text-xs font-semibold"
-                    disabled={!canOpenCase}
-                    aria-describedby={!canOpenCase ? 'order-case-availability' : undefined}
-                    onClick={() => handleOpenCaseModal('OTHER')}
+                    className="h-8 rounded-xl bg-white text-xs font-semibold hover:bg-stone-50"
+                    disabled={reopeningConversation}
+                    onClick={async () => {
+                      if (!conversation?.id || reopeningConversation) return;
+                      setReopeningConversation(true);
+                      setComposerError('');
+                      try {
+                        const reopened = await orderConversationsApi.reopenConversation(
+                          conversation.id,
+                          activeChannel,
+                          conversation.recipientLabel,
+                        );
+                        setConversation(reopened);
+                        const listResult = await orderConversationsApi.listMessages(reopened.id, {
+                          limit: 40,
+                        });
+                        setMessages(listResult.items);
+                        setTimeout(() => {
+                          scrollMessageListToBottom();
+                        }, 80);
+                      } catch (err) {
+                        setComposerError(
+                          err instanceof Error ? err.message : 'Chưa thể mở lại hội thoại lúc này.',
+                        );
+                      } finally {
+                        setReopeningConversation(false);
+                      }
+                    }}
                   >
-                    Tạo yêu cầu mới
+                    {reopeningConversation ? (
+                      <>
+                        <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                        Đang mở lại...
+                      </>
+                    ) : (
+                      'Tạo yêu cầu mới'
+                    )}
                   </Button>
                 </div>
               ) : (

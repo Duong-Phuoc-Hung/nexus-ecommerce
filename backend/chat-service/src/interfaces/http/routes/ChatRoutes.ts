@@ -80,6 +80,9 @@ export function createChatRoutes(
   router.post('/sessions/:id/close', requireAuth, (req, res) =>
     controller.closeConversation(req, res),
   );
+  router.post('/sessions/:id/reopen', requireAuth, (req, res) =>
+    controller.reopenConversation(req, res),
+  );
 
   // 8. Thẩm định đối soát chứng cứ cho Support Staff / Admin (chống Buyer/Seller lạm dụng)
   router.post('/dispute/analyze-evidence', requireAuth, (req, res) => {

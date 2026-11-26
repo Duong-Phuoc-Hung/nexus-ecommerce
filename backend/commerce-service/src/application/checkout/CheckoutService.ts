@@ -784,11 +784,14 @@ export class CheckoutService {
         ? 'PAID'
         : rawPayStatus;
 
+    const resolvedPayMethod =
+      payment?.paymentMethod || order.paymentMethod || (payment?.checkoutUrl ? 'PAYOS' : 'COD');
+
     return {
       orderId: order.id,
       orderCode: order.orderCode,
       orderStatus: order.status,
-      paymentMethod: payment?.paymentMethod || 'PAYOS',
+      paymentMethod: resolvedPayMethod,
       paymentStatus: normalizedPaymentStatus,
       amount: order.totalAmount,
       currency: CURRENCY,

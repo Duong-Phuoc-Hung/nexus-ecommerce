@@ -1351,6 +1351,29 @@ export function createOrderConversationsApi(request: RequestApi) {
       writeLocalStore(store);
       return { conversation: { ...bundle.conversation }, messages: [...bundle.messages] };
     },
+
+    async reopenConversation(
+      conversationId: string,
+      channel: ConversationChannel,
+      recipientLabel: string,
+    ): Promise<OrderConversation> {
+      const store = readLocalStore();
+      const simBundle = Object.values(store).find((b) => b.conversation.id === conversationId);
+      if (simBundle) {
+        simBundle.conversation.state = 'OPEN';
+        simBundle.conversation.closedAt = null;
+        simBundle.conversation.updatedAt = new Date().toISOString();
+        writeLocalStore(store);
+        return { ...simBundle.conversation };
+      }
+
+      const raw = await request<{ success: boolean; data: BackendConversationDto }>(
+        `/chat/sessions/${encodeURIComponent(conversationId)}/reopen`,
+        { method: 'POST' },
+      );
+      const dto = unwrap<BackendConversationDto>(raw);
+      return mapConversationDto(dto, channel, recipientLabel);
+    },
   };
 }
 

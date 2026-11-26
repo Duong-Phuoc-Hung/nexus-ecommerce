@@ -855,4 +855,67 @@ export class ChatController {
         .json({ success: false, error: error.message || 'Không thể kết thúc phiên hỗ trợ.' });
     }
   }
+
+  /**
+   * POST /api/v1/chat/sessions/:id/reopen
+   * Cho phép Buyer (chủ hội thoại) hoặc Support Staff/Admin mở lại hội thoại đã đóng để tạo yêu cầu mới
+   */
+  public async reopenConversation(req: Request, res: Response): Promise<void> {
+    try {
+      const user = (req as any).user;
+      if (!user || !user.sub) {
+        res.status(401).json({ success: false, error: 'Chưa xác thực người dùng.' });
+        return;
+      }
+
+      const convId = req.params.id as string;
+      const conv = await this.conversationRepo.findById(convId);
+      if (!conv) {
+        res
+          .status(404)
+          .json({ success: false, error: `Không tìm thấy cuộc hội thoại "${convId}".` });
+        return;
+      }
+
+      if (!conv.canAccess(user.sub, user.role)) {
+        res.status(403).json({
+          success: false,
+          error: 'Bạn không có quyền mở lại cuộc hội thoại này.',
+        });
+        return;
+      }
+
+      if (conv.isClosed()) {
+        const nextStatus =
+          conv.channelType === 'AI_BOT'
+            ? 'BOT_ACTIVE'
+            : conv.channelType === 'BUYER_SUPPORT'
+              ? 'WAITING_STAFF'
+              : 'ACTIVE';
+        conv.updateStatus(nextStatus);
+        const seq = conv.incrementSeq();
+        await this.conversationRepo.update(conv);
+
+        const sysMessage = new ChatMessage({
+          id: `msg_sys_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+          conversationId: conv.id,
+          senderId: user.sub,
+          senderRole: 'SYSTEM',
+          content: 'Khách hàng đã mở lại yêu cầu hỗ trợ mới.',
+          seq,
+        });
+        await this.messageRepo.save(sysMessage);
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Đã mở lại phiên hỗ trợ.',
+        data: conv.toDto(),
+      });
+    } catch (error: any) {
+      res
+        .status(500)
+        .json({ success: false, error: error.message || 'Không thể mở lại phiên hỗ trợ.' });
+    }
+  }
 }
