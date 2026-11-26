@@ -1518,34 +1518,60 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
                 ))}
               </div>
 
-              {/* Chi tiết mốc thời gian và ghi chú từ đơn */}
-              <ol className="mt-5 grid gap-4 border-t border-line/60 pt-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+              {/* Chi tiết mốc thời gian và ghi chú từ đơn (lọc trùng trạng thái liên tiếp) */}
+              <ol className="mt-5 space-y-3 border-t border-line/60 pt-4 text-sm">
                 {order.timeline && order.timeline.length > 0 ? (
-                  order.timeline.map((s, i) => (
-                    <li
-                      key={`${s.timestamp}-${i}`}
-                      className="relative pl-5 border-l-2 border-brand/40 pb-1"
-                    >
-                      <span className="absolute -left-[5px] top-1.5 size-2 rounded-full bg-brand" />
-                      <strong className="block text-stone-900 font-semibold text-xs sm:text-sm">
-                        {formatOrderStatus(s.title || s.status)}
-                      </strong>
-                      <span className="mt-0.5 block text-xs text-muted">
-                        {new Date(s.timestamp).toLocaleString('vi-VN')}
-                      </span>
-                      {s.note && (
-                        <p className="mt-1 text-xs text-stone-600 leading-relaxed">{s.note}</p>
-                      )}
-                    </li>
-                  ))
+                  order.timeline
+                    .filter((s, i, arr) => {
+                      if (i === 0) return true;
+                      const prev = arr[i - 1];
+                      return (
+                        (s.title || s.status) !== (prev.title || prev.status) ||
+                        (s.note || '') !== (prev.note || '')
+                      );
+                    })
+                    .map((s, i, filtered) => {
+                      const isLatest = i === filtered.length - 1;
+                      return (
+                        <li
+                          key={`${s.timestamp}-${i}`}
+                          className={`relative pl-5 border-l-2 pb-1 ${
+                            isLatest ? 'border-emerald-500' : 'border-stone-200'
+                          }`}
+                        >
+                          <span
+                            className={`absolute -left-[5px] top-1.5 size-2 rounded-full ${
+                              isLatest ? 'bg-emerald-500 ring-2 ring-emerald-100' : 'bg-stone-400'
+                            }`}
+                          />
+                          <div className="flex flex-wrap items-baseline justify-between gap-2">
+                            <strong className="text-stone-900 font-semibold text-xs sm:text-sm">
+                              {formatOrderStatus(s.title || s.status)}
+                            </strong>
+                            <span className="text-[11px] text-muted font-mono">
+                              {new Date(s.timestamp).toLocaleString('vi-VN')}
+                            </span>
+                          </div>
+                          {s.note && (
+                            <p className="mt-0.5 text-xs text-stone-600 leading-relaxed">
+                              {s.note}
+                            </p>
+                          )}
+                        </li>
+                      );
+                    })
                 ) : (
-                  <li className="relative pl-5 border-l-2 border-brand/40">
-                    <span className="absolute -left-[5px] top-1.5 size-2 rounded-full bg-brand" />
-                    <strong className="block text-stone-900 font-semibold text-xs sm:text-sm">
-                      Đơn hàng được khởi tạo thành công
-                    </strong>
-                    <span className="mt-0.5 block text-xs text-muted">{formattedCreatedDate}</span>
-                    <p className="mt-1 text-xs text-stone-600">
+                  <li className="relative pl-5 border-l-2 border-emerald-500">
+                    <span className="absolute -left-[5px] top-1.5 size-2 rounded-full bg-emerald-500 ring-2 ring-emerald-100" />
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <strong className="text-stone-900 font-semibold text-xs sm:text-sm">
+                        Đơn hàng được khởi tạo thành công
+                      </strong>
+                      <span className="text-[11px] text-muted font-mono">
+                        {formattedCreatedDate}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-stone-600">
                       Hệ thống đã ghi nhận sản phẩm, giá bán và địa chỉ nhận hàng.
                     </p>
                   </li>

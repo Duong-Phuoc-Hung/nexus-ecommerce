@@ -106,6 +106,13 @@ export function SupportShipmentsPage() {
   const [returnCondition, setReturnCondition] = useState<'INTACT' | 'DAMAGED' | 'LOST'>('INTACT');
   const [returnedAt, setReturnedAt] = useState('');
 
+  // Đồng bộ dropdown trạng thái luôn khớp với vận đơn đang chọn
+  useEffect(() => {
+    if (selected) {
+      setNextStatus(selected.statusCode || selected.status);
+    }
+  }, [selected]);
+
   // Tự động nhận từ khóa tìm kiếm khi điều hướng từ trang Chi tiết đơn hàng (?q=GHN_...)
   useEffect(() => {
     if (typeof window !== 'undefined') {

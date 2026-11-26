@@ -343,14 +343,26 @@ export class Order {
   }
 
   public updateStatus(status: OrderStatus, note?: string): void {
+    const now = new Date();
+    const last = this._timeline[this._timeline.length - 1];
+    if (
+      this._status === status &&
+      last &&
+      last.status === String(status) &&
+      (last.note || '') === (note || '')
+    ) {
+      last.timestamp = now;
+      this._updatedAt = now;
+      return;
+    }
     this._status = status;
     this._timeline.push({
       status: String(status),
       title: `Trạng thái chuyển sang: ${status}`,
-      timestamp: new Date(),
+      timestamp: now,
       note,
     });
-    this._updatedAt = new Date();
+    this._updatedAt = now;
   }
 
   public cancel(reason?: string): void {
