@@ -406,6 +406,9 @@ export function BuyerAssistantWidget() {
                 '🚛 Kiện hàng đang được luân chuyển giữa các trung tâm phân loại bưu chính.';
             } else if (rawLabel.includes('đã lấy')) {
               dynamicNotice = '📦 Bưu tá đã lấy hàng từ kho Người bán và đưa về bưu cục phân loại.';
+            } else if (rawLabel.includes('chờ bưu tá lấy') || rawLabel.includes('chờ lấy')) {
+              dynamicNotice =
+                '📦 Người bán đang chuẩn bị đóng gói kiện hàng và chờ bưu tá đến tiếp nhận.';
             } else {
               dynamicNotice =
                 'Đơn vị vận chuyển đang chuẩn bị tiếp nhận để phát kiện hàng đến địa chỉ của bạn.';
