@@ -343,7 +343,12 @@ export function createOrdersApi(request: RequestApi) {
         accountNumber?: string | null;
         accountName?: string | null;
         description?: string | null;
-      }>(await request(`/orders/${encodeURIComponent(orderId)}/payment-status`, { signal }));
+      }>(
+        await request(`/orders/${encodeURIComponent(orderId)}/payment-status?_t=${Date.now()}`, {
+          signal,
+          headers: { 'Cache-Control': 'no-cache, no-store' },
+        }),
+      );
     },
   };
 }

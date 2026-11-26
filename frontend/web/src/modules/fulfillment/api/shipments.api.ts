@@ -77,7 +77,10 @@ export function createShipmentsApi(request: RequestApi, prefix = '/support') {
     },
     async getById(id: string, signal?: AbortSignal): Promise<Shipment> {
       return unwrap<Shipment>(
-        await request(`${prefix}/shipments/${encodeURIComponent(id)}`, { signal }),
+        await request(`${prefix}/shipments/${encodeURIComponent(id)}?_t=${Date.now()}`, {
+          signal,
+          headers: { 'Cache-Control': 'no-cache' },
+        }),
       );
     },
     async updateStatus(
@@ -111,9 +114,13 @@ export function createShipmentsApi(request: RequestApi, prefix = '/support') {
     },
     async getByOrderId(orderId: string, signal?: AbortSignal): Promise<Shipment> {
       return unwrap<Shipment>(
-        await request(`/fulfillments/shipments/by-order/${encodeURIComponent(orderId)}`, {
-          signal,
-        }),
+        await request(
+          `/fulfillments/shipments/by-order/${encodeURIComponent(orderId)}?_t=${Date.now()}`,
+          {
+            signal,
+            headers: { 'Cache-Control': 'no-cache' },
+          },
+        ),
       );
     },
     async triggerCarrierWebhook(input: {

@@ -170,12 +170,63 @@ export class ChatController {
       }
 
       const { orderId, channelType, sellerId } = req.body;
+      let resolvedBuyerId = user.sub;
+      let resolvedSellerId = sellerId;
+
+      const roleUpper = (user.role || '').toUpperCase();
+      if (orderId && (roleUpper === 'BUYER' || roleUpper === 'SELLER')) {
+        const commerceUrl = (
+          process.env.COMMERCE_SERVICE_URL ||
+          `http://127.0.0.1:${process.env.COMMERCE_SERVICE_PORT || 4003}`
+        ).replace(/\/$/, '');
+        try {
+          const headers: Record<string, string> = {};
+          if (req.headers.authorization) {
+            headers['Authorization'] = req.headers.authorization;
+          }
+          const orderRes = await fetch(
+            `${commerceUrl}/api/v1/orders/${encodeURIComponent(String(orderId).trim())}`,
+            { headers, signal: AbortSignal.timeout(2500) },
+          );
+          if (orderRes.ok) {
+            const orderJson: any = await orderRes.json();
+            const orderData = orderJson?.data;
+            if (orderData) {
+              if (roleUpper === 'BUYER' && orderData.buyerId && orderData.buyerId !== user.sub) {
+                res.status(403).json({
+                  success: false,
+                  error: 'Bạn không có quyền mở hội thoại cho đơn hàng của người khác.',
+                });
+                return;
+              }
+              if (roleUpper === 'SELLER' && orderData.sellerId && orderData.sellerId !== user.sub) {
+                res.status(403).json({
+                  success: false,
+                  error: 'Bạn không có quyền mở hội thoại cho đơn hàng của gian hàng khác.',
+                });
+                return;
+              }
+              if (orderData.buyerId) resolvedBuyerId = orderData.buyerId;
+              if (orderData.sellerId) resolvedSellerId = orderData.sellerId;
+            }
+          } else if (orderRes.status === 403 || orderRes.status === 404) {
+            res.status(orderRes.status).json({
+              success: false,
+              error: 'Không thể xác thực quyền sở hữu đơn hàng để mở hội thoại.',
+            });
+            return;
+          }
+        } catch {
+          // Cho phép fallback khi commerce-service offline trong môi trường test cục bộ
+        }
+      }
+
       const conv = await this.getOrCreateConversationUseCase.execute(
         {
           orderId,
           channelType,
-          buyerId: user.sub,
-          sellerId,
+          buyerId: resolvedBuyerId,
+          sellerId: resolvedSellerId,
         },
         user.sub,
         user.role,

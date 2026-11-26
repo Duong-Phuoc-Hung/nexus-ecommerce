@@ -153,13 +153,51 @@ export class Shipment {
     return this._updatedAt;
   }
 
+  public static getDefaultLocationForStatus(
+    status: ShipmentStatus,
+    city?: string,
+    shippingAddress?: string,
+  ): string {
+    const area = (city || 'TP. Hồ Chí Minh').trim();
+    switch (status) {
+      case ShipmentStatus.READY_TO_PICK:
+        return 'Kho tổng Nexus · Đang chuẩn bị đóng gói & chờ bưu tá';
+      case ShipmentStatus.PICKED:
+        return `Bưu cục ${area} · Bưu tá đã lấy hàng từ Người bán`;
+      case ShipmentStatus.IN_TRANSIT:
+        return `Trung tâm phân loại bưu chính ${area} · Đang vận chuyển`;
+      case ShipmentStatus.OUT_FOR_DELIVERY:
+        return `Bưu cục phát ${area} · Bưu tá đang đi phát hàng`;
+      case ShipmentStatus.DELIVERED:
+        return `${shippingAddress || area} · Đã giao hàng thành công`;
+      case ShipmentStatus.FAILED:
+        return `Bưu cục phát ${area} · Giao hàng không thành công (Chờ phát lại)`;
+      case ShipmentStatus.RETURNED:
+        return `Trung tâm chuyển hoàn ${area} · Đã trả hàng về người bán`;
+      default:
+        return `${area} · Đang cập nhật`;
+    }
+  }
+
   public updateStatus(newStatus: ShipmentStatus, location?: string): void {
     this._status = newStatus;
     if (newStatus === ShipmentStatus.DELIVERED) {
       this._actualDeliveryDate = new Date();
     }
-    if (location) {
-      this._currentLocation = location;
+    const cleanLoc = (location || '').trim();
+    const isConflictingPlaceholder =
+      !cleanLoc ||
+      (newStatus !== ShipmentStatus.READY_TO_PICK &&
+        /đang chờ lấy hàng|chờ lấy hàng|đang chuẩn bị đóng gói/i.test(cleanLoc));
+
+    if (cleanLoc && !isConflictingPlaceholder) {
+      this._currentLocation = cleanLoc;
+    } else {
+      this._currentLocation = Shipment.getDefaultLocationForStatus(
+        newStatus,
+        this._city,
+        this._shippingAddress,
+      );
     }
     this._updatedAt = new Date();
   }

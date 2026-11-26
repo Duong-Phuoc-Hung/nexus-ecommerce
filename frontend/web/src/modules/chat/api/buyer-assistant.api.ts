@@ -72,19 +72,27 @@ function formatShipmentStatusVi(status: string): string {
       return 'Chờ bưu tá lấy hàng';
     case 'PICKED':
     case 'PICKED_UP':
+    case 'PICKING':
       return 'Bưu tá đã lấy kiện hàng';
     case 'IN_TRANSIT':
+    case 'TRANSIT':
+      return 'Đang vận chuyển liên tỉnh';
     case 'SHIPPED':
     case 'DELIVERING':
     case 'OUT_FOR_DELIVERY':
       return 'Đang trên đường giao hàng';
     case 'DELIVERED':
+    case 'SUCCESS':
+    case 'COMPLETED':
       return 'Đã giao hàng thành công';
+    case 'FAILED':
     case 'DELIVERY_FAILED':
+    case 'CANCELLED':
       return 'Giao hàng chưa thành công (Chờ phát lại)';
     case 'RETURNED':
     case 'RTO':
-      return 'Đang hoàn về kho Người bán';
+    case 'RETURNING':
+      return 'Đã chuyển hoàn về Người bán';
     default:
       return status || 'Đang cập nhật vận chuyển';
   }
@@ -453,6 +461,7 @@ export const buyerAssistantApi = {
     };
 
     try {
+      const cacheBuster = `_t=${Date.now()}`;
       const raw = await requestApi<{
         success?: boolean;
         data?: {
@@ -466,7 +475,10 @@ export const buyerAssistantApi = {
           updated?: string;
           estimatedDeliveryAt?: string | null;
         } | null;
-      }>(`/fulfillments/shipments/by-order/${encodeURIComponent(effectiveOrder.id)}?readOnly=true`);
+      }>(
+        `/fulfillments/shipments/by-order/${encodeURIComponent(effectiveOrder.id)}?readOnly=true&${cacheBuster}`,
+        { headers: { 'Cache-Control': 'no-cache, no-store' } },
+      );
 
       const shipData = unwrap<{
         carrier?: string;
@@ -481,12 +493,54 @@ export const buyerAssistantApi = {
       } | null>(raw);
 
       if (shipData && (shipData.trackingCode || shipData.status || shipData.statusCode)) {
+        const rawStatus = (shipData.statusCode || shipData.status || '').toUpperCase();
+        let displayLocation = (shipData.currentLocation || '').trim();
+
+        // Tự động đồng bộ vị trí hiển thị chuẩn xác với từng trạng thái để tránh mâu thuẫn
+        const isConflict =
+          !displayLocation ||
+          (rawStatus !== 'READY_TO_PICK' &&
+            /đang chờ lấy hàng|chờ lấy hàng/i.test(displayLocation)) ||
+          (rawStatus === 'DELIVERED' && !/đã giao/i.test(displayLocation)) ||
+          (rawStatus === 'OUT_FOR_DELIVERY' &&
+            /kho tổng|chờ lấy hàng|trung chuyển/i.test(displayLocation));
+
+        if (isConflict) {
+          switch (rawStatus) {
+            case 'READY_TO_PICK':
+              displayLocation = 'Kho tổng Nexus · Đang chuẩn bị đóng gói & chờ bưu tá';
+              break;
+            case 'PICKED':
+              displayLocation = 'Bưu cục đối tác · Bưu tá đã nhận kiện hàng từ Người bán';
+              break;
+            case 'IN_TRANSIT':
+              displayLocation = 'Trung tâm phân loại bưu chính · Đang vận chuyển liên tỉnh';
+              break;
+            case 'OUT_FOR_DELIVERY':
+            case 'DELIVERING':
+              displayLocation = 'Bưu cục phát địa phương · Bưu tá đang đi giao hàng';
+              break;
+            case 'DELIVERED':
+              displayLocation = 'Địa chỉ người nhận · Đã phát thành công';
+              break;
+            case 'FAILED':
+              displayLocation = 'Bưu cục phát · Giao hàng không thành công (Chờ phát lại)';
+              break;
+            case 'RETURNED':
+              displayLocation = 'Trung tâm chuyển hoàn · Đã trả hàng về người bán';
+              break;
+            default:
+              displayLocation = displayLocation || 'Đang cập nhật vị trí';
+              break;
+          }
+        }
+
         shipment = {
           state: 'HAS_SHIPMENT',
-          label: formatShipmentStatusVi(shipData.statusCode || shipData.status || ''),
+          label: formatShipmentStatusVi(rawStatus),
           carrier: shipData.carrier || shipData.carrierCode || undefined,
           trackingCode: shipData.trackingCode || undefined,
-          currentLocation: shipData.currentLocation || undefined,
+          currentLocation: displayLocation || undefined,
           updatedAt: shipData.updatedAt || shipData.updated || null,
           estimatedDeliveryAt: shipData.estimatedDeliveryAt ?? null,
         };

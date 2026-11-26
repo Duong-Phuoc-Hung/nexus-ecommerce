@@ -35,6 +35,20 @@ export class DeductProductStockUseCase {
       throw new ProductNotFoundException(`Không tìm thấy sản phẩm với mã: ${input.productId}`);
     }
 
+    if (typeof this.productRepository.deductStockOnce === 'function') {
+      const persisted = await this.productRepository.deductStockOnce(
+        product.id,
+        input.quantity,
+        input.orderId,
+      );
+      return {
+        id: product.id,
+        remainingStock: persisted.remainingStock,
+        status: persisted.status,
+        idempotentReplay: persisted.idempotentReplay || undefined,
+      };
+    }
+
     const dedupKey = input.orderId ? `${input.orderId}::${input.productId}` : null;
     if (dedupKey && this.deductedOrderKeys.has(dedupKey)) {
       return {
@@ -73,6 +87,20 @@ export class DeductProductStockUseCase {
     const product = await this.productRepository.findById(input.productId);
     if (!product) {
       throw new ProductNotFoundException(`Không tìm thấy sản phẩm với mã: ${input.productId}`);
+    }
+
+    if (typeof this.productRepository.restoreStockOnce === 'function') {
+      const persisted = await this.productRepository.restoreStockOnce(
+        product.id,
+        input.quantity,
+        input.orderId,
+      );
+      return {
+        id: product.id,
+        remainingStock: persisted.remainingStock,
+        status: persisted.status,
+        idempotentReplay: persisted.idempotentReplay || undefined,
+      };
     }
 
     const restoreKey = input.orderId ? `${input.orderId}::${input.productId}` : null;

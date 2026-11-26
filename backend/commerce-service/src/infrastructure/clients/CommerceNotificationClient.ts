@@ -19,15 +19,17 @@ export class CommerceNotificationClient implements INotificationClient {
     data?: Record<string, unknown>;
   }): Promise<boolean> {
     try {
-      const res = await fetch(`${this.baseUrl}/api/v1/notifications/send`, {
+      const orderId = typeof params.data?.orderId === 'string' ? params.data.orderId : undefined;
+      const res = await fetch(`${this.baseUrl}/api/v1/notifications/internal/dispatch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           recipientId: params.recipientId,
-          channel: params.channel || 'IN_APP',
+          channel: 'IN_APP',
+          category: 'ORDER',
           title: params.title,
           body: params.body,
-          data: params.data,
+          href: orderId ? `/orders/${encodeURIComponent(orderId)}` : undefined,
         }),
         signal: AbortSignal.timeout(4000),
       });
@@ -45,13 +47,17 @@ export class CommerceNotificationClient implements INotificationClient {
     email: string;
     title: string;
     body: string;
+    recipientId?: string;
   }): Promise<boolean> {
     try {
-      const res = await fetch(`${this.baseUrl}/api/v1/notifications/email/send`, {
+      const res = await fetch(`${this.baseUrl}/api/v1/notifications/internal/dispatch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: params.email,
+          recipientId: params.recipientId || params.email,
+          recipientEmail: params.email,
+          channel: 'EMAIL',
+          category: 'ORDER',
           title: params.title,
           body: params.body,
         }),

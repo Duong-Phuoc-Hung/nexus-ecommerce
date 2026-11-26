@@ -38,19 +38,19 @@ function defaultLocationForStatus(
   const area = (city || 'TP. Hồ Chí Minh').trim();
   switch (statusCode) {
     case 'READY_TO_PICK':
-      return `Kho tổng Nexus · Đang chờ lấy hàng`;
+      return `Kho tổng Nexus · Đang chuẩn bị đóng gói & chờ bưu tá`;
     case 'PICKED':
       return `Bưu cục ${area} · Bưu tá đã lấy hàng từ Người bán`;
     case 'IN_TRANSIT':
-      return `Trung tâm phân loại ${area} · Đang vận chuyển`;
+      return `Trung tâm phân loại bưu chính ${area} · Đang vận chuyển`;
     case 'OUT_FOR_DELIVERY':
-      return `Bưu cục phát ${area} · Shipper đang đi giao hàng`;
+      return `Bưu cục phát ${area} · Bưu tá đang đi phát hàng`;
     case 'DELIVERED':
       return `${shippingAddress || area} · Đã giao hàng thành công`;
     case 'FAILED':
-      return `Bưu cục phát ${area} · Giao hàng không thành công`;
+      return `Bưu cục phát ${area} · Giao hàng không thành công (Chờ phát lại)`;
     case 'RETURNED':
-      return `Trung tâm chuyển hoàn ${area} · Đã trả hàng`;
+      return `Trung tâm chuyển hoàn ${area} · Đã trả hàng về người bán`;
     default:
       return `${area} · Đang cập nhật`;
   }
@@ -677,7 +677,7 @@ export function SupportShipmentsPage() {
               </div>
               <div>
                 <small>Thời gian cập nhật</small>
-                <strong>{selected.updated}</strong>
+                <strong>{formatSafeDate(selected.updatedAt) || selected.updated}</strong>
               </div>
             </div>
 

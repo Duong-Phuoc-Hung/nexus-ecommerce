@@ -630,10 +630,16 @@ export class NotificationController {
       }
 
       const greeting = fullName ? `Xin chào ${fullName},` : 'Xin chào,';
+      const frontendUrl = (
+        process.env.FRONTEND_URL ||
+        process.env.WEB_APP_URL ||
+        'http://localhost:3000'
+      ).replace(/\/$/, '');
+      const resetLink = `${frontendUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
       const success = await this.emailService.sendCustomNotification(
         email,
         '[Nexus] Yêu cầu đặt lại mật khẩu tài khoản',
-        `${greeting}\n\nMã đặt lại mật khẩu dùng một lần (hiệu lực 15 phút) của bạn là: ${resetToken}\nNếu bạn không yêu cầu, vui lòng bỏ qua email này.`,
+        `${greeting}\n\nNhấn vào liên kết sau để đặt lại mật khẩu (hiệu lực 15 phút):\n${resetLink}\n\nHoặc nhập trực tiếp mã đặt lại mật khẩu: ${resetToken}\nNếu bạn không yêu cầu, vui lòng bỏ qua email này.`,
       );
       res.status(200).json({
         success,

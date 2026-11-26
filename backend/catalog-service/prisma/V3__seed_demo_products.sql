@@ -212,7 +212,17 @@ SET title = EXCLUDED.title,
     description = EXCLUDED.description,
     allow_auction = EXCLUDED.allow_auction;
 
-SELECT setval('catalog_products_id_seq', (SELECT MAX(id) FROM catalog_products));
+DO $$
+DECLARE
+  max_num BIGINT;
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_class WHERE relkind = 'S' AND relname = 'catalog_products_id_seq') THEN
+    SELECT COALESCE(MAX(id::bigint), 1) INTO max_num
+    FROM catalog_products
+    WHERE id::text ~ '^[0-9]+$';
+    PERFORM setval('catalog_products_id_seq', GREATEST(max_num, 1));
+  END IF;
+END $$;
 
 -- 3. Thêm Album ảnh chất lượng cao từ Unsplash cho từng sản phẩm (15 sản phẩm)
 DELETE FROM catalog_product_images WHERE product_id IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);

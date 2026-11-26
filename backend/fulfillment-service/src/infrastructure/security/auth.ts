@@ -36,32 +36,19 @@ export function verifyJwtToken(token: string): AuthenticatedUser | null {
     if (parts.length !== 3) return null;
 
     const [header, payloadPart, signature] = parts;
+    const parsedHeader = JSON.parse(Buffer.from(header, 'base64url').toString('utf8'));
+    if (parsedHeader.alg !== 'HS256') return null;
 
-    const candidateSecrets = [
-      process.env.JWT_ACCESS_SECRET,
-      process.env.JWT_SECRET,
-      'your_super_secret_jwt_access_key_min_32_characters_here',
-      'nexus_super_secret_jwt_access_key_min_32_chars_local_dev',
-      'nexus-dev-secret',
-    ].filter(Boolean) as string[];
+    const secret = getJwtSecret();
+    const expectedSignature = crypto
+      .createHmac('sha256', secret)
+      .update(`${header}.${payloadPart}`)
+      .digest('base64url');
 
-    let validSignature = false;
-    for (const secret of candidateSecrets) {
-      const expectedSignature = crypto
-        .createHmac('sha256', secret)
-        .update(`${header}.${payloadPart}`)
-        .digest('base64url');
-
-      if (
-        Buffer.from(expectedSignature).length === Buffer.from(signature).length &&
-        crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(signature))
-      ) {
-        validSignature = true;
-        break;
-      }
-    }
-
-    if (!validSignature) {
+    if (
+      Buffer.from(expectedSignature).length !== Buffer.from(signature).length ||
+      !crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(signature))
+    ) {
       return null;
     }
 
@@ -90,26 +77,12 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     .replace(/^Bearer\s+/i, '')
     .trim();
 
-  const forwardedUserId = req.headers['x-user-id'];
-  const forwardedRole = req.headers['x-user-role'];
-
   if (token) {
     const payload = verifyJwtToken(token);
     if (payload) {
       (req as AuthenticatedRequest).user = payload;
       return next();
     }
-  }
-
-  if (forwardedUserId && typeof forwardedUserId === 'string') {
-    (req as AuthenticatedRequest).user = {
-      sub: forwardedUserId,
-      email: (req.headers['x-user-email'] as string) || '',
-      role: (forwardedRole as string) || 'BUYER',
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 3600,
-    };
-    return next();
   }
 
   res.status(401).json({

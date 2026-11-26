@@ -38,6 +38,7 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
     email: '',
     fullName: '',
     phone: '',
+    resetToken: params?.get('token') || '',
     password: '',
     confirmPassword: '',
   });
@@ -292,8 +293,8 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
           : 'Nhập mật khẩu của bạn.';
     if ((isRegister || isReset) && values.confirmPassword !== values.password)
       validation.confirmPassword = 'Mật khẩu xác nhận chưa trùng khớp.';
-    if (isReset && !token.current)
-      validation.token = 'Liên kết đặt lại mật khẩu chưa hợp lệ. Hãy gửi yêu cầu mới.';
+    if (isReset && !values.resetToken.trim() && !token.current)
+      validation.token = 'Vui lòng nhập mã đặt lại mật khẩu hoặc mở liên kết từ email.';
 
     setErrors(validation);
     setSuccess(false);
@@ -311,13 +312,14 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
         await authApi.requestPasswordReset(values.email.trim());
         setSuccess(true);
         setNotice(
-          'Nếu tài khoản tồn tại, hệ thống sẽ cung cấp hướng dẫn đặt lại mật khẩu. Vui lòng kiểm tra hộp thư.',
+          'Nếu tài khoản tồn tại, mã và liên kết đặt lại mật khẩu đã được gửi. Hãy kiểm tra hộp thư.',
         );
       } else if (isReset) {
-        await authApi.resetPassword(token.current, values.password);
+        const effectiveToken = (values.resetToken || token.current).trim();
+        await authApi.resetPassword(effectiveToken, values.password);
         token.current = '';
         history.replaceState(null, '', '/reset-password');
-        setValues((v) => ({ ...v, password: '', confirmPassword: '' }));
+        setValues((v) => ({ ...v, resetToken: '', password: '', confirmPassword: '' }));
         setSuccess(true);
         setNotice('Mật khẩu đã được thay đổi. Vui lòng đăng nhập lại bằng mật khẩu mới.');
       } else if (isRegister) {
@@ -613,6 +615,7 @@ export function AuthPage({ initialMode = 'login' }: { initialMode?: Mode }) {
                   /* STANDARD FORM VIEW */
                   <>
                     {!isReset && input('email', 'Email', 'email', 'email')}
+                    {isReset && input('resetToken', 'Mã đặt lại mật khẩu', 'text', 'one-time-code')}
                     {isRegister && input('fullName', 'Họ và tên', 'text', 'name')}
                     {isRegister && (
                       <>

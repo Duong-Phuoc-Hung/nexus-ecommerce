@@ -45,7 +45,12 @@ export function createCommerceApi(request: RequestApi) {
       return pageOf<OrderSummary>(raw, 'items');
     },
     async getOrder(id: string, signal?: AbortSignal) {
-      const raw = unwrap<unknown>(await request(`/orders/${encodeURIComponent(id)}`, { signal }));
+      const raw = unwrap<unknown>(
+        await request(`/orders/${encodeURIComponent(id)}?_t=${Date.now()}`, {
+          signal,
+          headers: { 'Cache-Control': 'no-cache, no-store' },
+        }),
+      );
       const value = object(raw);
       if (typeof value.id !== 'string')
         throw new ApiError('Thông tin đơn hàng chưa đúng định dạng.', undefined, 'INVALID_ORDER');
@@ -229,7 +234,12 @@ export function createCommerceApi(request: RequestApi) {
         accountNumber?: string | null;
         accountName?: string | null;
         description?: string | null;
-      }>(await request(`/orders/${encodeURIComponent(orderId)}/payment-status`, { signal }));
+      }>(
+        await request(`/orders/${encodeURIComponent(orderId)}/payment-status?_t=${Date.now()}`, {
+          signal,
+          headers: { 'Cache-Control': 'no-cache, no-store' },
+        }),
+      );
     },
   };
 }

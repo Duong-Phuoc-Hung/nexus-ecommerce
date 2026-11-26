@@ -20,4 +20,4 @@ UPDATE catalog_products
 SET 
     stock_quantity = 5,
     seller_name = 'Trần Thị Seller'
-WHERE id = 3 OR slug = 'may-anh-leica-q3-full-frame-compact';
+WHERE id::text = '3' OR slug = 'may-anh-leica-q3-full-frame-compact';

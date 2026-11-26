@@ -135,7 +135,7 @@ for (const svc of SERVICES_CONFIG) {
       // Đọc nội dung file SQL và pipe vào lệnh psql trong Docker container (ép chuẩn UTF-8 chống lỗi font Windows)
       const sqlContent = fs.readFileSync(filePath, 'utf-8');
       execSync(
-        `docker exec -i -e PGCLIENTENCODING=UTF8 ${svc.container} psql -U ${svc.user} -d ${svc.db}`,
+        `docker exec -i -e PGCLIENTENCODING=UTF8 ${svc.container} psql -v ON_ERROR_STOP=1 -U ${svc.user} -d ${svc.db}`,
         {
           input: Buffer.from(`SET client_encoding = 'UTF8';\n${sqlContent}`, 'utf-8'),
           stdio: ['pipe', 'ignore', 'pipe'],
@@ -159,5 +159,6 @@ if (totalFailed === 0) {
   console.log(`🎉 [HOÀN TẤT] Toàn bộ migration thành công! (${totalSuccess} files đã chạy)`);
 } else {
   console.log(`⚠️ [CẢNH BÁO] Có lỗi xảy ra: ${totalSuccess} thành công, ${totalFailed} thất bại.`);
+  process.exitCode = 1;
 }
 console.log('='.repeat(80) + '\n');

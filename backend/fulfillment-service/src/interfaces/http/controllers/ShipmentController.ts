@@ -78,6 +78,7 @@ export class ShipmentController {
         }
       }
 
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       res.status(200).json({
         success: true,
         data: result.items,
@@ -178,6 +179,7 @@ export class ShipmentController {
         });
         return;
       }
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       res.status(200).json({
         success: true,
         data: shipment,
@@ -338,6 +340,7 @@ export class ShipmentController {
       const orderId = String(req.params.orderId || '')
         .replace(/^[#]/, '')
         .replace(/^NEX-TRK-/i, '')
+        .replace(/[\\/]+$/g, '')
         .trim();
       const access = await this.verifyBuyerOrderAccess(req, orderId);
       if (!access.allowed) {
@@ -367,6 +370,7 @@ export class ShipmentController {
           throw err;
         }
       }
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       res.status(200).json({
         success: true,
         data: shipment,

@@ -19,6 +19,10 @@ INSERT INTO fulfillment_support_cases (
 )
 ON CONFLICT (id) DO NOTHING;
 
+ALTER TABLE fulfillment_shipments
+  ADD COLUMN IF NOT EXISTS recipient_name VARCHAR(120),
+  ADD COLUMN IF NOT EXISTS recipient_phone VARCHAR(30);
+
 INSERT INTO fulfillment_shipments (
     id, order_id, warehouse_id, carrier_code, tracking_code, shipping_fee, status,
     shipping_address, recipient_name, recipient_phone, city, current_location,
