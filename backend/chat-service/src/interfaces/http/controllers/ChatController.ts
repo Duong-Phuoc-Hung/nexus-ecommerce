@@ -5,6 +5,7 @@ import { EscalateDisputeUseCase } from '../../../application/use-cases/EscalateD
 import { IChatMessageRepository } from '../../../domain/repositories/IChatMessageRepository';
 import { IConversationRepository } from '../../../domain/repositories/IConversationRepository';
 import { Conversation, ChannelType } from '../../../domain/entities/Conversation';
+import { ChatMessage } from '../../../domain/entities/ChatMessage';
 import { AuthenticatedRequest } from '../../../infrastructure/security/auth';
 import { ConversationNotFoundException } from '../../../domain/exceptions/ConversationNotFoundException';
 import { ChatForbiddenException } from '../../../domain/exceptions/ChatForbiddenException';
@@ -614,6 +615,64 @@ export class ChatController {
         return;
       }
       res.status(400).json({ success: false, error: error.message || 'Không thể gửi tin nhắn.' });
+    }
+  }
+
+  /**
+   * POST /api/v1/chat/conversations/:id/close
+   * Nhân viên Hỗ trợ / Admin kết thúc phiên hỗ trợ sau khi xử lý xong
+   */
+  public async closeConversation(req: Request, res: Response): Promise<void> {
+    try {
+      const user = (req as AuthenticatedRequest).user;
+      if (!user) {
+        res.status(401).json({ success: false, error: 'Unauthorized.' });
+        return;
+      }
+
+      const role = (user.role || '').toUpperCase();
+      if (role !== 'SUPPORT_STAFF' && role !== 'ADMIN') {
+        res.status(403).json({
+          success: false,
+          error: 'Chỉ nhân viên hỗ trợ hoặc quản trị viên mới được kết thúc phiên hỗ trợ.',
+        });
+        return;
+      }
+
+      const convId = req.params.id as string;
+      const conv = await this.conversationRepo.findById(convId);
+      if (!conv) {
+        res
+          .status(404)
+          .json({ success: false, error: `Không tìm thấy cuộc hội thoại "${convId}".` });
+        return;
+      }
+
+      if (!conv.isClosed()) {
+        conv.updateStatus('CLOSED');
+        const seq = conv.incrementSeq();
+        await this.conversationRepo.update(conv);
+
+        const sysMessage = new ChatMessage({
+          id: `msg_sys_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+          conversationId: conv.id,
+          senderId: user.sub,
+          senderRole: 'SYSTEM',
+          content: 'Phiên hỗ trợ đã được nhân viên CSKH đánh dấu kết thúc.',
+          seq,
+        });
+        await this.messageRepo.save(sysMessage);
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Đã kết thúc phiên hỗ trợ.',
+        data: conv.toDto(),
+      });
+    } catch (error: any) {
+      res
+        .status(500)
+        .json({ success: false, error: error.message || 'Không thể kết thúc phiên hỗ trợ.' });
     }
   }
 }

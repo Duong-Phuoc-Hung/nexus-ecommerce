@@ -42,7 +42,10 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
       const cached = localStorage.getItem(`nexus_dispute_verdict_${orderId}`);
       if (cached) {
         try {
-          setDisputeCase(JSON.parse(cached));
+          const parsed = JSON.parse(cached);
+          if (parsed && (parsed.orderId === orderId || parsed.orderCode === orderId)) {
+            setDisputeCase(parsed);
+          }
         } catch {}
       }
     }
@@ -51,44 +54,51 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
       .listCases({ q: orderId } as any, controller.signal)
       .then((items) => {
         if (Array.isArray(items) && items.length > 0) {
-          const matched =
-            items.find(
-              (c) =>
-                c.orderId === orderId || c.order === orderId || (c as any).orderCode === orderId,
-            ) || items[0];
+          const matched = items.find(
+            (c) =>
+              c.orderId === orderId ||
+              c.order === orderId ||
+              (c as any).orderCode === orderId ||
+              (c as any).order_code === orderId,
+          );
 
-          // Chỉ gán và cập nhật localStorage nếu hồ sơ đã có phán quyết hoặc chưa có trong cache
-          setDisputeCase((prev: any) => {
-            if (prev?.decision && !(matched as any).resolutionNote) return prev;
-            return matched;
-          });
+          if (matched) {
+            // Chỉ gán và cập nhật localStorage nếu hồ sơ thực sự thuộc về đơn hàng này
+            setDisputeCase((prev: any) => {
+              if (prev?.decision && !(matched as any).resolutionNote) return prev;
+              return matched;
+            });
 
-          if (
-            typeof window !== 'undefined' &&
-            matched &&
-            (matched.status === 'RESOLVED' ||
-              matched.status === 'REJECTED' ||
-              (matched as any).verdict)
-          ) {
-            localStorage.setItem(
-              `nexus_dispute_verdict_${orderId}`,
-              JSON.stringify({
-                caseId: matched.id,
-                orderId,
-                status: matched.status,
-                decision:
-                  (matched as any).verdict?.decision ||
-                  (matched.status === 'REJECTED' ? 'REJECT_BUYER' : 'REFUND_BUYER'),
-                note:
-                  (matched as any).resolutionNote ||
-                  (matched as any).verdict?.note ||
-                  matched.reason ||
-                  'Trọng tài sàn đã hoàn tất phân xử vụ việc.',
-                resolvedBy: (matched as any).resolvedBy || 'Chuyên viên Hỗ trợ Sàn Nexus',
-                updatedAt: (matched as any).updatedAt || new Date().toISOString(),
-              }),
-            );
+            if (
+              typeof window !== 'undefined' &&
+              (matched.status === 'RESOLVED' ||
+                matched.status === 'REJECTED' ||
+                (matched as any).verdict)
+            ) {
+              localStorage.setItem(
+                `nexus_dispute_verdict_${orderId}`,
+                JSON.stringify({
+                  caseId: matched.id,
+                  orderId,
+                  status: matched.status,
+                  decision:
+                    (matched as any).verdict?.decision ||
+                    (matched.status === 'REJECTED' ? 'REJECT_BUYER' : 'REFUND_BUYER'),
+                  note:
+                    (matched as any).resolutionNote ||
+                    (matched as any).verdict?.note ||
+                    matched.reason ||
+                    'Trọng tài sàn đã hoàn tất phân xử vụ việc.',
+                  resolvedBy: (matched as any).resolvedBy || 'Chuyên viên Hỗ trợ Sàn Nexus',
+                  updatedAt: (matched as any).updatedAt || new Date().toISOString(),
+                }),
+              );
+            }
+          } else {
+            setDisputeCase(null);
           }
+        } else {
+          setDisputeCase(null);
         }
       })
       .catch(() => {
@@ -96,7 +106,10 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
           const cached = localStorage.getItem(`nexus_dispute_verdict_${orderId}`);
           if (cached) {
             try {
-              setDisputeCase(JSON.parse(cached));
+              const parsed = JSON.parse(cached);
+              if (parsed && (parsed.orderId === orderId || parsed.orderCode === orderId)) {
+                setDisputeCase(parsed);
+              }
             } catch {}
           }
         }
@@ -257,7 +270,7 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Link
-                    href={`/support/disputes?q=${encodeURIComponent(order.id)}`}
+                    href={`/support/disputes?q=${encodeURIComponent(order.id)}&open=1`}
                     className="support-secondary-button"
                     style={{
                       background: '#eff6ff',
@@ -266,9 +279,9 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
                       fontSize: '0.75rem',
                       padding: '4px 8px',
                     }}
-                    title="Kiểm tra hàng đợi trọng tài khiếu nại"
+                    title="Mở ngay phiên phân xử tranh chấp cho đơn hàng này"
                   >
-                    ⚖ Tra cứu tranh chấp SLA
+                    ⚖ Giải quyết tranh chấp
                   </Link>
                   <span className={`support-status ${supportStatusClass(order.status)}`}>
                     {getOrderStatusLabel(order.status)}
@@ -336,27 +349,39 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
                   <div>
                     <small>Mã vận đơn</small>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <strong>{order.tracking || 'Chưa cấp'}</strong>
-                      {order.tracking && (
-                        <Link
-                          href={`/support/shipments?q=${encodeURIComponent(order.tracking)}`}
-                          style={{
-                            fontSize: '0.68rem',
-                            color: '#0284c7',
-                            background: '#f0f9ff',
-                            padding: '1px 6px',
-                            borderRadius: '4px',
-                            border: '1px solid #bae6fd',
-                            fontWeight: 600,
-                            textDecoration: 'none',
-                          }}
-                          title="Tra cứu hành trình vận đơn tại mục Vận đơn"
-                        >
-                          Theo dõi vận đơn ↗
-                        </Link>
-                      )}
+                      <strong>
+                        {order.tracking && order.tracking !== '—' && order.tracking !== 'Chưa cấp'
+                          ? order.tracking
+                          : 'Chưa phát sinh vận đơn'}
+                      </strong>
+                      <Link
+                        href={`/support/shipments?q=${encodeURIComponent(
+                          order.tracking && order.tracking !== '—' && order.tracking !== 'Chưa cấp'
+                            ? order.tracking
+                            : order.id,
+                        )}`}
+                        style={{
+                          fontSize: '0.68rem',
+                          color: '#0284c7',
+                          background: '#f0f9ff',
+                          padding: '1px 6px',
+                          borderRadius: '4px',
+                          border: '1px solid #bae6fd',
+                          fontWeight: 600,
+                          textDecoration: 'none',
+                        }}
+                        title="Tra cứu hành trình vận đơn tại mục Vận đơn"
+                      >
+                        {order.tracking && order.tracking !== '—' && order.tracking !== 'Chưa cấp'
+                          ? 'Theo dõi vận đơn ↗'
+                          : 'Tra cứu theo mã đơn ↗'}
+                      </Link>
                     </div>
-                    <span>Kênh: Sàn thương mại điện tử Nexus</span>
+                    <span>
+                      {order.tracking && order.tracking !== '—' && order.tracking !== 'Chưa cấp'
+                        ? 'Kênh: Sàn thương mại điện tử Nexus'
+                        : 'Đơn mới đặt · Chờ người bán đóng gói & bàn giao vận chuyển'}
+                    </span>
                   </div>
                   <div>
                     <small>Thời gian đặt hàng</small>
@@ -374,10 +399,23 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
                 </div>
               </div>
               <ol className="support-timeline">
-                {(order.timeline || []).map((item, index) => (
+                {(order.timeline && order.timeline.length > 0
+                  ? order.timeline
+                  : [
+                      {
+                        status: order.status || 'CREATED',
+                        title:
+                          order.status === 'PROCESSING' || order.status === 'ĐANG_XỬ_LÝ'
+                            ? 'Đơn hàng được tạo thành công · Đang xử lý'
+                            : getOrderStatusLabel(order.status) || 'Đơn hàng được tạo thành công',
+                        timestamp: order.createdAt || new Date().toISOString(),
+                        note: 'Đơn hàng đã được ghi nhận trên hệ thống và đang trong quá trình chuẩn bị hàng.',
+                      },
+                    ]
+                ).map((item, index, arr) => (
                   <li
-                    className={index === order.timeline.length - 1 ? 'current' : 'complete'}
-                    key={`${item.status}-${item.timestamp}`}
+                    className={index === arr.length - 1 ? 'current' : 'complete'}
+                    key={`${item.status}-${item.timestamp}-${index}`}
                   >
                     <span />
                     <div>
@@ -653,6 +691,25 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
                     hoặc <strong>Bác bỏ khiếu nại</strong> (qua nút &ldquo;Hủy yêu cầu hoàn
                     tiền&rdquo;).
                   </p>
+                  <div style={{ marginTop: '10px' }}>
+                    <Link
+                      href={`/support/disputes?q=${encodeURIComponent(order.id)}&open=1`}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        background: '#b91c1c',
+                        color: '#ffffff',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        textDecoration: 'none',
+                      }}
+                    >
+                      ⚖️ Chuyển sang giải quyết tranh chấp ngay →
+                    </Link>
+                  </div>
                 </div>
               </div>
             </section>

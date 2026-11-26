@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { supportApi, type DisputeItem } from '../api/support.api';
@@ -10,6 +10,8 @@ import { Heading, DemoBanner, money, supportStatusClass } from '../components/su
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 const FALLBACK_DISPUTES: DisputeItem[] = [];
+const FALLBACK_EVIDENCE_SVG =
+  "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Crect width='80' height='80' fill='%23f1f5f9'/%3E%3Cpath d='M22 54l12-14 9 10 8-9 11 13H22z' fill='%2394a3b8'/%3E%3Ccircle cx='30' cy='28' r='5' fill='%23cbd5e1'/%3E%3C/svg%3E";
 
 export function SupportDisputesPage() {
   const [query, setQuery] = useState(() => {
@@ -180,7 +182,7 @@ export function SupportDisputesPage() {
 
     list = [...localDisputes, ...list];
 
-    return list.map((d: DisputeItem) => {
+    const merged = list.map((d: DisputeItem) => {
       const orderKey = d.orderId || d.orderCode || d.order;
       const verdictRaw =
         localStorage.getItem(`nexus_dispute_verdict_${orderKey}`) ||
@@ -194,21 +196,49 @@ export function SupportDisputesPage() {
       }
       return d;
     });
+
+    // Khử trùng lặp theo mã đơn hàng (giữ bản ghi mới nhất cho mỗi đơn) để đồng bộ 100% số đếm với bong bóng hỗ trợ
+    const byOrder = new Map<string, DisputeItem>();
+    for (const d of merged) {
+      const key = String(d.orderCode || d.order || d.orderId || d.caseId || d.id || '')
+        .replace(/^#/, '')
+        .trim()
+        .toUpperCase();
+      if (!key) continue;
+      if (!byOrder.has(key)) {
+        byOrder.set(key, d);
+      }
+    }
+    return Array.from(byOrder.values());
   }
+
+  const autoOpenedRef = useRef(false);
 
   const fetchDisputes = async () => {
     setLoading(true);
     setError('');
     try {
       const res = await supportApi.listDisputes({
-        status: statusFilter === 'ALL' || statusFilter === 'OVERDUE' ? undefined : statusFilter,
-        q: search.trim() || undefined,
-        limit: 50,
+        status: statusFilter === 'ALL' || statusFilter === 'OVERDUE' ? 'ALL' : statusFilter,
+        q: search.replace(/^[#]/, '').trim() || undefined,
+        limit: 100,
       });
       const items: DisputeItem[] = Array.isArray(res) ? res : (res as any)?.items || [];
-      setDisputes(syncDisputesWithLocalStorage(items));
+      const synced = syncDisputesWithLocalStorage(items);
+      setDisputes(synced);
+
+      if (
+        !autoOpenedRef.current &&
+        typeof window !== 'undefined' &&
+        new URLSearchParams(window.location.search).get('open') === '1' &&
+        synced.length > 0
+      ) {
+        autoOpenedRef.current = true;
+        handleOpenArbitration(synced[0]);
+      }
     } catch {
-      setDisputes(syncDisputesWithLocalStorage([]));
+      const fallbackSynced = syncDisputesWithLocalStorage([]);
+      setDisputes(fallbackSynced);
     } finally {
       setLoading(false);
     }
@@ -285,7 +315,7 @@ export function SupportDisputesPage() {
 
     setSelectedDispute(enhanced);
     setDecision(enhanced.verdict?.decision || 'REFUND_BUYER');
-    setRefundAmount(enhanced.verdict?.refundAmount || 30001);
+    setRefundAmount(enhanced.verdict?.refundAmount || '');
     setLiableParty(enhanced.verdict?.liableParty || 'CARRIER');
     setVerdictNote(
       enhanced.verdict?.note || 'Xác nhận bằng chứng đối chiếu hợp lệ theo quy chế sàn.',
@@ -322,7 +352,7 @@ export function SupportDisputesPage() {
               ? 'REJECTED'
               : 'RESOLVED',
         decision,
-        refundAmount: decision === 'REFUND_BUYER' ? Number(refundAmount) || 30001 : 0,
+        refundAmount: decision === 'REFUND_BUYER' ? Number(refundAmount) || 0 : 0,
         liableParty,
         resolutionNote: verdictNote.trim(),
         note: verdictNote.trim(),
@@ -366,6 +396,9 @@ export function SupportDisputesPage() {
             : d,
         ),
       );
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('nexus:disputes-updated'));
+      }
       showToast(
         `✓ Đã ban hành phán quyết [${decision}] thành công cho hồ sơ ${updated.caseId || updated.id}.`,
       );
@@ -477,6 +510,7 @@ export function SupportDisputesPage() {
                   <th>Đơn hàng</th>
                   <th>Người mua</th>
                   <th>Lý do khiếu nại</th>
+                  <th>Ưu tiên</th>
                   <th>Bằng chứng đối chiếu</th>
                   <th>Thời hạn SLA</th>
                   <th>Trạng thái</th>
@@ -517,6 +551,25 @@ export function SupportDisputesPage() {
                         </p>
                       </td>
                       <td>
+                        {(() => {
+                          const p = String(item.priority || 'Cao').trim();
+                          const pUpper = p.toUpperCase();
+                          const cls =
+                            pUpper === 'CAO' || pUpper === 'HIGH' || pUpper === 'KHẨN CẤP'
+                              ? 'bg-rose-100 text-rose-700'
+                              : pUpper === 'TRUNG BÌNH' || pUpper === 'MEDIUM'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-slate-100 text-slate-600';
+                          return (
+                            <span
+                              className={`inline-block rounded px-2 py-0.5 text-[11px] font-semibold ${cls}`}
+                            >
+                              {p}
+                            </span>
+                          );
+                        })()}
+                      </td>
+                      <td>
                         <div className="flex items-center gap-1.5">
                           {item.buyerEvidence?.photos && item.buyerEvidence.photos.length > 0 && (
                             <button
@@ -530,6 +583,11 @@ export function SupportDisputesPage() {
                               <img
                                 src={item.buyerEvidence.photos[0]}
                                 alt="Buyer evidence"
+                                onError={(e) => {
+                                  if (e.currentTarget.src !== FALLBACK_EVIDENCE_SVG) {
+                                    e.currentTarget.src = FALLBACK_EVIDENCE_SVG;
+                                  }
+                                }}
                                 className="h-full w-full object-cover"
                               />
                             </button>
@@ -650,94 +708,79 @@ export function SupportDisputesPage() {
             </div>
           )}
 
-          {/* Thanh tiêu đề và Nút AI Phân Tích & Gợi Ý Phán Quyết (Task FE-06) */}
+          {/* Thanh tiêu đề và Nút AI Phân Tích & Gợi Ý Phán Quyết */}
           <div className="mt-5 flex items-center justify-between border-b border-slate-200 pb-2">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-              Hồ Sơ Chứng Cứ Đối Chiếu (Dual Evidence Side-by-Side)
+              Hồ sơ chứng cứ đối chiếu
             </h3>
             <button
               type="button"
               disabled={isAnalyzingAi}
               onClick={handleAnalyzeWithAi}
-              className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-md hover:from-purple-700 hover:to-indigo-700 transition disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:opacity-50"
             >
               <span>✨</span>
-              {isAnalyzingAi
-                ? 'AI Copilot đang quét bằng chứng...'
-                : '✨ AI Phân Tích & Gợi Ý Phán Quyết'}
+              {isAnalyzingAi ? 'Đang phân tích chứng cứ...' : 'AI Phân tích & Gợi ý'}
             </button>
           </div>
 
-          {/* Task FE-06: Bảng tóm tắt đối chiếu chứng cứ 3 mục của AI */}
+          {/* Bảng tóm tắt đối chiếu chứng cứ của AI */}
           {aiAnalysisResult && (
-            <div className="mt-4 rounded-xl border-2 border-purple-300 bg-gradient-to-br from-purple-50 via-indigo-50/50 to-white p-4 shadow-sm">
-              <div className="flex items-center justify-between border-b border-purple-200 pb-2">
+            <div className="mt-4 rounded-xl border border-indigo-200 bg-slate-50/80 p-4">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
                 <div className="flex items-center gap-2">
-                  <span className="text-lg">✨</span>
-                  <h4 className="text-xs font-bold text-purple-950 uppercase tracking-wide">
-                    AI Copilot - Bảng Đối Chiếu Bằng Chứng & Đề Xuất Phán Quyết (Task FE-06)
-                  </h4>
+                  <span className="text-sm">✨</span>
+                  <h4 className="text-xs font-bold text-slate-900">Trợ lý AI Phân tích Chứng cứ</h4>
                 </div>
-                <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-[11px] font-bold text-purple-800 border border-purple-200">
+                <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-semibold text-indigo-800">
                   Độ tin cậy: {(aiAnalysisResult.confidenceScore * 100).toFixed(0)}%
                 </span>
               </div>
 
-              {/* 3 Mục đối chiếu: Buyer vs Seller vs AI Verdict */}
-              <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-                {/* 1. Bằng chứng Buyer */}
-                <div className="rounded-lg bg-white/90 p-3 border border-rose-200 shadow-xs">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-rose-800 mb-1">
-                    <span>📸</span> Bằng chứng Buyer:
-                  </div>
-                  <p className="text-xs text-slate-700 leading-relaxed">
+              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                  <div className="mb-1 text-xs font-semibold text-rose-700">Chứng cứ Người mua</div>
+                  <p className="text-xs leading-relaxed text-slate-600">
                     {aiAnalysisResult.buyerSummary}
                   </p>
                 </div>
 
-                {/* 2. Bằng chứng Seller */}
-                <div className="rounded-lg bg-white/90 p-3 border border-emerald-200 shadow-xs">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 mb-1">
-                    <span>📦</span> Bằng chứng Seller:
+                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                  <div className="mb-1 text-xs font-semibold text-emerald-700">
+                    Chứng cứ Người bán
                   </div>
-                  <p className="text-xs text-slate-700 leading-relaxed">
+                  <p className="text-xs leading-relaxed text-slate-600">
                     {aiAnalysisResult.sellerSummary}
                   </p>
                 </div>
 
-                {/* 3. Đề xuất phán quyết của AI */}
-                <div className="rounded-lg bg-white/90 p-3 border border-purple-300 shadow-xs">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-purple-900 mb-1">
-                    <span>⚖️</span> Đề xuất phán quyết AI:
-                  </div>
+                <div className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-3">
+                  <div className="mb-1 text-xs font-semibold text-indigo-900">Đề xuất xử lý</div>
                   <div className="text-xs font-bold text-indigo-700">
                     {aiAnalysisResult.recommendedVerdictLabel}
                   </div>
-                  <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                  <p className="mt-1 text-[11px] leading-relaxed text-slate-600">
                     {aiAnalysisResult.legalGrounding}
                   </p>
                 </div>
               </div>
 
-              {/* Hàng nút bấm 1-chạm: Áp dụng đề xuất này */}
-              <div className="mt-3.5 flex items-center justify-between border-t border-purple-200 pt-2.5">
-                <span className="text-xs text-purple-900 font-medium">
-                  Tự động điền phán quyết và căn cứ quy chế sàn vào biểu mẫu bên dưới:
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-2.5">
+                <span className="text-[11px] text-slate-600">
+                  {aiAppliedNotice ? (
+                    <span className="font-semibold text-emerald-700">{aiAppliedNotice}</span>
+                  ) : (
+                    'Áp dụng nhanh đề xuất vào biểu mẫu phán quyết bên dưới.'
+                  )}
                 </span>
                 <button
                   type="button"
                   onClick={handleApplyAiRecommendation}
-                  className="flex items-center gap-1.5 rounded-lg bg-purple-700 px-4 py-2 text-xs font-bold text-white shadow hover:bg-purple-800 transition active:scale-95"
+                  className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700 active:scale-95"
                 >
-                  <span>⚡</span> Áp dụng đề xuất này
+                  <span>⚡</span> Áp dụng đề xuất
                 </button>
               </div>
-
-              {aiAppliedNotice && (
-                <div className="mt-2.5 rounded-lg bg-emerald-100 border border-emerald-300 p-2 text-xs font-semibold text-emerald-900 text-center">
-                  {aiAppliedNotice}
-                </div>
-              )}
             </div>
           )}
 
@@ -776,6 +819,11 @@ export function SupportDisputesPage() {
                       <img
                         src={img}
                         alt={`Buyer evidence ${i}`}
+                        onError={(e) => {
+                          if (e.currentTarget.src !== FALLBACK_EVIDENCE_SVG) {
+                            e.currentTarget.src = FALLBACK_EVIDENCE_SVG;
+                          }
+                        }}
                         className="h-full w-full object-cover"
                       />
                       <span className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition group-hover:opacity-100 text-white text-[10px] font-bold">
@@ -898,17 +946,54 @@ export function SupportDisputesPage() {
                     min={1000}
                     value={refundAmount}
                     onChange={(e) => setRefundAmount(e.target.value)}
+                    placeholder="Để trống = hoàn 100% giá trị đơn"
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900 outline-none focus:border-sky-500"
-                    required
                   />
                 </div>
               )}
             </div>
 
             <div className="mt-4">
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Căn cứ & Ghi chú phán quyết (lưu vết Audit log):
-              </label>
+              <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Căn cứ & Ghi chú phán quyết (lưu vết Audit log):
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    {
+                      label: 'Hoàn tiền — Hư hỏng vận chuyển',
+                      decision: 'REFUND_BUYER' as const,
+                      liable: 'CARRIER' as const,
+                      note: 'Chấp thuận hoàn tiền 100% cho Người mua do kiện hàng hư hỏng trong quá trình vận chuyển.',
+                    },
+                    {
+                      label: 'Hoàn hàng — Sai mẫu / Lỗi NSX',
+                      decision: 'REQUIRE_RETURN_FIRST' as const,
+                      liable: 'SELLER' as const,
+                      note: 'Yêu cầu Người mua gửi trả hàng về kho Gian hàng trước khi hoàn tiền theo chính sách đổi trả.',
+                    },
+                    {
+                      label: 'Bác bỏ — Shop đóng gói đúng',
+                      decision: 'REJECT_BUYER' as const,
+                      liable: 'BUYER' as const,
+                      note: 'Bác bỏ khiếu nại do Người bán đã cung cấp đầy đủ video đóng gói và chứng cứ hợp lệ.',
+                    },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => {
+                        setDecision(preset.decision);
+                        setLiableParty(preset.liable);
+                        setVerdictNote(preset.note);
+                      }}
+                      className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600 transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
+                    >
+                      + {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <textarea
                 value={verdictNote || ''}
                 onChange={(e) => setVerdictNote(e.target.value)}

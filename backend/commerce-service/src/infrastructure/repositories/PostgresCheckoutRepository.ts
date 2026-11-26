@@ -317,6 +317,8 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
       const orderCode = `${prefix}-${nowFormatted}-${seqNum}`;
 
       const initialStatus = params.paymentMethod === 'COD' ? 'PROCESSING' : 'PENDING_PAYMENT';
+      const initialCarrier = params.shippingCarrier || 'GHN';
+      const initialTrackingCode = `${initialCarrier}${seqNum}VN`;
       const resolvedBuyerName =
         params.buyerName ||
         (params.shippingAddress as any)?.fullName ||
@@ -339,12 +341,24 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
           discountAmount: params.discountAmount || 0,
           taxAmount: params.taxAmount || 0,
           promoCode: params.promoCode || null,
-          shippingCarrier: params.shippingCarrier || null,
-          shippingServiceName: params.shippingServiceName || null,
+          shippingCarrier: initialCarrier,
+          shippingServiceName: params.shippingServiceName || 'Tiêu chuẩn',
           estimatedDeliveryAt: params.estimatedDeliveryAt || null,
           status: initialStatus,
+          trackingCode: initialTrackingCode,
           shippingAddress: params.shippingAddress as any,
           checkoutSessionExpiresAt: params.orderExpiresAt,
+          timeline: [
+            {
+              status: initialStatus,
+              title:
+                initialStatus === 'PROCESSING'
+                  ? 'Đơn hàng được tạo thành công · Đang xử lý'
+                  : 'Đơn hàng được tạo thành công, chờ thanh toán',
+              timestamp: new Date().toISOString(),
+              note: `Khởi tạo đơn hàng qua phương thức ${params.paymentMethod}`,
+            },
+          ] as any,
         },
       });
 

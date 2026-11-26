@@ -92,9 +92,29 @@ export function SupportShipmentsPage() {
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
+    const qStr = search.trim();
     supportShipmentsApi
-      .list({ q: search.trim(), limit: 50 }, controller.signal)
-      .then((page) => setShipments(page.items))
+      .list({ q: qStr, limit: 50 }, controller.signal)
+      .then(async (page) => {
+        if (
+          page.items.length === 0 &&
+          qStr &&
+          (qStr.toUpperCase().startsWith('ORD') || qStr.length > 5)
+        ) {
+          try {
+            const single = await supportShipmentsApi.getByOrderId(qStr, controller.signal);
+            if (single) {
+              setShipments([single]);
+              setSelected(single);
+              return;
+            }
+          } catch {}
+        }
+        setShipments(page.items);
+        if (page.items.length > 0 && qStr) {
+          setSelected(page.items[0]);
+        }
+      })
       .catch((err) => !controller.signal.aborted && setError(userMessage(err)))
       .finally(() => !controller.signal.aborted && setLoading(false));
     return () => controller.abort();

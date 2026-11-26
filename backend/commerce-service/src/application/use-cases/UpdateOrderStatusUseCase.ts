@@ -196,6 +196,8 @@ export class UpdateOrderStatusUseCase {
         return OrderStatus.CANCELLED;
       case 'YÊU CẦU HOÀN TIỀN':
       case 'Yêu cầu hoàn tiền':
+      case 'RETURN_PENDING':
+      case 'RETURN_REQUESTED':
         return OrderStatus.REFUND_REQUESTED;
       case 'ĐÃ HOÀN TIỀN':
       case 'Đã hoàn tiền':

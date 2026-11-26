@@ -141,7 +141,8 @@ export class SupportCaseController {
         return;
       }
 
-      const status = typeof req.query.status === 'string' ? req.query.status : 'PENDING';
+      const rawStatus = typeof req.query.status === 'string' ? req.query.status.trim() : '';
+      const status = !rawStatus || rawStatus.toUpperCase() === 'ALL' ? undefined : rawStatus;
       const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 10;
       const query = typeof req.query.q === 'string' ? req.query.q : undefined;
@@ -332,7 +333,13 @@ export class SupportCaseController {
         userId: effectiveUserId,
         type: type || 'Yêu cầu trả hàng / hoàn tiền',
         reason: reason || 'Khiếu nại từ khách hàng',
-        priority: priority || 'Cao',
+        priority:
+          priority ||
+          this.classifyCasePriority(
+            req.body?.type,
+            req.body?.reason,
+            req.body?.aiAssessment?.severity,
+          ),
         status: 'PENDING',
         buyerEvidence: buyerEvidence
           ? {
@@ -370,6 +377,31 @@ export class SupportCaseController {
         error: error.message || 'Không thể tạo hồ sơ khiếu nại.',
       });
     }
+  }
+
+  private classifyCasePriority(
+    type?: string,
+    reason?: string,
+    aiSeverity?: string,
+  ): 'Cao' | 'Trung bình' | 'Thấp' {
+    const sev = String(aiSeverity || '').toUpperCase();
+    if (sev === 'HIGH' || sev === 'CRITICAL') return 'Cao';
+
+    const combined = `${type || ''} ${reason || ''}`.toLowerCase();
+    if (
+      /(vỡ|nứt|bể|hỏng|hư|móp|sai hàng|sai mẫu|nhầm|thiếu|không đúng|mất|thất lạc|lừa đảo|giả|đấu giá|broken|damaged|wrong|lost|fraud)/i.test(
+        combined,
+      )
+    ) {
+      return 'Cao';
+    }
+    if (
+      /(trễ|chậm|hoàn tiền|trả hàng|đổi trả|delay|refund|return)/i.test(combined) ||
+      sev === 'MEDIUM'
+    ) {
+      return 'Trung bình';
+    }
+    return 'Thấp';
   }
 
   /**

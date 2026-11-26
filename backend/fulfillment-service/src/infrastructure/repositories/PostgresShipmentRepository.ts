@@ -75,7 +75,10 @@ export class PostgresShipmentRepository implements IShipmentRepository {
   }
 
   public async findByTrackingCode(trackingCode: string): Promise<Shipment | null> {
-    const cleanCode = trackingCode.trim();
+    const cleanCode = trackingCode
+      .replace(/^[#]/, '')
+      .replace(/^NEX-TRK-/i, '')
+      .trim();
 
     try {
       const row = await this.prisma.shipment.findFirst({
@@ -102,7 +105,10 @@ export class PostgresShipmentRepository implements IShipmentRepository {
   }
 
   public async findByOrderId(orderId: string): Promise<Shipment | null> {
-    const cleanOrderId = orderId.trim();
+    const cleanOrderId = orderId
+      .replace(/^[#]/, '')
+      .replace(/^NEX-TRK-/i, '')
+      .trim();
 
     try {
       const row = await this.prisma.shipment.findFirst({
@@ -137,7 +143,10 @@ export class PostgresShipmentRepository implements IShipmentRepository {
 
     // 1. Tìm kiếm từ khóa tổng hợp
     if (criteria.query && criteria.query.trim().length > 0) {
-      const q = criteria.query.replace(/^[#]/, '').trim();
+      const q = criteria.query
+        .replace(/^[#]/, '')
+        .replace(/^NEX-TRK-/i, '')
+        .trim();
       where.OR = [
         { id: { contains: q, mode: 'insensitive' } },
         { trackingCode: { contains: q, mode: 'insensitive' } },
@@ -170,7 +179,10 @@ export class PostgresShipmentRepository implements IShipmentRepository {
     // 4. Lọc theo mã đơn hàng
     if (criteria.orderId && criteria.orderId.trim().length > 0) {
       where.orderId = {
-        contains: criteria.orderId.replace(/^[#]/, '').trim(),
+        contains: criteria.orderId
+          .replace(/^[#]/, '')
+          .replace(/^NEX-TRK-/i, '')
+          .trim(),
         mode: 'insensitive',
       };
     }
@@ -178,7 +190,10 @@ export class PostgresShipmentRepository implements IShipmentRepository {
     // 5. Lọc theo mã vận đơn trackingCode
     if (criteria.trackingCode && criteria.trackingCode.trim().length > 0) {
       where.trackingCode = {
-        contains: criteria.trackingCode.replace(/^[#]/, '').trim(),
+        contains: criteria.trackingCode
+          .replace(/^[#]/, '')
+          .replace(/^NEX-TRK-/i, '')
+          .trim(),
         mode: 'insensitive',
       };
     }

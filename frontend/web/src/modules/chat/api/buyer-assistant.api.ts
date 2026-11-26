@@ -335,7 +335,12 @@ export const buyerAssistantApi = {
    */
   async getOwnedOrderDetail(orderId: string, buyerId: string): Promise<OrderDetail | null> {
     try {
-      const detail = await commerceApi.getOrder(orderId);
+      const cleanId = orderId
+        .trim()
+        .replace(/^#/, '')
+        .replace(/^NEX-TRK-/i, '')
+        .trim();
+      const detail = await commerceApi.getOrder(cleanId);
       if (detail.buyerId && detail.buyerId !== buyerId) {
         return null;
       }

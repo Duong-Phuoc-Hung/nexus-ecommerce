@@ -45,6 +45,39 @@ export class ShipmentController {
         limit,
       });
 
+      // Tự động cấp phát / hiển thị vận đơn Sandbox nếu tra cứu theo mã đơn hàng mà chưa từng lưu trong phân hệ
+      if (
+        result.total === 0 &&
+        this.createShipmentUseCase &&
+        ((query && (query.trim().toUpperCase().startsWith('ORD') || query.trim().length >= 8)) ||
+          (orderId && orderId.trim().toUpperCase().startsWith('ORD')))
+      ) {
+        const lookupOrderCode = (orderId || query)!.replace(/^[#]/, '').trim();
+        try {
+          const autoShipment = await this.createShipmentUseCase.execute({
+            orderId: lookupOrderCode,
+            carrier: carrier || 'GHN',
+            shippingAddress: 'Địa chỉ nhận hàng (Theo đơn ' + lookupOrderCode + ')',
+            status: 'READY_TO_PICK',
+          });
+          if (autoShipment) {
+            res.status(200).json({
+              success: true,
+              data: [autoShipment],
+              pagination: {
+                total: 1,
+                page: 1,
+                limit,
+                totalPages: 1,
+              },
+            });
+            return;
+          }
+        } catch (autoErr) {
+          console.warn('[ShipmentController.listShipments] Auto-provision warning:', autoErr);
+        }
+      }
+
       res.status(200).json({
         success: true,
         data: result.items,
@@ -225,7 +258,10 @@ export class ShipmentController {
 
   public async getByOrderId(req: Request, res: Response): Promise<void> {
     try {
-      const orderId = String(req.params.orderId || '').trim();
+      const orderId = String(req.params.orderId || '')
+        .replace(/^[#]/, '')
+        .replace(/^NEX-TRK-/i, '')
+        .trim();
       let shipment: any;
       try {
         shipment = await this.getShipmentDetailUseCase.execute(orderId);

@@ -292,12 +292,23 @@ export class PostgresAdminOrderReader {
       discountAmount: Number(row.discount_amount),
       trackingCode: row.tracking_code ?? undefined,
       status: row.status,
-      timeline: Array.isArray(row.timeline)
-        ? row.timeline.map((event) => ({
-            ...event,
-            timestamp: event.timestamp ? new Date(event.timestamp) : row.updated_at,
-          }))
-        : undefined,
+      timeline:
+        Array.isArray(row.timeline) && row.timeline.length > 0
+          ? row.timeline.map((event) => ({
+              ...event,
+              timestamp: event.timestamp ? new Date(event.timestamp) : row.updated_at,
+            }))
+          : [
+              {
+                status: row.status || 'CREATED',
+                title:
+                  row.status === 'PROCESSING'
+                    ? 'Đơn hàng được tạo thành công · Đang xử lý'
+                    : 'Đơn hàng được tạo thành công',
+                timestamp: row.created_at,
+                note: 'Khởi tạo đơn hàng trên sàn thương mại điện tử Nexus',
+              },
+            ],
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     });

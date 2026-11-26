@@ -6,7 +6,10 @@ export class GetShipmentDetailUseCase {
   constructor(private readonly shipmentRepository: IShipmentRepository) {}
 
   public async execute(identifier: string): Promise<ShipmentDetailDto> {
-    const trimmed = (identifier || '').trim();
+    const trimmed = (identifier || '')
+      .replace(/^[#]/, '')
+      .replace(/^NEX-TRK-/i, '')
+      .trim();
     if (!trimmed) {
       throw new ShipmentNotFoundException('empty_id');
     }

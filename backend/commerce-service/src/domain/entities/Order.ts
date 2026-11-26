@@ -134,13 +134,20 @@ export class Order {
     this._escrowAmount =
       props.escrowAmount ?? (this._escrowStatus === 'HELD' ? props.totalAmount : 0);
     this._escrowReleasedAt = props.escrowReleasedAt ?? null;
-    this._timeline = props.timeline || [
-      {
-        status: 'CREATED',
-        title: 'Đơn hàng được tạo thành công',
-        timestamp: props.createdAt,
-      },
-    ];
+    this._timeline =
+      props.timeline && props.timeline.length > 0
+        ? props.timeline
+        : [
+            {
+              status: String(props.status || 'CREATED'),
+              title:
+                props.status === OrderStatus.PROCESSING
+                  ? 'Đơn hàng được tạo thành công · Đang xử lý'
+                  : 'Đơn hàng được tạo thành công',
+              timestamp: props.createdAt,
+              note: 'Khởi tạo đơn hàng trên sàn thương mại điện tử Nexus',
+            },
+          ];
     this._createdAt = props.createdAt;
     this._updatedAt = props.updatedAt;
   }

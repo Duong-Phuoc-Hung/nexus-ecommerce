@@ -25,7 +25,10 @@ export class UpdateShipmentStatusUseCase {
   }
 
   public async execute(req: UpdateShipmentStatusRequest): Promise<ShipmentDetailDto> {
-    const trimmed = (req.shipmentId || '').replace(/^[#]/, '').trim();
+    const trimmed = (req.shipmentId || '')
+      .replace(/^[#]/, '')
+      .replace(/^NEX-TRK-/i, '')
+      .trim();
     let shipment = await this.shipmentRepository.findById(trimmed);
     if (!shipment) {
       shipment = await this.shipmentRepository.findByTrackingCode(trimmed);

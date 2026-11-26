@@ -51,6 +51,11 @@ export function createChatRoutes(
     controller.uploadAttachment(req, res),
   );
 
+  // 5.3 Kết thúc / đóng phiên hỗ trợ (Support Staff / Admin)
+  router.post('/conversations/:id/close', requireAuth, (req, res) =>
+    controller.closeConversation(req, res),
+  );
+
   // 6. Bàn giao khiếu nại kẹp khóa chống trùng Idempotency sang Support Staff (Kịch bản C)
   router.post('/escalate', requireAuth, (req, res) => controller.escalateDispute(req, res));
 
@@ -63,6 +68,9 @@ export function createChatRoutes(
   router.put('/sessions/:id/read', requireAuth, (req, res) => controller.markAsRead(req, res));
   router.post('/sessions/:id/attachments', requireAuth, (req, res) =>
     controller.uploadAttachment(req, res),
+  );
+  router.post('/sessions/:id/close', requireAuth, (req, res) =>
+    controller.closeConversation(req, res),
   );
 
   // 8. Thẩm định đối soát chứng cứ cho Support Staff (AI Copilot Arbiter - Task BE-05)

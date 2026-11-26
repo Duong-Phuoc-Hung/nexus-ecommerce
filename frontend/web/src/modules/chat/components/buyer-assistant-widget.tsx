@@ -785,12 +785,18 @@ export function BuyerAssistantWidget() {
           return;
         }
 
-        // 7. Hỏi mã đơn hoặc tên món trong đơn ("Đơn tai nghe tới đâu rồi?", "Đơn của tôi", "#17")
-        const explicitOrderMatch = text.match(/#?([a-zA-Z0-9_-]{1,36})/);
+        // 7. Hỏi mã đơn hoặc tên món trong đơn ("Đơn tai nghe tới đâu rồi?", "Đơn của tôi", "#17", "NEX-TRK-ORD-...")
+        const explicitOrdMatch = text.match(
+          /(?:NEX-TRK-)?((?:NX-)?ORD-(?:AUC-)?[a-zA-Z0-9-]+)/i,
+        )?.[1];
+        const hashMatch = text.match(/#([a-zA-Z0-9_-]+)/)?.[1]?.replace(/^NEX-TRK-/i, '');
         const asksTracking =
+          Boolean(explicitOrdMatch || hashMatch) ||
           q.includes('tới đâu') ||
           q.includes('đơn của tôi') ||
           q.includes('giao chưa') ||
+          q.includes('vận đơn') ||
+          q.includes('tra cứu') ||
           q.includes('đơn ') ||
           q.startsWith('đơn');
 
@@ -813,9 +819,8 @@ export function BuyerAssistantWidget() {
           if (!user) return;
           const myOrders = await loadMyOrders();
 
-          // Nếu có mã rõ ràng dạng #... hoặc toàn số
-          const idCandidate =
-            text.match(/#([a-zA-Z0-9_-]+)/)?.[1] || text.match(/\b(\d{1,12})\b/)?.[1];
+          // Nếu có mã rõ ràng dạng (NEX-TRK-)ORD-..., #... hoặc toàn số
+          const idCandidate = explicitOrdMatch || hashMatch || text.match(/\b(\d{1,12})\b/)?.[1];
           if (idCandidate) {
             await inspectAndShowOrderCard(idCandidate);
             return;

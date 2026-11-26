@@ -103,7 +103,10 @@ export function createApplication(): Application {
     getProductReviewsUseCase,
   );
 
-  app.use('/api/v1/products', createModerationRoutes(new ModerationService(new PostgresModerationRepository())));
+  app.use(
+    '/api/v1/products',
+    createModerationRoutes(new ModerationService(new PostgresModerationRepository())),
+  );
   app.use('/api/v1/products', createProductRoutes(productController));
 
   // YÊU THÍCH (FAVORITES / WISHLIST):

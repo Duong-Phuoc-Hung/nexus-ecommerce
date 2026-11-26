@@ -21,6 +21,7 @@ export function SupportChatPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [closing, setClosing] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
@@ -143,6 +144,30 @@ export function SupportChatPage() {
     }
   }
 
+  async function handleCloseConversation() {
+    if (!selectedThreadId || closing || activeThread?.conversationStatus === 'CLOSED') return;
+    setClosing(true);
+    setChatError(null);
+    try {
+      await chatApi.closeConversation(selectedThreadId);
+      setThreads((prev) =>
+        prev.map((t) => (t.id === selectedThreadId ? { ...t, conversationStatus: 'CLOSED' } : t)),
+      );
+      const refreshed = await chatApi.getMessages(selectedThreadId).catch(() => null);
+      if (refreshed) {
+        setMessages(refreshed);
+        scrollToBottom();
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('nexus:disputes-updated'));
+      }
+    } catch (err: any) {
+      setChatError(err?.message || 'Không thể kết thúc phiên hỗ trợ. Vui lòng thử lại.');
+    } finally {
+      setClosing(false);
+    }
+  }
+
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -167,7 +192,7 @@ export function SupportChatPage() {
   }
 
   const filteredThreads = threads.filter((t) => {
-    const q = searchQuery.trim().toLowerCase();
+    const q = searchQuery.replace(/^[#]/, '').trim().toLowerCase();
     const matchQuery =
       !q ||
       t.customerName.toLowerCase().includes(q) ||
@@ -182,12 +207,18 @@ export function SupportChatPage() {
     if (!matchQuery) return false;
     if (filterTab === 'HANDOVER')
       return (
+        t.conversationStatus === 'WAITING_STAFF' ||
         t.orderStatus === 'WAITING_STAFF' ||
         t.disputeReason?.includes('Handover') ||
         t.disputeReason?.includes('bàn giao')
       );
-    if (filterTab === 'URGENT') return t.priority === 'URGENT';
-    if (filterTab === 'ACTIVE') return t.orderStatus !== 'DELIVERED';
+    if (filterTab === 'URGENT') return t.priority === 'URGENT' || t.priority === 'HIGH';
+    if (filterTab === 'ACTIVE')
+      return (
+        !['DELIVERED', 'COMPLETED', 'CANCELLED', 'REFUNDED'].includes(
+          String(t.orderStatus || '').toUpperCase(),
+        ) && t.conversationStatus !== 'CLOSED'
+      );
     return true;
   });
 
@@ -261,7 +292,8 @@ export function SupportChatPage() {
             </span>
             <span style={{ color: '#93c5fd' }}>|</span>
             <span style={{ color: '#e0e7ff' }}>
-              Hàng đợi: <strong>{threads.length}</strong> ca
+              Hàng đợi:{' '}
+              <strong>{threads.filter((t) => t.conversationStatus !== 'CLOSED').length}</strong> ca
             </span>
           </div>
         </div>
@@ -544,6 +576,39 @@ export function SupportChatPage() {
                   </div>
 
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+                    {activeThread.conversationStatus === 'CLOSED' ? (
+                      <span
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '6px',
+                          background: '#ecfdf5',
+                          color: '#047857',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          border: '1px solid #a7f3d0',
+                        }}
+                      >
+                        ✓ Đã kết thúc hỗ trợ
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={closing}
+                        onClick={handleCloseConversation}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '6px',
+                          background: closing ? '#94a3b8' : '#059669',
+                          color: '#ffffff',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          border: 'none',
+                          cursor: closing ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        {closing ? 'Đang đóng...' : '✓ Kết thúc hỗ trợ'}
+                      </button>
+                    )}
                     <Link
                       href={`/support/orders/${activeThread.orderId}`}
                       style={{
@@ -732,91 +797,108 @@ export function SupportChatPage() {
                 </div>
 
                 {/* Input Area */}
-                <div
-                  style={{
-                    padding: '14px 20px',
-                    background: '#ffffff',
-                    borderTop: '1px solid #e2e8f0',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    flexShrink: 0,
-                  }}
-                >
-                  <input
-                    type="file"
-                    disabled={sending}
-                    ref={fileInputRef}
-                    style={{ display: 'none' }}
-                    accept="image/*,video/mp4"
-                    onChange={handleFileSelect}
-                  />
-                  <button
-                    type="button"
-                    title="Đính kèm biên bản / ảnh bằng chứng"
-                    onClick={() => fileInputRef.current?.click()}
+                {activeThread.conversationStatus === 'CLOSED' ? (
+                  <div
                     style={{
-                      width: '38px',
-                      height: '38px',
-                      borderRadius: '8px',
-                      background: '#f1f5f9',
-                      border: '1px solid #cbd5e1',
-                      cursor: 'pointer',
+                      padding: '14px 20px',
+                      background: '#f8fafc',
+                      borderTop: '1px solid #e2e8f0',
+                      color: '#475569',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      textAlign: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    ✓ Phiên hỗ trợ này đã kết thúc. Không thể gửi thêm tin nhắn mới.
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      padding: '14px 20px',
+                      background: '#ffffff',
+                      borderTop: '1px solid #e2e8f0',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '16px',
+                      gap: '10px',
+                      flexShrink: 0,
                     }}
                   >
-                    📎
-                  </button>
+                    <input
+                      type="file"
+                      disabled={sending}
+                      ref={fileInputRef}
+                      style={{ display: 'none' }}
+                      accept="image/*,video/mp4"
+                      onChange={handleFileSelect}
+                    />
+                    <button
+                      type="button"
+                      title="Đính kèm biên bản / ảnh bằng chứng"
+                      onClick={() => fileInputRef.current?.click()}
+                      style={{
+                        width: '38px',
+                        height: '38px',
+                        borderRadius: '8px',
+                        background: '#f1f5f9',
+                        border: '1px solid #cbd5e1',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '16px',
+                      }}
+                    >
+                      📎
+                    </button>
 
-                  <input
-                    type="text"
-                    disabled={sending}
-                    placeholder="Nhập nội dung trao đổi / hướng dẫn cho khách hàng (Enter để gửi)..."
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSend();
-                      }
-                    }}
-                    style={{
-                      flex: 1,
-                      height: '40px',
-                      borderRadius: '8px',
-                      border: '1px solid #cbd5e1',
-                      padding: '0 14px',
-                      fontSize: '13.5px',
-                      outline: 'none',
-                    }}
-                  />
+                    <input
+                      type="text"
+                      disabled={sending}
+                      placeholder="Nhập nội dung trao đổi / hướng dẫn cho khách hàng (Enter để gửi)..."
+                      value={inputText}
+                      onChange={(e) => setInputText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSend();
+                        }
+                      }}
+                      style={{
+                        flex: 1,
+                        height: '40px',
+                        borderRadius: '8px',
+                        border: '1px solid #cbd5e1',
+                        padding: '0 14px',
+                        fontSize: '13.5px',
+                        outline: 'none',
+                      }}
+                    />
 
-                  <button
-                    type="button"
-                    disabled={sending || (!inputText.trim() && !selectedImage)}
-                    onClick={() => handleSend()}
-                    style={{
-                      height: '40px',
-                      padding: '0 18px',
-                      borderRadius: '8px',
-                      background:
-                        sending || (!inputText.trim() && !selectedImage) ? '#94a3b8' : '#2563eb',
-                      color: '#ffffff',
-                      border: 'none',
-                      fontWeight: 600,
-                      fontSize: '13px',
-                      cursor:
-                        sending || (!inputText.trim() && !selectedImage)
-                          ? 'not-allowed'
-                          : 'pointer',
-                    }}
-                  >
-                    {sending ? 'Đang gửi...' : 'Gửi 🚀'}
-                  </button>
-                </div>
+                    <button
+                      type="button"
+                      disabled={sending || (!inputText.trim() && !selectedImage)}
+                      onClick={() => handleSend()}
+                      style={{
+                        height: '40px',
+                        padding: '0 18px',
+                        borderRadius: '8px',
+                        background:
+                          sending || (!inputText.trim() && !selectedImage) ? '#94a3b8' : '#2563eb',
+                        color: '#ffffff',
+                        border: 'none',
+                        fontWeight: 600,
+                        fontSize: '13px',
+                        cursor:
+                          sending || (!inputText.trim() && !selectedImage)
+                            ? 'not-allowed'
+                            : 'pointer',
+                      }}
+                    >
+                      {sending ? 'Đang gửi...' : 'Gửi 🚀'}
+                    </button>
+                  </div>
+                )}
               </>
             ) : (
               <div

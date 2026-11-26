@@ -30,8 +30,11 @@ export function verifyJwtToken(token: string, strict = false): AuthenticatedUser
     const [header, payloadPart, signature] = parts;
     const configuredSecret = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET;
     const secrets = strict
-      ? configuredSecret ? [configuredSecret] : process.env.NODE_ENV === 'production'
-        ? [] : ['nexus_super_secret_jwt_access_key_min_32_chars_local_dev']
+      ? configuredSecret
+        ? [configuredSecret]
+        : process.env.NODE_ENV === 'production'
+          ? []
+          : ['nexus_super_secret_jwt_access_key_min_32_chars_local_dev']
       : getJwtSecrets();
 
     let isValid = false;
@@ -59,10 +62,17 @@ export function verifyJwtToken(token: string, strict = false): AuthenticatedUser
 
     const userId = payload.sub || payload.userId || payload.id;
     const roles = Array.isArray(payload.roles)
-      ? payload.roles.filter((role: unknown): role is string => typeof role === 'string').map((role: string) => role.toUpperCase())
+      ? payload.roles
+          .filter((role: unknown): role is string => typeof role === 'string')
+          .map((role: string) => role.toUpperCase())
       : [];
-    if (strict && (typeof payload.sub !== 'string' || !payload.sub.trim() ||
-        !Number.isFinite(payload.exp) || payload.exp <= Math.floor(Date.now() / 1000))) {
+    if (
+      strict &&
+      (typeof payload.sub !== 'string' ||
+        !payload.sub.trim() ||
+        !Number.isFinite(payload.exp) ||
+        payload.exp <= Math.floor(Date.now() / 1000))
+    ) {
       return null;
     }
     const role = payload.role || roles[0] || 'BUYER';
@@ -88,11 +98,16 @@ export function requireModerationAuth(...allowed: string[]) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const user = verifiedAccessUser(req);
     if (!user) {
-      res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Vui lòng đăng nhập.' } });
+      res
+        .status(401)
+        .json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Vui lòng đăng nhập.' } });
       return;
     }
-    if (!allowed.includes(user.role) && !user.roles?.some(role => allowed.includes(role))) {
-      res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Bạn không có quyền thực hiện thao tác này.' } });
+    if (!allowed.includes(user.role) && !user.roles?.some((role) => allowed.includes(role))) {
+      res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'Bạn không có quyền thực hiện thao tác này.' },
+      });
       return;
     }
     (req as AuthenticatedRequest).user = user;

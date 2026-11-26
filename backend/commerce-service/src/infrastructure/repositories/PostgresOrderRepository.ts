@@ -48,7 +48,10 @@ export class PostgresOrderRepository implements IOrderRepository {
 
   public async findById(id: string): Promise<Order | null> {
     const rawClean = id.trim();
-    const cleanId = rawClean.replace(/^[#]/, '').trim();
+    const cleanId = rawClean
+      .replace(/^[#]/, '')
+      .replace(/^NEX-TRK-/i, '')
+      .trim();
 
     const orderRow = await this.prisma.order.findFirst({
       where: {
@@ -308,7 +311,7 @@ export class PostgresOrderRepository implements IOrderRepository {
     const rawTimeline = orderRow.timeline;
     let timeline: OrderTimelineItem[] = [];
 
-    if (Array.isArray(rawTimeline)) {
+    if (Array.isArray(rawTimeline) && rawTimeline.length > 0) {
       timeline = rawTimeline.map((t: any) => ({
         status: String(t.status || 'STATUS_UPDATE'),
         title: String(t.title || 'Cập nhật đơn hàng'),
@@ -318,9 +321,13 @@ export class PostgresOrderRepository implements IOrderRepository {
     } else {
       timeline = [
         {
-          status: 'CREATED',
-          title: 'Đơn hàng được tạo thành công',
+          status: String(orderRow.status || 'CREATED'),
+          title:
+            orderRow.status === 'PROCESSING'
+              ? 'Đơn hàng được tạo thành công · Đang xử lý'
+              : 'Đơn hàng được tạo thành công',
           timestamp: new Date(orderRow.createdAt),
+          note: 'Khởi tạo đơn hàng trên sàn thương mại điện tử Nexus',
         },
       ];
     }

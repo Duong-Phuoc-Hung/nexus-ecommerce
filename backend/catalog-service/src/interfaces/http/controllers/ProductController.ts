@@ -227,8 +227,11 @@ export class ProductController {
       const authUser = verifiedAccessUser(req);
       const product = await this.getProductDetailUseCase.execute(productId);
 
-      const isPrivileged = authUser &&
-        (authUser.role === 'ADMIN' || authUser.roles?.includes('ADMIN') || authUser.id === product.sellerId);
+      const isPrivileged =
+        authUser &&
+        (authUser.role === 'ADMIN' ||
+          authUser.roles?.includes('ADMIN') ||
+          authUser.id === product.sellerId);
       if (
         !isPrivileged &&
         (product.status !== ProductStatus.ACTIVE || product.stockQuantity <= 0)

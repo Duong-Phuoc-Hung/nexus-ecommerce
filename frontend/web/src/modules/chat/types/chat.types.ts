@@ -56,6 +56,7 @@ export interface ChatThreadItem {
   customerAvatar?: string;
   customerPhone?: string;
   orderStatus: string;
+  conversationStatus?: string;
   totalAmount: number;
   productTitle: string;
   productImage?: string | null;
