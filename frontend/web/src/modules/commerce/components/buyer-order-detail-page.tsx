@@ -54,7 +54,6 @@ import {
   LifeBuoy,
   Info,
   MessageSquare,
-  ShoppingBag,
 } from 'lucide-react';
 import { isSimulationModeEnabled, orderConversationsApi } from '../api/order-conversations.api';
 
@@ -1462,373 +1461,122 @@ export default function BuyerOrderDetailPage({ orderId }: { orderId: string }) {
               aria-label="Diễn biến đơn hàng"
               className="mt-5 rounded-2xl border border-line bg-white p-5 sm:p-6 shadow-xs"
             >
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex size-9 items-center justify-center rounded-xl bg-sky-50 text-sky-600 ring-1 ring-sky-100 shadow-2xs">
-                    <Clock className="size-5" />
-                  </div>
-                  <div>
-                    <h2 className="font-bold text-stone-900 text-base sm:text-lg">
-                      Diễn biến & Hành trình đơn hàng
-                    </h2>
-                    <p className="text-xs text-muted mt-0.5">
-                      Cập nhật thời gian thực theo tiến trình giao dịch & đối tác vận chuyển Nexus
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
-                    <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                    Đồng bộ trực tiếp
-                  </span>
-                </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-3.5">
+                <h2 className="font-bold text-stone-900 text-base sm:text-lg flex items-center gap-2">
+                  <Clock className="size-4 text-brand-dark" />
+                  Diễn biến đơn hàng
+                </h2>
+                <span className="text-xs text-muted">
+                  Cập nhật theo tiến trình giao dịch & vận chuyển Nexus
+                </span>
               </div>
 
-              {/* Thanh tiến trình đơn hàng nằm ngang (4 bước chuẩn hoặc 5 bước khi có khiếu nại / hoàn tiền) */}
-              {(() => {
-                const activeStepIdx = lifecycleSteps.findIndex((s) => s.active);
-                return (
-                  <div className="mt-5 rounded-2xl border border-slate-200 bg-gradient-to-b from-slate-50/70 to-white p-5 sm:p-6 shadow-xs">
-                    <div className="flex items-center justify-between mb-5">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                        Tiến trình đơn hàng
+              {/* Thanh tiến trình tổng quan (4 bước chuẩn hoặc 5 bước khi có khiếu nại / hoàn tiền) */}
+              <div
+                className={`mt-4 grid grid-cols-2 gap-3 ${
+                  lifecycleSteps.length === 5 ? 'sm:grid-cols-5' : 'sm:grid-cols-4'
+                }`}
+              >
+                {lifecycleSteps.map((step, idx) => (
+                  <div
+                    key={step.key}
+                    className={`rounded-xl border p-3 transition ${
+                      step.isAlert
+                        ? 'border-red-200 bg-red-50/50'
+                        : step.active
+                          ? 'border-amber-300 bg-amber-50/70 ring-1 ring-amber-200'
+                          : step.done
+                            ? 'border-emerald-200 bg-emerald-50/40'
+                            : 'border-line bg-stone-50/60'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between text-xs">
+                      <span
+                        className={`font-bold ${
+                          step.active && !step.isAlert && !step.done
+                            ? 'text-amber-900'
+                            : 'text-stone-500'
+                        }`}
+                      >
+                        Bước {idx + 1}
                       </span>
-                      {activeStepIdx !== -1 && (
-                        <span className="text-xs font-semibold text-sky-700 bg-sky-50 px-2.5 py-0.5 rounded-md border border-sky-200/60">
-                          Bước {activeStepIdx + 1}/{lifecycleSteps.length}:{' '}
-                          {lifecycleSteps[activeStepIdx]?.label}
-                        </span>
+                      {step.isAlert ? (
+                        <XCircle className="size-4 text-red-600" />
+                      ) : step.active && !step.done ? (
+                        <Clock className="size-4 text-amber-600" />
+                      ) : step.done ? (
+                        <CheckCircle2 className="size-4 text-emerald-600" />
+                      ) : (
+                        <Clock className="size-4 text-stone-400" />
                       )}
                     </div>
-                    <div className="flex items-start overflow-x-auto pb-2 pt-1 gap-2">
-                      {lifecycleSteps.map((step, idx) => {
-                        const isCurrent = step.active && !step.isAlert;
-                        const isDone = step.done && !isCurrent && !step.isAlert;
-                        const isLineActive =
-                          isDone || (activeStepIdx !== -1 && idx < activeStepIdx);
+                    <strong className="mt-1 block text-xs sm:text-sm font-bold text-stone-900">
+                      {step.label}
+                    </strong>
+                    <span className="mt-0.5 block text-[11px] text-muted">{step.sub}</span>
+                  </div>
+                ))}
+              </div>
 
-                        const StepIcon =
-                          idx === 0
-                            ? ShoppingBag
-                            : idx === 1
-                              ? CreditCard
-                              : idx === 2
-                                ? Truck
-                                : idx === 3
-                                  ? step.isAlert
-                                    ? AlertCircle
-                                    : CheckCircle2
-                                  : LifeBuoy;
-
-                        return (
-                          <div
-                            key={step.key}
-                            className="relative flex-1 min-w-[140px] flex flex-col items-center text-center px-2 group"
-                          >
-                            {idx < lifecycleSteps.length - 1 && (
-                              <div
-                                aria-hidden="true"
-                                className="absolute top-4 left-[calc(50%+22px)] right-[calc(-50%+22px)] h-0.5 rounded-full overflow-hidden bg-slate-200 z-0"
-                              >
-                                <div
-                                  className={`h-full transition-all duration-300 ${
-                                    step.isAlert
-                                      ? 'bg-red-400'
-                                      : isLineActive
-                                        ? 'bg-gradient-to-r from-emerald-500 to-sky-500'
-                                        : 'bg-transparent'
-                                  }`}
-                                />
-                              </div>
-                            )}
-                            <span
-                              className={`relative z-10 flex size-9 items-center justify-center rounded-xl text-xs font-bold transition-all duration-200 ${
-                                step.isAlert
-                                  ? 'bg-red-600 text-white ring-4 ring-red-100 shadow-sm'
-                                  : isCurrent
-                                    ? 'bg-sky-600 text-white ring-4 ring-sky-100 shadow-md scale-105'
-                                    : isDone
-                                      ? 'bg-slate-800 text-white shadow-xs'
-                                      : 'border-2 border-slate-200 bg-white text-slate-400'
-                              }`}
-                            >
-                              {isDone ? (
-                                <Check className="size-4 stroke-[2.5]" />
-                              ) : (
-                                <StepIcon className="size-4" />
-                              )}
-                            </span>
-                            <strong
-                              className={`mt-2.5 block text-xs sm:text-sm font-semibold transition ${
-                                step.isAlert
-                                  ? 'text-red-700'
-                                  : isCurrent
-                                    ? 'text-sky-700'
-                                    : isDone
-                                      ? 'text-slate-800'
-                                      : 'text-slate-400'
-                              }`}
-                            >
-                              {step.label}
+              {/* Chi tiết mốc thời gian và ghi chú từ đơn (lọc trùng trạng thái liên tiếp) */}
+              <ol className="mt-5 space-y-3 border-t border-line/60 pt-4 text-sm">
+                {order.timeline && order.timeline.length > 0 ? (
+                  order.timeline
+                    .filter((s, i, arr) => {
+                      if (i === 0) return true;
+                      const prev = arr[i - 1];
+                      return (
+                        (s.title || s.status) !== (prev.title || prev.status) ||
+                        (s.note || '') !== (prev.note || '')
+                      );
+                    })
+                    .map((s, i, filtered) => {
+                      const isLatest = i === filtered.length - 1;
+                      return (
+                        <li
+                          key={`${s.timestamp}-${i}`}
+                          className={`relative pl-5 border-l-2 pb-1 ${
+                            isLatest ? 'border-emerald-500' : 'border-stone-200'
+                          }`}
+                        >
+                          <span
+                            className={`absolute -left-[5px] top-1.5 size-2 rounded-full ${
+                              isLatest ? 'bg-emerald-500 ring-2 ring-emerald-100' : 'bg-stone-400'
+                            }`}
+                          />
+                          <div className="flex flex-wrap items-baseline justify-between gap-2">
+                            <strong className="text-stone-900 font-semibold text-xs sm:text-sm">
+                              {formatOrderStatus(s.title || s.status)}
                             </strong>
-                            <span
-                              className={`mt-0.5 block text-[11px] leading-tight ${
-                                isCurrent
-                                  ? 'text-sky-600 font-medium'
-                                  : isDone
-                                    ? 'text-slate-500'
-                                    : 'text-slate-400'
-                              }`}
-                            >
-                              {step.sub}
+                            <span className="text-[11px] text-muted font-mono">
+                              {new Date(s.timestamp).toLocaleString('vi-VN')}
                             </span>
                           </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Nhật ký cập nhật trạng thái (Lưới thẻ ngang trực quan, thân thiện, không nằm dọc) */}
-              {(() => {
-                const parseTimelineEntry = (
-                  rawTitleOrStatus: string,
-                  rawNote?: string,
-                  timestamp?: string | Date,
-                ) => {
-                  const text = (rawTitleOrStatus || '').toUpperCase().trim();
-                  const note = (rawNote || '').trim();
-
-                  let title = 'Cập nhật tiến trình';
-                  let description = note || 'Hệ thống Nexus ghi nhận tiến trình đơn hàng.';
-                  let iconKind:
-                    'ORDER' | 'PROCESSING' | 'SHIPPING' | 'DELIVERED' | 'CANCELLED' | 'REFUND' =
-                    'ORDER';
-                  let carrierBadge: string | null = null;
-
-                  if (/ghn/i.test(note)) carrierBadge = 'GHN Express';
-                  else if (/ghtk/i.test(note)) carrierBadge = 'GHTK';
-                  else if (/viettel/i.test(note)) carrierBadge = 'Viettel Post';
-                  else if (/vnpost/i.test(note)) carrierBadge = 'VNPost';
-
-                  if (
-                    text.includes('TẠO') ||
-                    text.includes('CREATED') ||
-                    text.includes('PLACED') ||
-                    text.includes('ĐẶT HÀNG')
-                  ) {
-                    title = 'Khởi tạo đơn hàng thành công';
-                    description = 'Đơn hàng đã được ghi nhận trên hệ thống sàn Nexus và chờ xử lý.';
-                    iconKind = 'ORDER';
-                  } else if (
-                    text.includes('PROCESSING') ||
-                    text.includes('ĐANG XỬ LÝ') ||
-                    text.includes('ĐANG_XỬ_LÝ')
-                  ) {
-                    title = 'Xác nhận đơn & Đang chuẩn bị hàng';
-                    description = carrierBadge
-                      ? `Đối tác ${carrierBadge} đã tiếp nhận thông tin và đang điều phối nhân viên lấy kiện.`
-                      : note || 'Người bán đang kiểm tra hàng hóa, đóng gói và sẵn sàng bàn giao.';
-                    iconKind = 'PROCESSING';
-                  } else if (
-                    text.includes('SHIPPED') ||
-                    text.includes('IN_TRANSIT') ||
-                    text.includes('DELIVERING') ||
-                    text.includes('ĐANG GIAO') ||
-                    text.includes('ĐANG_GIAO')
-                  ) {
-                    title = 'Bưu tá đang vận chuyển đơn hàng';
-                    description = carrierBadge
-                      ? `Bưu tá ${carrierBadge} đang luân chuyển kiện hàng đến địa chỉ nhận của bạn.`
-                      : note || 'Kiện hàng đang được bưu tá chuyển phát tới bạn.';
-                    iconKind = 'SHIPPING';
-                  } else if (
-                    text.includes('DELIVERED') ||
-                    text.includes('COMPLETED') ||
-                    text.includes('ĐÃ GIAO') ||
-                    text.includes('ĐÃ_GIAO')
-                  ) {
-                    title = 'Giao hàng thành công';
-                    description =
-                      note || 'Kiện hàng đã được phát tận tay người nhận an toàn, nguyên vẹn.';
-                    iconKind = 'DELIVERED';
-                  } else if (
-                    text.includes('CANCELLED') ||
-                    text.includes('CANCELED') ||
-                    text.includes('ĐÃ HỦY')
-                  ) {
-                    title = 'Đơn hàng đã được hủy';
-                    description = note || 'Đơn hàng đã dừng tiến trình xử lý theo yêu cầu.';
-                    iconKind = 'CANCELLED';
-                  } else if (text.includes('REFUND') || text.includes('HOÀN TIỀN')) {
-                    title = 'Xử lý hoàn tiền hoàn tất';
-                    description = note || 'Khoản thanh toán đã được hoàn trả về tài khoản nguồn.';
-                    iconKind = 'REFUND';
-                  } else {
-                    title = formatOrderStatus(rawTitleOrStatus);
-                    if (note) description = note;
-                  }
-
-                  let formattedTime = '';
-                  if (timestamp) {
-                    try {
-                      const d = new Date(timestamp);
-                      if (!isNaN(d.getTime())) {
-                        const hh = String(d.getHours()).padStart(2, '0');
-                        const mm = String(d.getMinutes()).padStart(2, '0');
-                        const ss = String(d.getSeconds()).padStart(2, '0');
-                        const dd = String(d.getDate()).padStart(2, '0');
-                        const mo = String(d.getMonth() + 1).padStart(2, '0');
-                        const yyyy = d.getFullYear();
-                        formattedTime = `${hh}:${mm}:${ss} · ${dd}/${mo}/${yyyy}`;
-                      }
-                    } catch {
-                      formattedTime = String(timestamp);
-                    }
-                  }
-
-                  return { title, description, formattedTime, iconKind, carrierBadge };
-                };
-
-                const rawTimeline = order.timeline || [];
-                const filteredTimeline = rawTimeline.filter((s, i, arr) => {
-                  if (i === 0) return true;
-                  const prev = arr[i - 1];
-                  return (
-                    (s.title || s.status) !== (prev.title || prev.status) ||
-                    (s.note || '') !== (prev.note || '')
-                  );
-                });
-
-                const effectiveList =
-                  filteredTimeline.length > 0
-                    ? filteredTimeline
-                    : [
-                        {
-                          title: 'Đơn hàng được khởi tạo thành công',
-                          status: 'PLACED',
-                          note: 'Hệ thống đã ghi nhận sản phẩm, giá bán và địa chỉ nhận hàng.',
-                          timestamp: order.createdAt || new Date(),
-                        },
-                      ];
-
-                return (
-                  <div className="mt-6 border-t border-slate-200/80 pt-5">
-                    <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                          Nhật ký hành trình đơn hàng
-                        </span>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600">
-                          {effectiveList.length} mốc cập nhật
-                        </span>
-                      </div>
-                      <span className="text-xs text-slate-400 font-medium hidden sm:inline">
-                        Trình bày ngang theo trình tự thời gian
+                          {s.note && (
+                            <p className="mt-0.5 text-xs text-stone-600 leading-relaxed">
+                              {s.note}
+                            </p>
+                          )}
+                        </li>
+                      );
+                    })
+                ) : (
+                  <li className="relative pl-5 border-l-2 border-emerald-500">
+                    <span className="absolute -left-[5px] top-1.5 size-2 rounded-full bg-emerald-500 ring-2 ring-emerald-100" />
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <strong className="text-stone-900 font-semibold text-xs sm:text-sm">
+                        Đơn hàng được khởi tạo thành công
+                      </strong>
+                      <span className="text-[11px] text-muted font-mono">
+                        {formattedCreatedDate}
                       </span>
                     </div>
-
-                    {/* Dàn thẻ ngang dạng Responsive Grid đa cột, rộng rãi và cực kỳ dễ nhìn */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-                      {effectiveList.map((s, i) => {
-                        const isLatest = i === effectiveList.length - 1;
-                        const parsed = parseTimelineEntry(s.title || s.status, s.note, s.timestamp);
-
-                        const IconComponent =
-                          parsed.iconKind === 'ORDER'
-                            ? ShoppingBag
-                            : parsed.iconKind === 'PROCESSING'
-                              ? Package
-                              : parsed.iconKind === 'SHIPPING'
-                                ? Truck
-                                : parsed.iconKind === 'DELIVERED'
-                                  ? CheckCircle2
-                                  : parsed.iconKind === 'CANCELLED'
-                                    ? XCircle
-                                    : RotateCcw;
-
-                        return (
-                          <div
-                            key={`${s.timestamp}-${i}`}
-                            className={`relative rounded-xl border p-4 transition-all duration-200 flex flex-col justify-between ${
-                              isLatest
-                                ? 'bg-gradient-to-br from-sky-50/90 via-white to-sky-50/40 border-sky-300 shadow-sm ring-1 ring-sky-200'
-                                : 'bg-white border-slate-200/80 hover:border-slate-300 hover:shadow-xs'
-                            }`}
-                          >
-                            {/* Header Card: Icon + Mốc thứ tự + Badge Mới nhất / Carrier */}
-                            <div className="flex items-center justify-between gap-2 mb-3">
-                              <div className="flex items-center gap-2.5">
-                                <span
-                                  className={`flex size-8 items-center justify-center rounded-lg ${
-                                    isLatest
-                                      ? 'bg-sky-600 text-white shadow-2xs'
-                                      : parsed.iconKind === 'ORDER'
-                                        ? 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200'
-                                        : parsed.iconKind === 'PROCESSING'
-                                          ? 'bg-amber-50 text-amber-600 ring-1 ring-amber-200'
-                                          : parsed.iconKind === 'SHIPPING'
-                                            ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200'
-                                            : parsed.iconKind === 'DELIVERED'
-                                              ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                                              : 'bg-slate-100 text-slate-600'
-                                  }`}
-                                >
-                                  <IconComponent className="size-4" />
-                                </span>
-                                <span className="text-[11px] font-bold text-slate-400 font-mono">
-                                  Mốc #{i + 1}
-                                </span>
-                              </div>
-
-                              {isLatest ? (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-sky-600 text-white shadow-2xs">
-                                  <span className="size-1.5 rounded-full bg-white animate-ping" />
-                                  Mới nhất
-                                </span>
-                              ) : (
-                                parsed.carrierBadge && (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600">
-                                    {parsed.carrierBadge}
-                                  </span>
-                                )
-                              )}
-                            </div>
-
-                            {/* Title & Desc */}
-                            <div className="mb-3">
-                              <h4
-                                className={`text-sm font-bold leading-snug ${
-                                  isLatest ? 'text-sky-950' : 'text-slate-800'
-                                }`}
-                              >
-                                {parsed.title}
-                              </h4>
-                              <p className="mt-1 text-xs text-slate-600 leading-relaxed line-clamp-2">
-                                {parsed.description}
-                              </p>
-                            </div>
-
-                            {/* Footer Card: Thời gian ghi nhận */}
-                            <div className="mt-auto pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
-                              <span className="flex items-center gap-1.5 text-slate-500 font-mono">
-                                <Clock className="size-3 text-slate-400" />
-                                {parsed.formattedTime}
-                              </span>
-                              {isLatest && parsed.carrierBadge && (
-                                <span className="font-semibold text-sky-700 bg-sky-100/80 px-1.5 py-0.5 rounded text-[10px]">
-                                  {parsed.carrierBadge}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
+                    <p className="mt-0.5 text-xs text-stone-600">
+                      Hệ thống đã ghi nhận sản phẩm, giá bán và địa chỉ nhận hàng.
+                    </p>
+                  </li>
+                )}
+              </ol>
             </section>
 
             {/* TRUNG TÂM NHẮN TIN ĐƠN HÀNG (SELLER / SUPPORT) & TRỢ LÝ NEXUS (AI) & HỒ SƠ KHIẾU NẠI */}
