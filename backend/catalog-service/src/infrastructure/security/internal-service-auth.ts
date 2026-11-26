@@ -32,7 +32,11 @@ export const SERVICE_AUTH_HEADER = 'x-service-authorization';
 const MAX_TTL_SECONDS = 120;
 const DEFAULT_TTL_SECONDS = 60;
 function resolveS2SSecret(): string | null {
-  return process.env.INTERNAL_SERVICE_JWT_SECRET?.trim() || null;
+  return (
+    process.env.INTERNAL_SERVICE_JWT_SECRET?.trim() ||
+    process.env.JWT_ACCESS_SECRET?.trim() ||
+    (process.env.NODE_ENV !== 'production' ? 'nexus-internal-service-s2s-secret-key-32chars' : null)
+  );
 }
 
 export function signServiceToken(params: {

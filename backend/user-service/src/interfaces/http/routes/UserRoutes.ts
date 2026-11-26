@@ -82,12 +82,18 @@ export function createUserRoutes(controller: UserController): Router {
   router.patch('/:id/status', requireAuth, requirePermission('USER.UPDATE'), (req, res) =>
     controller.updateStatus(req, res),
   );
-  // Chỉ ADMIN có USER.REPUTATION.ADJUST được điều chỉnh điểm (Mục 14 & 15)
-  router.post('/:id/adjust-reputation', requireAuth, requirePermission('USER.UPDATE'), (req, res) =>
-    controller.adjustReputation(req, res),
+  // Chỉ ADMIN có USER.REPUTATION.ADJUST / REPUTATION.PENALTY.APPLY được điều chỉnh điểm & áp phạt (SRS 2.7)
+  router.post(
+    '/:id/adjust-reputation',
+    requireAuth,
+    requirePermission('USER.REPUTATION.ADJUST'),
+    (req, res) => controller.adjustReputation(req, res),
   );
-  router.post('/:id/restrict-features', requireAuth, requirePermission('USER.UPDATE'), (req, res) =>
-    controller.restrictFeatures(req, res),
+  router.post(
+    '/:id/restrict-features',
+    requireAuth,
+    requirePermission('REPUTATION.PENALTY.APPLY'),
+    (req, res) => controller.restrictFeatures(req, res),
   );
 
   return router;
@@ -99,13 +105,13 @@ export function createSupportUserRoutes(controller: UserController): Router {
   router.post(
     '/:userId/adjust-reputation',
     requireAuth,
-    requirePermission('USER.UPDATE'),
+    requirePermission('USER.REPUTATION.ADJUST'),
     (req, res) => controller.adjustReputation(req, res),
   );
   router.post(
     '/:userId/restrict-features',
     requireAuth,
-    requirePermission('USER.UPDATE'),
+    requirePermission('REPUTATION.PENALTY.APPLY'),
     (req, res) => controller.restrictFeatures(req, res),
   );
 

@@ -69,6 +69,12 @@ export class SupportCaseController {
       }
       const status = typeof req.query.status === 'string' ? req.query.status : undefined;
       const priority = typeof req.query.priority === 'string' ? req.query.priority : undefined;
+      const query =
+        typeof req.query.q === 'string'
+          ? req.query.q
+          : typeof req.query.query === 'string'
+            ? req.query.query
+            : undefined;
       const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 10;
 
@@ -82,6 +88,7 @@ export class SupportCaseController {
         orderId,
         status,
         priority,
+        query,
         page,
         limit,
       });

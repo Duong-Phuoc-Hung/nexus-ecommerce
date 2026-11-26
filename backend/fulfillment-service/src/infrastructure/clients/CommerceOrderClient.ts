@@ -66,12 +66,17 @@ export class CommerceOrderClient implements ICommerceOrderClient {
       note: note || `Đồng bộ tự động từ Vận chuyển (Fulfillment status: ${shipmentStatus})`,
     });
 
-    const s2sHeaders = buildServiceAuthHeader({
-      issuer: 'fulfillment-service',
-      audience: 'commerce-service',
-      scope: 'order:status:sync',
-      resource: cleanOrderId,
-    });
+    let s2sHeaders: Record<string, string> = {};
+    try {
+      s2sHeaders = buildServiceAuthHeader({
+        issuer: 'fulfillment-service',
+        audience: 'commerce-service',
+        scope: 'order:status:sync',
+        resource: cleanOrderId,
+      });
+    } catch (err: any) {
+      console.warn('[CommerceOrderClient] Không thể tạo S2S header:', err?.message || err);
+    }
 
     try {
       const response = await fetch(targetUrl, {

@@ -28,6 +28,7 @@ export type SupportSummary = {
 
 export type SupportCaseFilter = {
   userId?: string;
+  q?: string;
   status?: string;
   priority?: string;
   page?: number;
@@ -86,6 +87,24 @@ export function createSupportApi(request: RequestApi) {
         { signal },
       );
       return unwrap<SupportCase[]>(raw);
+    },
+    async createCase(payload: {
+      userId: string;
+      customer: string;
+      orderId?: string;
+      type: string;
+      reason: string;
+      priority?: string;
+    }): Promise<SupportCase> {
+      return unwrap<SupportCase>(
+        await request('/support/cases', {
+          method: 'POST',
+          body: {
+            ...payload,
+            orderCode: payload.orderId,
+          },
+        }),
+      );
     },
     async resolveCase(
       id: string,

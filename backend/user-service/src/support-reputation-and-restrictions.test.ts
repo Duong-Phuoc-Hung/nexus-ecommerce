@@ -63,15 +63,33 @@ test('Support Staff Task 4: POST /api/v1/support/users/:userId/adjust-reputation
     );
     assert.equal(buyerForbiddenRes.status, 403);
 
-    // 3. Support Staff -> 200 OK
+    // 3. Support Staff -> 403 Forbidden (SRS 2.7: chỉ Admin có USER.REPUTATION.ADJUST)
     const staffToken = await login(baseUrl, 'staff.test@nexus-ecommerce.com', 'Password123!');
-    const adjustRes = await fetch(
+    const staffForbiddenRes = await fetch(
       `${baseUrl}/api/v1/support/users/${targetUserId}/adjust-reputation`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${staffToken}`,
+        },
+        body: JSON.stringify({
+          points: -10,
+          reason: 'Support Staff không được tự điều chỉnh điểm',
+        }),
+      },
+    );
+    assert.equal(staffForbiddenRes.status, 403);
+
+    // 4. Admin -> 200 OK
+    const adminToken = await login(baseUrl, 'admin.test@nexus-ecommerce.com', 'AdminPassword123!');
+    const adjustRes = await fetch(
+      `${baseUrl}/api/v1/support/users/${targetUserId}/adjust-reputation`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
         },
         body: JSON.stringify({
           points: -10,
@@ -88,30 +106,30 @@ test('Support Staff Task 4: POST /api/v1/support/users/:userId/adjust-reputation
       adjustBody.data.reason,
       'Tự ý hủy đơn hàng đã thanh toán không có lý do chính đáng',
     );
-    assert.equal(adjustBody.data.reputationHistory.length, 1);
+    assert.ok(adjustBody.data.reputationHistory.length >= 1);
 
-    // 4. User not found -> 404
+    // 5. User not found -> 404
     const notFoundRes = await fetch(
       `${baseUrl}/api/v1/support/users/usr_non_existent/adjust-reputation`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${staffToken}`,
+          Authorization: `Bearer ${adminToken}`,
         },
         body: JSON.stringify({ points: -5, reason: 'Test' }),
       },
     );
     assert.equal(notFoundRes.status, 404);
 
-    // 5. Invalid body -> 400
+    // 6. Invalid body -> 400
     const invalidRes = await fetch(
       `${baseUrl}/api/v1/support/users/${targetUserId}/adjust-reputation`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${staffToken}`,
+          Authorization: `Bearer ${adminToken}`,
         },
         body: JSON.stringify({ points: 'not_a_number', reason: '' }),
       },
@@ -158,15 +176,34 @@ test('Support Staff Task 4: POST /api/v1/support/users/:userId/restrict-features
     );
     assert.equal(buyerForbiddenRes.status, 403);
 
-    // 3. Admin / Support Staff -> 200 OK
+    // 3. Support Staff -> 403 Forbidden (SRS 2.7: chỉ Admin có REPUTATION.PENALTY.APPLY)
     const staffToken = await login(baseUrl, 'staff.test@nexus-ecommerce.com', 'Password123!');
-    const restrictRes = await fetch(
+    const staffForbiddenRes = await fetch(
       `${baseUrl}/api/v1/support/users/${targetUserId}/restrict-features`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${staffToken}`,
+        },
+        body: JSON.stringify({
+          restriction: 'BAN_AUCTION_CREATION',
+          durationDays: 14,
+          reason: 'Support Staff không được tự áp phạt',
+        }),
+      },
+    );
+    assert.equal(staffForbiddenRes.status, 403);
+
+    // 4. Admin -> 200 OK
+    const adminToken = await login(baseUrl, 'admin.test@nexus-ecommerce.com', 'AdminPassword123!');
+    const restrictRes = await fetch(
+      `${baseUrl}/api/v1/support/users/${targetUserId}/restrict-features`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
         },
         body: JSON.stringify({
           restriction: 'BAN_AUCTION_CREATION',

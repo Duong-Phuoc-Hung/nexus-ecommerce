@@ -76,6 +76,25 @@ export function createUserApi(request: RequestApi) {
         }),
       );
     },
+    async getReputationHistory(id: string): Promise<{
+      userId: string;
+      currentScore: number;
+      reputationScore: number;
+      tier: string;
+      tierLabel: string;
+      canBid: boolean;
+      completedTransactions: number;
+      items: Array<{
+        id: string;
+        delta: number;
+        scoreAfter: number;
+        reason: string;
+        source?: string;
+        createdAt: string;
+      }>;
+    }> {
+      return unwrap(await request(`/users/${encodeURIComponent(id)}/reputation-history`));
+    },
     async adjustReputation(
       id: string,
       payload: { points: number; reason: string },

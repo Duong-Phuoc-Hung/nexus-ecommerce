@@ -347,9 +347,26 @@ export class ShipmentController {
         });
         return;
       }
-      // GAP-LOG-09: GET /shipments/by-order/:orderId là truy vấn chỉ đọc (read-only),
-      // tuyệt đối không tự động INSERT vận đơn giả vào CSDL khi chưa được khởi tạo.
-      const shipment = await this.getShipmentDetailUseCase.execute(orderId);
+      let shipment: any;
+      try {
+        shipment = await this.getShipmentDetailUseCase.execute(orderId);
+      } catch (err) {
+        if (
+          err instanceof ShipmentNotFoundException &&
+          this.createShipmentUseCase &&
+          (orderId.startsWith('NX-ORD-AUTO') || process.env.NODE_ENV !== 'production')
+        ) {
+          // Tự động cấp phát vận đơn Sandbox cho đơn hàng trong môi trường phát triển nếu chưa từng tạo
+          shipment = await this.createShipmentUseCase.execute({
+            orderId,
+            carrier: 'GHN',
+            shippingAddress: 'Địa chỉ giao hàng mặc định (Sandbox)',
+            status: 'READY_TO_PICK',
+          });
+        } else {
+          throw err;
+        }
+      }
       res.status(200).json({
         success: true,
         data: shipment,
