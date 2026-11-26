@@ -17,7 +17,9 @@ export function SupportChatPage() {
   const [selectedThreadId, setSelectedThreadId] = useState<string>('');
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
   const [inputText, setInputText] = useState('');
-  const [filterTab, setFilterTab] = useState<'ALL' | 'HANDOVER' | 'URGENT' | 'ACTIVE'>('ALL');
+  const [filterTab, setFilterTab] = useState<'ALL' | 'HANDOVER' | 'URGENT' | 'ACTIVE' | 'CLOSED'>(
+    'ALL',
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -205,20 +207,23 @@ export function SupportChatPage() {
       (t.supportCaseId && t.supportCaseId.toLowerCase().includes(q));
 
     if (!matchQuery) return false;
-    if (filterTab === 'HANDOVER')
-      return (
-        t.conversationStatus === 'WAITING_STAFF' ||
+    const isClosedThread =
+      t.conversationStatus === 'CLOSED' ||
+      ['DELIVERED', 'COMPLETED', 'CANCELLED', 'REFUNDED'].includes(
+        String(t.orderStatus || '').toUpperCase(),
+      );
+    const isHandoverThread =
+      !isClosedThread &&
+      (t.conversationStatus === 'WAITING_STAFF' ||
         t.orderStatus === 'WAITING_STAFF' ||
         t.disputeReason?.includes('Handover') ||
-        t.disputeReason?.includes('bàn giao')
-      );
-    if (filterTab === 'URGENT') return t.priority === 'URGENT' || t.priority === 'HIGH';
-    if (filterTab === 'ACTIVE')
-      return (
-        !['DELIVERED', 'COMPLETED', 'CANCELLED', 'REFUNDED'].includes(
-          String(t.orderStatus || '').toUpperCase(),
-        ) && t.conversationStatus !== 'CLOSED'
-      );
+        t.disputeReason?.includes('bàn giao'));
+
+    if (filterTab === 'HANDOVER') return isHandoverThread;
+    if (filterTab === 'URGENT')
+      return !isClosedThread && (t.priority === 'URGENT' || t.priority === 'HIGH');
+    if (filterTab === 'ACTIVE') return !isClosedThread && !isHandoverThread;
+    if (filterTab === 'CLOSED') return isClosedThread;
     return true;
   });
 
@@ -328,8 +333,9 @@ export function SupportChatPage() {
               {[
                 { id: 'ALL', label: 'Tất cả' },
                 { id: 'HANDOVER', label: '🎧 Chờ CSKH' },
-                { id: 'URGENT', label: '🔴 Khẩn' },
                 { id: 'ACTIVE', label: 'Đang xử lý' },
+                { id: 'URGENT', label: '🔴 Khẩn' },
+                { id: 'CLOSED', label: '✓ Đã xong' },
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -337,11 +343,12 @@ export function SupportChatPage() {
                   onClick={() => setFilterTab(tab.id as any)}
                   style={{
                     flex: 1,
-                    padding: '6px 0',
+                    padding: '6px 4px',
                     borderRadius: '6px',
                     border: 'none',
-                    fontSize: '11.5px',
+                    fontSize: '11px',
                     fontWeight: 600,
+                    whiteSpace: 'nowrap',
                     cursor: 'pointer',
                     background: filterTab === tab.id ? '#ffffff' : 'transparent',
                     color: filterTab === tab.id ? '#1e3a8a' : '#64748b',

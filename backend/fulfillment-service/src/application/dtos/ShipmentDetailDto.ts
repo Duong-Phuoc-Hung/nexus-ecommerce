@@ -68,7 +68,7 @@ export function mapShipmentStatusToVietnamese(status: ShipmentStatus | string): 
       return 'Đã tạo vận đơn';
     case ShipmentStatus.PICKED:
     case 'PICKED':
-      return 'Đang lấy hàng';
+      return 'Đã lấy hàng';
     case ShipmentStatus.IN_TRANSIT:
     case 'IN_TRANSIT':
       return 'Đang giao';

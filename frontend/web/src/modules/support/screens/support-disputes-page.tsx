@@ -13,6 +13,17 @@ const FALLBACK_DISPUTES: DisputeItem[] = [];
 const FALLBACK_EVIDENCE_SVG =
   "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Crect width='80' height='80' fill='%23f1f5f9'/%3E%3Cpath d='M22 54l12-14 9 10 8-9 11 13H22z' fill='%2394a3b8'/%3E%3Ccircle cx='30' cy='28' r='5' fill='%23cbd5e1'/%3E%3C/svg%3E";
 
+const DEAD_EVIDENCE_HOST_RE =
+  /^https?:\/\/(?:assets\.nexus\.vn|cdn\.nexus\.com|cdn\.nexus\.vn|storage\.nexus\.vn|storage\.nexus\.com)\//i;
+
+function resolveEvidenceSrc(src?: string | null): string {
+  const clean = (src || '').trim();
+  if (!clean || DEAD_EVIDENCE_HOST_RE.test(clean) || clean.startsWith('/uploads/chat/')) {
+    return FALLBACK_EVIDENCE_SVG;
+  }
+  return clean;
+}
+
 export function SupportDisputesPage() {
   const [query, setQuery] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -581,7 +592,7 @@ export function SupportDisputesPage() {
                               title="Xem ảnh bằng chứng của Người mua"
                             >
                               <img
-                                src={item.buyerEvidence.photos[0]}
+                                src={resolveEvidenceSrc(item.buyerEvidence.photos[0])}
                                 alt="Buyer evidence"
                                 onError={(e) => {
                                   if (e.currentTarget.src !== FALLBACK_EVIDENCE_SVG) {
@@ -817,7 +828,7 @@ export function SupportDisputesPage() {
                       className="group relative h-20 w-20 overflow-hidden rounded-lg border border-rose-200 shadow-sm transition hover:scale-105"
                     >
                       <img
-                        src={img}
+                        src={resolveEvidenceSrc(img)}
                         alt={`Buyer evidence ${i}`}
                         onError={(e) => {
                           if (e.currentTarget.src !== FALLBACK_EVIDENCE_SVG) {
@@ -867,8 +878,13 @@ export function SupportDisputesPage() {
                       className="group relative h-20 w-20 overflow-hidden rounded-lg border border-emerald-200 shadow-sm transition hover:scale-105"
                     >
                       <img
-                        src={img}
+                        src={resolveEvidenceSrc(img)}
                         alt={`Seller evidence ${i}`}
+                        onError={(e) => {
+                          if (e.currentTarget.src !== FALLBACK_EVIDENCE_SVG) {
+                            e.currentTarget.src = FALLBACK_EVIDENCE_SVG;
+                          }
+                        }}
                         className="h-full w-full object-cover"
                       />
                       <span className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition group-hover:opacity-100 text-white text-[10px] font-bold">
@@ -1033,8 +1049,13 @@ export function SupportDisputesPage() {
           <div className="mt-3 flex items-center justify-center">
             {previewImage && (
               <img
-                src={previewImage}
+                src={resolveEvidenceSrc(previewImage)}
                 alt="Enlarged evidence"
+                onError={(e) => {
+                  if (e.currentTarget.src !== FALLBACK_EVIDENCE_SVG) {
+                    e.currentTarget.src = FALLBACK_EVIDENCE_SVG;
+                  }
+                }}
                 className="max-h-[75vh] w-auto rounded-lg object-contain"
               />
             )}

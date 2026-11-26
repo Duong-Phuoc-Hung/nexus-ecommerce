@@ -30,6 +30,32 @@ export function getShipmentStatusLabel(statusCode: string, fallback?: string): s
   return match ? match.label : fallback || statusCode;
 }
 
+function defaultLocationForStatus(
+  statusCode: string,
+  city?: string,
+  shippingAddress?: string,
+): string {
+  const area = (city || 'TP. Hồ Chí Minh').trim();
+  switch (statusCode) {
+    case 'READY_TO_PICK':
+      return `Kho tổng Nexus · Đang chờ lấy hàng`;
+    case 'PICKED':
+      return `Bưu cục ${area} · Bưu tá đã lấy hàng từ Người bán`;
+    case 'IN_TRANSIT':
+      return `Trung tâm phân loại ${area} · Đang vận chuyển`;
+    case 'OUT_FOR_DELIVERY':
+      return `Bưu cục phát ${area} · Shipper đang đi giao hàng`;
+    case 'DELIVERED':
+      return `${shippingAddress || area} · Đã giao hàng thành công`;
+    case 'FAILED':
+      return `Bưu cục phát ${area} · Giao hàng không thành công`;
+    case 'RETURNED':
+      return `Trung tâm chuyển hoàn ${area} · Đã trả hàng`;
+    default:
+      return `${area} · Đang cập nhật`;
+  }
+}
+
 function formatSafeDate(val?: string): string {
   if (!val) return '';
   try {
@@ -106,6 +132,7 @@ export function SupportShipmentsPage() {
             if (single) {
               setShipments([single]);
               setSelected(single);
+              setNextStatus(single.statusCode || single.status);
               return;
             }
           } catch {}
@@ -113,6 +140,7 @@ export function SupportShipmentsPage() {
         setShipments(page.items);
         if (page.items.length > 0 && qStr) {
           setSelected(page.items[0]);
+          setNextStatus(page.items[0].statusCode || page.items[0].status);
         }
       })
       .catch((err) => !controller.signal.aborted && setError(userMessage(err)))
@@ -135,6 +163,11 @@ export function SupportShipmentsPage() {
     if (!selected) return;
     setActing(true);
     setNotice('');
+    const nextLocation = defaultLocationForStatus(
+      nextStatus,
+      selected.city,
+      selected.shippingAddress,
+    );
     try {
       // 1. Thử gọi API Webhook 3PL Carrier mới của Backend: POST /api/v1/fulfillment/carriers/webhook
       try {
@@ -143,20 +176,21 @@ export function SupportShipmentsPage() {
           tracking_code: selected.trackingCode || selected.code,
           order_id: selected.orderId || selected.order,
           status: nextStatus,
-          current_location: selected.currentLocation,
+          current_location: nextLocation,
           timestamp: new Date().toISOString(),
         });
       } catch {
         // 2. Fallback sang PATCH /api/v1/support/shipments/:id/status
         await supportShipmentsApi.updateStatus(selected.id, {
           status: nextStatus,
-          location: selected.currentLocation,
+          location: nextLocation,
           note: 'Cập nhật từ Support Staff.',
         });
       }
 
       const updated = await supportShipmentsApi.getById(selected.id);
       setSelected(updated);
+      setNextStatus(updated.statusCode || nextStatus);
       setShipments((items) => items.map((item) => (item.id === updated.id ? updated : item)));
       setNotice('Đã cập nhật trạng thái vận đơn qua Backend Carrier API thành công.');
     } catch (err) {
@@ -412,7 +446,7 @@ export function SupportShipmentsPage() {
     })();
 
     const createdTime = formatSafeDate(selected.createdAt) || selected.updated;
-    const updatedTime = selected.updated || formatSafeDate(selected.updatedAt);
+    const updatedTime = formatSafeDate(selected.updatedAt) || selected.updated;
     const location = selected.currentLocation || selected.city || 'Trung tâm xử lý';
     const recipient = selected.recipient || selected.recipientName || 'người nhận';
 

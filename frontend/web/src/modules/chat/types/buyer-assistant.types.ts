@@ -70,6 +70,7 @@ export interface OrderDualStatusCardData {
   shipment: ShipmentStatusSnapshot;
   canCancel?: boolean;
   canComplain?: boolean;
+  focusSection?: 'PAYMENT' | 'SHIPMENT' | 'ALL';
 }
 
 export interface OrderChoiceItem {
