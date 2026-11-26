@@ -212,6 +212,7 @@ export function ChatFloatingBubble({ role, targetUrl, badgeCount }: ChatFloating
             : '0 10px 25px -3px rgba(37, 99, 235, 0.5), 0 4px 6px -2px rgba(37, 99, 235, 0.3)',
           cursor: 'pointer',
           textDecoration: 'none',
+          animation: 'none',
         }}
       >
         {/* Biểu tượng bong bóng chat */}

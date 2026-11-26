@@ -116,6 +116,22 @@ export class ProcessCarrierWebhookUseCase {
         mappedStatus,
         `Cập nhật qua 3PL Carrier Webhook (${input.carrier || 'Carrier'})`,
       );
+      if (
+        mappedStatus === ShipmentStatus.DELIVERED &&
+        typeof this.commerceClient.confirmCodPayment === 'function'
+      ) {
+        try {
+          await this.commerceClient.confirmCodPayment(
+            shipment.orderId,
+            '3PL Webhook: Shipper đã giao kiện hàng thành công và thu đủ tiền COD.',
+          );
+        } catch (err: any) {
+          console.warn(
+            '[ProcessCarrierWebhookUseCase] confirmCodPayment warning:',
+            err?.message || err,
+          );
+        }
+      }
     }
 
     return shipment;

@@ -195,11 +195,25 @@ export function SupportShipmentsPage() {
         });
       }
 
+      if (nextStatus === 'DELIVERED') {
+        try {
+          await supportShipmentsApi.confirmCodPayment(selected.id, {
+            note: 'Cập nhật giao hàng thành công (DELIVERED) - Tự động ghi nhận thu tiền COD.',
+          });
+        } catch {
+          // Bỏ qua nếu đơn hàng không phải COD hoặc đã thanh toán trước
+        }
+      }
+
       const updated = await supportShipmentsApi.getById(selected.id);
       setSelected(updated);
       setNextStatus(updated.statusCode || nextStatus);
       setShipments((items) => items.map((item) => (item.id === updated.id ? updated : item)));
-      setNotice('Đã cập nhật trạng thái vận đơn qua Backend Carrier API thành công.');
+      setNotice(
+        nextStatus === 'DELIVERED'
+          ? '✓ Đã cập nhật giao hàng và tự động xác nhận thu tiền COD thành công!'
+          : 'Đã cập nhật trạng thái vận đơn qua Backend Carrier API thành công.',
+      );
     } catch (err) {
       setNotice(userMessage(err));
     } finally {
@@ -1028,10 +1042,23 @@ export function SupportShipmentsPage() {
                 </button>
                 <button
                   type="button"
-                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
                   disabled={acting}
                   onClick={handleConfirmCodPayment}
                   title="Xác nhận đối tác giao nhận/shipper đã thu đủ tiền COD từ khách hàng"
+                  style={{
+                    backgroundColor: '#059669',
+                    color: '#ffffff',
+                    border: '1.5px solid #047857',
+                    borderRadius: '8px',
+                    padding: '8px 16px',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    cursor: acting ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 2px 5px rgba(5, 150, 105, 0.35)',
+                  }}
                 >
                   💵 Xác nhận đã thanh toán COD
                 </button>

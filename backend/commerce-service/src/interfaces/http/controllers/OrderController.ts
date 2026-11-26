@@ -632,6 +632,39 @@ export class OrderController {
         operatorRole: user?.role,
       });
 
+      // Tự động xác nhận thanh toán COD khi đơn hàng chuyển sang DELIVERED (Đã giao hàng / Thu tiền khi giao)
+      if (String(status).toUpperCase() === 'DELIVERED' && process.env.USE_IN_MEMORY_DB !== 'true') {
+        try {
+          const pool = this.dbPool || getCommerceDbPool();
+          const targetId = (result as any).internalId || result.id;
+          const orderCode = (result as any).orderCode || result.id;
+          const updatePayRes = await pool.query(
+            `UPDATE commerce_payments
+             SET status = 'PAID', paid_at = COALESCE(paid_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP
+             WHERE (order_id = $1::varchar OR order_id = $2::varchar) AND status != 'PAID'`,
+            [targetId, orderCode],
+          );
+          if (updatePayRes.rowCount === 0) {
+            const checkPay = await pool.query(
+              `SELECT id FROM commerce_payments WHERE order_id = $1::varchar OR order_id = $2::varchar LIMIT 1`,
+              [targetId, orderCode],
+            );
+            if (checkPay.rowCount === 0) {
+              await pool.query(
+                `INSERT INTO commerce_payments (order_id, payment_method, idempotency_key, amount, currency, status, paid_at, created_at, updated_at)
+                 VALUES ($1, 'COD', $2, $3, 'VND', 'PAID', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+                [targetId, `cod_pay_${Date.now()}_${targetId.slice(-6)}`, result.totalAmount || 0],
+              );
+            }
+          }
+        } catch (payErr: any) {
+          console.warn(
+            '[OrderController] Auto COD payment confirmation error:',
+            payErr?.message || payErr,
+          );
+        }
+      }
+
       res.status(200).json({
         success: true,
         message: 'Cập nhật trạng thái đơn hàng thành công.',
