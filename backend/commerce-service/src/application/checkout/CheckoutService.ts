@@ -785,7 +785,9 @@ export class CheckoutService {
         : rawPayStatus;
 
     const resolvedPayMethod =
-      payment?.paymentMethod || order.paymentMethod || (payment?.checkoutUrl ? 'PAYOS' : 'COD');
+      payment?.paymentMethod ||
+      (order as any).paymentMethod ||
+      (payment?.checkoutUrl ? 'PAYOS' : 'COD');
 
     return {
       orderId: order.id,

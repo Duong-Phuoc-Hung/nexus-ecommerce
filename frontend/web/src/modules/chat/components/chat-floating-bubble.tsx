@@ -23,7 +23,6 @@ interface SupportBreakdown {
 export function ChatFloatingBubble({ role, targetUrl, badgeCount }: ChatFloatingBubbleProps) {
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
   const [liveCount, setLiveCount] = useState<number>(0);
   const [breakdown, setBreakdown] = useState<SupportBreakdown>({
     disputesTotal: 0,
@@ -148,89 +147,76 @@ export function ChatFloatingBubble({ role, targetUrl, badgeCount }: ChatFloating
 
   return (
     <div
+      className="group flex items-center gap-2.5 select-none"
       style={{
         position: 'fixed',
         bottom: '24px',
         right: '24px',
         zIndex: 9999,
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px',
       }}
     >
-      {/* Tooltip / Bảng phân tách rõ khiếu nại & tin nhắn khi rê chuột */}
-      {isHovered && (
-        <div
-          style={{
-            background: isSeller ? '#1e293b' : '#0f172a',
-            color: '#ffffff',
-            padding: '10px 14px',
-            borderRadius: '10px',
-            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3)',
-            fontSize: '12px',
-            fontWeight: 500,
-            whiteSpace: 'nowrap',
-            pointerEvents: 'none',
-            border: isSeller
-              ? '1px solid rgba(225, 29, 72, 0.4)'
-              : '1px solid rgba(37, 99, 235, 0.4)',
-            animation: 'fadeIn 0.2s ease-in-out',
-          }}
-        >
-          <div style={{ fontWeight: 700, color: isSeller ? '#fda4af' : '#93c5fd' }}>{label}</div>
-          {isSeller ? (
-            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>{sublabel}</div>
-          ) : (
-            <div style={{ fontSize: '11px', color: '#cbd5e1', marginTop: '4px', lineHeight: 1.5 }}>
-              <div>
-                ⚖️ Khiếu nại đơn:{' '}
-                <strong style={{ color: '#fbbf24' }}>{breakdown.disputesTotal}</strong>
-                {breakdown.disputesTotal > 0 && (
-                  <span style={{ color: '#94a3b8' }}>
-                    {' '}
-                    (Cao: {breakdown.highPriority} · TB: {breakdown.mediumPriority} · Thấp:{' '}
-                    {breakdown.lowPriority})
-                  </span>
-                )}
-              </div>
-              <div>
-                💬 Hội thoại chờ:{' '}
-                <strong style={{ color: '#60a5fa' }}>{breakdown.waitingChats}</strong>
-              </div>
+      {/* Tooltip / Bảng phân tách rõ khiếu nại & tin nhắn khi rê chuột (CSS group-hover chống rung/chớp tắt) */}
+      <div
+        className="pointer-events-none opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100"
+        style={{
+          background: isSeller ? '#1e293b' : '#0f172a',
+          color: '#ffffff',
+          padding: '10px 14px',
+          borderRadius: '10px',
+          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3)',
+          fontSize: '12px',
+          fontWeight: 500,
+          whiteSpace: 'nowrap',
+          border: isSeller
+            ? '1px solid rgba(225, 29, 72, 0.4)'
+            : '1px solid rgba(37, 99, 235, 0.4)',
+        }}
+      >
+        <div style={{ fontWeight: 700, color: isSeller ? '#fda4af' : '#93c5fd' }}>{label}</div>
+        {isSeller ? (
+          <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>{sublabel}</div>
+        ) : (
+          <div style={{ fontSize: '11px', color: '#cbd5e1', marginTop: '4px', lineHeight: 1.5 }}>
+            <div>
+              ⚖️ Khiếu nại đơn:{' '}
+              <strong style={{ color: '#fbbf24' }}>{breakdown.disputesTotal}</strong>
+              {breakdown.disputesTotal > 0 && (
+                <span style={{ color: '#94a3b8' }}>
+                  {' '}
+                  (Cao: {breakdown.highPriority} · TB: {breakdown.mediumPriority} · Thấp:{' '}
+                  {breakdown.lowPriority})
+                </span>
+              )}
             </div>
-          )}
-        </div>
-      )}
+            <div>
+              💬 Hội thoại chờ:{' '}
+              <strong style={{ color: '#60a5fa' }}>{breakdown.waitingChats}</strong>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Nút bấm hình bong bóng tròn */}
       <Link
         href={targetUrl}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
         aria-label={label}
+        className="relative flex items-center justify-center rounded-full text-white transition-transform duration-200 ease-out group-hover:scale-105"
         style={{
           width: '58px',
           height: '58px',
-          borderRadius: '50%',
           background: isSeller
             ? 'linear-gradient(135deg, #e11d48 0%, #be123c 100%)'
             : 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-          color: '#ffffff',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
           boxShadow: isSeller
             ? '0 10px 25px -3px rgba(225, 29, 72, 0.5), 0 4px 6px -2px rgba(225, 29, 72, 0.3)'
             : '0 10px 25px -3px rgba(37, 99, 235, 0.5), 0 4px 6px -2px rgba(37, 99, 235, 0.3)',
-          transition: 'all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
-          transform: isHovered ? 'scale(1.1) translateY(-2px)' : 'scale(1)',
           cursor: 'pointer',
           textDecoration: 'none',
-          position: 'relative',
         }}
       >
         {/* Biểu tượng bong bóng chat */}
         <span
+          className="pointer-events-none"
           style={{
             fontSize: '26px',
             lineHeight: 1,
@@ -243,6 +229,7 @@ export function ChatFloatingBubble({ role, targetUrl, badgeCount }: ChatFloating
         {/* Chấm tròn báo số khiếu nại đang xử lý / tin nhắn chưa đọc */}
         {displayCount > 0 && (
           <span
+            className="pointer-events-none"
             style={{
               position: 'absolute',
               top: '-2px',
@@ -269,6 +256,7 @@ export function ChatFloatingBubble({ role, targetUrl, badgeCount }: ChatFloating
         {/* Hiệu ứng xung nhịp Pulse ngầm khi có khiếu nại/tin nhắn đang chờ */}
         {displayCount > 0 && (
           <span
+            className="pointer-events-none"
             style={{
               position: 'absolute',
               inset: 0,
@@ -276,6 +264,7 @@ export function ChatFloatingBubble({ role, targetUrl, badgeCount }: ChatFloating
               background: isSeller ? 'rgba(225, 29, 72, 0.4)' : 'rgba(37, 99, 235, 0.4)',
               zIndex: -1,
               animation: 'ping 2s cubic-bezier(0, 0, 0.2, 1) infinite',
+              pointerEvents: 'none',
             }}
           />
         )}

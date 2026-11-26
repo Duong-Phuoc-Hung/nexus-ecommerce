@@ -344,7 +344,6 @@ export class PostgresCheckoutRepository implements ICheckoutRepository {
           shippingCarrier: initialCarrier,
           shippingServiceName: params.shippingServiceName || 'Tiêu chuẩn',
           estimatedDeliveryAt: params.estimatedDeliveryAt || null,
-          paymentMethod: params.paymentMethod || 'PAYOS',
           status: initialStatus,
           trackingCode: initialTrackingCode,
           shippingAddress: params.shippingAddress as any,
