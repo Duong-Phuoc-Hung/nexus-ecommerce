@@ -9,6 +9,8 @@ ALTER TABLE IF EXISTS commerce_payments DROP CONSTRAINT IF EXISTS fk_payment_ord
 ALTER TABLE IF EXISTS commerce_invoices DROP CONSTRAINT IF EXISTS fk_invoice_order;
 ALTER TABLE IF EXISTS commerce_checkout_idempotency DROP CONSTRAINT IF EXISTS commerce_checkout_idempotency_order_id_fkey;
 ALTER TABLE IF EXISTS commerce_stock_reservations DROP CONSTRAINT IF EXISTS commerce_stock_reservations_order_id_fkey;
+ALTER TABLE IF EXISTS commerce_checkout_idempotency DROP CONSTRAINT IF EXISTS fk_checkout_idempotency_order;
+ALTER TABLE IF EXISTS commerce_stock_reservations DROP CONSTRAINT IF EXISTS fk_stock_reservations_order;
 
 -- 2. Convert commerce_orders.id to VARCHAR(36)
 ALTER TABLE commerce_orders ALTER COLUMN id TYPE VARCHAR(36) USING id::text;
@@ -75,22 +77,27 @@ BEGIN
 END $$;
 
 -- 4. Re-establish foreign key constraints
+ALTER TABLE commerce_order_items DROP CONSTRAINT IF EXISTS fk_order_item_order;
 ALTER TABLE commerce_order_items 
   ADD CONSTRAINT fk_order_item_order FOREIGN KEY (order_id) REFERENCES commerce_orders(id) ON DELETE CASCADE;
 
+ALTER TABLE commerce_payments DROP CONSTRAINT IF EXISTS fk_payment_order;
 ALTER TABLE commerce_payments 
   ADD CONSTRAINT fk_payment_order FOREIGN KEY (order_id) REFERENCES commerce_orders(id) ON DELETE RESTRICT;
 
+ALTER TABLE commerce_invoices DROP CONSTRAINT IF EXISTS fk_invoice_order;
 ALTER TABLE commerce_invoices 
   ADD CONSTRAINT fk_invoice_order FOREIGN KEY (order_id) REFERENCES commerce_orders(id) ON DELETE RESTRICT;
 
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'commerce_checkout_idempotency') THEN
+    ALTER TABLE commerce_checkout_idempotency DROP CONSTRAINT IF EXISTS fk_checkout_idempotency_order;
     ALTER TABLE commerce_checkout_idempotency 
       ADD CONSTRAINT fk_checkout_idempotency_order FOREIGN KEY (order_id) REFERENCES commerce_orders(id) ON DELETE CASCADE;
   END IF;
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'commerce_stock_reservations') THEN
+    ALTER TABLE commerce_stock_reservations DROP CONSTRAINT IF EXISTS fk_stock_reservations_order;
     ALTER TABLE commerce_stock_reservations 
       ADD CONSTRAINT fk_stock_reservations_order FOREIGN KEY (order_id) REFERENCES commerce_orders(id) ON DELETE CASCADE;
   END IF;

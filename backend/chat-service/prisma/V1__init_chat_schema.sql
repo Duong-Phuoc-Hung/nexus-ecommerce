@@ -3,8 +3,15 @@
 -- Multi-party Chat, Order Tracking, Versioned Policy FAQs & Dispute Escalation
 -- ==============================================================================
 
-CREATE TYPE "ChannelType" AS ENUM ('AI_BOT', 'BUYER_SELLER', 'BUYER_SUPPORT');
-CREATE TYPE "MessageSenderRole" AS ENUM ('BUYER', 'SELLER', 'SUPPORT_STAFF', 'AI', 'SYSTEM');
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ChannelType') THEN
+        CREATE TYPE "ChannelType" AS ENUM ('AI_BOT', 'BUYER_SELLER', 'BUYER_SUPPORT');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'MessageSenderRole') THEN
+        CREATE TYPE "MessageSenderRole" AS ENUM ('BUYER', 'SELLER', 'SUPPORT_STAFF', 'AI', 'SYSTEM');
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS chat_conversations (
     id VARCHAR(36) PRIMARY KEY,

@@ -15,6 +15,7 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [acting, setActing] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   // Modal dialog state for Cancel / Refund actions
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -32,10 +33,34 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
   useEffect(() => {
     const controller = new AbortController();
     setError('');
+    let retryTimer: NodeJS.Timeout | null = null;
+
     ordersApi
       .getById(orderId, controller.signal)
       .then(setOrder)
-      .catch((err) => !controller.signal.aborted && setError(userMessage(err)));
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        const msg = userMessage(err);
+        // Tự động thử lại 1 lần sau 1.2s nếu service đang khởi động lại hoặc mạng bận tạm thời (502 / unavailable)
+        if (
+          msg.includes('unavailable') ||
+          msg.includes('chưa được bật') ||
+          msg.includes('Chưa kết nối')
+        ) {
+          retryTimer = setTimeout(() => {
+            if (!controller.signal.aborted) {
+              ordersApi
+                .getById(orderId, controller.signal)
+                .then(setOrder)
+                .catch((retryErr) => {
+                  if (!controller.signal.aborted) setError(userMessage(retryErr));
+                });
+            }
+          }, 1200);
+        } else {
+          setError(msg);
+        }
+      });
 
     // Ưu tiên nạp phán quyết từ localStorage nếu có
     if (typeof window !== 'undefined') {
@@ -115,8 +140,11 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
         }
       });
 
-    return () => controller.abort();
-  }, [orderId]);
+    return () => {
+      controller.abort();
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, [orderId, reloadKey]);
 
   const isCancelled = order?.status === 'CANCELLED' || order?.status === 'ĐÃ_HỦY';
   const isRefunded = order?.status === 'REFUNDED' || order?.status === 'ĐÃ_HOÀN_TIỀN';
@@ -256,7 +284,46 @@ export function SupportOrderDetailPage({ orderId }: { orderId: string }) {
       />
       <DemoBanner message="Chi tiết và thao tác đơn hàng được xử lý trực tiếp qua Commerce API." />
       {error ? (
-        <div className="support-empty">{error}</div>
+        <div
+          className="support-empty"
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '36px 20px',
+            gap: '12px',
+          }}
+        >
+          <div style={{ fontSize: '1.8rem', lineHeight: 1 }}>⚠️</div>
+          <p style={{ margin: 0, color: '#dc2626', fontWeight: 600, textAlign: 'center' }}>
+            {error}
+          </p>
+          <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b', textAlign: 'center' }}>
+            Dịch vụ vừa hoàn tất cập nhật. Bạn có thể nhấn nút bên dưới để tải lại dữ liệu đơn hàng
+            ngay.
+          </p>
+          <button
+            type="button"
+            className="support-secondary-button"
+            style={{
+              padding: '6px 16px',
+              fontSize: '0.82rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              marginTop: '4px',
+            }}
+            onClick={() => {
+              setError('');
+              setReloadKey((k) => k + 1);
+            }}
+          >
+            🔄 Tải lại dữ liệu
+          </button>
+        </div>
       ) : !order ? (
         <div className="support-empty">Đang tải thông tin đơn hàng…</div>
       ) : (

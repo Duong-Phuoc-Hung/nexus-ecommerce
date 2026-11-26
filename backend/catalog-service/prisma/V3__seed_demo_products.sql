@@ -24,8 +24,13 @@ UPDATE catalog_products SET seller_id = '01a15822-3fd0-7b39-ad01-f11da72d5b80' W
 
 -- 2. Thêm 15 sản phẩm mẫu thực tế trải đều các danh mục
 -- Người bán: 01a15822-3fd0-7b39-ad01-f11da72d5b80 (Trần Thị Seller)
-INSERT INTO catalog_products (id, seller_id, category_id, title, slug, description, status, condition, base_price, allow_auction)
-VALUES 
+DO $$
+DECLARE
+  max_num BIGINT;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM catalog_products WHERE slug = 'iphone-15-pro-max-256gb-titan-tu-nhien') THEN
+    INSERT INTO catalog_products (id, seller_id, category_id, title, slug, description, status, condition, base_price, allow_auction)
+    VALUES 
 (
     1,
     '01a15822-3fd0-7b39-ad01-f11da72d5b80',
@@ -212,24 +217,21 @@ SET title = EXCLUDED.title,
     description = EXCLUDED.description,
     allow_auction = EXCLUDED.allow_auction;
 
-DO $$
-DECLARE
-  max_num BIGINT;
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_class WHERE relkind = 'S' AND relname = 'catalog_products_id_seq') THEN
-    SELECT COALESCE(MAX(id::bigint), 1) INTO max_num
-    FROM catalog_products
-    WHERE id::text ~ '^[0-9]+$';
-    PERFORM setval('catalog_products_id_seq', GREATEST(max_num, 1));
-  END IF;
-END $$;
+    IF EXISTS (SELECT 1 FROM pg_class WHERE relkind = 'S' AND relname = 'catalog_products_id_seq') THEN
+      SELECT COALESCE(MAX(id::bigint), 1) INTO max_num
+      FROM catalog_products
+      WHERE id::text ~ '^[0-9]+$';
+      PERFORM setval('catalog_products_id_seq', GREATEST(max_num, 1));
+    END IF;
 
--- 3. Thêm Album ảnh chất lượng cao từ Unsplash cho từng sản phẩm (15 sản phẩm)
-DELETE FROM catalog_product_images WHERE product_id IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
-ALTER SEQUENCE catalog_product_images_id_seq RESTART WITH 1;
+    -- 3. Thêm Album ảnh chất lượng cao từ Unsplash cho từng sản phẩm (15 sản phẩm)
+    DELETE FROM catalog_product_images WHERE product_id IN ('1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15');
+    IF EXISTS (SELECT 1 FROM pg_class WHERE relkind = 'S' AND relname = 'catalog_product_images_id_seq') THEN
+      PERFORM setval('catalog_product_images_id_seq', 1, false);
+    END IF;
 
-INSERT INTO catalog_product_images (product_id, image_url, display_order, is_primary)
-VALUES 
+    INSERT INTO catalog_product_images (product_id, image_url, display_order, is_primary)
+    VALUES 
 -- 1. iPhone 15 Pro Max
 (1, 'https://images.unsplash.com/photo-1695048133142-1a20484d2569?auto=format&fit=crop&w=800&q=85', 1, TRUE),
 (1, 'https://images.unsplash.com/photo-1695048133149-6a9788f6c567?auto=format&fit=crop&w=800&q=85', 2, FALSE),
@@ -287,8 +289,10 @@ VALUES
 (15, 'https://images.unsplash.com/photo-1585366119957-e9730b6d0f60?auto=format&fit=crop&w=800&q=85', 1, TRUE);
 
 -- 4. Thêm Thông số kỹ thuật chi tiết (Product Attributes)
-DELETE FROM catalog_product_attributes WHERE product_id IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
-ALTER SEQUENCE catalog_product_attributes_id_seq RESTART WITH 1;
+    DELETE FROM catalog_product_attributes WHERE product_id IN ('1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15');
+    IF EXISTS (SELECT 1 FROM pg_class WHERE relkind = 'S' AND relname = 'catalog_product_attributes_id_seq') THEN
+      PERFORM setval('catalog_product_attributes_id_seq', 1, false);
+    END IF;
 
 INSERT INTO catalog_product_attributes (product_id, attribute_key, attribute_value)
 VALUES 
@@ -364,3 +368,5 @@ VALUES
 (15, 'Số lượng mảnh ghép', '1087 mảnh'),
 (15, 'Độ tuổi khuyên dùng', '16+ (Dòng Icons Người lớn)'),
 (15, 'Kích thước mô hình', 'Cao hơn 20cm, rộng 22cm');
+  END IF;
+END $$;
